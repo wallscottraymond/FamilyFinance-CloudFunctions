@@ -1,0 +1,335 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // =======================
+    // HELPER FUNCTIONS
+    // =======================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Get user role from custom claims
+    function getUserRole() {
+      return request.auth.token.role;
+    }
+    
+    // Check if user has a specific role
+    function hasRole(role) {
+      return isAuthenticated() && getUserRole() == role;
+    }
+    
+    // Check if user is admin
+    function isAdmin() {
+      return hasRole('admin');
+    }
+    
+    // Check if user is parent
+    function isParent() {
+      return hasRole('parent');
+    }
+    
+    // Check if user can manage (admin or parent)
+    function canManage() {
+      return isAdmin() || isParent();
+    }
+    
+    // Check if user owns the resource
+    function isOwner(resourceUserId) {
+      return isAuthenticated() && request.auth.uid == resourceUserId;
+    }
+    
+    // Check if user is in the same family
+    function inSameFamily(familyId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
+    }
+    
+    // Check if user can access another user (same family or admin)
+    function canAccessUser(targetUserId) {
+      return isOwner(targetUserId) || 
+             isAdmin() ||
+             (exists(/databases/$(database)/documents/users/$(targetUserId)) &&
+              inSameFamily(get(/databases/$(database)/documents/users/$(targetUserId)).data.familyId));
+    }
+    
+    // Validate user data structure
+    function isValidUserData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['email', 'displayName', 'role', 'isActive', 'preferences']) &&
+             data.email is string && data.email.size() > 0 &&
+             data.displayName is string && data.displayName.size() > 0 &&
+             data.role is string && data.role in ['admin', 'parent', 'child', 'viewer'] &&
+             data.isActive is bool &&
+             isValidPreferences(data.preferences);
+    }
+    
+    // Validate preferences structure
+    function isValidPreferences(prefs) {
+      return prefs.keys().hasAll(['currency', 'locale', 'theme', 'notifications', 'privacy', 'display', 'accessibility', 'financial', 'security']) &&
+             prefs.currency is string && prefs.currency.size() == 3 &&
+             prefs.locale is string && prefs.locale.size() > 0 &&
+             prefs.theme is string && prefs.theme in ['light', 'dark', 'auto'] &&
+             isValidNotificationSettings(prefs.notifications) &&
+             isValidPrivacySettings(prefs.privacy) &&
+             isValidDisplaySettings(prefs.display) &&
+             isValidAccessibilitySettings(prefs.accessibility) &&
+             isValidFinancialSettings(prefs.financial) &&
+             isValidSecuritySettings(prefs.security);
+    }
+    
+    // Validate notification settings
+    function isValidNotificationSettings(notifs) {
+      return notifs.keys().hasAll(['email', 'push', 'transactionAlerts', 'budgetAlerts', 'weeklyReports']) &&
+             notifs.email is bool &&
+             notifs.push is bool &&
+             notifs.transactionAlerts is bool &&
+             notifs.budgetAlerts is bool &&
+             notifs.weeklyReports is bool;
+    }
+    
+    // Validate privacy settings
+    function isValidPrivacySettings(privacy) {
+      return privacy.keys().hasAll(['shareSpendingWithFamily', 'shareGoalsWithFamily', 'allowFamilyToSeeTransactionDetails', 'showProfileToFamilyMembers', 'dataRetentionPeriod', 'allowAnalytics', 'allowMarketingEmails']) &&
+             privacy.shareSpendingWithFamily is bool &&
+             privacy.shareGoalsWithFamily is bool &&
+             privacy.allowFamilyToSeeTransactionDetails is bool &&
+             privacy.showProfileToFamilyMembers is bool &&
+             privacy.dataRetentionPeriod is int && privacy.dataRetentionPeriod > 0 &&
+             privacy.allowAnalytics is bool &&
+             privacy.allowMarketingEmails is bool;
+    }
+    
+    // Validate display settings
+    function isValidDisplaySettings(display) {
+      return display.keys().hasAll(['dateFormat', 'timeFormat', 'numberFormat', 'showCentsInDisplays', 'defaultTransactionView']) &&
+             display.dateFormat is string && display.dateFormat in ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] &&
+             display.timeFormat is string && display.timeFormat in ['12h', '24h'] &&
+             display.numberFormat is string && display.numberFormat in ['US', 'EU', 'IN'] &&
+             display.showCentsInDisplays is bool &&
+             display.defaultTransactionView is string && display.defaultTransactionView in ['list', 'cards', 'table'];
+    }
+    
+    // Validate accessibility settings
+    function isValidAccessibilitySettings(access) {
+      return access.keys().hasAll(['fontSize', 'highContrast', 'reduceMotion', 'screenReaderOptimized', 'voiceOverEnabled', 'hapticFeedback', 'longPressDelay']) &&
+             access.fontSize is string && access.fontSize in ['small', 'medium', 'large', 'extra_large'] &&
+             access.highContrast is bool &&
+             access.reduceMotion is bool &&
+             access.screenReaderOptimized is bool &&
+             access.voiceOverEnabled is bool &&
+             access.hapticFeedback is bool &&
+             access.longPressDelay is int && access.longPressDelay >= 100 && access.longPressDelay <= 2000;
+    }
+    
+    // Validate financial settings
+    function isValidFinancialSettings(financial) {
+      return financial.keys().hasAll(['autoCategorizationEnabled', 'roundUpSavings', 'budgetStartDay', 'showNetWorth', 'hiddenAccounts', 'defaultBudgetAlertThreshold', 'enableSpendingLimits']) &&
+             financial.autoCategorizationEnabled is bool &&
+             financial.roundUpSavings is bool &&
+             financial.budgetStartDay is int && financial.budgetStartDay >= 1 && financial.budgetStartDay <= 31 &&
+             financial.showNetWorth is bool &&
+             financial.hiddenAccounts is list &&
+             financial.defaultBudgetAlertThreshold is int && financial.defaultBudgetAlertThreshold >= 0 && financial.defaultBudgetAlertThreshold <= 100 &&
+             financial.enableSpendingLimits is bool;
+    }
+    
+    // Validate security settings
+    function isValidSecuritySettings(security) {
+      return security.keys().hasAll(['biometricAuthEnabled', 'pinAuthEnabled', 'autoLockTimeout', 'requireAuthForTransactions', 'requireAuthForBudgetChanges', 'requireAuthForGoalChanges', 'sessionTimeout', 'allowedDevices', 'twoFactorAuthEnabled', 'suspiciousActivityDetection']) &&
+             security.biometricAuthEnabled is bool &&
+             security.pinAuthEnabled is bool &&
+             security.autoLockTimeout is int && security.autoLockTimeout >= 0 &&
+             security.requireAuthForTransactions is bool &&
+             security.requireAuthForBudgetChanges is bool &&
+             security.requireAuthForGoalChanges is bool &&
+             security.sessionTimeout is int && security.sessionTimeout > 0 &&
+             security.allowedDevices is list &&
+             security.twoFactorAuthEnabled is bool &&
+             security.suspiciousActivityDetection is bool;
+    }
+    
+    // =======================
+    // USERS COLLECTION RULES
+    // =======================
+    
+    match /users/{userId} {
+      // Allow users to read their own profile
+      // Allow family members to read basic profile info (filtered by cloud function)
+      // Allow admins to read any user profile
+      allow read: if isOwner(userId) || 
+                     isAdmin() || 
+                     canAccessUser(userId);
+      
+      // Allow users to create their own profile (via auth trigger usually)
+      // This is primarily for the createUserProfile cloud function
+      allow create: if isOwner(userId) && 
+                       isValidUserData() &&
+                       request.resource.data.role == 'viewer'; // New users start as viewers
+      
+      // Allow users to update their own profile
+      // Allow admins to update any user profile
+      // Prevent role elevation without proper authorization
+      allow update: if (isOwner(userId) || isAdmin()) &&
+                       isValidUserData() &&
+                       // Users cannot change their own role unless they're admin
+                       (isOwner(userId) ? 
+                         (request.resource.data.role == resource.data.role || isAdmin()) :
+                         true) &&
+                       // Prevent deactivating oneself unless admin
+                       (isOwner(userId) ? 
+                         (request.resource.data.isActive == true || isAdmin()) :
+                         true);
+      
+      // Only admins can delete user profiles (soft delete preferred)
+      allow delete: if isAdmin();
+      
+      // Subcollections for user-specific data
+      match /sessions/{sessionId} {
+        // Users can manage their own sessions
+        allow read, write: if isOwner(userId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+      
+      match /devices/{deviceId} {
+        // Users can manage their own devices
+        allow read, write: if isOwner(userId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+      
+      match /preferences_history/{historyId} {
+        // Users can read their preference history
+        // Write access controlled by cloud functions
+        allow read: if isOwner(userId);
+        allow write: if false; // Only cloud functions should write history
+      }
+    }
+    
+    // =======================
+    // FAMILIES COLLECTION RULES
+    // =======================
+    
+    match /families/{familyId} {
+      // Family members can read family data
+      allow read: if inSameFamily(familyId);
+      
+      // Only authenticated users can create families (they become admin)
+      allow create: if isAuthenticated() && 
+                       request.resource.data.adminUserId == request.auth.uid;
+      
+      // Only family admin can update family settings
+      allow update: if inSameFamily(familyId) && 
+                       resource.data.adminUserId == request.auth.uid;
+      
+      // Only family admin can delete family
+      allow delete: if resource.data.adminUserId == request.auth.uid;
+    }
+    
+    // =======================
+    // TRANSACTIONS COLLECTION RULES
+    // =======================
+    
+    match /transactions/{transactionId} {
+      // Family members can read family transactions
+      // Users can always read their own transactions
+      allow read: if isOwner(resource.data.userId) || 
+                     inSameFamily(resource.data.familyId);
+      
+      // Users can create transactions for themselves
+      // Parents/Admins can create for family members
+      allow create: if isAuthenticated() &&
+                       (isOwner(request.resource.data.userId) || canManage()) &&
+                       inSameFamily(request.resource.data.familyId);
+      
+      // Users can update their own pending transactions
+      // Parents/Admins can update any family transaction
+      allow update: if (isOwner(resource.data.userId) && resource.data.status == 'pending') ||
+                       (canManage() && inSameFamily(resource.data.familyId));
+      
+      // Only admins can delete transactions
+      allow delete: if isAdmin() && inSameFamily(resource.data.familyId);
+    }
+    
+    // =======================
+    // BUDGETS COLLECTION RULES
+    // =======================
+    
+    match /budgets/{budgetId} {
+      // Family members can read family budgets
+      allow read: if inSameFamily(resource.data.familyId);
+      
+      // Only parents/admins can create budgets
+      allow create: if canManage() && 
+                       inSameFamily(request.resource.data.familyId);
+      
+      // Only budget creator or family admin can update
+      allow update: if (isOwner(resource.data.createdBy) || 
+                        (resource.data.familyId == get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid)) &&
+                       inSameFamily(resource.data.familyId);
+      
+      // Only family admin can delete budgets
+      allow delete: if inSameFamily(resource.data.familyId) &&
+                       get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid;
+    }
+    
+    // =======================
+    // NOTIFICATIONS COLLECTION RULES
+    // =======================
+    
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isOwner(resource.data.userId);
+      
+      // Only cloud functions should create notifications
+      allow create: if false;
+      
+      // Users can mark their own notifications as read
+      allow update: if isOwner(resource.data.userId) &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      
+      // Users can delete their own notifications
+      allow delete: if isOwner(resource.data.userId);
+    }
+    
+    // =======================
+    // SOURCE PERIODS COLLECTION RULES
+    // =======================
+    
+    match /source_periods/{periodId} {
+      // All authenticated users can read source periods (needed for budget creation)
+      allow read: if isAuthenticated();
+      
+      // Only admins can create/update/delete source periods
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // =======================
+    // SYSTEM COLLECTIONS
+    // =======================
+    
+    // Admin-only collections
+    match /admin/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Analytics and logs (read-only for admins)
+    match /analytics/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false; // Only cloud functions
+    }
+    
+    match /audit_logs/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false; // Only cloud functions
+    }
+    
+    // Deny all other requests
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
