@@ -53,10 +53,10 @@ export const generateSourcePeriods = onRequest({
       
       // Generate periods from 2023 to 2033
       for (let year = 2023; year <= 2033; year++) {
-        // Generate monthly periods
+        // Generate monthly periods (UTC+0)
         for (let month = 1; month <= 12; month++) {
-          const startDate = new Date(year, month - 1, 1);
-          const endDate = new Date(year, month - 1 + 1, 0, 23, 59, 59, 999); // Last day of month
+          const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+          const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // Last day of month
           
           const monthlyPeriod: Omit<SourcePeriod, "createdAt" | "updatedAt"> = {
             id: `${year}M${month.toString().padStart(2, '0')}`,
@@ -75,9 +75,9 @@ export const generateSourcePeriods = onRequest({
 
           periods.push(monthlyPeriod);
 
-          // Generate bi-monthly periods (1st-15th, 16th-end)
-          const firstHalfEnd = new Date(year, month - 1, 15, 23, 59, 59, 999);
-          const secondHalfStart = new Date(year, month - 1, 16);
+          // Generate bi-monthly periods (1st-15th, 16th-end) (UTC+0)
+          const firstHalfEnd = new Date(Date.UTC(year, month - 1, 15, 23, 59, 59, 999));
+          const secondHalfStart = new Date(Date.UTC(year, month - 1, 16, 0, 0, 0, 0));
 
           const biMonthlyFirstHalf: Omit<SourcePeriod, "createdAt" | "updatedAt"> = {
             id: `${year}BM${month.toString().padStart(2, '0')}A`,
@@ -114,24 +114,24 @@ export const generateSourcePeriods = onRequest({
           periods.push(biMonthlyFirstHalf, biMonthlySecondHalf);
         }
 
-        // Generate weekly periods (Sunday start)
-        const yearStart = new Date(year, 0, 1);
-        const yearEnd = new Date(year, 11, 31);
+        // Generate weekly periods (Sunday start) (UTC+0)
+        const yearStart = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+        const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
         
-        // Find the first Sunday of the year or the first day if it's Sunday
-        let currentWeekStart = new Date(yearStart);
-        while (currentWeekStart.getDay() !== 0) {
-          currentWeekStart.setDate(currentWeekStart.getDate() - 1);
+        // Find the first Sunday of the year or the first day if it's Sunday (UTC)
+        let currentWeekStart = new Date(yearStart.getTime());
+        while (currentWeekStart.getUTCDay() !== 0) {
+          currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() - 1);
         }
 
         let weekNumber = 1;
-        while (currentWeekStart.getFullYear() === year || currentWeekStart < yearEnd) {
-          const weekEnd = new Date(currentWeekStart);
-          weekEnd.setDate(weekEnd.getDate() + 6);
-          weekEnd.setHours(23, 59, 59, 999);
+        while (currentWeekStart.getUTCFullYear() === year || currentWeekStart < yearEnd) {
+          const weekEnd = new Date(currentWeekStart.getTime());
+          weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+          weekEnd.setUTCHours(23, 59, 59, 999);
 
-          // Only include weeks that have some days in the current year
-          if (weekEnd.getFullYear() >= year && currentWeekStart.getFullYear() <= year) {
+          // Only include weeks that have some days in the current year (UTC)
+          if (weekEnd.getUTCFullYear() >= year && currentWeekStart.getUTCFullYear() <= year) {
             // Get the ISO week number for better accuracy
             const isoWeekNumber = getISOWeekNumber(currentWeekStart);
             
@@ -154,7 +154,7 @@ export const generateSourcePeriods = onRequest({
             weekNumber++;
           }
 
-          currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+          currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() + 7);
         }
       }
 
