@@ -103,7 +103,7 @@ export const transferFamilyAdmin = onRequest({
         // Update current admin role to parent
         const currentAdminRef = admin.firestore().collection("users").doc(currentAdmin.id!);
         transaction.update(currentAdminRef, {
-          role: UserRole.PARENT,
+          role: UserRole.EDITOR,
           updatedAt: admin.firestore.Timestamp.now(),
         });
       });
@@ -115,7 +115,7 @@ export const transferFamilyAdmin = onRequest({
           familyId: currentAdmin.familyId,
         }),
         setUserClaims(currentAdmin.id!, {
-          role: UserRole.PARENT,
+          role: UserRole.EDITOR,
           familyId: currentAdmin.familyId,
         }),
       ]);
@@ -132,7 +132,7 @@ export const transferFamilyAdmin = onRequest({
           id: currentAdmin.id,
           email: currentAdmin.email,
           displayName: currentAdmin.displayName,
-          newRole: UserRole.PARENT,
+          newRole: UserRole.EDITOR,
         },
         newAdmin: {
           id: newAdminUserId,

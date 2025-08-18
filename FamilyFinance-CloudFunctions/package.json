@@ -30,7 +30,9 @@
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "moment": "^2.29.4",
-    "uuid": "^9.0.1"
+    "plaid": "^11.0.0",
+    "uuid": "^9.0.1",
+    "zod": "^4.0.17"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.0",

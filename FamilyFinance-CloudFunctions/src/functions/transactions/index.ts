@@ -44,7 +44,7 @@ export const createTransaction = onRequest({
 
     try {
       // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.CHILD);
+      const authResult = await authMiddleware(request, UserRole.VIEWER);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
@@ -207,7 +207,7 @@ export const updateTransaction = onRequest({
       }
 
       // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.CHILD);
+      const authResult = await authMiddleware(request, UserRole.VIEWER);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
@@ -289,7 +289,7 @@ export const deleteTransaction = onRequest({
       }
 
       // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.CHILD);
+      const authResult = await authMiddleware(request, UserRole.VIEWER);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
@@ -414,7 +414,7 @@ export const getFamilyTransactions = onRequest({
 
     try {
       // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.PARENT);
+      const authResult = await authMiddleware(request, UserRole.EDITOR);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
@@ -479,7 +479,7 @@ export const approveTransaction = onRequest({
       }
 
       // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.PARENT);
+      const authResult = await authMiddleware(request, UserRole.EDITOR);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }

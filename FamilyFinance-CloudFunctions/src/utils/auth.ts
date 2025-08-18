@@ -2,6 +2,9 @@ import * as admin from "firebase-admin";
 import { User, UserRole, FunctionResponse, ApiError } from "../types";
 import { getDocument } from "./firestore";
 
+// Re-export UserRole for use in other modules
+export { UserRole } from "../types";
+
 /**
  * Middleware to verify Firebase Auth token
  */
@@ -37,9 +40,8 @@ export function hasRequiredRole(
 ): boolean {
   const roleHierarchy = {
     [UserRole.VIEWER]: 1,
-    [UserRole.CHILD]: 2,
-    [UserRole.PARENT]: 3,
-    [UserRole.ADMIN]: 4,
+    [UserRole.EDITOR]: 2,
+    [UserRole.ADMIN]: 3,
   };
 
   return roleHierarchy[userRole] >= roleHierarchy[requiredRole];
@@ -88,12 +90,6 @@ export async function checkUserAccess(
 
     // Admin can access anyone in the family
     if (requestingUser.role === UserRole.ADMIN) {
-      return true;
-    }
-
-    // Parents can access children's data
-    if (requestingUser.role === UserRole.PARENT && 
-        targetUser.role === UserRole.CHILD) {
       return true;
     }
 
@@ -287,4 +283,48 @@ export function validateCorsOrigin(origin: string): boolean {
   }
 
   return allowedOrigins.includes(origin) || origin.startsWith("http://localhost:");
+}
+
+/**
+ * Simplified authentication function for use in Plaid functions
+ * Returns user and decoded token for authenticated requests
+ */
+export async function authenticateRequest(
+  request: any,
+  requiredRole: UserRole = UserRole.VIEWER
+): Promise<{
+  user: admin.auth.DecodedIdToken;
+  userData: User;
+}> {
+  // Check for Authorization header
+  const authHeader = request.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new Error("Authorization header with Bearer token is required");
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+  
+  // Verify the token
+  const decodedToken = await verifyAuthToken(idToken);
+  
+  // Get user document with role
+  const userData = await getUserWithRole(decodedToken.uid);
+  if (!userData) {
+    throw new Error("User document not found");
+  }
+
+  // Check if user is active
+  if (!userData.isActive) {
+    throw new Error("User account is inactive");
+  }
+
+  // Check role permissions
+  if (!hasRequiredRole(userData.role, requiredRole)) {
+    throw new Error(`Required role: ${requiredRole}, user role: ${userData.role}`);
+  }
+
+  return {
+    user: decodedToken,
+    userData,
+  };
 }

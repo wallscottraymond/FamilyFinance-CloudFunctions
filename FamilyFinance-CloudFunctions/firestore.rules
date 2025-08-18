@@ -207,6 +207,14 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow write: if false; // Only cloud functions should write history
       }
+      
+      match /plaidItems/{itemId} {
+        // Users can manage their own Plaid items
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isAuthenticated();
+        allow update: if isOwner(userId) && isAuthenticated();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
     }
     
     // =======================
@@ -234,24 +242,28 @@ service cloud.firestore {
     // =======================
     
     match /transactions/{transactionId} {
-      // Family members can read family transactions
-      // Users can always read their own transactions
+      // Users can read their own transactions
+      // Family members can read family transactions if familyId is set
       allow read: if isOwner(resource.data.userId) || 
-                     inSameFamily(resource.data.familyId);
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
       // Users can create transactions for themselves
       // Parents/Admins can create for family members
+      // Cloud functions can create Plaid transactions
       allow create: if isAuthenticated() &&
                        (isOwner(request.resource.data.userId) || canManage()) &&
-                       inSameFamily(request.resource.data.familyId);
+                       isValidTransactionData();
       
-      // Users can update their own pending transactions
-      // Parents/Admins can update any family transaction
-      allow update: if (isOwner(resource.data.userId) && resource.data.status == 'pending') ||
-                       (canManage() && inSameFamily(resource.data.familyId));
+      // Users can update their own transactions
+      // Parents/Admins can update family transactions
+      allow update: if (isOwner(resource.data.userId) || 
+                       (resource.data.familyId != null && canManage() && inSameFamily(resource.data.familyId))) &&
+                       isValidTransactionUpdate();
       
-      // Only admins can delete transactions
-      allow delete: if isAdmin() && inSameFamily(resource.data.familyId);
+      // Users can delete their own manual transactions
+      // Admins can delete any transaction
+      allow delete: if (isOwner(resource.data.userId) && resource.data.source != 'plaid') || 
+                       isAdmin();
     }
     
     // =======================
@@ -305,6 +317,216 @@ service cloud.firestore {
       
       // Only admins can create/update/delete source periods
       allow create, update, delete: if isAdmin();
+    }
+    
+    // =======================
+    // ACCOUNTS COLLECTION RULES
+    // =======================
+    
+    match /accounts/{accountId} {
+      // Users can read their own accounts
+      // Family members can read family accounts
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only authenticated users can create their own accounts
+      allow create: if isAuthenticated() &&
+                       isOwner(request.resource.data.userId);
+      
+      // Users can update their own accounts
+      // Admins can update any account
+      allow update: if (isOwner(resource.data.userId) || isAdmin()) &&
+                       // Prevent changing userId after creation
+                       request.resource.data.userId == resource.data.userId;
+      
+      // Users can delete their own accounts
+      // Admins can delete any account
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+
+    // =======================
+    // PLAID INTEGRATION COLLECTIONS
+    // =======================
+    
+    match /plaid_items/{itemId} {
+      // Users can read their own Plaid items
+      // Family members can read basic item info (institution name, status)
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only authenticated users can create their own Plaid items
+      allow create: if isAuthenticated() &&
+                       isOwner(request.resource.data.userId) &&
+                       isValidPlaidItemData();
+      
+      // Users can update their own Plaid items
+      // Admins can update any Plaid item for troubleshooting
+      allow update: if (isOwner(resource.data.userId) || isAdmin()) &&
+                       isValidPlaidItemData() &&
+                       // Prevent changing userId after creation
+                       request.resource.data.userId == resource.data.userId;
+      
+      // Users can delete their own Plaid items
+      // Admins can delete any Plaid item
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+    
+    match /plaid_accounts/{accountId} {
+      // Users can read their own Plaid accounts
+      // Family members can read basic account info (name, type, balances)
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only authenticated users can create their own Plaid accounts
+      allow create: if isAuthenticated() &&
+                       isOwner(request.resource.data.userId) &&
+                       isValidPlaidAccountData();
+      
+      // Users can update their own Plaid accounts (sync settings, visibility)
+      // Admins can update any Plaid account
+      allow update: if (isOwner(resource.data.userId) || isAdmin()) &&
+                       isValidPlaidAccountData() &&
+                       // Prevent changing userId after creation
+                       request.resource.data.userId == resource.data.userId;
+      
+      // Users can delete their own Plaid accounts
+      // Admins can delete any Plaid account
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+    
+    match /plaid_transactions/{transactionId} {
+      // Users can read their own Plaid transactions
+      // Family members can read family transactions (filtered by cloud functions for privacy)
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only cloud functions should create Plaid transactions (from sync)
+      allow create: if false;
+      
+      // Users can update limited fields on their own transactions (user notes, tags, category overrides)
+      allow update: if isOwner(resource.data.userId) &&
+                       isValidPlaidTransactionUpdate();
+      
+      // Only admins can delete Plaid transactions (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    match /plaid_webhooks/{webhookId} {
+      // Only admins can read webhook logs (for debugging)
+      allow read: if isAdmin();
+      
+      // Only cloud functions should create webhook records
+      allow create: if false;
+      
+      // Only cloud functions should update webhook processing status
+      allow update: if false;
+      
+      // Only admins can delete webhook records (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    match /plaid_configuration/config {
+      // Only admins can read Plaid configuration
+      allow read: if isAdmin();
+      
+      // Only admins can update Plaid configuration
+      allow create, update: if isAdmin() && isValidPlaidConfigData();
+      
+      // Only admins can delete Plaid configuration
+      allow delete: if isAdmin();
+    }
+    
+    // Validation functions for Plaid data
+    function isValidPlaidItemData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['itemId', 'userId', 'institutionId', 'institutionName', 'accessToken', 'products', 'status', 'isActive']) &&
+             data.itemId is string && data.itemId.size() > 0 &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.institutionId is string && data.institutionId.size() > 0 &&
+             data.institutionName is string && data.institutionName.size() > 0 &&
+             data.accessToken is string && data.accessToken.size() > 0 &&
+             data.products is list &&
+             data.status is string && data.status in ['GOOD', 'ITEM_LOGIN_REQUIRED', 'PENDING_EXPIRATION', 'EXPIRED', 'ERROR'] &&
+             data.isActive is bool &&
+             // Ensure familyId matches user's family if provided
+             (data.familyId == null || 
+              (exists(/databases/$(database)/documents/users/$(data.userId)) &&
+               get(/databases/$(database)/documents/users/$(data.userId)).data.familyId == data.familyId));
+    }
+    
+    function isValidPlaidAccountData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['accountId', 'itemId', 'userId', 'name', 'type', 'subtype', 'balances', 'isActive', 'isSyncEnabled', 'metadata']) &&
+             data.accountId is string && data.accountId.size() > 0 &&
+             data.itemId is string && data.itemId.size() > 0 &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.name is string && data.name.size() > 0 &&
+             data.type is string && data.type in ['depository', 'credit', 'loan', 'investment', 'other'] &&
+             data.subtype is string &&
+             data.balances is map && data.balances.keys().hasAll(['current']) &&
+             data.balances.current is number &&
+             data.isActive is bool &&
+             data.isSyncEnabled is bool &&
+             data.metadata is map &&
+             // Ensure familyId matches user's family if provided
+             (data.familyId == null || 
+              (exists(/databases/$(database)/documents/users/$(data.userId)) &&
+               get(/databases/$(database)/documents/users/$(data.userId)).data.familyId == data.familyId));
+    }
+    
+    function isValidPlaidTransactionUpdate() {
+      let data = request.resource.data;
+      let resource = resource.data;
+      // Only allow updates to user-modifiable fields
+      let allowedFields = ['userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt'];
+      let changedFields = data.diff(resource).affectedKeys();
+      return changedFields.hasOnly(allowedFields);
+    }
+    
+    function isValidPlaidConfigData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['clientId', 'environment', 'products', 'countryCodes', 'isActive', 'syncSettings', 'encryptionSettings', 'errorHandling']) &&
+             data.clientId is string && data.clientId.size() > 0 &&
+             data.environment is string && data.environment in ['sandbox', 'development', 'production'] &&
+             data.products is list &&
+             data.countryCodes is list &&
+             data.isActive is bool &&
+             data.syncSettings is map && data.syncSettings.keys().hasAll(['maxTransactionDays', 'frontendTransactionDays', 'enableWebhooks', 'enableScheduledSync']) &&
+             data.encryptionSettings is map && data.encryptionSettings.keys().hasAll(['algorithm', 'keyRotationDays']) &&
+             data.errorHandling is map && data.errorHandling.keys().hasAll(['maxRetries', 'retryDelayMs', 'errorReportingEnabled']);
+    }
+    
+    // Transaction validation functions
+    function isValidTransactionData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['id', 'userId', 'amount', 'date', 'name', 'source', 'status']) &&
+             data.id is string && data.id.size() > 0 &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.amount is number &&
+             data.date is string &&
+             data.name is string && data.name.size() > 0 &&
+             data.source is string && data.source in ['manual', 'plaid', 'import'] &&
+             data.status is string && data.status in ['pending', 'posted', 'cleared'] &&
+             data.isManual is bool &&
+             (data.familyId == null || data.familyId is string);
+    }
+    
+    function isValidTransactionUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+      let changedFields = data.diff(resource_data).affectedKeys();
+      
+      // For Plaid transactions, only allow updating user-modifiable fields
+      let plaidAllowedFields = ['notes', 'tags', 'categoryId', 'updatedAt'];
+      // For manual transactions, allow more fields
+      let manualAllowedFields = ['notes', 'tags', 'categoryId', 'isManual', 'status', 'updatedAt', 'name', 'amount'];
+      
+      let allowedFields = resource_data.source == 'plaid' ? plaidAllowedFields : manualAllowedFields;
+      
+      return changedFields.hasOnly(allowedFields) &&
+             // Prevent changing userId or core transaction ID
+             data.userId == resource_data.userId &&
+             data.id == resource_data.id;
     }
     
     // =======================

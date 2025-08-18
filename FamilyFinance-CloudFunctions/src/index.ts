@@ -11,6 +11,7 @@ export * from "./functions/families";
 export * from "./functions/transactions";
 export * from "./functions/budgets";
 export * from "./functions/admin";
+export * from "./functions/plaid"; // Plaid integration functions
 
 // Health check function (v2)
 export const healthCheck = onRequest({

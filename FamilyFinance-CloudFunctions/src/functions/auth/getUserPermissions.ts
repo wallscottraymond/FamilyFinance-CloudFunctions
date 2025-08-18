@@ -53,7 +53,7 @@ export const getUserPermissions = onRequest({
           canChangeRoles: true,
           canViewReports: true,
         },
-        [UserRole.PARENT]: {
+        [UserRole.EDITOR]: {
           canCreateTransactions: true,
           canEditOwnTransactions: true,
           canDeleteOwnTransactions: true,
@@ -66,20 +66,6 @@ export const getUserPermissions = onRequest({
           canRemoveMembers: false,
           canChangeRoles: false,
           canViewReports: true,
-        },
-        [UserRole.CHILD]: {
-          canCreateTransactions: true,
-          canEditOwnTransactions: true,
-          canDeleteOwnTransactions: true,
-          canApproveTransactions: false,
-          canCreateBudgets: false,
-          canEditOwnBudgets: false,
-          canViewOwnTransactions: true,
-          canManageFamily: false,
-          canInviteMembers: false,
-          canRemoveMembers: false,
-          canChangeRoles: false,
-          canViewReports: false,
         },
         [UserRole.VIEWER]: {
           canCreateTransactions: false,
@@ -109,7 +95,7 @@ export const getUserPermissions = onRequest({
       // Adjust permissions based on family settings
       if (familySettings) {
         // If children transactions are disabled, override child permissions
-        if (!(familySettings as any).allowChildTransactions && user.role === UserRole.CHILD) {
+        if (!(familySettings as any).allowViewerTransactions && user.role === UserRole.VIEWER) {
           permissions.canCreateTransactions = false;
         }
       }

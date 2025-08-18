@@ -39,8 +39,8 @@ export const updateBudget = onRequest({
         );
       }
 
-      // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.PARENT);
+      // Authenticate user (editors can update budgets they created or are members of)
+      const authResult = await authMiddleware(request, UserRole.EDITOR);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
@@ -63,11 +63,21 @@ export const updateBudget = onRequest({
         );
       }
 
-      // Check family access
-      if (!await checkFamilyAccess(user.id!, existingBudget.familyId)) {
-        return response.status(403).json(
-          createErrorResponse("access-denied", "Cannot access this budget")
-        );
+      // Check access - for individual budgets check ownership, for shared budgets check family access
+      if (existingBudget.isShared && existingBudget.familyId) {
+        // Shared budget - check family access
+        if (!await checkFamilyAccess(user.id!, existingBudget.familyId)) {
+          return response.status(403).json(
+            createErrorResponse("access-denied", "Cannot access this family budget")
+          );
+        }
+      } else {
+        // Individual budget - check ownership or membership
+        if (existingBudget.createdBy !== user.id! && !existingBudget.memberIds.includes(user.id!)) {
+          return response.status(403).json(
+            createErrorResponse("access-denied", "Cannot update budget you don't have access to")
+          );
+        }
       }
 
       const updateData = request.body;

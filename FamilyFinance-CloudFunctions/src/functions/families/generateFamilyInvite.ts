@@ -39,7 +39,7 @@ export const generateFamilyInvite = onRequest({
 
     try {
       // Authenticate user (parent or admin can create invites)
-      const authResult = await authMiddleware(request, UserRole.PARENT);
+      const authResult = await authMiddleware(request, UserRole.EDITOR);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }

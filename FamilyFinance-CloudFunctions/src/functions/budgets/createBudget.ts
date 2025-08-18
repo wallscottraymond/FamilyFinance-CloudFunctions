@@ -37,19 +37,13 @@ export const createBudget = onRequest({
     }
 
     try {
-      // Authenticate user (parent or admin can create budgets)
-      const authResult = await authMiddleware(request, UserRole.PARENT);
+      // Authenticate user (editor or admin can create budgets)
+      const authResult = await authMiddleware(request, UserRole.EDITOR);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
 
       const { user } = authResult;
-
-      if (!user.familyId) {
-        return response.status(400).json(
-          createErrorResponse("no-family", "User must belong to a family to create budgets")
-        );
-      }
 
       // Validate request body
       const validation = validateRequest(request.body, createBudgetSchema);
@@ -61,12 +55,29 @@ export const createBudget = onRequest({
 
       const budgetData = validation.value!;
 
-      // Get family for currency and settings
-      const family = await getDocument("families", user.familyId);
-      if (!family) {
-        return response.status(404).json(
-          createErrorResponse("family-not-found", "Family not found")
-        );
+      // Determine if this is a shared budget and validate accordingly
+      const isSharedBudget = budgetData.isShared || false;
+      let currency = "USD"; // Default currency
+      
+      if (isSharedBudget) {
+        // For shared budgets, user must belong to a family
+        if (!user.familyId) {
+          return response.status(400).json(
+            createErrorResponse("no-family", "User must belong to a family to create shared budgets")
+          );
+        }
+        
+        // Get family for currency and settings
+        const family = await getDocument("families", user.familyId);
+        if (!family) {
+          return response.status(404).json(
+            createErrorResponse("family-not-found", "Family not found")
+          );
+        }
+        currency = (family as any).settings?.currency || "USD";
+      } else {
+        // For individual budgets, use user's preferred currency
+        currency = user.preferences?.currency || "USD";
       }
 
       // Calculate dates based on period
@@ -100,10 +111,10 @@ export const createBudget = onRequest({
       const budget: Omit<Budget, "id" | "createdAt" | "updatedAt"> = {
         name: budgetData.name,
         description: budgetData.description,
-        familyId: user.familyId,
+        familyId: isSharedBudget ? user.familyId : undefined, // Only set for shared budgets
         createdBy: user.id!,
         amount: budgetData.amount,
-        currency: (family as any).settings.currency,
+        currency: currency,
         category: budgetData.category,
         period: budgetData.period,
         startDate: admin.firestore.Timestamp.fromDate(startDate),
@@ -112,7 +123,8 @@ export const createBudget = onRequest({
         remaining: budgetData.amount,
         alertThreshold: budgetData.alertThreshold || 80,
         isActive: true,
-        memberIds: budgetData.memberIds || [user.id!],
+        memberIds: budgetData.memberIds || [user.id!], // For individual budgets, just the creator
+        isShared: isSharedBudget,
       };
 
       const createdBudget = await createDocument<Budget>("budgets", budget);

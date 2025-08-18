@@ -59,6 +59,7 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   endDate: dateSchema.optional(),
   alertThreshold: Joi.number().min(0).max(100).optional().default(80),
   memberIds: Joi.array().items(Joi.string()).optional(),
+  isShared: Joi.boolean().optional().default(false),
 });
 
 // Family validation schemas
@@ -70,7 +71,7 @@ export const createFamilySchema = Joi.object<CreateFamilyRequest>({
     budgetPeriod: Joi.string().valid("weekly", "monthly", "yearly").optional().default("monthly"),
     requireApprovalForExpenses: Joi.boolean().optional().default(false),
     expenseApprovalLimit: Joi.number().min(0).optional().default(100),
-    allowChildTransactions: Joi.boolean().optional().default(true),
+    allowViewerTransactions: Joi.boolean().optional().default(true),
   }).optional(),
 });
 
@@ -170,9 +171,8 @@ export function validateUserPermission(
 
   // Role hierarchy check
   const roleHierarchy = {
-    [UserRole.ADMIN]: 4,
-    [UserRole.PARENT]: 3,
-    [UserRole.CHILD]: 2,
+    [UserRole.ADMIN]: 3,
+    [UserRole.EDITOR]: 2,
     [UserRole.VIEWER]: 1,
   };
 
@@ -207,24 +207,15 @@ export function validateTransactionPermission(
   familySettings: {
     requireApprovalForExpenses: boolean;
     expenseApprovalLimit: number;
-    allowChildTransactions: boolean;
+    allowViewerTransactions: boolean; // Updated from allowViewerTransactions
   }
 ): { canCreate: boolean; requiresApproval: boolean; reason?: string } {
-  // Check if children can make transactions
-  if (userRole === UserRole.CHILD && !familySettings.allowChildTransactions) {
+  // Check if viewers can make transactions
+  if (userRole === UserRole.VIEWER && !familySettings.allowViewerTransactions) {
     return {
       canCreate: false,
       requiresApproval: false,
-      reason: "Children are not allowed to create transactions",
-    };
-  }
-
-  // Viewers cannot create transactions
-  if (userRole === UserRole.VIEWER) {
-    return {
-      canCreate: false,
-      requiresApproval: false,
-      reason: "Viewers cannot create transactions",
+      reason: "Viewers are not allowed to create transactions",
     };
   }
 
@@ -255,3 +246,23 @@ export const customJoiMessages = {
   "array.max": "Too many items in array",
   "dateRange.invalid": "End date must be after start date",
 };
+
+/**
+ * Validates request body against Zod schema (used in Plaid functions)
+ */
+export function validateRequestBody<T>(
+  data: unknown,
+  schema: { parse: (data: unknown) => T }
+): { success: true; data: T } | { success: false; error: { errors: any[] } } {
+  try {
+    const validatedData = schema.parse(data);
+    return { success: true, data: validatedData };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: {
+        errors: error.errors || [{ message: error.message }],
+      },
+    };
+  }
+}

@@ -12,16 +12,15 @@ export interface User extends BaseDocument {
   email: string;
   displayName: string;
   photoURL?: string;
-  familyId?: string;
-  role: UserRole;
+  familyId?: string; // Optional - only set when user joins a family/group
+  role: UserRole; // Role within family/group context (individual users default to EDITOR)
   preferences: UserPreferences;
   isActive: boolean;
 }
 
 export enum UserRole {
   ADMIN = "admin",
-  PARENT = "parent",
-  CHILD = "child",
+  EDITOR = "editor", 
   VIEWER = "viewer"
 }
 
@@ -143,7 +142,7 @@ export interface FamilySettings {
   budgetPeriod: "weekly" | "monthly" | "yearly";
   requireApprovalForExpenses: boolean;
   expenseApprovalLimit: number;
-  allowChildTransactions: boolean;
+  allowViewerTransactions: boolean;
 }
 
 // Transaction related types
@@ -217,8 +216,8 @@ export interface TransactionLocation {
 export interface Budget extends BaseDocument {
   name: string;
   description?: string;
-  familyId: string;
-  createdBy: string;
+  familyId?: string; // Optional - only set for shared/group budgets
+  createdBy: string; // Always set to the user who created the budget
   amount: number;
   currency: string;
   category: TransactionCategory;
@@ -229,7 +228,8 @@ export interface Budget extends BaseDocument {
   remaining: number;
   alertThreshold: number; // Percentage (0-100)
   isActive: boolean;
-  memberIds: string[]; // Users who can spend from this budget
+  memberIds: string[]; // Users who can spend from this budget (for individual budgets, just the creator)
+  isShared: boolean; // True for group/family budgets, false for individual budgets
 }
 
 export enum BudgetPeriod {
@@ -322,7 +322,8 @@ export interface CreateBudgetRequest {
   startDate: string; // ISO date string
   endDate?: string; // ISO date string
   alertThreshold?: number;
-  memberIds?: string[];
+  memberIds?: string[]; // Optional - for shared budgets only
+  isShared?: boolean; // Optional - defaults to false (individual budget)
 }
 
 export interface CreateFamilyRequest {
@@ -386,4 +387,448 @@ export interface FunctionResponse<T = any> {
   data?: T;
   error?: ApiError;
   timestamp: string;
+}
+
+// =======================
+// PLAID INTEGRATION TYPES
+// =======================
+
+// Plaid Items - represents the connection between user and financial institution
+export interface PlaidItem extends BaseDocument {
+  itemId: string; // Plaid item_id
+  userId: string; // Family Finance user ID
+  familyId?: string; // Optional family association
+  institutionId: string; // Plaid institution_id
+  institutionName: string; // Human-readable institution name
+  institutionLogo?: string; // Institution logo URL from Plaid
+  accessToken: string; // ENCRYPTED Plaid access token
+  cursor?: string; // For transaction sync pagination
+  products: PlaidProduct[]; // Products enabled for this item
+  availableProducts: PlaidProduct[]; // Products available but not yet enabled
+  billedProducts: PlaidProduct[]; // Products being billed
+  status: PlaidItemStatus;
+  error?: PlaidItemError; // Current error state if any
+  consentExpirationTime?: Timestamp; // When user consent expires
+  lastWebhookReceived?: Timestamp; // Last webhook received for this item
+  updateMode?: PlaidUpdateMode; // How this item should be updated
+  isActive: boolean; // Whether this item is active and should be synced
+}
+
+export enum PlaidProduct {
+  TRANSACTIONS = "transactions",
+  ACCOUNTS = "accounts", 
+  IDENTITY = "identity",
+  ASSETS = "assets",
+  LIABILITIES = "liabilities",
+  INVESTMENTS = "investments",
+  AUTH = "auth",
+  INCOME = "income"
+}
+
+export enum PlaidItemStatus {
+  GOOD = "ITEM_LOGIN_REQUIRED", // Item is in good state
+  LOGIN_REQUIRED = "ITEM_LOGIN_REQUIRED", // User needs to update login credentials
+  PENDING_EXPIRATION = "PENDING_EXPIRATION", // Item will expire soon
+  EXPIRED = "EXPIRED", // Item has expired
+  ERROR = "ERROR" // Item is in error state
+}
+
+export interface PlaidItemError {
+  errorType: string; // Plaid error type (e.g., "ITEM_ERROR", "INVALID_CREDENTIALS")
+  errorCode: string; // Specific error code from Plaid
+  displayMessage?: string; // User-friendly error message
+  lastOccurredAt: Timestamp;
+  retryCount: number; // Number of automatic retry attempts
+}
+
+export enum PlaidUpdateMode {
+  WEBHOOK = "webhook", // Update via webhooks (preferred)
+  POLLING = "polling", // Update via scheduled polling
+  MANUAL = "manual" // Manual update only
+}
+
+// Plaid Accounts - bank accounts, credit cards, etc.
+export interface PlaidAccount extends BaseDocument {
+  accountId: string; // Plaid account_id
+  itemId: string; // Reference to plaid_items document
+  userId: string; // Family Finance user ID  
+  familyId?: string; // Optional family association
+  persistentAccountId?: string; // Plaid persistent_account_id for tracking across reconnections
+  name: string; // Account name from institution
+  mask?: string; // Account number mask (e.g., "0000")
+  officialName?: string; // Official account name from institution
+  type: PlaidAccountType;
+  subtype: PlaidAccountSubtype;
+  balances: PlaidAccountBalances;
+  verificationStatus?: PlaidVerificationStatus;
+  isActive: boolean; // Whether this account should be included in transactions
+  isSyncEnabled: boolean; // Whether to sync transactions for this account
+  lastSyncedAt?: Timestamp; // Last time transactions were synced
+  metadata: {
+    institution: {
+      name: string;
+      logo?: string;
+    };
+    linkedAt: Timestamp; // When account was first linked
+    lastBalanceUpdate: Timestamp; // Last time balance was updated
+  };
+}
+
+export enum PlaidAccountType {
+  DEPOSITORY = "depository", // Checking, savings, etc.
+  CREDIT = "credit", // Credit cards, lines of credit
+  LOAN = "loan", // Mortgages, auto loans, etc.
+  INVESTMENT = "investment", // Investment accounts
+  OTHER = "other" // Other account types
+}
+
+export enum PlaidAccountSubtype {
+  // Depository subtypes
+  CHECKING = "checking",
+  SAVINGS = "savings",
+  HSA = "hsa",
+  CD = "cd",
+  MONEY_MARKET = "money market",
+  PAYPAL = "paypal",
+  PREPAID = "prepaid",
+  
+  // Credit subtypes  
+  CREDIT_CARD = "credit card",
+  PAYPAL_CREDIT = "paypal credit",
+  
+  // Loan subtypes
+  AUTO = "auto",
+  COMMERCIAL = "commercial", 
+  CONSTRUCTION = "construction",
+  CONSUMER = "consumer",
+  HOME_EQUITY = "home equity",
+  MORTGAGE = "mortgage",
+  OVERDRAFT = "overdraft",
+  LINE_OF_CREDIT = "line of credit",
+  STUDENT = "student",
+  
+  // Investment subtypes
+  INVESTMENT_401A = "401a",
+  INVESTMENT_401K = "401k", 
+  INVESTMENT_403B = "403b",
+  INVESTMENT_457B = "457b",
+  INVESTMENT_529 = "529",
+  BROKERAGE = "brokerage",
+  CASH_ISA = "cash isa",
+  EDUCATION_SAVINGS_ACCOUNT = "education savings account",
+  FIXED_ANNUITY = "fixed annuity",
+  GIC = "gic",
+  HEALTH_REIMBURSEMENT_ARRANGEMENT = "health reimbursement arrangement",
+  IRA = "ira",
+  ISA = "isa",
+  KEOGH = "keogh",
+  LIF = "lif",
+  LIFE_INSURANCE = "life insurance",
+  LIRA = "lira",
+  LRIF = "lrif",
+  LRSP = "lrsp",
+  NON_CUSTODIAL_WALLET = "non-custodial wallet",
+  NON_TAXABLE_INVESTMENT_ACCOUNT = "non-taxable investment account",
+  PENSION = "pension",
+  PLAN = "plan",
+  PRIF = "prif",
+  PROFIT_SHARING_PLAN = "profit sharing plan",
+  RDSP = "rdsp",
+  RESP = "resp",
+  RETIREMENT = "retirement",
+  RLIF = "rlif",
+  ROTH = "roth",
+  ROTH_401K = "roth 401k",
+  RRIF = "rrif",
+  RRSP = "rrsp",
+  SARSEP = "sarsep",
+  SEP_IRA = "sep ira",
+  SIMPLE_IRA = "simple ira",
+  SIPP = "sipp",
+  STOCK_PLAN = "stock plan",
+  TFSA = "tfsa",
+  TRUST = "trust",
+  UGMA = "ugma",
+  UTMA = "utma",
+  VARIABLE_ANNUITY = "variable annuity",
+  
+  // Other
+  OTHER = "other"
+}
+
+export interface PlaidAccountBalances {
+  available?: number; // Available balance (null for credit/loan accounts)
+  current: number; // Current balance
+  limit?: number; // Credit limit (for credit accounts)
+  isoCurrencyCode?: string; // ISO currency code (e.g., "USD")
+  unofficialCurrencyCode?: string; // Unofficial currency code if ISO not available
+  lastUpdated: Timestamp; // When balance was last updated
+}
+
+export enum PlaidVerificationStatus {
+  PENDING_AUTOMATIC_VERIFICATION = "pending_automatic_verification",
+  PENDING_MANUAL_VERIFICATION = "pending_manual_verification", 
+  MANUALLY_VERIFIED = "manually_verified",
+  VERIFICATION_EXPIRED = "verification_expired",
+  VERIFICATION_FAILED = "verification_failed",
+  DATABASE_MATCHED = "database_matched",
+  DATABASE_INSIGHTS_PASS = "database_insights_pass",
+  DATABASE_INSIGHTS_PASS_WITH_CAUTION = "database_insights_pass_with_caution",
+  DATABASE_INSIGHTS_FAIL = "database_insights_fail"
+}
+
+// Plaid Transactions - individual transactions from bank accounts
+export interface PlaidTransaction extends BaseDocument {
+  transactionId: string; // Plaid transaction_id
+  accountId: string; // Reference to plaid_accounts document
+  itemId: string; // Reference to plaid_items document
+  userId: string; // Family Finance user ID
+  familyId?: string; // Optional family association
+  persistentTransactionId?: string; // Plaid persistent_transaction_id
+  amount: number; // Transaction amount (positive for outflows, negative for inflows)
+  isoCurrencyCode?: string; // ISO currency code
+  unofficialCurrencyCode?: string; // Unofficial currency code if ISO not available
+  category: string[]; // Plaid category hierarchy (e.g., ["Food and Drink", "Restaurants"])
+  categoryId: string; // Plaid category_id
+  checkNumber?: string; // Check number if applicable
+  dateTransacted: Timestamp; // Date when transaction occurred (YYYY-MM-DD from Plaid)
+  datePosted: Timestamp; // Date when transaction posted to account
+  location?: PlaidTransactionLocation; // Transaction location data
+  merchantName?: string; // Merchant name
+  merchantEntityId?: string; // Plaid merchant entity ID
+  originalDescription?: string; // Original transaction description
+  paymentMeta: PlaidPaymentMeta; // Payment metadata
+  pending: boolean; // Whether transaction is pending
+  pendingTransactionId?: string; // ID of pending transaction this updates
+  accountOwner?: string; // Account owner (for business accounts)
+  authorizedDate?: Timestamp; // Date transaction was authorized
+  authorizedDatetime?: Timestamp; // Datetime transaction was authorized
+  datetime?: Timestamp; // Datetime of transaction (if available)
+  paymentChannel: PlaidPaymentChannel; // How payment was made
+  personalFinanceCategory?: PlaidPersonalFinanceCategory; // Enhanced categorization
+  transactionCode?: PlaidTransactionCode; // Institution-specific transaction code
+  transactionType?: PlaidTransactionType; // Type of transaction
+  
+  // Family Finance specific fields
+  isProcessed: boolean; // Whether this has been processed into a family transaction
+  familyTransactionId?: string; // ID of corresponding family transaction
+  isHidden: boolean; // Whether user has hidden this transaction
+  userCategory?: TransactionCategory; // User-assigned category override
+  userNotes?: string; // User-added notes
+  tags: string[]; // User-added tags
+  
+  // Sync metadata
+  lastSyncedAt: Timestamp; // When this transaction was last synced from Plaid
+  syncVersion: number; // Version for optimistic concurrency control
+}
+
+export interface PlaidTransactionLocation {
+  address?: string;
+  city?: string;
+  region?: string; // State/province
+  postalCode?: string;
+  country?: string;
+  lat?: number;
+  lon?: number;
+  storeNumber?: string;
+}
+
+export interface PlaidPaymentMeta {
+  byOrderOf?: string;
+  payee?: string;
+  payer?: string; 
+  paymentMethod?: string;
+  paymentProcessor?: string;
+  ppdId?: string;
+  reason?: string;
+  referenceNumber?: string;
+}
+
+export enum PlaidPaymentChannel {
+  ONLINE = "online",
+  IN_STORE = "in store", 
+  ATM = "atm",
+  KIOSK = "kiosk",
+  MOBILE = "mobile",
+  MAIL = "mail",
+  TELEPHONE = "telephone",
+  OTHER = "other"
+}
+
+export interface PlaidPersonalFinanceCategory {
+  primary: string; // Primary category (e.g., "FOOD_AND_DRINK")
+  detailed: string; // Detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
+  confidenceLevel?: string; // Plaid's confidence in categorization
+}
+
+export enum PlaidTransactionCode {
+  ADJUSTMENT = "adjustment",
+  ATM = "atm",
+  BANK_CHARGE = "bank charge",
+  BILL_PAYMENT = "bill payment", 
+  CASH = "cash",
+  CASHBACK = "cashback",
+  CHEQUE = "cheque",
+  DIRECT_DEBIT = "direct debit",
+  INTEREST = "interest",
+  PURCHASE = "purchase",
+  STANDING_ORDER = "standing order",
+  TRANSFER = "transfer",
+  NULL = "null"
+}
+
+export enum PlaidTransactionType {
+  DIGITAL = "digital",
+  PLACE = "place",
+  SPECIAL = "special",
+  UNRESOLVED = "unresolved"
+}
+
+// Plaid Webhooks - for tracking webhook events and ensuring idempotency
+export interface PlaidWebhook extends BaseDocument {
+  webhookType: PlaidWebhookType;
+  webhookCode: PlaidWebhookCode;
+  itemId?: string; // Item ID if webhook is item-specific
+  environmentId: string; // Plaid environment (sandbox/development/production)
+  requestId: string; // Plaid request ID for debugging
+  payload: Record<string, any>; // Full webhook payload
+  processedAt?: Timestamp; // When webhook was successfully processed
+  processingStatus: PlaidWebhookProcessingStatus;
+  processingError?: string; // Error message if processing failed
+  retryCount: number; // Number of processing attempts
+  signature: string; // Webhook signature for verification
+  isValid: boolean; // Whether signature was valid
+}
+
+export enum PlaidWebhookType {
+  TRANSACTIONS = "TRANSACTIONS",
+  ITEM = "ITEM", 
+  AUTH = "AUTH",
+  IDENTITY = "IDENTITY",
+  ASSETS = "ASSETS",
+  HOLDINGS = "HOLDINGS",
+  INVESTMENTS_TRANSACTIONS = "INVESTMENTS_TRANSACTIONS",
+  LIABILITIES = "LIABILITIES",
+  TRANSFER = "TRANSFER",
+  BANK_TRANSFER = "BANK_TRANSFER",
+  INCOME = "INCOME",
+  SIGNAL = "SIGNAL"
+}
+
+export enum PlaidWebhookCode {
+  // TRANSACTIONS webhooks
+  SYNC_UPDATES_AVAILABLE = "SYNC_UPDATES_AVAILABLE",
+  DEFAULT_UPDATE = "DEFAULT_UPDATE",
+  INITIAL_UPDATE = "INITIAL_UPDATE",
+  HISTORICAL_UPDATE = "HISTORICAL_UPDATE",
+  TRANSACTIONS_REMOVED = "TRANSACTIONS_REMOVED",
+  
+  // ITEM webhooks
+  ERROR = "ERROR",
+  PENDING_EXPIRATION = "PENDING_EXPIRATION",
+  USER_PERMISSION_REVOKED = "USER_PERMISSION_REVOKED",
+  WEBHOOK_UPDATE_ACKNOWLEDGED = "WEBHOOK_UPDATE_ACKNOWLEDGED",
+  NEW_ACCOUNTS_AVAILABLE = "NEW_ACCOUNTS_AVAILABLE"
+}
+
+export enum PlaidWebhookProcessingStatus {
+  PENDING = "pending",
+  PROCESSING = "processing", 
+  COMPLETED = "completed",
+  FAILED = "failed",
+  SKIPPED = "skipped"
+}
+
+// Plaid Configuration - app-level Plaid settings
+export interface PlaidConfiguration extends BaseDocument {
+  clientId: string; // Plaid client ID
+  environment: PlaidEnvironment; // Current environment
+  products: PlaidProduct[]; // Enabled products
+  countryCodes: string[]; // Supported country codes
+  webhookUrl?: string; // Webhook endpoint URL
+  isActive: boolean; // Whether Plaid integration is active
+  
+  // Rate limiting and sync settings
+  syncSettings: {
+    maxTransactionDays: number; // How many days of transactions to sync
+    frontendTransactionDays: number; // How many days to load in frontend (30)
+    syncFrequency: PlaidSyncFrequency; // How often to sync
+    enableWebhooks: boolean; // Whether to use webhooks for real-time updates
+    enableScheduledSync: boolean; // Whether to use scheduled sync as backup
+  };
+  
+  // Security settings
+  encryptionSettings: {
+    algorithm: string; // Encryption algorithm for access tokens
+    keyRotationDays: number; // How often to rotate encryption keys
+  };
+  
+  // Error handling
+  errorHandling: {
+    maxRetries: number; // Max retries for failed operations
+    retryDelayMs: number; // Delay between retries
+    errorReportingEnabled: boolean; // Whether to report errors to monitoring
+  };
+}
+
+export enum PlaidEnvironment {
+  SANDBOX = "sandbox",
+  DEVELOPMENT = "development", 
+  PRODUCTION = "production"
+}
+
+export enum PlaidSyncFrequency {
+  REAL_TIME = "real_time", // Webhook-driven only
+  HOURLY = "hourly",
+  EVERY_6_HOURS = "every_6_hours", 
+  DAILY = "daily",
+  MANUAL = "manual"
+}
+
+// API Request/Response types for Plaid integration
+export interface CreatePlaidLinkTokenRequest {
+  userId: string;
+  clientName?: string;
+  countryCodes?: string[];
+  language?: string;
+  products?: PlaidProduct[];
+  accountFilters?: Record<string, any>;
+  redirectUri?: string;
+  androidPackageName?: string;
+}
+
+export interface ExchangePlaidPublicTokenRequest {
+  publicToken: string;
+  institutionId: string;
+  institutionName: string;
+  accountIds?: string[]; // Specific accounts to enable
+}
+
+export interface SyncPlaidTransactionsRequest {
+  itemId?: string; // Sync specific item, or all if not provided
+  accountId?: string; // Sync specific account
+  startDate?: string; // Start date for sync (ISO date)
+  endDate?: string; // End date for sync (ISO date)
+  forceFullSync?: boolean; // Force full sync instead of incremental
+}
+
+export interface PlaidTransactionSyncResponse {
+  itemId: string;
+  accountsCount: number;
+  transactionsAdded: number;
+  transactionsModified: number;
+  transactionsRemoved: number;
+  cursor?: string; // New cursor for next sync
+  hasMore: boolean; // Whether more data is available
+}
+
+export interface PlaidItemStatusResponse {
+  itemId: string;
+  institutionName: string;
+  accountsCount: number;
+  status: PlaidItemStatus;
+  lastSyncedAt?: string;
+  error?: PlaidItemError;
+  products: PlaidProduct[];
+  billedProducts: PlaidProduct[];
 }

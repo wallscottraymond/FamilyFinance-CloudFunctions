@@ -55,11 +55,21 @@ export const getBudgetSummary = onRequest({
         );
       }
 
-      // Check access
-      if (!await checkFamilyAccess(user.id!, budget.familyId)) {
-        return response.status(403).json(
-          createErrorResponse("access-denied", "Cannot access this budget")
-        );
+      // Check access - for individual budgets check ownership/membership, for shared budgets check family access
+      if (budget.isShared && budget.familyId) {
+        // Shared budget - check family access
+        if (!await checkFamilyAccess(user.id!, budget.familyId)) {
+          return response.status(403).json(
+            createErrorResponse("access-denied", "Cannot access this family budget")
+          );
+        }
+      } else {
+        // Individual budget - check ownership or membership
+        if (budget.createdBy !== user.id! && !budget.memberIds.includes(user.id!)) {
+          return response.status(403).json(
+            createErrorResponse("access-denied", "Cannot access this budget")
+          );
+        }
       }
 
       // Get transactions for this budget

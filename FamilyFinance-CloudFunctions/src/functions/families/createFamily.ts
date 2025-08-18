@@ -68,7 +68,7 @@ export const createFamily = onRequest({
         budgetPeriod: "monthly",
         requireApprovalForExpenses: false,
         expenseApprovalLimit: 100,
-        allowChildTransactions: true,
+        allowViewerTransactions: true,
         ...familyData.settings,
       };
 
