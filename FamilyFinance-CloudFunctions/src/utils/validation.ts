@@ -55,6 +55,7 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   amount: amountSchema,
   category: Joi.string().valid(...Object.values(TransactionCategory)).required(),
   period: Joi.string().valid(...Object.values(BudgetPeriod)).required(),
+  budgetType: Joi.string().valid('recurring', 'limited').optional().default('recurring'),
   startDate: dateSchema.required(),
   endDate: dateSchema.optional(),
   alertThreshold: Joi.number().min(0).max(100).optional().default(80),

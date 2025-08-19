@@ -230,6 +230,16 @@ export interface Budget extends BaseDocument {
   isActive: boolean;
   memberIds: string[]; // Users who can spend from this budget (for individual budgets, just the creator)
   isShared: boolean; // True for group/family budgets, false for individual budgets
+  
+  // New fields for budget periods integration
+  budgetType: 'recurring' | 'limited';
+  endPeriod?: string; // For limited budgets - final period ID
+  totalPeriods?: number; // For limited budgets - how many periods
+  activePeriodRange?: {
+    startPeriod: string; // First period ID with budget_periods created
+    endPeriod: string;   // Last period ID with budget_periods created
+  };
+  lastExtended?: Timestamp; // When budget_periods were last extended
 }
 
 export enum BudgetPeriod {
@@ -319,6 +329,7 @@ export interface CreateBudgetRequest {
   amount: number;
   category: TransactionCategory;
   period: BudgetPeriod;
+  budgetType?: 'recurring' | 'limited'; // Budget type
   startDate: string; // ISO date string
   endDate?: string; // ISO date string
   alertThreshold?: number;
@@ -379,6 +390,38 @@ export enum PeriodType {
   WEEKLY = "weekly",
   MONTHLY = "monthly", 
   BI_MONTHLY = "bi_monthly"
+}
+
+// Budget Periods - Links budgets to specific source periods with proportional amounts
+export interface BudgetPeriodDocument extends BaseDocument {
+  budgetId: string;           // Reference to budgets collection
+  periodId: string;           // Reference to source_periods.id (same as sourcePeriodId)
+  sourcePeriodId: string;     // Direct reference to source_periods.id for mapping
+  familyId?: string;          // Optional - same as budget familyId for easy querying
+  
+  // Ownership and permissions
+  userId: string;             // Same as budget.createdBy for security rules
+  createdBy: string;          // Original budget creator (explicit tracking)
+  
+  // Period context (denormalized from source_periods for performance)
+  periodType: PeriodType;     // "weekly" | "monthly" | "bi_monthly"
+  periodStart: Timestamp;     // UTC timestamp
+  periodEnd: Timestamp;       // UTC timestamp
+  
+  // Budget amounts
+  allocatedAmount: number;    // Proportionally calculated amount for this period
+  originalAmount: number;     // Store original calculation for reference
+  
+  // User modifications (only by owner or family managers)
+  userNotes?: string;         // User-added notes for this period
+  modifiedAmount?: number;    // If user overrode the calculated amount
+  isModified: boolean;        // Has user manually adjusted the amount?
+  lastModifiedBy?: string;    // Track who made changes
+  lastModifiedAt?: Timestamp; // When last modified
+  
+  // System fields
+  lastCalculated: Timestamp;  // When allocatedAmount was last calculated
+  isActive: boolean;          // Whether this budget period is active
 }
 
 // Function response types

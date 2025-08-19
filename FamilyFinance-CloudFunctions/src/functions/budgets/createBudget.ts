@@ -117,6 +117,7 @@ export const createBudget = onRequest({
         currency: currency,
         category: budgetData.category,
         period: budgetData.period,
+        budgetType: (budgetData.budgetType || 'recurring') as 'recurring' | 'limited',
         startDate: admin.firestore.Timestamp.fromDate(startDate),
         endDate: admin.firestore.Timestamp.fromDate(endDate),
         spent: 0,

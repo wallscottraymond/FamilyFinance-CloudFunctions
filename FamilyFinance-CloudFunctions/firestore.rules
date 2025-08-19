@@ -313,7 +313,8 @@ service cloud.firestore {
     
     match /source_periods/{periodId} {
       // All authenticated users can read source periods (needed for budget creation)
-      allow read: if isAuthenticated();
+      // Temporarily remove role dependency for debugging
+      allow read: if request.auth != null;
       
       // Only admins can create/update/delete source periods
       allow create, update, delete: if isAdmin();
@@ -527,6 +528,24 @@ service cloud.firestore {
              // Prevent changing userId or core transaction ID
              data.userId == resource_data.userId &&
              data.id == resource_data.id;
+    }
+    
+    // =======================
+    // BUDGET PERIODS COLLECTION RULES
+    // =======================
+    
+    match /budget_periods/{budgetPeriodId} {
+      // Users can read their own budget periods OR family members can read shared budget periods
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Budget creator can always manage their own budget_periods (regardless of role)
+      // OR family managers (admin/parent) can manage any family budget_periods
+      allow create, update: if isOwner(resource.data.userId) || 
+                               (canManage() && resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only admins can delete budget periods (for cleanup)
+      allow delete: if isAdmin();
     }
     
     // =======================

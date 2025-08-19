@@ -6,3 +6,7 @@ export { deleteBudget } from "./deleteBudget";
 export { getFamilyBudgets } from "./getFamilyBudgets";
 export { getUserBudgets } from "./getUserBudgets";
 export { getBudgetSummary } from "./getBudgetSummary";
+
+// Budget periods functions
+export { onBudgetCreate } from "./onBudgetCreate";
+export { extendBudgetPeriods } from "./extendBudgetPeriods";
