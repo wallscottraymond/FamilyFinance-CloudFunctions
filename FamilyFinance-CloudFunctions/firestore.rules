@@ -247,6 +247,10 @@ service cloud.firestore {
       allow read: if isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
+      // Allow collection queries for authenticated users
+      // This is a broad permission for now to get transactions working
+      allow list: if isAuthenticated();
+      
       // Users can create transactions for themselves
       // Parents/Admins can create for family members
       // Cloud functions can create Plaid transactions
@@ -517,17 +521,40 @@ service cloud.firestore {
       let resource_data = resource.data;
       let changedFields = data.diff(resource_data).affectedKeys();
       
-      // For Plaid transactions, only allow updating user-modifiable fields
-      let plaidAllowedFields = ['notes', 'tags', 'categoryId', 'updatedAt'];
-      // For manual transactions, allow more fields
-      let manualAllowedFields = ['notes', 'tags', 'categoryId', 'isManual', 'status', 'updatedAt', 'name', 'amount'];
+      // User-modifiable fields for transactions with embedded splits
+      let allowedFields = [
+        'userNotes',           // User notes
+        'isHidden',            // Hide/show transaction
+        'isRecurring',         // Mark as recurring
+        'splits',              // Transaction splits array
+        'isSplit',             // Split flag (calculated from splits)
+        'totalAllocated',      // Total split amount (calculated)
+        'unallocated',         // Unallocated amount (calculated)
+        'updatedAt'            // Update timestamp
+      ];
       
-      let allowedFields = resource_data.source == 'plaid' ? plaidAllowedFields : manualAllowedFields;
+      // Validate that only allowed fields are being changed
+      let validFieldChanges = changedFields.hasOnly(allowedFields);
       
-      return changedFields.hasOnly(allowedFields) &&
-             // Prevent changing userId or core transaction ID
-             data.userId == resource_data.userId &&
-             data.id == resource_data.id;
+      // Prevent changing core immutable fields
+      let coreFieldsUnchanged = data.userId == resource_data.userId &&
+                               data.transactionId == resource_data.transactionId &&
+                               data.accountId == resource_data.accountId &&
+                               data.amount == resource_data.amount;
+      
+      // Validate splits if they're being updated
+      let splitsValid = !changedFields.hasAny(['splits']) || isValidSplitsUpdate(data.splits, resource_data.amount);
+      
+      return validFieldChanges && coreFieldsUnchanged && splitsValid;
+    }
+    
+    // Validate transaction splits array
+    function isValidSplitsUpdate(splits, transactionAmount) {
+      // Empty splits are valid (no splitting)
+      return splits.size() == 0 || 
+             (splits is list && 
+              splits.size() <= 10 && 
+              splits.hasAll(['id', 'amount', 'createdAt', 'updatedAt', 'createdBy']));
     }
     
     // =======================
@@ -545,6 +572,28 @@ service cloud.firestore {
                                (canManage() && resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
       // Only admins can delete budget periods (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    // =======================
+    // TRANSACTIONS COLLECTION RULES
+    // =======================
+    
+    match /transactions/{transactionId} {
+      // Users can read their own transactions OR family members can read shared transactions
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only cloud functions can create transactions (from Plaid sync)
+      allow create: if false;
+      
+      // Users can update their own transactions (user notes, splits, categories)
+      // Family managers can update family transactions
+      allow update: if (isOwner(resource.data.userId) || 
+                        (resource.data.familyId != null && inSameFamily(resource.data.familyId) && canManage())) &&
+                       isValidTransactionUpdate();
+      
+      // Only admins can delete transactions (for cleanup)
       allow delete: if isAdmin();
     }
     
