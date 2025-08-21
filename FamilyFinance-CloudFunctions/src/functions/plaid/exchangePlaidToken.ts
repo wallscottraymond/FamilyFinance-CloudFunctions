@@ -276,6 +276,137 @@ export const exchangePlaidToken = onRequest(
 
             console.log('Plaid data saved to Firestore successfully');
 
+            // Fetch recurring transactions for the accounts
+            console.log('Fetching recurring transactions from Plaid...');
+            let recurringTransactionCount = 0;
+            try {
+              // Call Plaid API directly for recurring transactions
+              const recurringRequest = {
+                client_id: plaidClientId.value(),
+                secret: plaidSecret.value(),
+                access_token: accessToken,
+                account_ids: plaidAccounts.map(account => account.account_id),
+              };
+
+              try {
+                const recurringResponse = await client.transactionsRecurringGet(recurringRequest);
+                console.log('Retrieved recurring transactions from Plaid', {
+                  inflowStreams: recurringResponse.data.inflow_streams?.length || 0,
+                  outflowStreams: recurringResponse.data.outflow_streams?.length || 0,
+                });
+
+                // Save recurring transactions to new root collections
+                const { inflow_streams, outflow_streams } = recurringResponse.data;
+                
+                if (inflow_streams) {
+                  for (const stream of inflow_streams) {
+                    const incomeData = {
+                      streamId: stream.stream_id,
+                      itemId: itemId,
+                      userId: user.uid,
+                      familyId: '', // TODO: Get user's familyId from userData
+                      accountId: stream.account_id,
+                      isActive: stream.is_active !== false,
+                      status: stream.status || 'EARLY_DETECTION',
+                      description: stream.description || stream.merchant_name || 'Unknown',
+                      merchantName: stream.merchant_name || null,
+                      category: stream.category || [],
+                      personalFinanceCategory: stream.personal_finance_category || null,
+                      averageAmount: {
+                        amount: stream.average_amount?.amount || 0,
+                        isoCurrencyCode: stream.average_amount?.iso_currency_code || 'USD',
+                        unofficialCurrencyCode: stream.average_amount?.unofficial_currency_code || null,
+                      },
+                      lastAmount: {
+                        amount: stream.last_amount?.amount || 0,
+                        isoCurrencyCode: stream.last_amount?.iso_currency_code || 'USD',
+                        unofficialCurrencyCode: stream.last_amount?.unofficial_currency_code || null,
+                      },
+                      frequency: stream.frequency || 'UNKNOWN',
+                      firstDate: new Date(stream.first_date),
+                      lastDate: new Date(stream.last_date),
+                      transactionIds: stream.transaction_ids || [],
+                      userCategory: null,
+                      userNotes: null,
+                      tags: [],
+                      isHidden: false,
+                      lastSyncedAt: new Date(),
+                      syncVersion: 1,
+                      // Income-specific fields
+                      incomeType: 'other', // Default, user can categorize
+                      isRegularSalary: false,
+                      employerName: stream.merchant_name || null,
+                      taxable: true,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                    };
+
+                    await db.collection('income').add(incomeData);
+                    recurringTransactionCount++;
+                  }
+                }
+
+                if (outflow_streams) {
+                  for (const stream of outflow_streams) {
+                    const outflowData = {
+                      streamId: stream.stream_id,
+                      itemId: itemId,
+                      userId: user.uid,
+                      familyId: '', // TODO: Get user's familyId from userData
+                      accountId: stream.account_id,
+                      isActive: stream.is_active !== false,
+                      status: stream.status || 'EARLY_DETECTION',
+                      description: stream.description || stream.merchant_name || 'Unknown',
+                      merchantName: stream.merchant_name || null,
+                      category: stream.category || [],
+                      personalFinanceCategory: stream.personal_finance_category || null,
+                      averageAmount: {
+                        amount: stream.average_amount?.amount || 0,
+                        isoCurrencyCode: stream.average_amount?.iso_currency_code || 'USD',
+                        unofficialCurrencyCode: stream.average_amount?.unofficial_currency_code || null,
+                      },
+                      lastAmount: {
+                        amount: stream.last_amount?.amount || 0,
+                        isoCurrencyCode: stream.last_amount?.iso_currency_code || 'USD',
+                        unofficialCurrencyCode: stream.last_amount?.unofficial_currency_code || null,
+                      },
+                      frequency: stream.frequency || 'UNKNOWN',
+                      firstDate: new Date(stream.first_date),
+                      lastDate: new Date(stream.last_date),
+                      transactionIds: stream.transaction_ids || [],
+                      userCategory: null,
+                      userNotes: null,
+                      tags: [],
+                      isHidden: false,
+                      lastSyncedAt: new Date(),
+                      syncVersion: 1,
+                      // Outflow-specific fields
+                      expenseType: 'other', // Default, user can categorize
+                      isEssential: false,
+                      merchantCategory: stream.personal_finance_category?.primary || null,
+                      isCancellable: true,
+                      reminderDays: 3,
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                    };
+
+                    await db.collection('outflows').add(outflowData);
+                    recurringTransactionCount++;
+                  }
+                }
+
+                console.log(`Saved ${recurringTransactionCount} recurring transaction streams to Firestore`);
+
+              } catch (recurringError) {
+                console.error('Error fetching recurring transactions (non-critical):', recurringError);
+                // Don't fail the entire operation if recurring transactions fail
+              }
+
+            } catch (recurringImportError) {
+              console.error('Error importing recurring transactions function (non-critical):', recurringImportError);
+              // Don't fail the entire operation if import fails
+            }
+
             // Fetch transactions for the accounts
             console.log('Fetching recent transactions from Plaid...');
             let transactionCount = 0;
@@ -373,7 +504,7 @@ export const exchangePlaidToken = onRequest(
                 })),
                 institutionName: requestData.metadata.institution.name,
               },
-              message: `Token exchanged successfully, ${processedAccounts.length} accounts and ${transactionCount} transactions saved`,
+              message: `Token exchanged successfully, ${processedAccounts.length} accounts, ${transactionCount} transactions, and ${recurringTransactionCount} recurring streams saved`,
             } as ExchangePlaidTokenResponse);
 
             console.log('Token exchange completed successfully', {
@@ -382,6 +513,7 @@ export const exchangePlaidToken = onRequest(
               institutionName: requestData.metadata.institution.name,
               accountCount: processedAccounts.length,
               transactionCount: transactionCount,
+              recurringTransactionCount: recurringTransactionCount,
               isReal: true,
             });
 

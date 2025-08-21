@@ -755,7 +755,8 @@ export enum PlaidWebhookType {
   TRANSFER = "TRANSFER",
   BANK_TRANSFER = "BANK_TRANSFER",
   INCOME = "INCOME",
-  SIGNAL = "SIGNAL"
+  SIGNAL = "SIGNAL",
+  RECURRING_TRANSACTIONS = "RECURRING_TRANSACTIONS"
 }
 
 export enum PlaidWebhookCode {
@@ -771,7 +772,10 @@ export enum PlaidWebhookCode {
   PENDING_EXPIRATION = "PENDING_EXPIRATION",
   USER_PERMISSION_REVOKED = "USER_PERMISSION_REVOKED",
   WEBHOOK_UPDATE_ACKNOWLEDGED = "WEBHOOK_UPDATE_ACKNOWLEDGED",
-  NEW_ACCOUNTS_AVAILABLE = "NEW_ACCOUNTS_AVAILABLE"
+  NEW_ACCOUNTS_AVAILABLE = "NEW_ACCOUNTS_AVAILABLE",
+  
+  // RECURRING_TRANSACTIONS webhooks
+  RECURRING_TRANSACTIONS_UPDATE = "RECURRING_TRANSACTIONS_UPDATE"
 }
 
 export enum PlaidWebhookProcessingStatus {
@@ -874,4 +878,173 @@ export interface PlaidItemStatusResponse {
   error?: PlaidItemError;
   products: PlaidProduct[];
   billedProducts: PlaidProduct[];
+}
+
+// =======================
+// RECURRING TRANSACTIONS TYPES - ROOT COLLECTIONS
+// =======================
+
+// Base interface for recurring income and outflow transactions
+export interface BaseRecurringTransaction extends BaseDocument {
+  streamId: string; // Plaid recurring stream ID
+  itemId: string; // Reference to plaid_items document
+  userId: string; // Family Finance user ID
+  familyId?: string; // Optional family association
+  accountId: string; // Primary account where this recurring stream appears
+  
+  // Stream classification
+  isActive: boolean; // Whether this stream is still active
+  status: PlaidRecurringTransactionStatus; // Current status of the stream
+  
+  // Transaction details
+  description: string; // Recurring transaction description
+  merchantName?: string; // Merchant name if available
+  category: string[]; // Plaid category hierarchy
+  personalFinanceCategory?: PlaidPersonalFinanceCategory; // Enhanced categorization
+  
+  // Amount information
+  averageAmount: PlaidRecurringAmount; // Average amount data
+  lastAmount: PlaidRecurringAmount; // Most recent amount data
+  
+  // Frequency and timing
+  frequency: PlaidRecurringFrequency; // How often this recurs
+  
+  // Historical data
+  firstDate: Timestamp; // Date of first transaction in stream
+  lastDate: Timestamp; // Date of last transaction in stream
+  transactionIds: string[]; // IDs of transactions that are part of this stream
+  
+  // Family Finance specific fields
+  userCategory?: TransactionCategory; // User-assigned category override
+  userNotes?: string; // User-added notes
+  tags: string[]; // User-added tags
+  isHidden: boolean; // Whether user has hidden this recurring transaction
+  
+  // Sync metadata
+  lastSyncedAt: Timestamp; // When this recurring transaction was last synced from Plaid
+  syncVersion: number; // Version for optimistic concurrency control
+}
+
+// Recurring Income - stored in root 'income' collection
+export interface RecurringIncome extends BaseRecurringTransaction {
+  // Income-specific fields can be added here
+  incomeType?: 'salary' | 'dividend' | 'interest' | 'rental' | 'freelance' | 'bonus' | 'other';
+  isRegularSalary?: boolean; // True for primary salary income
+  employerName?: string; // Employer or payer name
+  taxable?: boolean; // Whether this income is taxable
+}
+
+// Recurring Outflows - stored in root 'outflows' collection
+export interface RecurringOutflow extends BaseRecurringTransaction {
+  // Outflow-specific fields can be added here
+  expenseType?: 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other';
+  isEssential?: boolean; // True for essential expenses (rent, utilities)
+  merchantCategory?: string; // Standardized merchant category
+  isCancellable?: boolean; // Whether this can be easily cancelled
+  reminderDays?: number; // Days before due date to remind
+}
+
+// Legacy interface for backward compatibility - maps to both collections
+export interface PlaidRecurringTransaction extends BaseRecurringTransaction {
+  streamType: PlaidRecurringTransactionStreamType; // Inflow or outflow - used to determine target collection
+}
+
+export enum PlaidRecurringTransactionStatus {
+  MATURE = "MATURE", // Has at least 3 transactions and regular cadence
+  EARLY_DETECTION = "EARLY_DETECTION" // First appears before becoming mature
+}
+
+export enum PlaidRecurringTransactionStreamType {
+  INFLOW = "inflow", // Money coming in (income, refunds, etc.)
+  OUTFLOW = "outflow" // Money going out (expenses, bills, etc.)
+}
+
+export interface PlaidRecurringAmount {
+  amount: number; // Transaction amount
+  isoCurrencyCode?: string; // ISO currency code
+  unofficialCurrencyCode?: string; // Unofficial currency code if ISO not available
+}
+
+export enum PlaidRecurringFrequency {
+  UNKNOWN = "UNKNOWN",
+  WEEKLY = "WEEKLY", 
+  BIWEEKLY = "BIWEEKLY",
+  SEMI_MONTHLY = "SEMI_MONTHLY",
+  MONTHLY = "MONTHLY",
+  ANNUALLY = "ANNUALLY"
+}
+
+// Plaid Recurring Transaction Update Events - tracks webhook updates
+export interface PlaidRecurringTransactionUpdate extends BaseDocument {
+  itemId: string; // Reference to plaid_items document
+  userId: string; // Family Finance user ID
+  updateType: PlaidRecurringUpdateType; // Type of update
+  streamId?: string; // Specific stream ID if applicable
+  
+  // Update payload from webhook
+  payload: Record<string, any>; // Full webhook payload
+  processedAt?: Timestamp; // When update was processed
+  processingStatus: PlaidWebhookProcessingStatus;
+  processingError?: string; // Error message if processing failed
+  
+  // Changes made - now tracks both collections separately
+  changesApplied: {
+    incomeStreamsAdded: number; // Income streams added
+    incomeStreamsModified: number; // Income streams modified
+    incomeStreamsRemoved: number; // Income streams removed
+    outflowStreamsAdded: number; // Outflow streams added
+    outflowStreamsModified: number; // Outflow streams modified
+    outflowStreamsRemoved: number; // Outflow streams removed
+    transactionsAffected: number; // Total transactions affected
+  };
+}
+
+export enum PlaidRecurringUpdateType {
+  INITIAL_DETECTION = "INITIAL_DETECTION", // First time recurring streams detected
+  STREAM_UPDATES = "STREAM_UPDATES", // Updates to existing streams
+  NEW_STREAMS = "NEW_STREAMS", // New recurring streams detected
+  STREAM_MODIFICATIONS = "STREAM_MODIFICATIONS" // Changes to stream classification
+}
+
+// API Request/Response types for recurring transactions
+export interface FetchRecurringTransactionsRequest {
+  itemId?: string; // Fetch for specific item, or all if not provided
+  accountId?: string; // Fetch for specific account
+}
+
+export interface FetchRecurringTransactionsResponse {
+  itemId: string;
+  accountsCount: number;
+  streamsFound: number;
+  streamsAdded: number;
+  streamsModified: number;
+  incomeStreamsAdded: number; // Income streams added to 'income' collection
+  outflowStreamsAdded: number; // Outflow streams added to 'outflows' collection
+  incomeStreamsModified: number; // Income streams modified
+  outflowStreamsModified: number; // Outflow streams modified
+  historicalTransactionsDays: number; // How many days of history were analyzed
+}
+
+// Combined response for getting both income and outflows
+export interface GetUserRecurringTransactionsResponse {
+  income: RecurringIncome[];
+  outflows: RecurringOutflow[];
+  totalIncome: number; // Total monthly income
+  totalOutflows: number; // Total monthly outflows
+  netFlow: number; // Monthly net cash flow
+}
+
+export interface PlaidRecurringTransactionStreamResponse {
+  streamId: string;
+  status: PlaidRecurringTransactionStatus;
+  streamType: PlaidRecurringTransactionStreamType;
+  description: string;
+  merchantName?: string;
+  category: string[];
+  averageAmount: PlaidRecurringAmount;
+  lastAmount: PlaidRecurringAmount;
+  frequency: PlaidRecurringFrequency;
+  firstDate: string; // ISO date string
+  lastDate: string; // ISO date string
+  transactionCount: number;
 }

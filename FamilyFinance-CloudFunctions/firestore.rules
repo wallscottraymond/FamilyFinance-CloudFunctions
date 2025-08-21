@@ -441,6 +441,79 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    match /plaid_recurring_transactions/{recurringTransactionId} {
+      // Users can read their own recurring transactions
+      // Family members can read family recurring transactions (filtered by cloud functions for privacy)
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only cloud functions should create recurring transactions (from sync)
+      allow create: if false;
+      
+      // Users can update limited fields on their own recurring transactions (user notes, tags, category overrides, visibility)
+      allow update: if isOwner(resource.data.userId) &&
+                       isValidPlaidRecurringTransactionUpdate();
+      
+      // Only admins can delete recurring transactions (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    match /plaid_recurring_transaction_updates/{updateId} {
+      // Only admins can read recurring transaction update logs (for debugging)
+      allow read: if isAdmin();
+      
+      // Only cloud functions should create update records
+      allow create: if false;
+      
+      // Only cloud functions should update processing status
+      allow update: if false;
+      
+      // Only admins can delete update records (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    // =======================
+    // INCOME COLLECTION RULES - ROOT LEVEL
+    // =======================
+    
+    match /income/{incomeId} {
+      // Users can read their own income streams
+      // Family members can read family income streams (filtered by cloud functions for privacy)
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only cloud functions should create income streams (from Plaid sync)
+      allow create: if false;
+      
+      // Users can update limited fields on their own income streams (user notes, tags, category overrides, visibility)
+      allow update: if isOwner(resource.data.userId) &&
+                       isValidRecurringIncomeUpdate();
+      
+      // Only admins can delete income streams (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    // =======================
+    // OUTFLOWS COLLECTION RULES - ROOT LEVEL
+    // =======================
+    
+    match /outflows/{outflowId} {
+      // Users can read their own outflow streams
+      // Family members can read family outflow streams (filtered by cloud functions for privacy)
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Only cloud functions should create outflow streams (from Plaid sync)
+      allow create: if false;
+      
+      // Users can update limited fields on their own outflow streams (user notes, tags, category overrides, visibility)
+      allow update: if isOwner(resource.data.userId) &&
+                       isValidRecurringOutflowUpdate();
+      
+      // Only admins can delete outflow streams (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
     // Validation functions for Plaid data
     function isValidPlaidItemData() {
       let data = request.resource.data;
@@ -485,6 +558,40 @@ service cloud.firestore {
       // Only allow updates to user-modifiable fields
       let allowedFields = ['userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt'];
       let changedFields = data.diff(resource).affectedKeys();
+      return changedFields.hasOnly(allowedFields);
+    }
+    
+    function isValidPlaidRecurringTransactionUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+      // Only allow updates to user-modifiable fields for recurring transactions
+      let allowedFields = ['userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt'];
+      let changedFields = data.diff(resource_data).affectedKeys();
+      return changedFields.hasOnly(allowedFields);
+    }
+    
+    // Validation functions for new root collections
+    function isValidRecurringIncomeUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+      // Only allow updates to user-modifiable fields for income streams
+      let allowedFields = [
+        'userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt',
+        'incomeType', 'isRegularSalary', 'employerName', 'taxable'
+      ];
+      let changedFields = data.diff(resource_data).affectedKeys();
+      return changedFields.hasOnly(allowedFields);
+    }
+    
+    function isValidRecurringOutflowUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+      // Only allow updates to user-modifiable fields for outflow streams
+      let allowedFields = [
+        'userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt',
+        'expenseType', 'isEssential', 'merchantCategory', 'isCancellable', 'reminderDays'
+      ];
+      let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields);
     }
     

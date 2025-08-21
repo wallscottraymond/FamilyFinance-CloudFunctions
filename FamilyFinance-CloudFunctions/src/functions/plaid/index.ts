@@ -7,6 +7,7 @@
  * Functions included:
  * - createLinkToken: Generate secure link tokens for Plaid Link initialization
  * - exchangePlaidToken: Exchange public token for access token and link bank accounts
+ * - fetchRecurringTransactions: Fetch recurring transaction streams from Plaid
  * - plaidWebhook: Handle real-time webhook updates from Plaid
  * - refreshPlaidData: Manual refresh of account and transaction data
  * - unlinkPlaidAccount: Safely remove bank account connections
@@ -31,7 +32,8 @@
 // Export all Plaid-related cloud functions
 export { createLinkToken } from "./createLinkToken";
 export { exchangePlaidToken } from "./exchangePlaidToken"; // Using real Plaid API
-// export { plaidWebhook } from "./plaidWebhook";
+export { fetchRecurringTransactions } from "./fetchRecurringTransactions";
+export { plaidWebhook } from "./plaidWebhook";
 // export { refreshPlaidData } from "./refreshPlaidData";
 // export { unlinkPlaidAccount, getUnlinkPreview } from "./unlinkPlaidAccount";
 
@@ -46,12 +48,18 @@ export { exchangePlaidToken } from "./exchangePlaidToken"; // Using real Plaid A
  * 
  * exchangePlaidToken:
  * - Purpose: Convert Plaid Link public token to access token and store account data
- * - Authentication: Requires EDITOR role
+ * - Authentication: Requires VIEWER role
+ * - Memory: 256MiB, Timeout: 30s
+ * - Promise Pattern: ✓
+ * 
+ * fetchRecurringTransactions:
+ * - Purpose: Fetch recurring transaction streams from Plaid for analysis
+ * - Authentication: Requires VIEWER role
  * - Memory: 512MiB, Timeout: 60s
  * - Promise Pattern: ✓
  * 
  * plaidWebhook:
- * - Purpose: Handle real-time webhook notifications from Plaid
+ * - Purpose: Handle real-time webhook notifications from Plaid including recurring transactions
  * - Authentication: Webhook signature verification only
  * - Memory: 512MiB, Timeout: 60s
  * - CORS: Disabled (webhook endpoint)
