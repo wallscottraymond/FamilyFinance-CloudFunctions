@@ -1,26 +1,16 @@
 /**
- * Fetch Recurring Transactions Cloud Function
+ * Admin Fetch Recurring Transactions Function
  * 
- * Fetches recurring transaction streams from Plaid for a specific item or all user items.
- * This function calls the Plaid /transactions/recurring/get endpoint and stores the
- * recurring transaction data in Firestore.
+ * Administrative function to fetch recurring transactions for all users or specific user.
+ * This bypasses normal authentication for initial setup or troubleshooting.
  * 
- * Security Features:
- * - User authentication required (VIEWER role minimum)
- * - Encrypted access token handling
- * - Proper error handling and validation
- * 
- * Memory: 512MiB, Timeout: 60s
- * CORS: Enabled for mobile app
- * Promise Pattern: ✓
+ * SECURITY WARNING: This function should only be used for admin setup and testing.
+ * Remove or secure before production deployment.
  */
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { corsMiddleware } from '../../middleware/cors';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { validateRequest } from '../../utils/validation';
-import * as Joi from 'joi';
 import { db } from '../../index';
 import { 
   PlaidApi, 
@@ -36,8 +26,6 @@ import {
   PlaidRecurringTransactionStreamType,
   PlaidRecurringFrequency,
   PlaidRecurringAmount,
-  FetchRecurringTransactionsRequest,
-  FetchRecurringTransactionsResponse,
   PlaidItem
 } from '../../types';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -45,12 +33,6 @@ import { Timestamp } from 'firebase-admin/firestore';
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
 const plaidSecret = defineSecret('PLAID_SECRET');
-
-// Request validation schema
-const fetchRecurringTransactionsSchema = Joi.object({
-  itemId: Joi.string().optional(),
-  accountId: Joi.string().optional(),
-});
 
 // Configure Plaid client
 let plaidClient: PlaidApi | null = null;
@@ -69,12 +51,13 @@ function getPlaidClient(): PlaidApi {
 }
 
 /**
- * Fetch Recurring Transactions
+ * Admin Fetch Recurring Transactions
+ * Processes all users with Plaid items to populate outflows and income collections
  */
-export const fetchRecurringTransactions = onRequest(
+export const fetchRecurringTransactionsAdmin = onRequest(
   {
-    memory: '512MiB',
-    timeoutSeconds: 60,
+    memory: '1GiB',
+    timeoutSeconds: 300,
     cors: true,
     secrets: [plaidClientId, plaidSecret],
   },
@@ -96,156 +79,120 @@ export const fetchRecurringTransactions = onRequest(
               return resolve();
             }
 
-            // Authenticate user (require at least VIEWER role)
-            const { user } = await authenticateRequest(req, UserRole.VIEWER);
+            console.log('Starting admin fetch of recurring transactions for all users');
 
-            // Validate request body
-            const validationResult = validateRequest(req.body, fetchRecurringTransactionsSchema);
-            if (validationResult.error) {
-              res.status(400).json({
-                success: false,
-                error: {
-                  code: 'VALIDATION_ERROR',
-                  message: 'Invalid request body',
-                  details: validationResult.error,
-                },
-              });
-              return resolve();
-            }
+            // Get all active Plaid items across all users
+            const allUsersSnapshot = await db.collection('users').get();
+            
+            let totalUsersProcessed = 0;
+            let totalItemsProcessed = 0;
+            let totalOutflowsCreated = 0;
+            let totalIncomeCreated = 0;
+            const userSummary: Array<{
+              userId: string;
+              email: string;
+              outflows: number;
+              income: number;
+              items: number;
+            }> = [];
 
-            const requestData: FetchRecurringTransactionsRequest = validationResult.value;
-
-            console.log('Fetching recurring transactions for user:', user.uid, 'itemId:', requestData.itemId);
-
-            // Get user's Plaid items
-            let itemsQuery = db.collection('users').doc(user.uid).collection('plaidItems');
-
-            if (requestData.itemId) {
-              // Fetch specific item
-              const itemDoc = await itemsQuery.doc(requestData.itemId).get();
-              if (!itemDoc.exists) {
-                res.status(404).json({
-                  success: false,
-                  error: {
-                    code: 'ITEM_NOT_FOUND',
-                    message: 'Plaid item not found',
-                  },
-                });
-                return resolve();
-              }
+            for (const userDoc of allUsersSnapshot.docs) {
+              const userData = userDoc.data();
+              const userId = userDoc.id;
               
-              const result = await processItemRecurringTransactions(itemDoc.data() as PlaidItem, requestData.accountId);
+              console.log(`Processing user: ${userData.email || userId}`);
               
-              res.status(200).json({
-                success: true,
-                data: result,
-                message: `Fetched recurring transactions for item ${requestData.itemId}`,
-              } as { success: boolean; data: FetchRecurringTransactionsResponse; message: string });
-              
-            } else {
-              // Fetch all active items for user
-              const itemsSnapshot = await itemsQuery.where('isActive', '==', true).get();
-              
+              // Get user's Plaid items
+              const itemsSnapshot = await db.collection('users')
+                .doc(userId)
+                .collection('plaidItems')
+                .where('isActive', '==', true)
+                .get();
+
               if (itemsSnapshot.empty) {
-                res.status(200).json({
-                  success: true,
-                  data: {
-                    itemId: '',
-                    accountsCount: 0,
-                    streamsFound: 0,
-                    streamsAdded: 0,
-                    streamsModified: 0,
-                    historicalTransactionsDays: 0,
-                  } as FetchRecurringTransactionsResponse,
-                  message: 'No active Plaid items found',
-                });
-                return resolve();
+                console.log(`  No active Plaid items for user ${userId}`);
+                continue;
               }
 
-              let totalAccountsCount = 0;
-              let totalStreamsFound = 0;
-              let totalStreamsAdded = 0;
-              let totalStreamsModified = 0;
-              let totalIncomeStreamsAdded = 0;
-              let totalOutflowStreamsAdded = 0;
-              let totalIncomeStreamsModified = 0;
-              let totalOutflowStreamsModified = 0;
+              let userOutflows = 0;
+              let userIncome = 0;
+              let userItems = 0;
 
-              // Process each item
+              // Process each item for this user
               for (const itemDoc of itemsSnapshot.docs) {
                 const itemData = itemDoc.data() as PlaidItem;
-                const result = await processItemRecurringTransactions(itemData, requestData.accountId);
                 
-                totalAccountsCount += result.accountsCount;
-                totalStreamsFound += result.streamsFound;
-                totalStreamsAdded += result.streamsAdded;
-                totalStreamsModified += result.streamsModified;
-                totalIncomeStreamsAdded += result.incomeStreamsAdded;
-                totalOutflowStreamsAdded += result.outflowStreamsAdded;
-                totalIncomeStreamsModified += result.incomeStreamsModified;
-                totalOutflowStreamsModified += result.outflowStreamsModified;
+                try {
+                  console.log(`  Processing item: ${itemData.itemId} (${itemData.institutionName})`);
+                  
+                  const result = await processItemRecurringTransactionsAdmin(itemData);
+                  
+                  userOutflows += result.outflowStreamsAdded;
+                  userIncome += result.incomeStreamsAdded;
+                  userItems++;
+                  totalItemsProcessed++;
+                  
+                } catch (error) {
+                  console.error(`  Error processing item ${itemData.itemId}:`, error);
+                  // Continue processing other items
+                }
               }
 
-              res.status(200).json({
-                success: true,
-                data: {
-                  itemId: 'multiple',
-                  accountsCount: totalAccountsCount,
-                  streamsFound: totalStreamsFound,
-                  streamsAdded: totalStreamsAdded,
-                  streamsModified: totalStreamsModified,
-                  incomeStreamsAdded: totalIncomeStreamsAdded,
-                  outflowStreamsAdded: totalOutflowStreamsAdded,
-                  incomeStreamsModified: totalIncomeStreamsModified,
-                  outflowStreamsModified: totalOutflowStreamsModified,
-                  historicalTransactionsDays: 180, // Standard for recurring transactions
-                } as FetchRecurringTransactionsResponse,
-                message: `Fetched recurring transactions for ${itemsSnapshot.size} items`,
-              });
+              if (userItems > 0) {
+                totalUsersProcessed++;
+                totalOutflowsCreated += userOutflows;
+                totalIncomeCreated += userIncome;
+                
+                userSummary.push({
+                  userId,
+                  email: userData.email || 'No email',
+                  outflows: userOutflows,
+                  income: userIncome,
+                  items: userItems,
+                });
+
+                console.log(`  User ${userData.email} summary: ${userOutflows} outflows, ${userIncome} income, ${userItems} items`);
+              }
             }
 
-            console.log('Recurring transactions fetch completed successfully', {
-              userId: user.uid,
-              itemId: requestData.itemId || 'all',
-              accountId: requestData.accountId,
+            res.status(200).json({
+              success: true,
+              data: {
+                totalUsersProcessed,
+                totalItemsProcessed,
+                totalOutflows: totalOutflowsCreated,
+                totalIncome: totalIncomeCreated,
+                summary: userSummary,
+              },
+              message: `Admin fetch completed: Processed ${totalUsersProcessed} users, ${totalItemsProcessed} items`,
+            });
+
+            console.log(`Admin recurring transactions fetch completed successfully`, {
+              totalUsersProcessed,
+              totalItemsProcessed,
+              totalOutflowsCreated,
+              totalIncomeCreated,
             });
 
             resolve();
           } catch (error) {
-            console.error('Error fetching recurring transactions:', error);
-
-            // Handle specific Plaid errors
-            if (error && typeof error === 'object' && 'response' in error) {
-              const plaidError = error as any;
-              res.status(400).json({
-                success: false,
-                error: {
-                  code: 'PLAID_API_ERROR',
-                  message: plaidError.response?.data?.error_message || 'Plaid API error occurred',
-                  details: {
-                    error_type: plaidError.response?.data?.error_type,
-                    error_code: plaidError.response?.data?.error_code,
-                    display_message: plaidError.response?.data?.display_message,
-                  },
-                },
-              });
-            } else {
-              // Handle general errors
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-              res.status(500).json({
-                success: false,
-                error: {
-                  code: 'INTERNAL_ERROR',
-                  message: errorMessage,
-                },
-              });
-            }
+            console.error('Error in admin fetch recurring transactions:', error);
+            
+            // Handle general errors
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            res.status(500).json({
+              success: false,
+              error: {
+                code: 'INTERNAL_ERROR',
+                message: errorMessage,
+              },
+            });
 
             resolve();
           }
         });
       } catch (error) {
-        console.error('Unhandled error in fetchRecurringTransactions:', error);
+        console.error('Unhandled error in fetchRecurringTransactionsAdmin:', error);
         res.status(500).json({
           success: false,
           error: {
@@ -260,14 +207,20 @@ export const fetchRecurringTransactions = onRequest(
 );
 
 /**
- * Process recurring transactions for a specific Plaid item
+ * Admin version of processItemRecurringTransactions
  */
-async function processItemRecurringTransactions(
-  itemData: PlaidItem, 
-  accountId?: string
-): Promise<FetchRecurringTransactionsResponse> {
+async function processItemRecurringTransactionsAdmin(
+  itemData: PlaidItem
+): Promise<{
+  itemId: string;
+  streamsFound: number;
+  streamsAdded: number;
+  streamsModified: number;
+  incomeStreamsAdded: number;
+  outflowStreamsAdded: number;
+}> {
   try {
-    console.log(`Processing recurring transactions for item: ${itemData.itemId}`);
+    console.log(`    Processing recurring transactions for item: ${itemData.itemId}`);
 
     // Get accounts for this item to pass to Plaid API
     const accountsSnapshot = await db.collection('accounts')
@@ -276,38 +229,31 @@ async function processItemRecurringTransactions(
       .get();
 
     const allAccountIds = accountsSnapshot.docs.map(doc => doc.data().plaidAccountId || doc.data().accountId);
-    console.log(`Found ${allAccountIds.length} active accounts for item ${itemData.itemId}:`, allAccountIds);
+    console.log(`    Found ${allAccountIds.length} active accounts for item ${itemData.itemId}:`, allAccountIds);
 
-    // Filter to specific account if provided
-    const targetAccountIds = accountId ? [accountId] : allAccountIds;
-    
-    if (targetAccountIds.length === 0) {
-      console.warn(`No active accounts found for item ${itemData.itemId}`);
+    if (allAccountIds.length === 0) {
+      console.warn(`    No active accounts found for item ${itemData.itemId}`);
       return {
         itemId: itemData.itemId,
-        accountsCount: 0,
         streamsFound: 0,
         streamsAdded: 0,
         streamsModified: 0,
         incomeStreamsAdded: 0,
         outflowStreamsAdded: 0,
-        incomeStreamsModified: 0,
-        outflowStreamsModified: 0,
-        historicalTransactionsDays: 180,
       };
     }
 
-    console.log(`Using account IDs for Plaid API:`, targetAccountIds);
+    console.log(`    Using account IDs for Plaid API:`, allAccountIds);
 
     // Prepare Plaid API request
     const request: TransactionsRecurringGetRequest = {
       client_id: plaidClientId.value(),
       secret: plaidSecret.value(),
       access_token: itemData.accessToken, // TODO: Decrypt this in production
-      account_ids: targetAccountIds, // Use specific account IDs instead of empty array
+      account_ids: allAccountIds, // Use specific account IDs instead of empty array
     };
 
-    console.log(`Calling Plaid transactionsRecurringGet with account IDs:`, request.account_ids);
+    console.log(`    Calling Plaid transactionsRecurringGet with account IDs:`, request.account_ids);
 
     const client = getPlaidClient();
     const response = await client.transactionsRecurringGet(request);
@@ -318,7 +264,7 @@ async function processItemRecurringTransactions(
 
     const { inflow_streams, outflow_streams } = response.data;
     
-    console.log(`Retrieved recurring transactions from Plaid`, {
+    console.log(`    Retrieved recurring transactions from Plaid`, {
       itemId: itemData.itemId,
       inflowStreams: inflow_streams?.length || 0,
       outflowStreams: outflow_streams?.length || 0,
@@ -329,12 +275,10 @@ async function processItemRecurringTransactions(
     let streamsModified = 0;
     let incomeStreamsAdded = 0;
     let outflowStreamsAdded = 0;
-    let incomeStreamsModified = 0;
-    let outflowStreamsModified = 0;
 
     // Process inflow streams (save to 'income' collection)
     if (inflow_streams) {
-      const result = await processRecurringStreams(
+      const result = await processRecurringStreamsAdmin(
         inflow_streams, 
         itemData, 
         PlaidRecurringTransactionStreamType.INFLOW
@@ -343,12 +287,11 @@ async function processItemRecurringTransactions(
       streamsAdded += result.added;
       streamsModified += result.modified;
       incomeStreamsAdded += result.added;
-      incomeStreamsModified += result.modified;
     }
 
     // Process outflow streams (save to 'outflows' collection)
     if (outflow_streams) {
-      const result = await processRecurringStreams(
+      const result = await processRecurringStreamsAdmin(
         outflow_streams, 
         itemData, 
         PlaidRecurringTransactionStreamType.OUTFLOW
@@ -357,32 +300,27 @@ async function processItemRecurringTransactions(
       streamsAdded += result.added;
       streamsModified += result.modified;
       outflowStreamsAdded += result.added;
-      outflowStreamsModified += result.modified;
     }
 
     return {
       itemId: itemData.itemId,
-      accountsCount: targetAccountIds.length,
       streamsFound,
       streamsAdded,
       streamsModified,
       incomeStreamsAdded,
       outflowStreamsAdded,
-      incomeStreamsModified,
-      outflowStreamsModified,
-      historicalTransactionsDays: 180, // Standard for recurring transactions
     };
 
   } catch (error) {
-    console.error(`Error processing recurring transactions for item ${itemData.itemId}:`, error);
+    console.error(`    Error processing recurring transactions for item ${itemData.itemId}:`, error);
     throw error;
   }
 }
 
 /**
- * Process a set of recurring transaction streams and save to appropriate root collection
+ * Admin version of processRecurringStreams
  */
-async function processRecurringStreams(
+async function processRecurringStreamsAdmin(
   streams: any[], 
   itemData: PlaidItem, 
   streamType: PlaidRecurringTransactionStreamType
@@ -393,7 +331,7 @@ async function processRecurringStreams(
   // Determine target collection based on stream type
   const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? 'income' : 'outflows';
   
-  console.log(`Processing ${streams.length} ${streamType} streams to '${targetCollection}' collection`);
+  console.log(`    Processing ${streams.length} ${streamType} streams to '${targetCollection}' collection`);
 
   for (const stream of streams) {
     try {
@@ -467,7 +405,7 @@ async function processRecurringStreams(
           updatedAt: Timestamp.now(),
         });
         added++;
-        console.log(`Added new ${streamType} stream to ${targetCollection}: ${stream.stream_id}`);
+        console.log(`      Added new ${streamType} stream to ${targetCollection}: ${stream.stream_id}`);
       } else {
         // Update existing document
         const existingDoc = existingStreamQuery.docs[0];
@@ -494,11 +432,11 @@ async function processRecurringStreams(
 
         await existingDoc.ref.update(updateData);
         modified++;
-        console.log(`Updated ${streamType} stream in ${targetCollection}: ${stream.stream_id}`);
+        console.log(`      Updated ${streamType} stream in ${targetCollection}: ${stream.stream_id}`);
       }
 
     } catch (error) {
-      console.error(`Error processing ${streamType} stream ${stream.stream_id}:`, error);
+      console.error(`      Error processing ${streamType} stream ${stream.stream_id}:`, error);
       // Continue processing other streams
     }
   }
@@ -506,9 +444,7 @@ async function processRecurringStreams(
   return { added, modified };
 }
 
-/**
- * Map Plaid recurring status to our enum
- */
+// Utility functions (copied from original file)
 function mapPlaidRecurringStatus(status: string): PlaidRecurringTransactionStatus {
   switch (status?.toUpperCase()) {
     case 'MATURE':
@@ -520,9 +456,6 @@ function mapPlaidRecurringStatus(status: string): PlaidRecurringTransactionStatu
   }
 }
 
-/**
- * Map Plaid frequency to our enum
- */
 function mapPlaidFrequency(frequency: string): PlaidRecurringFrequency {
   switch (frequency?.toUpperCase()) {
     case 'WEEKLY':
@@ -540,9 +473,6 @@ function mapPlaidFrequency(frequency: string): PlaidRecurringFrequency {
   }
 }
 
-/**
- * Map Plaid amount object to our interface
- */
 function mapPlaidAmount(amount: any): PlaidRecurringAmount {
   return {
     amount: amount?.amount || 0,
@@ -551,9 +481,6 @@ function mapPlaidAmount(amount: any): PlaidRecurringAmount {
   };
 }
 
-/**
- * Categorize income type based on Plaid data
- */
 function categorizeIncomeType(category: string[], description: string): 'salary' | 'dividend' | 'interest' | 'rental' | 'freelance' | 'bonus' | 'other' {
   const categoryStr = category.join(' ').toLowerCase();
   const descStr = description.toLowerCase();
@@ -579,17 +506,11 @@ function categorizeIncomeType(category: string[], description: string): 'salary'
   return 'other';
 }
 
-/**
- * Check if transaction is likely salary
- */
 function isLikelySalary(description: string, merchantName?: string): boolean {
   const text = `${description} ${merchantName || ''}`.toLowerCase();
   return text.includes('payroll') || text.includes('salary') || text.includes('direct deposit');
 }
 
-/**
- * Categorize expense type based on Plaid data
- */
 function categorizeExpenseType(category: string[], description: string): 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other' {
   const categoryStr = category.join(' ').toLowerCase();
   const descStr = description.toLowerCase();
@@ -615,18 +536,12 @@ function categorizeExpenseType(category: string[], description: string): 'subscr
   return 'other';
 }
 
-/**
- * Check if expense is essential
- */
 function isEssentialExpense(category: string[], description: string): boolean {
   const essentialCategories = ['rent', 'mortgage', 'utilities', 'insurance', 'loan', 'food'];
   const categoryStr = category.join(' ').toLowerCase();
   return essentialCategories.some(essential => categoryStr.includes(essential));
 }
 
-/**
- * Check if expense is easily cancellable
- */
 function isCancellableExpense(category: string[], description: string): boolean {
   const cancellableCategories = ['subscription', 'entertainment', 'streaming'];
   const categoryStr = category.join(' ').toLowerCase();
@@ -636,9 +551,6 @@ function isCancellableExpense(category: string[], description: string): boolean 
   );
 }
 
-/**
- * Get default reminder days based on category
- */
 function getDefaultReminderDays(category: string[]): number {
   const categoryStr = category.join(' ').toLowerCase();
   if (categoryStr.includes('loan') || categoryStr.includes('mortgage') || categoryStr.includes('rent')) {
