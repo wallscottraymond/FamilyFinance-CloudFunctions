@@ -526,3 +526,7 @@ export const approveTransaction = onRequest({
     }
   });
 });
+
+// Export trigger functions
+export { onOutflowCreated } from "./onOutflowCreated";
+export { onInflowCreated } from "./onInflowCreated";

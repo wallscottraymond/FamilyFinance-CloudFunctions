@@ -1109,7 +1109,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1131,7 +1131,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1149,7 +1149,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1167,7 +1167,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1185,7 +1185,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1203,7 +1203,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1341,6 +1341,222 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStartDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "outflowId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStartDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "familyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isDuePeriod",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "periodId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourcePeriodId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "outflowIsEssential",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStartDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStartDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "inflowId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStartDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "familyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isReceiptPeriod",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "receiptDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "periodId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourcePeriodId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "inflowIsRegularSalary",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStartDate",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -1447,7 +1663,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "fieldPath": "category",
       "indexes": [
         {
@@ -1457,7 +1673,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "fieldPath": "tags",
       "indexes": [
         {
@@ -1471,7 +1687,7 @@
       ]
     },
     {
-      "collectionGroup": "income",
+      "collectionGroup": "inflow",
       "fieldPath": "transactionIds",
       "indexes": [
         {

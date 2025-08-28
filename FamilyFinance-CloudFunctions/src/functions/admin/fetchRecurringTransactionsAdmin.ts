@@ -52,7 +52,7 @@ function getPlaidClient(): PlaidApi {
 
 /**
  * Admin Fetch Recurring Transactions
- * Processes all users with Plaid items to populate outflows and income collections
+ * Processes all users with Plaid items to populate outflows and inflow collections
  */
 export const fetchRecurringTransactionsAdmin = onRequest(
   {
@@ -276,7 +276,7 @@ async function processItemRecurringTransactionsAdmin(
     let incomeStreamsAdded = 0;
     let outflowStreamsAdded = 0;
 
-    // Process inflow streams (save to 'income' collection)
+    // Process inflow streams (save to 'inflow' collection)
     if (inflow_streams) {
       const result = await processRecurringStreamsAdmin(
         inflow_streams, 
@@ -329,7 +329,7 @@ async function processRecurringStreamsAdmin(
   let modified = 0;
 
   // Determine target collection based on stream type
-  const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? 'income' : 'outflows';
+  const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? 'inflow' : 'outflows';
   
   console.log(`    Processing ${streams.length} ${streamType} streams to '${targetCollection}' collection`);
 

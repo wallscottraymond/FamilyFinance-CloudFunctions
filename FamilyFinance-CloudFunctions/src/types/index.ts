@@ -925,7 +925,7 @@ export interface BaseRecurringTransaction extends BaseDocument {
   syncVersion: number; // Version for optimistic concurrency control
 }
 
-// Recurring Income - stored in root 'income' collection
+// Recurring Income - stored in root 'inflow' collection
 export interface RecurringIncome extends BaseRecurringTransaction {
   // Income-specific fields can be added here
   incomeType?: 'salary' | 'dividend' | 'interest' | 'rental' | 'freelance' | 'bonus' | 'other';
@@ -1018,7 +1018,7 @@ export interface FetchRecurringTransactionsResponse {
   streamsFound: number;
   streamsAdded: number;
   streamsModified: number;
-  incomeStreamsAdded: number; // Income streams added to 'income' collection
+  incomeStreamsAdded: number; // Income streams added to 'inflow' collection
   outflowStreamsAdded: number; // Outflow streams added to 'outflows' collection
   incomeStreamsModified: number; // Income streams modified
   outflowStreamsModified: number; // Outflow streams modified
@@ -1047,4 +1047,90 @@ export interface PlaidRecurringTransactionStreamResponse {
   firstDate: string; // ISO date string
   lastDate: string; // ISO date string
   transactionCount: number;
+}
+
+// =======================
+// OUTFLOW PERIODS TYPES
+// =======================
+
+// Outflow Periods - Maps outflows to source periods with withholding calculations
+export interface OutflowPeriod extends BaseDocument {
+  outflowId: string; // Reference to outflows collection document
+  periodId: string; // Reference to source_periods.id (same as sourcePeriodId)  
+  sourcePeriodId: string; // Direct reference to source_periods.id for mapping
+  userId: string; // Family Finance user ID
+  familyId?: string; // Optional family association
+  
+  // Period context (denormalized from source_periods for performance)
+  periodType: PeriodType; // "weekly" | "monthly" | "bi_monthly"
+  periodStartDate: Timestamp; // UTC timestamp - period start
+  periodEndDate: Timestamp; // UTC timestamp - period end
+  
+  // Payment cycle information
+  cycleStartDate: Timestamp; // Last payment date (or calculated start)
+  cycleEndDate: Timestamp; // Next payment date
+  cycleDays: number; // Days in the payment cycle
+  
+  // Financial calculations
+  billAmount: number; // Full bill amount for this cycle
+  dailyWithholdingRate: number; // billAmount ÷ cycleDays
+  amountWithheld: number; // dailyRate × daysInPeriod (how much to withhold this period)
+  amountDue: number; // billAmount if due date falls in this period, else 0
+  
+  // Payment status and tracking
+  isDuePeriod: boolean; // True if the due date falls within this period
+  dueDate?: Timestamp; // Actual due date if isDuePeriod is true
+  isActive: boolean; // Whether this outflow period is active
+  
+  // Metadata from outflow (denormalized for performance)
+  outflowDescription: string; // Description from outflow
+  outflowMerchantName?: string; // Merchant name from outflow
+  outflowExpenseType?: string; // Expense type from outflow
+  outflowIsEssential?: boolean; // Whether this is an essential expense
+  
+  // System tracking
+  lastCalculated: Timestamp; // When amounts were last calculated
+}
+
+// =======================
+// INFLOW PERIODS TYPES
+// =======================
+
+// Inflow Periods - Maps inflows to source periods with earning calculations
+export interface InflowPeriod extends BaseDocument {
+  inflowId: string; // Reference to inflows collection document
+  periodId: string; // Reference to source_periods.id (same as sourcePeriodId)  
+  sourcePeriodId: string; // Direct reference to source_periods.id for mapping
+  userId: string; // Family Finance user ID
+  familyId?: string; // Optional family association
+  
+  // Period context (denormalized from source_periods for performance)
+  periodType: PeriodType; // "weekly" | "monthly" | "bi_monthly"
+  periodStartDate: Timestamp; // UTC timestamp - period start
+  periodEndDate: Timestamp; // UTC timestamp - period end
+  
+  // Payment cycle information
+  cycleStartDate: Timestamp; // Last payment date (or calculated start)
+  cycleEndDate: Timestamp; // Next payment date
+  cycleDays: number; // Days in the payment cycle
+  
+  // Financial calculations
+  incomeAmount: number; // Full income amount for this cycle
+  dailyEarningRate: number; // incomeAmount ÷ cycleDays
+  amountEarned: number; // dailyRate × daysInPeriod (how much earned this period)
+  amountReceived: number; // incomeAmount if receipt date falls in this period, else 0
+  
+  // Payment status and tracking
+  isReceiptPeriod: boolean; // True if the receipt date falls within this period
+  receiptDate?: Timestamp; // Actual receipt date if isReceiptPeriod is true
+  isActive: boolean; // Whether this inflow period is active
+  
+  // Metadata from inflow (denormalized for performance)
+  inflowDescription: string; // Description from inflow
+  inflowMerchantName?: string; // Merchant name from inflow
+  inflowIncomeType?: string; // Income type from inflow
+  inflowIsRegularSalary?: boolean; // Whether this is regular salary income
+  
+  // System tracking
+  lastCalculated: Timestamp; // When amounts were last calculated
 }

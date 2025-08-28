@@ -473,23 +473,23 @@ service cloud.firestore {
     }
     
     // =======================
-    // INCOME COLLECTION RULES - ROOT LEVEL
+    // INFLOW COLLECTION RULES - ROOT LEVEL
     // =======================
     
-    match /income/{incomeId} {
-      // Users can read their own income streams
-      // Family members can read family income streams (filtered by cloud functions for privacy)
+    match /inflow/{inflowId} {
+      // Users can read their own inflow streams
+      // Family members can read family inflow streams (filtered by cloud functions for privacy)
       allow read: if isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
-      // Only cloud functions should create income streams (from Plaid sync)
+      // Only cloud functions should create inflow streams (from Plaid sync)
       allow create: if false;
       
-      // Users can update limited fields on their own income streams (user notes, tags, category overrides, visibility)
+      // Users can update limited fields on their own inflow streams (user notes, tags, category overrides, visibility)
       allow update: if isOwner(resource.data.userId) &&
                        isValidRecurringIncomeUpdate();
       
-      // Only admins can delete income streams (for cleanup)
+      // Only admins can delete inflow streams (for cleanup)
       allow delete: if isAdmin();
     }
     
@@ -511,6 +511,56 @@ service cloud.firestore {
                        isValidRecurringOutflowUpdate();
       
       // Only admins can delete outflow streams (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    // =======================
+    // OUTFLOW PERIODS COLLECTION RULES - ROOT LEVEL
+    // =======================
+    
+    match /outflow_periods/{outflowPeriodId} {
+      // Users can read their own outflow periods
+      // Family members can read family outflow periods
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Allow collection queries for authenticated users to list their outflow periods
+      allow list: if isAuthenticated();
+      
+      // Only cloud functions should create outflow periods (from onOutflowCreated trigger)
+      allow create: if false;
+      
+      // Users can update limited fields on their own outflow periods (user modifications, notes)
+      // Allow user to modify amounts if they're the owner
+      allow update: if isOwner(resource.data.userId) &&
+                       isValidOutflowPeriodUpdate();
+      
+      // Only admins can delete outflow periods (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    // =======================
+    // INFLOW PERIODS COLLECTION RULES - ROOT LEVEL
+    // =======================
+    
+    match /inflow_periods/{inflowPeriodId} {
+      // Users can read their own inflow periods
+      // Family members can read family inflow periods
+      allow read: if isOwner(resource.data.userId) || 
+                     (resource.data.familyId != null && inSameFamily(resource.data.familyId));
+      
+      // Allow collection queries for authenticated users to list their inflow periods
+      allow list: if isAuthenticated();
+      
+      // Only cloud functions should create inflow periods (from onInflowCreated trigger)
+      allow create: if false;
+      
+      // Users can update limited fields on their own inflow periods (user modifications, notes)
+      // Allow user to modify amounts if they're the owner
+      allow update: if isOwner(resource.data.userId) &&
+                       isValidInflowPeriodUpdate();
+      
+      // Only admins can delete inflow periods (for cleanup)
       allow delete: if isAdmin();
     }
     
@@ -593,6 +643,42 @@ service cloud.firestore {
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields);
+    }
+    
+    // Validation function for outflow period updates
+    function isValidOutflowPeriodUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+      // Only allow updates to user-modifiable fields for outflow periods
+      let allowedFields = [
+        'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt', 'updatedAt'
+      ];
+      let changedFields = data.diff(resource_data).affectedKeys();
+      return changedFields.hasOnly(allowedFields) &&
+             // Ensure core immutable fields don't change
+             data.outflowId == resource_data.outflowId &&
+             data.periodId == resource_data.periodId &&
+             data.userId == resource_data.userId &&
+             data.billAmount == resource_data.billAmount &&
+             data.dailyWithholdingRate == resource_data.dailyWithholdingRate;
+    }
+    
+    // Validation function for inflow period updates
+    function isValidInflowPeriodUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+      // Only allow updates to user-modifiable fields for inflow periods
+      let allowedFields = [
+        'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt', 'updatedAt'
+      ];
+      let changedFields = data.diff(resource_data).affectedKeys();
+      return changedFields.hasOnly(allowedFields) &&
+             // Ensure core immutable fields don't change
+             data.inflowId == resource_data.inflowId &&
+             data.periodId == resource_data.periodId &&
+             data.userId == resource_data.userId &&
+             data.incomeAmount == resource_data.incomeAmount &&
+             data.dailyEarningRate == resource_data.dailyEarningRate;
     }
     
     function isValidPlaidConfigData() {
