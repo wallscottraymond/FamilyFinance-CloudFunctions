@@ -521,7 +521,9 @@ service cloud.firestore {
     match /outflow_periods/{outflowPeriodId} {
       // Users can read their own outflow periods
       // Family members can read family outflow periods
-      allow read: if isOwner(resource.data.userId) || 
+      // Handle case where collection/documents don't exist yet
+      allow read: if resource == null || 
+                     isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
       // Allow collection queries for authenticated users to list their outflow periods
@@ -546,10 +548,13 @@ service cloud.firestore {
     match /inflow_periods/{inflowPeriodId} {
       // Users can read their own inflow periods
       // Family members can read family inflow periods
-      allow read: if isOwner(resource.data.userId) || 
+      // Handle case where collection/documents don't exist yet
+      allow read: if resource == null || 
+                     isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
       // Allow collection queries for authenticated users to list their inflow periods
+      // This covers cases where collection is empty or doesn't exist
       allow list: if isAuthenticated();
       
       // Only cloud functions should create inflow periods (from onInflowCreated trigger)
