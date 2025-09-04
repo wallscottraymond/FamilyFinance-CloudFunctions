@@ -863,6 +863,18 @@ service cloud.firestore {
     
     
     // =======================
+    // CATEGORIES COLLECTION RULES
+    // =======================
+    
+    match /categories/{categoryId} {
+      // All authenticated users can read categories (universal data)
+      allow read: if isAuthenticated();
+      
+      // Only admins can create, update, or delete categories
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // =======================
     // SYSTEM COLLECTIONS
     // =======================
     
