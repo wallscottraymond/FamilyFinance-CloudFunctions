@@ -146,6 +146,21 @@ export interface FamilySettings {
 }
 
 // Transaction related types
+// Transaction Split interface for splitting transactions across multiple budgets
+export interface TransactionSplit {
+  id: string;                     // Unique identifier for the split
+  budgetId: string;               // Reference to budgets collection for flexibility
+  budgetPeriodId: string;         // Reference to specific budget_periods document
+  budgetName: string;             // Denormalized budget name for display performance
+  categoryId: TransactionCategory; // Category for this split (can differ from main transaction)
+  amount: number;                 // Amount allocated to this split
+  description?: string;           // Optional override description for this split
+  isDefault: boolean;             // True for the auto-created split when transaction is created
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;              // User who created this split
+}
+
 export interface Transaction extends BaseDocument {
   userId: string;
   familyId: string;
@@ -158,12 +173,22 @@ export interface Transaction extends BaseDocument {
   location?: TransactionLocation;
   receiptUrl?: string;
   tags: string[];
-  budgetId?: string;
+  budgetId?: string;              // Legacy field - maintained for backward compatibility
   recurringTransactionId?: string;
   status: TransactionStatus;
   approvedBy?: string;
   approvedAt?: Timestamp;
   metadata: Record<string, any>;
+  
+  // New splitting functionality
+  splits: TransactionSplit[];     // Array of transaction splits
+  isSplit: boolean;               // True if transaction has multiple splits or user has modified splits
+  totalAllocated: number;         // Sum of all split amounts
+  unallocated: number;            // amount - totalAllocated (remaining unallocated amount)
+  affectedBudgetPeriods: string[]; // Array of budget period IDs for efficient querying
+  affectedBudgets: string[];      // Array of budget IDs for flexibility
+  primaryBudgetId?: string;       // The budget with the largest split amount (for default sorting)
+  primaryBudgetPeriodId?: string; // The budget period with the largest split amount
 }
 
 export enum TransactionType {
@@ -220,7 +245,7 @@ export interface Budget extends BaseDocument {
   createdBy: string; // Always set to the user who created the budget
   amount: number;
   currency: string;
-  category: TransactionCategory;
+  categories: TransactionCategory[];
   period: BudgetPeriod;
   startDate: Timestamp;
   endDate: Timestamp;
@@ -235,6 +260,7 @@ export interface Budget extends BaseDocument {
   budgetType: 'recurring' | 'limited';
   endPeriod?: string; // For limited budgets - final period ID
   totalPeriods?: number; // For limited budgets - how many periods
+  selectedStartPeriod?: string; // Period ID where user wants budget to start
   activePeriodRange?: {
     startPeriod: string; // First period ID with budget_periods created
     endPeriod: string;   // Last period ID with budget_periods created
@@ -323,11 +349,43 @@ export interface UpdateTransactionRequest {
   tags?: string[];
 }
 
+// Transaction Splitting Request/Response types
+export interface AddTransactionSplitRequest {
+  transactionId: string;
+  budgetId: string;
+  budgetPeriodId: string;
+  amount: number;
+  categoryId?: TransactionCategory;
+  description?: string;
+}
+
+export interface UpdateTransactionSplitRequest {
+  transactionId: string;
+  splitId: string;
+  budgetId?: string;
+  budgetPeriodId?: string;
+  amount?: number;
+  categoryId?: TransactionCategory;
+  description?: string;
+}
+
+export interface DeleteTransactionSplitRequest {
+  transactionId: string;
+  splitId: string;
+}
+
+export interface TransactionSplitResponse {
+  success: boolean;
+  split?: TransactionSplit;
+  transaction?: Transaction;
+  message?: string;
+}
+
 export interface CreateBudgetRequest {
   name: string;
   description?: string;
   amount: number;
-  category: TransactionCategory;
+  categories: TransactionCategory[];
   period: BudgetPeriod;
   budgetType?: 'recurring' | 'limited'; // Budget type
   startDate: string; // ISO date string
@@ -335,6 +393,7 @@ export interface CreateBudgetRequest {
   alertThreshold?: number;
   memberIds?: string[]; // Optional - for shared budgets only
   isShared?: boolean; // Optional - defaults to false (individual budget)
+  selectedStartPeriod?: string; // Optional - specific period ID to start budget periods from
 }
 
 export interface CreateFamilyRequest {
@@ -392,9 +451,20 @@ export enum PeriodType {
   BI_MONTHLY = "bi_monthly"
 }
 
+// Checklist item for budget periods
+export interface ChecklistItem {
+  id: string;                   // Unique identifier for the checklist item
+  name: string;
+  transactionSplit: string;     // Placeholder for future transaction splitting functionality
+  expectedAmount: number;
+  actualAmount: number;
+  isChecked: boolean;
+}
+
 // Budget Periods - Links budgets to specific source periods with proportional amounts
 export interface BudgetPeriodDocument extends BaseDocument {
   budgetId: string;           // Reference to budgets collection
+  budgetName: string;         // Denormalized budget name for performance
   periodId: string;           // Reference to source_periods.id (same as sourcePeriodId)
   sourcePeriodId: string;     // Direct reference to source_periods.id for mapping
   familyId?: string;          // Optional - same as budget familyId for easy querying
@@ -418,6 +488,9 @@ export interface BudgetPeriodDocument extends BaseDocument {
   isModified: boolean;        // Has user manually adjusted the amount?
   lastModifiedBy?: string;    // Track who made changes
   lastModifiedAt?: Timestamp; // When last modified
+  
+  // Checklist functionality
+  checklistItems: ChecklistItem[];  // Array of checklist items for this budget period
   
   // System fields
   lastCalculated: Timestamp;  // When allocatedAmount was last calculated

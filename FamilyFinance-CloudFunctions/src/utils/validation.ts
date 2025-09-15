@@ -53,7 +53,7 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   name: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).optional(),
   amount: amountSchema,
-  category: Joi.string().valid(...Object.values(TransactionCategory)).required(),
+  categories: Joi.array().items(Joi.string().valid(...Object.values(TransactionCategory))).min(1).required(),
   period: Joi.string().valid(...Object.values(BudgetPeriod)).required(),
   budgetType: Joi.string().valid('recurring', 'limited').optional().default('recurring'),
   startDate: dateSchema.required(),
@@ -61,6 +61,7 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   alertThreshold: Joi.number().min(0).max(100).optional().default(80),
   memberIds: Joi.array().items(Joi.string()).optional(),
   isShared: Joi.boolean().optional().default(false),
+  selectedStartPeriod: Joi.string().optional(),
 });
 
 // Family validation schemas

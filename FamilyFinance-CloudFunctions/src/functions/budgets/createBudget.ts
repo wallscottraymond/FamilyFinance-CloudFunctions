@@ -115,7 +115,7 @@ export const createBudget = onRequest({
         createdBy: user.id!,
         amount: budgetData.amount,
         currency: currency,
-        category: budgetData.category,
+        categories: budgetData.categories,
         period: budgetData.period,
         budgetType: (budgetData.budgetType || 'recurring') as 'recurring' | 'limited',
         startDate: admin.firestore.Timestamp.fromDate(startDate),
@@ -126,6 +126,7 @@ export const createBudget = onRequest({
         isActive: true,
         memberIds: budgetData.memberIds || [user.id!], // For individual budgets, just the creator
         isShared: isSharedBudget,
+        selectedStartPeriod: budgetData.selectedStartPeriod, // Pass through for onBudgetCreate trigger
       };
 
       const createdBudget = await createDocument<Budget>("budgets", budget);
