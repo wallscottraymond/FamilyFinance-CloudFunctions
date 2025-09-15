@@ -1,4 +1,5 @@
 import * as Joi from "joi";
+import * as admin from "firebase-admin";
 import {
   CreateTransactionRequest,
   UpdateTransactionRequest,
@@ -53,7 +54,7 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   name: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).optional(),
   amount: amountSchema,
-  categories: Joi.array().items(Joi.string().valid(...Object.values(TransactionCategory))).min(1).required(),
+  categoryIds: Joi.array().items(Joi.string().min(1)).min(1).required(), // Changed to categoryIds with dynamic validation
   period: Joi.string().valid(...Object.values(BudgetPeriod)).required(),
   budgetType: Joi.string().valid('recurring', 'limited').optional().default('recurring'),
   startDate: dateSchema.required(),
@@ -265,6 +266,64 @@ export function validateRequestBody<T>(
       error: {
         errors: error.errors || [{ message: error.message }],
       },
+    };
+  }
+}
+
+/**
+ * Validates category IDs against the categories collection
+ */
+export async function validateCategoryIds(categoryIds: string[]): Promise<{ 
+  isValid: boolean; 
+  invalidIds: string[]; 
+  validCategories: { id: string; name: string; type: string }[];
+}> {
+  try {
+    const db = admin.firestore();
+    
+    // Get all provided category IDs from the database
+    const categoryPromises = categoryIds.map(id => 
+      db.collection('categories').doc(id).get()
+    );
+    
+    const categoryDocs = await Promise.all(categoryPromises);
+    
+    const invalidIds: string[] = [];
+    const validCategories: { id: string; name: string; type: string }[] = [];
+    
+    categoryDocs.forEach((doc, index) => {
+      const categoryId = categoryIds[index];
+      
+      if (!doc.exists) {
+        invalidIds.push(categoryId);
+      } else {
+        const data = doc.data();
+        
+        // Check if category is active
+        if (data?.isActive === false) {
+          invalidIds.push(categoryId);
+        } else {
+          validCategories.push({
+            id: categoryId,
+            name: data?.name || 'Unknown',
+            type: data?.type || 'Unknown'
+          });
+        }
+      }
+    });
+    
+    return {
+      isValid: invalidIds.length === 0,
+      invalidIds,
+      validCategories
+    };
+    
+  } catch (error) {
+    console.error('Error validating category IDs:', error);
+    return {
+      isValid: false,
+      invalidIds: categoryIds, // Mark all as invalid if we can't validate
+      validCategories: []
     };
   }
 }

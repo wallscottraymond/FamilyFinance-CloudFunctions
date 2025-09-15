@@ -10,6 +10,7 @@ export * from "./functions/users"; // Includes auth triggers (onUserCreate, onUs
 export * from "./functions/families";
 export * from "./functions/transactions";
 export * from "./functions/budgets";
+export * from "./functions/categories"; // Categories management functions
 export * from "./functions/admin";
 export * from "./functions/plaid"; // Plaid integration functions
 

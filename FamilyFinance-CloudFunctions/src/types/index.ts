@@ -230,6 +230,30 @@ export enum TransactionCategory {
   OTHER_EXPENSE = "other_expense"
 }
 
+// Enhanced Category interface matching frontend structure
+export interface Category extends BaseDocument {
+  name: string;
+  primary_plaid_category: string;
+  detailed_plaid_category: string;
+  description: string;
+  type: 'Income' | 'Outflow';
+  second_category: string;
+  first_category: string;
+  overall_category: string;
+  visible_by_default: boolean;
+  budget_selection: boolean;
+  income_selection: boolean;
+  index: number;
+  
+  // Lifecycle management fields
+  isActive: boolean; // Default true, set to false to disable without deleting
+  isSystemCategory: boolean; // True for default categories, false for custom user categories
+  createdBy?: string; // User ID who created this category (for custom categories)
+  
+  // Enhanced mapping field for backend compatibility
+  transactionCategoryId?: string; // Direct mapping to backend transaction processing
+}
+
 export interface TransactionLocation {
   name?: string;
   address?: string;
@@ -245,7 +269,7 @@ export interface Budget extends BaseDocument {
   createdBy: string; // Always set to the user who created the budget
   amount: number;
   currency: string;
-  categories: TransactionCategory[];
+  categoryIds: string[]; // Changed from categories to categoryIds - references to categories collection
   period: BudgetPeriod;
   startDate: Timestamp;
   endDate: Timestamp;
@@ -385,7 +409,7 @@ export interface CreateBudgetRequest {
   name: string;
   description?: string;
   amount: number;
-  categories: TransactionCategory[];
+  categoryIds: string[]; // Changed from categories to categoryIds - references to categories collection
   period: BudgetPeriod;
   budgetType?: 'recurring' | 'limited'; // Budget type
   startDate: string; // ISO date string

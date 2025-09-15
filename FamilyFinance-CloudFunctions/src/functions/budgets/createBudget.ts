@@ -16,7 +16,8 @@ import {
 } from "../../utils/auth";
 import { 
   validateRequest, 
-  createBudgetSchema 
+  createBudgetSchema,
+  validateCategoryIds
 } from "../../utils/validation";
 import { firebaseCors } from "../../middleware/cors";
 
@@ -54,6 +55,19 @@ export const createBudget = onRequest({
       }
 
       const budgetData = validation.value!;
+
+      // Validate category IDs against categories collection
+      const categoryValidation = await validateCategoryIds(budgetData.categoryIds);
+      if (!categoryValidation.isValid) {
+        return response.status(400).json(
+          createErrorResponse(
+            "invalid-categories", 
+            `Invalid category IDs: ${categoryValidation.invalidIds.join(', ')}`
+          )
+        );
+      }
+
+      console.log(`Valid categories for budget:`, categoryValidation.validCategories);
 
       // Determine if this is a shared budget and validate accordingly
       const isSharedBudget = budgetData.isShared || false;
@@ -115,7 +129,7 @@ export const createBudget = onRequest({
         createdBy: user.id!,
         amount: budgetData.amount,
         currency: currency,
-        categories: budgetData.categories,
+        categoryIds: budgetData.categoryIds, // Use validated category IDs
         period: budgetData.period,
         budgetType: (budgetData.budgetType || 'recurring') as 'recurring' | 'limited',
         startDate: admin.firestore.Timestamp.fromDate(startDate),
