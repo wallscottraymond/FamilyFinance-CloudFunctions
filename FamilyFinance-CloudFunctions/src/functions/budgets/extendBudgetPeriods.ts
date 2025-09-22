@@ -111,10 +111,29 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
       }
       
       // Check if this period falls within the budget's timeframe
-      if (targetPeriod.startDate.toMillis() < budget.startDate.toMillis() ||
-          (budget.endDate && targetPeriod.endDate.toMillis() > budget.endDate.toMillis())) {
-        console.log(`Period ${periodId} is outside budget ${budget.id} timeframe, skipping`);
+      const budgetStartTime = budget.startDate.toMillis();
+      const periodStartTime = targetPeriod.startDate.toMillis();
+
+      // Check if period starts before budget starts
+      if (periodStartTime < budgetStartTime) {
+        console.log(`Period ${periodId} starts before budget ${budget.id} start date, skipping`);
         continue;
+      }
+
+      // Check budget end date based on isOngoing flag
+      if (!budget.isOngoing && budget.budgetEndDate) {
+        const budgetEndTime = budget.budgetEndDate.toMillis();
+        if (periodStartTime > budgetEndTime) {
+          console.log(`Period ${periodId} starts after budget ${budget.id} end date (${budget.budgetEndDate.toDate().toISOString()}), skipping - budget is not ongoing`);
+          continue;
+        }
+      } else if (budget.endDate) {
+        // Legacy support for endDate field
+        const legacyEndTime = budget.endDate.toMillis();
+        if (targetPeriod.endDate.toMillis() > legacyEndTime) {
+          console.log(`Period ${periodId} extends beyond budget ${budget.id} legacy end date, skipping`);
+          continue;
+        }
       }
       
       budgetsToExtend.push(budget);
@@ -141,6 +160,12 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
         // Budget amounts
         allocatedAmount,
         originalAmount: allocatedAmount,
+        
+        // Budget name (denormalized for performance)
+        budgetName: budget.name,
+        
+        // Checklist items (initially empty)
+        checklistItems: [],
         
         // User modifications
         isModified: false,

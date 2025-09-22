@@ -277,16 +277,18 @@ service cloud.firestore {
     match /budgets/{budgetId} {
       // Family members can read family budgets
       allow read: if inSameFamily(resource.data.familyId);
-      
-      // Only parents/admins can create budgets
-      allow create: if canManage() && 
-                       inSameFamily(request.resource.data.familyId);
-      
-      // Only budget creator or family admin can update
-      allow update: if (isOwner(resource.data.createdBy) || 
+
+      // Only parents/admins can create budgets with valid data
+      allow create: if canManage() &&
+                       inSameFamily(request.resource.data.familyId) &&
+                       isValidBudgetData();
+
+      // Only budget creator or family admin can update with valid data
+      allow update: if (isOwner(resource.data.createdBy) ||
                         (resource.data.familyId == get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid)) &&
-                       inSameFamily(resource.data.familyId);
-      
+                       inSameFamily(resource.data.familyId) &&
+                       isValidBudgetData();
+
       // Only family admin can delete budgets
       allow delete: if inSameFamily(resource.data.familyId) &&
                        get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid;
@@ -712,6 +714,24 @@ service cloud.firestore {
              data.status is string && data.status in ['pending', 'posted', 'cleared'] &&
              data.isManual is bool &&
              (data.familyId == null || data.familyId is string);
+    }
+
+    // Budget validation function
+    function isValidBudgetData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'amount', 'createdBy', 'isActive', 'isOngoing']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.amount is number && data.amount > 0 &&
+             data.createdBy is string && data.createdBy.size() > 0 &&
+             data.isActive is bool &&
+             data.isOngoing is bool &&
+             // If isOngoing is false, budgetEndDate must be present and valid
+             (data.isOngoing == true ||
+              (data.keys().hasAny(['budgetEndDate']) && data.budgetEndDate is timestamp)) &&
+             // Ensure budget end date is after start date if provided
+             (!data.keys().hasAny(['budgetEndDate']) ||
+              !data.keys().hasAny(['startDate']) ||
+              data.budgetEndDate.toMillis() > data.startDate.toMillis());
     }
     
     function isValidTransactionUpdate() {

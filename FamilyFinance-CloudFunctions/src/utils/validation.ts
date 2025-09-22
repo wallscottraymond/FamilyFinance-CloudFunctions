@@ -58,11 +58,19 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   period: Joi.string().valid(...Object.values(BudgetPeriod)).required(),
   budgetType: Joi.string().valid('recurring', 'limited').optional().default('recurring'),
   startDate: dateSchema.required(),
-  endDate: dateSchema.optional(),
+  endDate: dateSchema.optional(), // Legacy field for backward compatibility
   alertThreshold: Joi.number().min(0).max(100).optional().default(80),
   memberIds: Joi.array().items(Joi.string()).optional(),
   isShared: Joi.boolean().optional().default(false),
   selectedStartPeriod: Joi.string().optional(),
+
+  // Budget end date functionality
+  isOngoing: Joi.boolean().optional().default(true),
+  budgetEndDate: Joi.when('isOngoing', {
+    is: false,
+    then: dateSchema.required().greater(Joi.ref('startDate')),
+    otherwise: Joi.forbidden()
+  }),
 });
 
 // Family validation schemas

@@ -272,14 +272,14 @@ export interface Budget extends BaseDocument {
   categoryIds: string[]; // Changed from categories to categoryIds - references to categories collection
   period: BudgetPeriod;
   startDate: Timestamp;
-  endDate: Timestamp;
+  endDate: Timestamp; // Legacy field - kept for backward compatibility
   spent: number;
   remaining: number;
   alertThreshold: number; // Percentage (0-100)
   isActive: boolean;
   memberIds: string[]; // Users who can spend from this budget (for individual budgets, just the creator)
   isShared: boolean; // True for group/family budgets, false for individual budgets
-  
+
   // New fields for budget periods integration
   budgetType: 'recurring' | 'limited';
   endPeriod?: string; // For limited budgets - final period ID
@@ -290,6 +290,10 @@ export interface Budget extends BaseDocument {
     endPeriod: string;   // Last period ID with budget_periods created
   };
   lastExtended?: Timestamp; // When budget_periods were last extended
+
+  // Budget end date functionality
+  isOngoing: boolean; // True for ongoing budgets, false for budgets with fixed end dates
+  budgetEndDate?: Timestamp; // Specific end date when isOngoing is false
 }
 
 export enum BudgetPeriod {
@@ -413,11 +417,15 @@ export interface CreateBudgetRequest {
   period: BudgetPeriod;
   budgetType?: 'recurring' | 'limited'; // Budget type
   startDate: string; // ISO date string
-  endDate?: string; // ISO date string
+  endDate?: string; // ISO date string - Legacy field for backward compatibility
   alertThreshold?: number;
   memberIds?: string[]; // Optional - for shared budgets only
   isShared?: boolean; // Optional - defaults to false (individual budget)
   selectedStartPeriod?: string; // Optional - specific period ID to start budget periods from
+
+  // Budget end date functionality
+  isOngoing?: boolean; // Optional - defaults to true (ongoing budget)
+  budgetEndDate?: string; // Optional - ISO date string for budget end date when isOngoing is false
 }
 
 export interface CreateFamilyRequest {

@@ -99,6 +99,7 @@ export const createBudget = onRequest({
       let endDate: Date;
 
       if (budgetData.endDate) {
+        // Legacy support for endDate field
         endDate = new Date(budgetData.endDate);
       } else {
         // Auto-calculate end date based on period
@@ -121,6 +122,21 @@ export const createBudget = onRequest({
         }
       }
 
+      // Handle budget end date functionality
+      const isOngoing = budgetData.isOngoing !== undefined ? budgetData.isOngoing : true;
+      let budgetEndDate: Date | undefined;
+
+      if (!isOngoing && budgetData.budgetEndDate) {
+        budgetEndDate = new Date(budgetData.budgetEndDate);
+
+        // Validate that budget end date is after start date
+        if (budgetEndDate <= startDate) {
+          return response.status(400).json(
+            createErrorResponse("invalid-end-date", "Budget end date must be after start date")
+          );
+        }
+      }
+
       // Create budget
       const budget: Omit<Budget, "id" | "createdAt" | "updatedAt"> = {
         name: budgetData.name,
@@ -133,7 +149,7 @@ export const createBudget = onRequest({
         period: budgetData.period,
         budgetType: (budgetData.budgetType || 'recurring') as 'recurring' | 'limited',
         startDate: admin.firestore.Timestamp.fromDate(startDate),
-        endDate: admin.firestore.Timestamp.fromDate(endDate),
+        endDate: admin.firestore.Timestamp.fromDate(endDate), // Legacy field
         spent: 0,
         remaining: budgetData.amount,
         alertThreshold: budgetData.alertThreshold || 80,
@@ -141,6 +157,10 @@ export const createBudget = onRequest({
         memberIds: budgetData.memberIds || [user.id!], // For individual budgets, just the creator
         isShared: isSharedBudget,
         selectedStartPeriod: budgetData.selectedStartPeriod, // Pass through for onBudgetCreate trigger
+
+        // Budget end date functionality
+        isOngoing: isOngoing,
+        budgetEndDate: budgetEndDate ? admin.firestore.Timestamp.fromDate(budgetEndDate) : undefined,
       };
 
       const createdBudget = await createDocument<Budget>("budgets", budget);
