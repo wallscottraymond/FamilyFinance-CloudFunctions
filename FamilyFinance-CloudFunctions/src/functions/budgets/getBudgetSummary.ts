@@ -122,7 +122,7 @@ export const getBudgetSummary = onRequest({
           amount: budget.amount,
           currency: budget.currency,
           period: budget.period,
-          category: budget.category,
+          categoryIds: budget.categoryIds,
         },
         spending: {
           total: totalSpent,

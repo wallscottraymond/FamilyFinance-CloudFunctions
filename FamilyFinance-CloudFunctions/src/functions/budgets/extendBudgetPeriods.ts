@@ -1,16 +1,14 @@
 /**
- * Extend Budget Periods
- * 
- * This callable function extends budget_periods when users navigate to periods
- * that don't have budget data yet. It's called on-demand from the frontend
- * when the PeriodSwiper needs budget data for a period that hasn't been generated.
- * 
+ * Extend Budget Periods (Simplified)
+ *
+ * This callable function handles rare cases where budget periods need to be created
+ * for existing budgets. Since periods are now created upfront, this should rarely be needed.
+ *
  * Features:
- * - On-demand period generation
- * - Extends existing budget period ranges
- * - Handles all period types (weekly, bi-monthly, monthly)
+ * - Simple period generation for edge cases
+ * - Handles single period requests
  * - User permission validation
- * 
+ *
  * Memory: 256MiB, Timeout: 30s
  */
 
@@ -56,14 +54,14 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     }
     const db = admin.firestore();
     
-    console.log(`Extending budget periods to cover period: ${periodId} for user: ${user.uid}`);
-    
+    console.log(`Creating budget periods for period: ${periodId} for user: ${user.uid}`);
+
     // Get the target source period
     const targetPeriodDoc = await db.collection('source_periods').doc(periodId).get();
     if (!targetPeriodDoc.exists) {
       throw new Error(`Source period not found: ${periodId}`);
     }
-    
+
     const targetPeriod = { id: targetPeriodDoc.id, ...targetPeriodDoc.data() } as SourcePeriod;
     
     // Find active budgets that need extension
@@ -81,40 +79,40 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     const budgetsSnapshot = await budgetsQuery.get();
     
     if (budgetsSnapshot.empty) {
-      console.log('No active budgets found to extend');
+      console.log('No active budgets found');
       return {
         success: true,
         budgetPeriodsCreated: 0,
         budgetsExtended: [],
       };
     }
-    
-    console.log(`Found ${budgetsSnapshot.size} active budgets to potentially extend`);
-    
+
+    console.log(`Found ${budgetsSnapshot.size} active budgets`);
+
     const budgetsToExtend: Budget[] = [];
     const budgetPeriodsToCreate: BudgetPeriodDocument[] = [];
     const now = admin.firestore.Timestamp.now();
-    
-    // Check each budget to see if it needs extension
+
+    // Check each budget to see if it needs this period
     for (const budgetDoc of budgetsSnapshot.docs) {
       const budget = { id: budgetDoc.id, ...budgetDoc.data() } as Budget;
-      
-      // Check if this budget already has a period for the target period
+
+      // Check if this budget already has this period
       const existingPeriodQuery = await db.collection('budget_periods')
         .where('budgetId', '==', budget.id)
         .where('periodId', '==', periodId)
         .get();
-      
+
       if (!existingPeriodQuery.empty) {
         console.log(`Budget ${budget.id} already has period ${periodId}, skipping`);
         continue;
       }
-      
+
       // Check if this period falls within the budget's timeframe
       const budgetStartTime = budget.startDate.toMillis();
       const periodStartTime = targetPeriod.startDate.toMillis();
 
-      // Check if period starts before budget starts
+      // Skip if period starts before budget starts
       if (periodStartTime < budgetStartTime) {
         console.log(`Period ${periodId} starts before budget ${budget.id} start date, skipping`);
         continue;
@@ -124,59 +122,52 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
       if (!budget.isOngoing && budget.budgetEndDate) {
         const budgetEndTime = budget.budgetEndDate.toMillis();
         if (periodStartTime > budgetEndTime) {
-          console.log(`Period ${periodId} starts after budget ${budget.id} end date (${budget.budgetEndDate.toDate().toISOString()}), skipping - budget is not ongoing`);
-          continue;
-        }
-      } else if (budget.endDate) {
-        // Legacy support for endDate field
-        const legacyEndTime = budget.endDate.toMillis();
-        if (targetPeriod.endDate.toMillis() > legacyEndTime) {
-          console.log(`Period ${periodId} extends beyond budget ${budget.id} legacy end date, skipping`);
+          console.log(`Period ${periodId} starts after budget ${budget.id} end date, skipping`);
           continue;
         }
       }
-      
+
       budgetsToExtend.push(budget);
-      
+
       // Calculate proportional amount for this period
       const allocatedAmount = calculateAllocatedAmount(budget.amount, targetPeriod);
-      
+
       const budgetPeriod: BudgetPeriodDocument = {
         id: `${budget.id}_${targetPeriod.id}`,
         budgetId: budget.id!,
         periodId: targetPeriod.id!,
-        sourcePeriodId: targetPeriod.id!, // Direct reference to source_periods.id for mapping
+        sourcePeriodId: targetPeriod.id!,
         familyId: String(budget.familyId || userData.familyId || ''),
-        
+
         // Ownership
         userId: budget.createdBy,
         createdBy: budget.createdBy,
-        
+
         // Period context
         periodType: targetPeriod.type,
         periodStart: targetPeriod.startDate,
         periodEnd: targetPeriod.endDate,
-        
+
         // Budget amounts
         allocatedAmount,
         originalAmount: allocatedAmount,
-        
+
         // Budget name (denormalized for performance)
         budgetName: budget.name,
-        
+
         // Checklist items (initially empty)
         checklistItems: [],
-        
+
         // User modifications
         isModified: false,
-        
+
         // System fields
         createdAt: now,
         updatedAt: now,
         lastCalculated: now,
         isActive: true,
       };
-      
+
       budgetPeriodsToCreate.push(budgetPeriod);
     }
     
@@ -192,29 +183,29 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     console.log(`Creating ${budgetPeriodsToCreate.length} new budget periods`);
     
     // Batch create the new budget periods
-    const batch = db.batch();
+    await batchCreateBudgetPeriods(db, budgetPeriodsToCreate);
     
-    budgetPeriodsToCreate.forEach((budgetPeriod) => {
-      if (budgetPeriod.id) {
-        const docRef = db.collection('budget_periods').doc(budgetPeriod.id);
-        batch.set(docRef, budgetPeriod);
-      }
-    });
-    
-    await batch.commit();
-    
-    // Update budget activePeriodRange if needed
+    // Update budget lastExtended timestamp
     for (const budget of budgetsToExtend) {
-      if (!budget.activePeriodRange || 
-          targetPeriod.startDate.toMillis() > 
-          (await db.collection('source_periods').doc(budget.activePeriodRange.endPeriod).get())
-            .data()?.startDate?.toMillis()) {
-        
-        await db.collection('budgets').doc(budget.id!).update({
-          'activePeriodRange.endPeriod': targetPeriod.id,
-          lastExtended: now,
-        });
+      const updateData: any = { lastExtended: now };
+
+      // For single period extension, update the range if needed
+      if (!budget.activePeriodRange) {
+        updateData.activePeriodRange = {
+          startPeriod: targetPeriod.id,
+          endPeriod: targetPeriod.id,
+        };
+      } else {
+        // Check if this period extends the current range
+        const currentEndPeriodDoc = await db.collection('source_periods').doc(budget.activePeriodRange.endPeriod).get();
+        const currentEndTime = currentEndPeriodDoc.data()?.startDate?.toMillis() || 0;
+
+        if (targetPeriod.startDate.toMillis() > currentEndTime) {
+          updateData['activePeriodRange.endPeriod'] = targetPeriod.id;
+        }
       }
+
+      await db.collection('budgets').doc(budget.id!).update(updateData);
     }
     
     console.log(`Successfully created ${budgetPeriodsToCreate.length} budget periods`);
@@ -236,6 +227,32 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
   }
 });
 
+
+/**
+ * Efficiently create multiple budget_periods using Firestore batch operations
+ */
+async function batchCreateBudgetPeriods(
+  db: admin.firestore.Firestore,
+  budgetPeriods: BudgetPeriodDocument[]
+): Promise<void> {
+  const BATCH_SIZE = 500; // Firestore batch limit
+
+  for (let i = 0; i < budgetPeriods.length; i += BATCH_SIZE) {
+    const batch = db.batch();
+    const batchPeriods = budgetPeriods.slice(i, i + BATCH_SIZE);
+
+    batchPeriods.forEach((budgetPeriod) => {
+      if (budgetPeriod.id) {
+        const docRef = db.collection('budget_periods').doc(budgetPeriod.id);
+        batch.set(docRef, budgetPeriod);
+      }
+    });
+
+    await batch.commit();
+    console.log(`📦 Created batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(budgetPeriods.length / BATCH_SIZE)} (${batchPeriods.length} periods)`);
+  }
+}
+
 /**
  * Calculate proportional amount for a budget period based on period type and duration
  */
@@ -243,18 +260,18 @@ function calculateAllocatedAmount(baseBudgetAmount: number, sourcePeriod: Source
   switch (sourcePeriod.type) {
     case PeriodType.MONTHLY:
       return baseBudgetAmount;
-      
+
     case PeriodType.BI_MONTHLY:
       return baseBudgetAmount * 0.5;
-      
+
     case PeriodType.WEEKLY:
       const startDate = sourcePeriod.startDate.toDate();
       const endDate = sourcePeriod.endDate.toDate();
       const daysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       const averageDaysInMonth = 30.44;
-      
+
       return baseBudgetAmount * (daysInPeriod / averageDaysInMonth);
-      
+
     default:
       console.warn(`Unknown period type: ${sourcePeriod.type}`);
       return baseBudgetAmount;

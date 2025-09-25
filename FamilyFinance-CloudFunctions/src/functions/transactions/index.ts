@@ -89,7 +89,22 @@ export const createTransaction = onRequest({
         );
       }
 
-      // Create transaction
+      // Create default split for the transaction
+      const defaultSplit = {
+        id: admin.firestore().collection('_dummy').doc().id,
+        budgetId: transactionData.budgetId || 'unassigned',
+        budgetPeriodId: 'unassigned', // Will be assigned later via budget period lookup
+        budgetName: 'General',
+        categoryId: transactionData.category,
+        amount: transactionData.amount,
+        description: undefined,
+        isDefault: true,
+        createdAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now(),
+        createdBy: user.id!,
+      };
+
+      // Create transaction with splitting support
       const transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
         userId: user.id!,
         familyId: user.familyId,
@@ -109,6 +124,16 @@ export const createTransaction = onRequest({
           createdBy: user.id,
           requiresApproval: permissionCheck.requiresApproval,
         },
+        
+        // New splitting fields
+        splits: [defaultSplit],
+        isSplit: false, // Single default split
+        totalAllocated: transactionData.amount,
+        unallocated: 0,
+        affectedBudgets: transactionData.budgetId ? [transactionData.budgetId] : [],
+        affectedBudgetPeriods: [], // Will be populated when budget period is assigned
+        primaryBudgetId: transactionData.budgetId || undefined,
+        primaryBudgetPeriodId: undefined, // Will be assigned when budget period is determined
       };
 
       const createdTransaction = await createDocument<Transaction>("transactions", transaction);
@@ -530,3 +555,10 @@ export const approveTransaction = onRequest({
 // Export trigger functions
 export { onOutflowCreated } from "./onOutflowCreated";
 export { onInflowCreated } from "./onInflowCreated";
+
+// Export transaction splitting functions
+export { 
+  addTransactionSplit,
+  updateTransactionSplit,
+  deleteTransactionSplit
+} from "./transactionSplits";

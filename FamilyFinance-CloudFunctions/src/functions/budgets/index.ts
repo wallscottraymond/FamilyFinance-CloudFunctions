@@ -10,3 +10,13 @@ export { getBudgetSummary } from "./getBudgetSummary";
 // Budget periods functions
 export { onBudgetCreate } from "./onBudgetCreate";
 export { extendBudgetPeriods } from "./extendBudgetPeriods";
+export { extendBudgetPeriodsRange } from "./extendBudgetPeriodsRange";
+export { extendRecurringBudgetPeriods } from "./extendRecurringBudgetPeriods";
+
+// Checklist items functions
+export { 
+  addChecklistItem,
+  updateChecklistItem,
+  deleteChecklistItem,
+  toggleChecklistItem
+} from "./checklistItems";

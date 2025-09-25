@@ -288,6 +288,7 @@ export function validateCorsOrigin(origin: string): boolean {
 /**
  * Simplified authentication function for use in Plaid functions
  * Returns user and decoded token for authenticated requests
+ * Handles both HTTP requests and Firebase Functions v2 callable requests
  */
 export async function authenticateRequest(
   request: any,
@@ -296,8 +297,43 @@ export async function authenticateRequest(
   user: admin.auth.DecodedIdToken;
   userData: User;
 }> {
-  // Check for Authorization header
-  const authHeader = request.get("Authorization");
+  let authHeader: string | undefined;
+  
+  // Handle different request types
+  if (request.get && typeof request.get === 'function') {
+    // HTTP request (Express-style)
+    authHeader = request.get("Authorization");
+  } else if (request.headers && request.headers.authorization) {
+    // HTTP request with headers object
+    authHeader = request.headers.authorization;
+  } else if (request.auth && request.auth.token) {
+    // Firebase Functions v2 callable request - already authenticated
+    const decodedToken = request.auth.token;
+    
+    // Get user document with role
+    const userData = await getUserWithRole(decodedToken.uid);
+    if (!userData) {
+      throw new Error("User document not found");
+    }
+
+    // Check if user is active
+    if (!userData.isActive) {
+      throw new Error("User account is inactive");
+    }
+
+    // Check role permissions
+    if (!hasRequiredRole(userData.role, requiredRole)) {
+      throw new Error(`Required role: ${requiredRole}, user role: ${userData.role}`);
+    }
+
+    return {
+      user: decodedToken,
+      userData,
+    };
+  } else {
+    throw new Error("Authorization header with Bearer token is required");
+  }
+  
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     throw new Error("Authorization header with Bearer token is required");
   }

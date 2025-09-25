@@ -1,0 +1,180 @@
+#!/usr/bin/env node
+
+/**
+ * Script to call the fetchRecurringTransactions function
+ * This will populate the outflows collection with Plaid recurring transaction data
+ */
+
+const https = require('https');
+
+const PROJECT_ID = 'family-budget-app-cb59b';
+const REGION = 'us-central1';
+const BASE_URL = `https://${REGION}-${PROJECT_ID}.cloudfunctions.net`;
+
+function makeHttpRequest(url, method = 'GET', data = null, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || 443,
+      path: urlObj.pathname + urlObj.search,
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      }
+    };
+
+    if (data && method !== 'GET') {
+      const jsonData = JSON.stringify(data);
+      options.headers['Content-Length'] = Buffer.byteLength(jsonData);
+    }
+
+    const req = https.request(options, (res) => {
+      let responseData = '';
+
+      res.on('data', (chunk) => {
+        responseData += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const parsedData = JSON.parse(responseData);
+          resolve({
+            statusCode: res.statusCode,
+            data: parsedData,
+            headers: res.headers
+          });
+        } catch (error) {
+          resolve({
+            statusCode: res.statusCode,
+            data: responseData,
+            headers: res.headers
+          });
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    if (data && method !== 'GET') {
+      req.write(JSON.stringify(data));
+    }
+
+    req.end();
+  });
+}
+
+async function callFetchRecurringTransactionsAdmin() {
+  try {
+    console.log('🔄 Calling fetchRecurringTransactionsAdmin function...');
+    
+    const url = `${BASE_URL}/fetchRecurringTransactionsAdmin`;
+    
+    // Call admin function (doesn't require authentication)
+    const response = await makeHttpRequest(url, 'POST', {});
+    
+    console.log(`   Response status: ${response.statusCode}`);
+    
+    if (response.statusCode === 200) {
+      const result = response.data;
+      console.log('✅ fetchRecurringTransactionsAdmin completed successfully!');
+      
+      if (result.success && result.data) {
+        const data = result.data;
+        console.log('   Results:');
+        console.log(`     Users processed: ${data.totalUsersProcessed}`);
+        console.log(`     Items processed: ${data.totalItemsProcessed}`);
+        console.log(`     Total outflows created: ${data.totalOutflows}`);
+        console.log(`     Total income created: ${data.totalIncome}`);
+        
+        if (data.summary && data.summary.length > 0) {
+          console.log('   Per-user summary:');
+          data.summary.forEach(user => {
+            console.log(`     User ${user.email}: ${user.outflows} outflows, ${user.income} income, ${user.items} items`);
+          });
+        }
+      } else {
+        console.log('   Raw response:', result);
+      }
+      
+      return true;
+    } else {
+      console.log('❌ Failed to fetch recurring transactions');
+      console.log('   Response:', response.data);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error calling fetchRecurringTransactionsAdmin:', error.message);
+    return false;
+  }
+}
+
+async function checkHealthStatus() {
+  try {
+    console.log('🔍 Checking Cloud Functions health...');
+    
+    const url = `${BASE_URL}/healthCheck`;
+    const response = await makeHttpRequest(url);
+    
+    if (response.statusCode === 200) {
+      console.log('✅ Cloud Functions are healthy and responding');
+      return true;
+    } else {
+      console.log('⚠️  Cloud Functions health check failed');
+      console.log('   Response:', response.data);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error checking health:', error.message);
+    return false;
+  }
+}
+
+async function main() {
+  console.log('🚀 Fetching recurring transactions from Plaid...');
+  console.log(`   Project: ${PROJECT_ID}`);
+  console.log(`   Region: ${REGION}`);
+  console.log('');
+  
+  // Step 1: Check if functions are healthy
+  const healthOk = await checkHealthStatus();
+  if (!healthOk) {
+    console.error('❌ Cloud Functions are not responding properly. Aborting.');
+    process.exit(1);
+  }
+  
+  console.log('');
+  
+  // Step 2: Call fetchRecurringTransactionsAdmin (the admin version)  
+  const success = await callFetchRecurringTransactionsAdmin();
+  
+  console.log('');
+  
+  if (success) {
+    console.log('🎉 Recurring transactions fetch completed successfully!');
+    console.log('💡 Check the Firebase Console:');
+    console.log('   1. Go to Firestore Database');
+    console.log('   2. Look for the "outflows" collection');
+    console.log('   3. Verify outflow data was created from Plaid recurring transactions');
+    console.log('   4. Check that "outflow_periods" were auto-generated by the trigger');
+  } else {
+    console.log('❌ Failed to fetch recurring transactions');
+    console.log('💡 This might be due to:');
+    console.log('   - Authentication requirements');
+    console.log('   - No Plaid items connected');
+    console.log('   - Network issues');
+    console.log('   - Function deployment problems');
+  }
+  
+  process.exit(0);
+}
+
+// Run the script
+main().catch(error => {
+  console.error('❌ Script failed:', error);
+  process.exit(1);
+});

@@ -494,6 +494,320 @@ TOKEN_ENCRYPTION_KEY=64_character_hex_string
 - Granular privacy controls per user
 - Account-level visibility settings
 
+## Budget Period Checklist System
+
+### Overview
+
+The Budget Period Checklist System allows users to create detailed task lists within their budget periods to track specific spending goals, categories, and financial objectives. This feature enhances budget management by providing granular tracking capabilities for individual spending items within broader budget categories.
+
+### Architecture
+
+#### Data Structure
+
+**ChecklistItem Interface:**
+```typescript
+interface ChecklistItem {
+  id: string;                   // Unique identifier for the checklist item
+  name: string;                 // Display name/description
+  transactionSplit: string;     // Future transaction splitting functionality (placeholder)
+  expectedAmount: number;       // Budgeted/expected amount for this item
+  actualAmount: number;         // Actual amount spent on this item
+  isChecked: boolean;          // Completion/tracking status
+}
+```
+
+**Enhanced BudgetPeriodDocument:**
+```typescript
+interface BudgetPeriodDocument extends BaseDocument {
+  // ... existing fields ...
+  budgetName: string;          // Denormalized budget name for performance
+  checklistItems: ChecklistItem[]; // Array of checklist items for this period
+  // ... existing fields ...
+}
+```
+
+#### Cloud Functions
+
+**Checklist Management Functions:**
+
+1. **`addChecklistItem`** - Add new checklist item to a budget period
+   - **Endpoint:** `addChecklistItem`
+   - **Method:** Firebase Functions v2 Callable
+   - **Authentication:** Required (user must own the budget period)
+   - **Parameters:**
+     ```typescript
+     interface AddChecklistItemRequest {
+       budgetPeriodId: string;
+       checklistItem: Omit<ChecklistItem, 'id'>;
+     }
+     ```
+   - **Response:**
+     ```typescript
+     interface ChecklistItemResponse {
+       success: boolean;
+       checklistItem?: ChecklistItem;
+       message?: string;
+     }
+     ```
+
+2. **`updateChecklistItem`** - Update existing checklist item
+   - **Endpoint:** `updateChecklistItem`
+   - **Method:** Firebase Functions v2 Callable
+   - **Authentication:** Required (user must own the budget period)
+   - **Parameters:**
+     ```typescript
+     interface UpdateChecklistItemRequest {
+       budgetPeriodId: string;
+       checklistItemId: string;
+       updates: Partial<Omit<ChecklistItem, 'id'>>;
+     }
+     ```
+
+3. **`deleteChecklistItem`** - Remove checklist item from budget period
+   - **Endpoint:** `deleteChecklistItem`
+   - **Method:** Firebase Functions v2 Callable
+   - **Authentication:** Required (user must own the budget period)
+   - **Parameters:**
+     ```typescript
+     interface DeleteChecklistItemRequest {
+       budgetPeriodId: string;
+       checklistItemId: string;
+     }
+     ```
+
+4. **`toggleChecklistItem`** - Toggle checked status of checklist item
+   - **Endpoint:** `toggleChecklistItem`
+   - **Method:** Firebase Functions v2 Callable
+   - **Authentication:** Required (user must own the budget period)
+   - **Parameters:**
+     ```typescript
+     interface ToggleChecklistItemRequest {
+       budgetPeriodId: string;
+       checklistItemId: string;
+     }
+     ```
+
+### Security Implementation
+
+#### Firestore Security Rules
+
+Enhanced budget period validation with checklist support:
+
+```javascript
+// Validate budget period updates
+function isValidBudgetPeriodUpdate() {
+  let data = request.resource.data;
+  let resource_data = resource.data;
+  
+  // Allow updates to user-modifiable fields including checklist items
+  let allowedFields = [
+    'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 
+    'lastModifiedAt', 'checklistItems', 'updatedAt'
+  ];
+  
+  let changedFields = data.diff(resource_data).affectedKeys();
+  let validFieldChanges = changedFields.hasOnly(allowedFields);
+  
+  // Ensure core immutable fields don't change
+  let coreFieldsUnchanged = data.budgetId == resource_data.budgetId &&
+                           data.periodId == resource_data.periodId &&
+                           data.userId == resource_data.userId;
+  
+  // Validate checklist items if they're being updated
+  let checklistValid = !changedFields.hasAny(['checklistItems']) || 
+                      isValidChecklistItems(data.checklistItems);
+  
+  return validFieldChanges && coreFieldsUnchanged && checklistValid;
+}
+
+// Validate checklist items array
+function isValidChecklistItems(checklistItems) {
+  return checklistItems is list &&
+         checklistItems.size() <= 20 && // Reasonable limit
+         checklistItems.all(item, isValidChecklistItem(item));
+}
+
+// Validate individual checklist item
+function isValidChecklistItem(item) {
+  return item is map &&
+         item.keys().hasAll(['id', 'name', 'transactionSplit', 'expectedAmount', 'actualAmount', 'isChecked']) &&
+         item.id is string && item.id.size() > 0 &&
+         item.name is string && item.name.size() > 0 && item.name.size() <= 100 &&
+         item.transactionSplit is string &&
+         item.expectedAmount is number && item.expectedAmount >= 0 &&
+         item.actualAmount is number && item.actualAmount >= 0 &&
+         item.isChecked is bool;
+}
+```
+
+#### Access Control
+
+- **User Ownership:** Only budget period owners can modify their checklist items
+- **Authentication Required:** All checklist operations require valid Firebase Auth token
+- **Family Visibility:** Family members can read checklist items but cannot modify them
+- **Admin Override:** System admins have full access for troubleshooting
+
+### Usage Examples
+
+#### Frontend Integration (React Native)
+
+```typescript
+import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
+
+const functions = getFunctions();
+
+// Add checklist item
+const addChecklistItem = async (budgetPeriodId: string, item: Omit<ChecklistItem, 'id'>) => {
+  try {
+    const addItem = httpsCallable(functions, 'addChecklistItem');
+    const result = await addItem({
+      budgetPeriodId,
+      checklistItem: item
+    });
+    return result.data;
+  } catch (error) {
+    console.error('Error adding checklist item:', error);
+    throw error;
+  }
+};
+
+// Update checklist item
+const updateChecklistItem = async (budgetPeriodId: string, itemId: string, updates: Partial<ChecklistItem>) => {
+  try {
+    const updateItem = httpsCallable(functions, 'updateChecklistItem');
+    const result = await updateItem({
+      budgetPeriodId,
+      checklistItemId: itemId,
+      updates
+    });
+    return result.data;
+  } catch (error) {
+    console.error('Error updating checklist item:', error);
+    throw error;
+  }
+};
+
+// Toggle checklist item
+const toggleChecklistItem = async (budgetPeriodId: string, itemId: string) => {
+  try {
+    const toggleItem = httpsCallable(functions, 'toggleChecklistItem');
+    const result = await toggleItem({
+      budgetPeriodId,
+      checklistItemId: itemId
+    });
+    return result.data;
+  } catch (error) {
+    console.error('Error toggling checklist item:', error);
+    throw error;
+  }
+};
+
+// Delete checklist item
+const deleteChecklistItem = async (budgetPeriodId: string, itemId: string) => {
+  try {
+    const deleteItem = httpsCallable(functions, 'deleteChecklistItem');
+    const result = await deleteItem({
+      budgetPeriodId,
+      checklistItemId: itemId
+    });
+    return result.data;
+  } catch (error) {
+    console.error('Error deleting checklist item:', error);
+    throw error;
+  }
+};
+```
+
+### Performance Considerations
+
+#### Data Storage Strategy
+
+- **Embedded Documents:** Checklist items are stored as an embedded array within budget period documents for atomic operations and better performance
+- **Document Size Limits:** Maximum 20 checklist items per budget period to stay within Firestore document size limits
+- **Denormalized Data:** Budget names are stored directly in budget periods to avoid additional lookups
+
+#### Optimization Features
+
+- **Batch Operations:** All checklist modifications update the entire array atomically
+- **Client-side Caching:** Real-time subscriptions to budget periods include checklist updates
+- **Minimal Network Calls:** Single function call updates entire checklist state
+
+### Development Guidelines
+
+#### Adding Checklist Features
+
+1. **Follow Existing Patterns:**
+   ```typescript
+   // Always validate authentication
+   if (!request.auth) {
+     throw new HttpsError('unauthenticated', 'User must be authenticated');
+   }
+   
+   // Verify budget period ownership
+   if (budgetPeriodData.userId !== request.auth.uid) {
+     throw new HttpsError('permission-denied', 'You can only modify your own budget periods');
+   }
+   ```
+
+2. **Error Handling:**
+   - Use Firebase Functions v2 HttpsError for consistent error responses
+   - Include detailed logging for debugging
+   - Validate all inputs thoroughly
+
+3. **Testing:**
+   - Test all CRUD operations for checklist items
+   - Verify security rules prevent unauthorized access
+   - Test with maximum checklist item limits
+
+#### Future Enhancements
+
+1. **Transaction Splitting Integration:**
+   - The `transactionSplit` field is prepared for future functionality
+   - Will allow linking checklist items to specific transaction splits
+   - Enables automatic progress tracking based on actual spending
+
+2. **Analytics Integration:**
+   - Checklist completion rates by user and period
+   - Budget vs actual analysis at checklist item level
+   - Spending pattern identification through checklist data
+
+3. **Mobile App Features:**
+   - Drag-and-drop checklist reordering
+   - Smart suggestions based on historical patterns
+   - Progress indicators and completion celebrations
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **Permission Denied Errors:**
+   - Verify user owns the budget period
+   - Check Firestore security rules deployment
+   - Ensure proper authentication token
+
+2. **Validation Errors:**
+   - Check checklist item field types and constraints
+   - Verify maximum item limit (20 items per period)
+   - Validate required fields are present
+
+3. **Performance Issues:**
+   - Monitor document size growth with many checklist items
+   - Consider pagination for large lists in mobile UI
+   - Use efficient Firestore listeners for real-time updates
+
+#### Debug Commands
+
+```bash
+# Check function deployment status
+firebase functions:list | grep -E "Checklist"
+
+# View function logs
+firebase functions:log --only addChecklistItem,updateChecklistItem,deleteChecklistItem,toggleChecklistItem
+
+# Test function locally
+firebase emulators:start --only functions,firestore
+```
+
 ## Notes for AI Assistants
 
 - Always check existing patterns before implementing new features

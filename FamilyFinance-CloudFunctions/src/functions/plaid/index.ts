@@ -34,6 +34,7 @@ export { createLinkToken } from "./createLinkToken";
 export { exchangePlaidToken } from "./exchangePlaidToken"; // Using real Plaid API
 export { fetchRecurringTransactions } from "./fetchRecurringTransactions";
 export { plaidWebhook } from "./plaidWebhook";
+export { syncPlaidTransactions, getPlaidSyncStatus } from "./syncPlaidTransactions";
 // export { refreshPlaidData } from "./refreshPlaidData";
 // export { unlinkPlaidAccount, getUnlinkPreview } from "./unlinkPlaidAccount";
 

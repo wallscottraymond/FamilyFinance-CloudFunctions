@@ -332,7 +332,7 @@ async function processItemRecurringTransactions(
     let incomeStreamsModified = 0;
     let outflowStreamsModified = 0;
 
-    // Process inflow streams (save to 'income' collection)
+    // Process inflow streams (save to 'inflow' collection)
     if (inflow_streams) {
       const result = await processRecurringStreams(
         inflow_streams, 
@@ -391,7 +391,7 @@ async function processRecurringStreams(
   let modified = 0;
 
   // Determine target collection based on stream type
-  const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? 'income' : 'outflows';
+  const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? 'inflow' : 'outflows';
   
   console.log(`Processing ${streams.length} ${streamType} streams to '${targetCollection}' collection`);
 

@@ -265,16 +265,53 @@ async function processTransactionWebhook(payload: any): Promise<any> {
     case PlaidWebhookCode.DEFAULT_UPDATE:
     case PlaidWebhookCode.INITIAL_UPDATE:
     case PlaidWebhookCode.HISTORICAL_UPDATE:
-      // Trigger transaction sync (implementation would call existing sync functions)
+      // Trigger actual transaction sync with splits support
       console.log(`Transaction sync triggered for item: ${itemId}`);
-      return {
-        success: true,
-        processed: true,
-        webhookType: payload.webhook_type,
-        webhookCode: payload.webhook_code,
-        itemId: itemId,
-        message: 'Transaction sync triggered'
-      };
+      
+      try {
+        // Find the user ID for this item
+        const plaidItemQuery = await db.collection('plaid_items')
+          .where('itemId', '==', itemId)
+          .limit(1)
+          .get();
+        
+        if (plaidItemQuery.empty) {
+          throw new Error(`Plaid item not found: ${itemId}`);
+        }
+        
+        const itemData = plaidItemQuery.docs[0].data();
+        const userId = itemData.userId;
+        
+        // Import the sync function
+        const { syncTransactionsForPlaidItem } = await import('../../utils/plaidTransactionSync');
+        
+        // Perform the sync
+        const syncResult = await syncTransactionsForPlaidItem(itemId, userId);
+        
+        return {
+          success: true,
+          processed: true,
+          webhookType: payload.webhook_type,
+          webhookCode: payload.webhook_code,
+          itemId: itemId,
+          transactionsAdded: syncResult.transactionsAdded,
+          transactionsUpdated: syncResult.transactionsUpdated,
+          errors: syncResult.errors,
+          message: `Transaction sync completed: ${syncResult.transactionsAdded} added, ${syncResult.transactionsUpdated} updated`
+        };
+        
+      } catch (error) {
+        console.error(`Error during transaction sync for item ${itemId}:`, error);
+        return {
+          success: false,
+          processed: false,
+          webhookType: payload.webhook_type,
+          webhookCode: payload.webhook_code,
+          itemId: itemId,
+          error: error instanceof Error ? error.message : 'Unknown sync error',
+          message: 'Transaction sync failed'
+        };
+      }
     
     case PlaidWebhookCode.TRANSACTIONS_REMOVED:
       // Handle removed transactions

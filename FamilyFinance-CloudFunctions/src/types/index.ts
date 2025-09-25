@@ -1198,6 +1198,28 @@ export interface OutflowPeriod extends BaseDocument {
 }
 
 // =======================
+// PERIOD MANAGEMENT TYPES
+// =======================
+
+// Period range definition for batch operations
+export interface PeriodRange {
+  startPeriodId: string;
+  endPeriodId: string;
+  periodType: PeriodType;
+  count: number;
+}
+
+// Configuration for period management strategies
+export interface PeriodManagementConfig {
+  defaultWindowSize: number;
+  edgeDetectionThreshold: number;
+  maxPreloadExpansion: number;
+  batchExtensionSize: number;
+  maxBatchExtensionLimit: number;
+  preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
+}
+
+// =======================
 // INFLOW PERIODS TYPES
 // =======================
 
@@ -1238,4 +1260,26 @@ export interface InflowPeriod extends BaseDocument {
   
   // System tracking
   lastCalculated: Timestamp; // When amounts were last calculated
+}
+
+// =======================
+// PERIOD MANAGEMENT TYPES
+// =======================
+
+// Period range definition for batch operations
+export interface PeriodRange {
+  startPeriodId: string;
+  endPeriodId: string;
+  periodType: PeriodType;
+  count: number;
+}
+
+// Configuration for period management strategies
+export interface PeriodManagementConfig {
+  defaultWindowSize: number;
+  edgeDetectionThreshold: number;
+  maxPreloadExpansion: number;
+  batchExtensionSize: number;
+  maxBatchExtensionLimit: number;
+  preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
 }

@@ -1,16 +1,17 @@
 /**
- * Budget Periods Auto-Generation
- * 
+ * Budget Periods Auto-Generation (Simplified)
+ *
  * This Cloud Function automatically creates budget_periods when a budget is created.
  * It generates periods for all 3 period types (weekly, bi-monthly, monthly) covering
- * a 3-month forward window to minimize Firestore writes while providing functionality.
- * 
+ * a full 1-year window upfront for optimal user experience.
+ *
  * Features:
  * - Multi-period type generation (weekly, bi-monthly, monthly)
  * - Proportional amount calculation based on period duration
- * - Smart 3-month windowing to minimize document creation
+ * - 1-year upfront generation for instant navigation
  * - Owner-based permissions with family role support
- * 
+ * - Simplified architecture with no lazy loading complexity
+ *
  * Memory: 512MiB, Timeout: 60s
  */
 
@@ -71,18 +72,22 @@ export const onBudgetCreate = onDocumentCreated({
     
     const startDateTimestamp = admin.firestore.Timestamp.fromDate(startDate);
     
-    // Determine end date for period generation
-    let searchEndDate: Date;
+    // Always create 1 year of periods upfront for simplified management
+    // This provides consistent UX and eliminates complex lazy loading
+    let searchEndDate = new Date(startDate);
+    searchEndDate.setMonth(searchEndDate.getMonth() + 12);
 
+    // Respect fixed end dates if they're shorter than 1 year
     if (!budgetData.isOngoing && budgetData.budgetEndDate) {
-      // For fixed-end budgets, use the budget end date
-      searchEndDate = budgetData.budgetEndDate.toDate();
-      console.log(`Budget has fixed end date: ${searchEndDate.toISOString()}`);
+      const budgetEndDate = budgetData.budgetEndDate.toDate();
+      if (budgetEndDate < searchEndDate) {
+        searchEndDate = budgetEndDate;
+        console.log(`Budget has fixed end date shorter than 1 year: ${searchEndDate.toISOString()}`);
+      } else {
+        console.log(`Budget has fixed end date beyond 1 year, capping at 1 year: ${searchEndDate.toISOString()}`);
+      }
     } else {
-      // For ongoing budgets, create 3-month window for initial periods
-      searchEndDate = new Date(startDate);
-      searchEndDate.setMonth(searchEndDate.getMonth() + 3);
-      console.log(`Budget is ongoing, using 3-month window: ${searchEndDate.toISOString()}`);
+      console.log(`Creating 1 year of periods upfront: ${searchEndDate.toISOString()}`);
     }
 
     const searchEndTimestamp = admin.firestore.Timestamp.fromDate(searchEndDate);
