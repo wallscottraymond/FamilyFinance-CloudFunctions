@@ -8,8 +8,8 @@
  * Features:
  * - Multi-period type generation (weekly, bi-monthly, monthly)
  * - Proportional amount calculation based on period duration
- * - Ongoing budgets: 2 years of periods upfront for extended planning
- * - Fixed-end budgets: Periods until end date (capped at 2 years)
+ * - Recurring budgets (budgetType: 'recurring'): 1 year of periods, extended by scheduled function
+ * - Limited budgets (budgetType: 'limited'): Periods until specified end date
  * - Owner-based permissions with family role support
  * - Period ID format matches source periods for frontend compatibility
  *
@@ -27,8 +27,8 @@ import {
 /**
  * Triggered when a budget is created
  * Automatically generates budget_periods with intelligent time horizon:
- * - Ongoing budgets: 2 years of periods (24 monthly, 48 bi-monthly, 104 weekly)
- * - Fixed-end budgets: Until end date, capped at 2 years maximum
+ * - Recurring budgets: 1 year of periods (12 monthly, 24 bi-monthly, 52 weekly) + scheduled extension
+ * - Limited budgets: Periods until specified end date
  * - Default: 1 year of periods (12 monthly, 24 bi-monthly, 52 weekly)
  */
 export const onBudgetCreate = onDocumentCreated({
@@ -47,6 +47,12 @@ export const onBudgetCreate = onDocumentCreated({
     }
 
     console.log(`Creating budget periods for budget: ${budgetId}`);
+    console.log(`Budget data:`, {
+      budgetType: budgetData.budgetType,
+      budgetEndDate: budgetData.budgetEndDate ? budgetData.budgetEndDate.toDate().toISOString() : 'undefined',
+      endDate: budgetData.endDate ? budgetData.endDate.toDate().toISOString() : 'undefined',
+      startDate: budgetData.startDate ? budgetData.startDate.toDate().toISOString() : 'undefined'
+    });
     
     const db = admin.firestore();
     const now = admin.firestore.Timestamp.now();
@@ -78,27 +84,28 @@ export const onBudgetCreate = onDocumentCreated({
     }
     
 
-    // Determine end date for period generation
+    // Determine end date for period generation - Simple logic
     let endDate: Date;
 
-    if (budgetData.isOngoing === false && budgetData.budgetEndDate) {
-      // Bounded budget: Use the exact end date specified
-      endDate = budgetData.budgetEndDate.toDate();
-      console.log(`Bounded budget: Using exact end date: ${endDate.toISOString()}`);
-    } else if (budgetData.endDate) {
-      // Legacy support: Use the old endDate field if present
-      endDate = budgetData.endDate.toDate();
-      console.log(`Using legacy endDate field: ${endDate.toISOString()}`);
-    } else if (budgetData.isOngoing !== false) {
-      // Ongoing budget (isOngoing === true or undefined): Generate 2 years ahead
-      endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 24);
-      console.log(`Ongoing budget: Creating 2 years of periods ahead: ${endDate.toISOString()}`);
-    } else {
-      // Default case: generate 1 year of periods
+    if (budgetData.budgetType === 'recurring') {
+      // Recurring budget: Generate 1 year of periods (will be extended by scheduled function)
       endDate = new Date(startDate);
       endDate.setMonth(endDate.getMonth() + 12);
-      console.log(`Default: Creating 1 year of periods: ${endDate.toISOString()}`);
+      console.log(`Recurring budget: Creating 1 year of periods: ${endDate.toISOString()}`);
+    } else {
+      // Limited/non-recurring budget: Use the specified end date
+      if (budgetData.budgetEndDate) {
+        endDate = budgetData.budgetEndDate.toDate();
+        console.log(`Limited budget: Using budgetEndDate: ${endDate.toISOString()}`);
+      } else if (budgetData.endDate) {
+        endDate = budgetData.endDate.toDate();
+        console.log(`Limited budget: Using legacy endDate: ${endDate.toISOString()}`);
+      } else {
+        // Default to 1 year if no end date specified
+        endDate = new Date(startDate);
+        endDate.setMonth(endDate.getMonth() + 12);
+        console.log(`Limited budget: No end date specified, defaulting to 1 year: ${endDate.toISOString()}`);
+      }
     }
 
     console.log(`Start date: ${startDate.toISOString()}`);
@@ -107,17 +114,38 @@ export const onBudgetCreate = onDocumentCreated({
     // Generate periods directly instead of relying on existing source_periods
     const budgetPeriods: BudgetPeriodDocument[] = [];
 
-    // Generate monthly periods (12 periods)
+    // Generate periods with safety limits to prevent runaway generation
+    const maxPeriodsPerType = 104; // Max 2 years of periods (52 weeks * 2)
+
+    // Generate monthly periods
     console.log('Generating monthly periods...');
-    budgetPeriods.push(...generateMonthlyPeriods(budgetId, budgetData, startDate, endDate, now));
+    const monthlyPeriods = generateMonthlyPeriods(budgetId, budgetData, startDate, endDate, now);
+    if (monthlyPeriods.length > maxPeriodsPerType) {
+      console.warn(`Monthly periods count (${monthlyPeriods.length}) exceeds safety limit (${maxPeriodsPerType}), truncating`);
+      budgetPeriods.push(...monthlyPeriods.slice(0, maxPeriodsPerType));
+    } else {
+      budgetPeriods.push(...monthlyPeriods);
+    }
 
-    // Generate bi-monthly periods (24 periods - 2 per month)
+    // Generate bi-monthly periods
     console.log('Generating bi-monthly periods...');
-    budgetPeriods.push(...generateBiMonthlyPeriods(budgetId, budgetData, startDate, endDate, now));
+    const biMonthlyPeriods = generateBiMonthlyPeriods(budgetId, budgetData, startDate, endDate, now);
+    if (biMonthlyPeriods.length > maxPeriodsPerType) {
+      console.warn(`Bi-monthly periods count (${biMonthlyPeriods.length}) exceeds safety limit (${maxPeriodsPerType}), truncating`);
+      budgetPeriods.push(...biMonthlyPeriods.slice(0, maxPeriodsPerType));
+    } else {
+      budgetPeriods.push(...biMonthlyPeriods);
+    }
 
-    // Generate weekly periods (52 periods)
+    // Generate weekly periods
     console.log('Generating weekly periods...');
-    budgetPeriods.push(...generateWeeklyPeriods(budgetId, budgetData, startDate, endDate, now));
+    const weeklyPeriods = generateWeeklyPeriods(budgetId, budgetData, startDate, endDate, now);
+    if (weeklyPeriods.length > maxPeriodsPerType) {
+      console.warn(`Weekly periods count (${weeklyPeriods.length}) exceeds safety limit (${maxPeriodsPerType}), truncating`);
+      budgetPeriods.push(...weeklyPeriods.slice(0, maxPeriodsPerType));
+    } else {
+      budgetPeriods.push(...weeklyPeriods);
+    }
     
     console.log(`Creating ${budgetPeriods.length} budget periods`);
     
@@ -125,21 +153,31 @@ export const onBudgetCreate = onDocumentCreated({
     await batchCreateBudgetPeriods(db, budgetPeriods);
     
     // Update budget with period range tracking
-    const firstPeriod = budgetPeriods.sort((a, b) => 
+    const firstPeriod = budgetPeriods.sort((a, b) =>
       a.periodStart.toMillis() - b.periodStart.toMillis()
     )[0];
-    
-    const lastPeriod = budgetPeriods.sort((a, b) => 
+
+    const lastPeriod = budgetPeriods.sort((a, b) =>
       b.periodStart.toMillis() - a.periodStart.toMillis()
     )[0];
-    
-    await db.collection('budgets').doc(budgetId).update({
+
+    // For ongoing budgets, track that they can be extended further if needed
+    const updateData: any = {
       activePeriodRange: {
         startPeriod: firstPeriod.periodId,
         endPeriod: lastPeriod.periodId,
       },
       lastExtended: now,
-    });
+    };
+
+    // Add metadata for recurring budgets to enable future extension
+    if (budgetData.budgetType === 'recurring') {
+      updateData.periodsGeneratedUntil = admin.firestore.Timestamp.fromDate(endDate);
+      updateData.canExtendPeriods = true;
+      updateData.needsScheduledExtension = true; // Flag for scheduled function
+    }
+
+    await db.collection('budgets').doc(budgetId).update(updateData);
     
     console.log(`Successfully created ${budgetPeriods.length} budget periods for budget ${budgetId}`);
     
