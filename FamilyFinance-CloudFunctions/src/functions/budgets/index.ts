@@ -5,6 +5,7 @@ export { updateBudget } from "./updateBudget";
 export { deleteBudget } from "./deleteBudget";
 export { getFamilyBudgets } from "./getFamilyBudgets";
 export { getUserBudgets } from "./getUserBudgets";
+export { getPersonalBudgets } from "./getPersonalBudgets";
 export { getBudgetSummary } from "./getBudgetSummary";
 
 // Budget periods functions
