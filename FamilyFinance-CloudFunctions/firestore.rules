@@ -821,6 +821,7 @@ service cloud.firestore {
         'userNotes',           // User notes
         'modifiedAmount',      // Modified budget amount
         'isModified',          // Modification flag
+        'isActive',            // Active/inactive status
         'lastModifiedBy',      // Who modified it
         'lastModifiedAt',      // When modified
         'checklistItems',      // Checklist items array
