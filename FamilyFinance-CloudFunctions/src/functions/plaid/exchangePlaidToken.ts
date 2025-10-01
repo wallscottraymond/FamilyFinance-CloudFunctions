@@ -26,7 +26,8 @@ import * as Joi from 'joi';
 import { createPlaidClient, exchangePublicToken } from '../../utils/plaidClient';
 import { fetchPlaidAccounts, savePlaidItem, savePlaidAccounts, ProcessedAccount } from '../../utils/plaidAccounts';
 import { processRecurringTransactions, RecurringProcessingResult } from '../../utils/plaidRecurring';
-import { syncTransactions, SyncResult } from '../../utils/syncTransactions';
+import { SyncResult } from '../../utils/syncTransactions';
+import { db } from '../../index';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -187,14 +188,33 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
       user.uid
     );
 
-    // Step 4: Sync transactions directly to Family Finance format
-    console.log('🔄 Starting unified transaction sync...');
-    const transactionResult = await syncTransactions(
-      plaidClient,
-      itemId,
-      accessToken,
-      user.uid
-    );
+    // Step 4: Make initial transactions sync to enable webhooks
+    console.log('🔄 Making initial transactions sync to enable webhook system...');
+
+    try {
+      // Import the same sync function used by webhooks
+      const { processWebhookTransactionSync } = await import('./syncPlaidTransactions');
+
+      // Find the saved item to get document reference
+      const itemDoc = await findPlaidItemByItemId(user.uid, itemId);
+
+      const transactionResult = await processWebhookTransactionSync(
+        itemId,
+        user.uid,
+        itemDoc
+      );
+
+      console.log('✅ Initial sync completed - webhooks now enabled:', {
+        success: transactionResult.success,
+        added: transactionResult.addedCount,
+        modified: transactionResult.modifiedCount,
+        removed: transactionResult.removedCount
+      });
+
+    } catch (error) {
+      console.log('⚠️ Initial sync failed, but item created. Webhooks may not fire:', error);
+      // Don't throw - item creation succeeded, sync can be retried via webhook
+    }
 
     // Prepare response
     const response: ExchangePlaidTokenResponse = {
@@ -204,7 +224,16 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
         accounts,
         institutionName: requestData.metadata.institution.name,
         processing: {
-          transactions: transactionResult,
+          transactions: {
+            itemId,
+            userId: user.uid,
+            totalTransactions: 0, // Will be populated by webhook
+            successfullyProcessed: 0,
+            failed: 0,
+            errors: [],
+            transactionsByAccount: {},
+            processingTimeMs: 0
+          },
           recurringTransactions: recurringResult,
         },
       },
@@ -216,13 +245,7 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
       itemId,
       institutionName: requestData.metadata.institution.name,
       accountCount: accounts.length,
-      transactions: {
-        totalTransactions: transactionResult.totalTransactions,
-        successfullyProcessed: transactionResult.successfullyProcessed,
-        failed: transactionResult.failed,
-        errors: transactionResult.errors.length,
-        processingTimeMs: transactionResult.processingTimeMs
-      },
+      initialSyncStatus: 'Initial /transactions/sync call made to enable webhooks',
       recurringTransactions: {
         accountsProcessed: recurringResult.accountsProcessed,
         streamsSaved: recurringResult.totalStreams,
@@ -230,7 +253,7 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
         outflowStreams: recurringResult.outflowStreams,
         errors: recurringResult.errors
       },
-      isReal: true
+      nextSteps: 'Transactions will be synced automatically via webhooks'
     });
 
     res.status(200).json(response);
@@ -238,6 +261,68 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
   } catch (error) {
     console.error('Error in handleTokenExchange:', error);
     throw error; // Re-throw to be handled by caller
+  }
+}
+
+/**
+ * Find Plaid item by itemId for a user (helper function)
+ */
+async function findPlaidItemByItemId(userId: string, itemId: string): Promise<{
+  id: string;
+  accessToken: string;
+  cursor?: string;
+  userId: string;
+  itemId: string;
+  isActive: boolean;
+} | null> {
+  try {
+    // Try subcollection first
+    const subCollectionQuery = await db.collection('users')
+      .doc(userId)
+      .collection('plaidItems')
+      .where('plaidItemId', '==', itemId)
+      .where('isActive', '==', true)
+      .limit(1)
+      .get();
+
+    if (!subCollectionQuery.empty) {
+      const doc = subCollectionQuery.docs[0];
+      const data = doc.data() as any;
+      return {
+        id: doc.id,
+        accessToken: data.accessToken,
+        cursor: data.cursor,
+        userId: data.userId,
+        itemId: data.itemId,
+        isActive: data.isActive
+      };
+    }
+
+    // Try top-level collection
+    const topLevelQuery = await db.collection('plaid_items')
+      .where('plaidItemId', '==', itemId)
+      .where('userId', '==', userId)
+      .where('isActive', '==', true)
+      .limit(1)
+      .get();
+
+    if (!topLevelQuery.empty) {
+      const doc = topLevelQuery.docs[0];
+      const data = doc.data() as any;
+      return {
+        id: doc.id,
+        accessToken: data.accessToken,
+        cursor: data.cursor,
+        userId: data.userId,
+        itemId: data.itemId,
+        isActive: data.isActive
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error finding Plaid item:', error);
+    return null;
   }
 }
 

@@ -1,17 +1,18 @@
 /**
  * Plaid Webhook Handler Cloud Function
- * 
- * Handles real-time webhook notifications from Plaid for transaction updates,
- * item status changes, and recurring transaction updates.
- * 
- * Security Features:
+ *
+ * Handles real-time webhook notifications from Plaid following best practices:
+ * - Fast response (< 10 seconds) with minimal processing
+ * - Idempotent handling of duplicate and out-of-order webhooks
  * - Webhook signature verification using HMAC-SHA256
- * - Request idempotency tracking
+ * - Queue-based processing for heavy operations
  * - Proper error handling and retry logic
- * 
+ *
+ * Based on Plaid's webhook best practices:
+ * https://plaid.com/docs/#webhooks
+ *
  * Memory: 512MiB, Timeout: 60s
  * CORS: Disabled (webhook endpoint)
- * Promise Pattern: ✓
  */
 
 import { onRequest } from 'firebase-functions/v2/https';
@@ -19,22 +20,18 @@ import { defineSecret } from 'firebase-functions/params';
 // import { authenticateRequest, UserRole } from '../../utils/auth';
 // import * as Joi from 'joi';
 import { db } from '../../index';
-// import { 
-//   PlaidApi, 
-//   Configuration, 
+// import {
+//   PlaidApi,
+//   Configuration,
 //   PlaidEnvironments
 // } from 'plaid';
 import {
   PlaidWebhookType,
   PlaidWebhookCode,
-  PlaidWebhook,
-  PlaidWebhookProcessingStatus,
-  // PlaidItem,
-  PlaidRecurringTransactionUpdate,
-  PlaidRecurringUpdateType
-  // FetchRecurringTransactionsResponse
+  PlaidWebhookProcessingStatus
 } from '../../types';
-import { Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
+import { processWebhookTransactionSync } from './syncPlaidTransactions';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -60,458 +57,490 @@ const plaidWebhookSecret = defineSecret('PLAID_WEBHOOK_SECRET');
 /**
  * Plaid Webhook Handler
  */
+/**
+ * Plaid Webhook Handler - Fast, reliable webhook receiver
+ * Following Plaid's best practices for webhook handling
+ */
 export const plaidWebhook = onRequest(
   {
     memory: '512MiB',
-    timeoutSeconds: 60,
+    timeoutSeconds: 30, // Reduced for faster response
     cors: false, // Webhooks should not have CORS
     secrets: [plaidClientId, plaidSecret, plaidWebhookSecret],
   },
   async (req, res) => {
-    return new Promise<void>(async (resolve) => {
-      try {
-        // Only allow POST requests
-        if (req.method !== 'POST') {
-          res.status(405).json({
-            success: false,
-            error: {
-              code: 'METHOD_NOT_ALLOWED',
-              message: 'Only POST requests are allowed',
-            },
-          });
-          return resolve();
-        }
-
-        try {
-          // Get webhook signature from headers
-          const signature = req.get('plaid-verification') || '';
-          const webhookBody = JSON.stringify(req.body);
-
-          console.log('Received Plaid webhook:', {
-            signature: signature ? 'present' : 'missing',
-            bodySize: webhookBody.length,
-            webhook_type: req.body?.webhook_type,
-            webhook_code: req.body?.webhook_code,
-            item_id: req.body?.item_id
-          });
-
-          // Verify webhook signature
-          const isValidSignature = verifyWebhookSignature(webhookBody, signature);
-          if (!isValidSignature) {
-            res.status(401).json({
-              success: false,
-              error: {
-                code: 'INVALID_SIGNATURE',
-                message: 'Webhook signature verification failed',
-              },
-            });
-            return resolve();
-          }
-
-          // Process webhook based on type
-          const result = await processWebhookRequest(req.body, signature);
-
-          if (result.success) {
-            res.status(200).json(result);
-          } else {
-            res.status(400).json(result);
-          }
-
-          resolve();
-        } catch (error) {
-          console.error('Error processing webhook:', error);
-
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          res.status(500).json({
-            success: false,
-            error: {
-              code: 'WEBHOOK_PROCESSING_ERROR',
-              message: errorMessage,
-            },
-          });
-
-          resolve();
-        }
-      } catch (error) {
-        console.error('Unhandled error in plaidWebhook:', error);
-        res.status(500).json({
-          success: false,
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'An unexpected error occurred',
-          },
-        });
-        resolve();
+    // Fast response - keep processing minimal
+    try {
+      // Only allow POST requests
+      if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Only POST requests allowed' });
+        return;
       }
-    });
+
+      // Extract webhook data
+      const webhookBody = JSON.stringify(req.body);
+      const signature = req.get('plaid-verification') || '';
+      const { webhook_type, webhook_code, item_id } = req.body;
+
+      // Log webhook receipt for debugging
+      const serverLogAndEmitSocket = (additionalInfo: string, itemId: string) => {
+        console.log(
+          `WEBHOOK: ${webhook_type}: ${webhook_code}: Plaid_item_id ${item_id}: ${additionalInfo}`
+        );
+        // Note: In a real app with socket.io, you would emit here:
+        // if (webhook_code) io.emit(webhook_code, { itemId });
+      };
+
+      // Verify webhook signature first (security)
+      // Always verify in production, configurable for development
+      const shouldVerifySignature = process.env.NODE_ENV === 'production' ||
+                                    process.env.VERIFY_WEBHOOK_SIGNATURE === 'true';
+
+      if (shouldVerifySignature && !verifyWebhookSignature(webhookBody, signature)) {
+        serverLogAndEmitSocket('Invalid webhook signature', item_id);
+        console.warn(`⚠️ Webhook signature verification failed for item ${item_id}`, {
+          signatureProvided: !!signature,
+          signatureLength: signature?.length || 0,
+          bodyLength: webhookBody.length,
+          timestamp: new Date().toISOString()
+        });
+        res.status(401).json({
+          success: false,
+          error: 'Invalid webhook signature'
+        });
+        return;
+      }
+
+      // Log verification status for debugging
+      if (shouldVerifySignature) {
+        console.log(`✅ Webhook signature verified successfully for item ${item_id}`);
+      } else {
+        console.log(`🔓 Webhook signature verification disabled (development mode) for item ${item_id}`);
+      }
+
+      // Handle webhook based on type - FAST processing only
+      const result = await handleWebhookEvent(req.body, serverLogAndEmitSocket);
+
+      // Always respond with 200 for successful processing
+      res.status(200).json({
+        success: true,
+        processed: result.processed,
+        message: result.message
+      });
+
+    } catch (error) {
+      console.error('Webhook processing error:', error);
+      // Still return 200 to avoid retries for system errors
+      res.status(200).json({
+        success: false,
+        error: 'Internal processing error'
+      });
+    }
   }
 );
 
 /**
- * Process webhook request based on type
+ * Handle webhook events - fast processing following Plaid's example pattern
+ * Based on: https://github.com/plaid/pattern/blob/main/server/webhookHandlers/handleTransactionsWebhook.js
  */
-async function processWebhookRequest(payload: any, signature: string): Promise<any> {
-  try {
-    // Create webhook record for tracking
-    const webhookRecord: Omit<PlaidWebhook, 'id' | 'createdAt' | 'updatedAt'> = {
-      webhookType: payload.webhook_type,
-      webhookCode: payload.webhook_code,
-      itemId: payload.item_id || undefined,
-      environmentId: payload.environment || 'unknown',
-      requestId: payload.request_id || '',
-      payload: payload,
-      processedAt: undefined,
-      processingStatus: PlaidWebhookProcessingStatus.PENDING,
-      processingError: undefined,
-      retryCount: 0,
-      signature: signature,
-      isValid: true
-    };
+async function handleWebhookEvent(requestBody: any, serverLogAndEmitSocket: (info: string, itemId: string) => void): Promise<{ processed: boolean; message: string }> {
+  const {
+    webhook_type: webhookType,
+    webhook_code: webhookCode,
+    item_id: plaidItemId,
+    request_id: requestId
+  } = requestBody;
 
-    const webhookRef = await db.collection('plaid_webhooks').add({
-      ...webhookRecord,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
-    });
+  // Check for duplicate webhooks using request_id for idempotency
+  if (requestId) {
+    const existingWebhook = await db.collection('plaid_webhooks')
+      .where('requestId', '==', requestId)
+      .limit(1)
+      .get();
 
-    // Mark webhook as processing
-    await webhookRef.update({
-      processingStatus: PlaidWebhookProcessingStatus.PROCESSING,
-      updatedAt: Timestamp.now()
-    });
-
-    let result: any;
-
-    try {
-      // Process webhook based on type
-      switch (payload.webhook_type) {
-        case PlaidWebhookType.TRANSACTIONS:
-          result = await processTransactionWebhook(payload);
-          break;
-        
-        case PlaidWebhookType.ITEM:
-          result = await processItemWebhook(payload);
-          break;
-        
-        case PlaidWebhookType.RECURRING_TRANSACTIONS:
-          result = await processRecurringTransactionWebhook(payload);
-          break;
-        
-        default:
-          console.log(`Unhandled webhook type: ${payload.webhook_type}`);
-          result = {
-            success: true,
-            processed: false,
-            message: `Unhandled webhook type: ${payload.webhook_type}`
-          };
-      }
-
-      // Update webhook record with result
-      await webhookRef.update({
-        processingStatus: result.success ? 
-          PlaidWebhookProcessingStatus.COMPLETED : 
-          PlaidWebhookProcessingStatus.FAILED,
-        processedAt: result.success ? Timestamp.now() : undefined,
-        processingError: result.error?.message || undefined,
-        updatedAt: Timestamp.now()
-      });
-
-      return result;
-
-    } catch (error) {
-      console.error('Error processing webhook:', error);
-      
-      // Update webhook record with error
-      await webhookRef.update({
-        processingStatus: PlaidWebhookProcessingStatus.FAILED,
-        processingError: error instanceof Error ? error.message : String(error),
-        retryCount: FieldValue.increment(1),
-        updatedAt: Timestamp.now()
-      });
-
-      return {
-        success: false,
-        error: {
-          code: 'WEBHOOK_PROCESSING_FAILED',
-          message: error instanceof Error ? error.message : String(error)
-        }
-      };
+    if (!existingWebhook.empty) {
+      serverLogAndEmitSocket('Duplicate webhook ignored', plaidItemId);
+      return { processed: false, message: 'Duplicate webhook ignored' };
     }
+  }
 
-  } catch (error) {
-    console.error('Error in webhook processing:', error);
-    return {
-      success: false,
-      error: {
-        code: 'WEBHOOK_ERROR',
-        message: error instanceof Error ? error.message : String(error)
-      }
-    };
+  // Store webhook for tracking (minimal data, fast write)
+  const webhookDoc = {
+    webhookType,
+    webhookCode,
+    itemId: plaidItemId,
+    requestId: requestId || '',
+    payload: requestBody,
+    processingStatus: PlaidWebhookProcessingStatus.PENDING,
+    createdAt: Timestamp.now()
+  };
+
+  // Write to queue for processing - don't wait for completion
+  const webhookRef = db.collection('plaid_webhooks').doc();
+  webhookRef.set(webhookDoc).catch(error => {
+    console.error('Failed to store webhook:', error);
+  });
+
+  // Handle different webhook types
+  switch (webhookType) {
+    case PlaidWebhookType.TRANSACTIONS:
+      return await handleTransactionsWebhook(requestBody, serverLogAndEmitSocket);
+
+    case PlaidWebhookType.ITEM:
+      return await handleItemWebhook(requestBody, serverLogAndEmitSocket);
+
+    case PlaidWebhookType.RECURRING_TRANSACTIONS:
+      return await handleRecurringTransactionsWebhook(requestBody, serverLogAndEmitSocket);
+
+    default:
+      serverLogAndEmitSocket(`Unhandled webhook type: ${webhookType}`, plaidItemId);
+      return { processed: false, message: `Unhandled webhook type: ${webhookType}` };
   }
 }
 
 /**
- * Process transaction webhooks
+ * Handle transaction webhooks following Plaid's example pattern
+ * Based on: https://github.com/plaid/pattern/blob/main/server/webhookHandlers/handleTransactionsWebhook.js
  */
-async function processTransactionWebhook(payload: any): Promise<any> {
-  const itemId = payload.item_id;
-  
-  if (!itemId) {
-    throw new Error('Missing item_id in transaction webhook');
+async function handleTransactionsWebhook(
+  requestBody: any,
+  serverLogAndEmitSocket: (info: string, itemId: string) => void
+): Promise<{ processed: boolean; message: string }> {
+  const {
+    webhook_code: webhookCode,
+    item_id: plaidItemId,
+  } = requestBody;
+
+  // Get item from database for user context
+  const itemDoc = await retrieveItemByPlaidItemId(plaidItemId);
+  if (!itemDoc) {
+    serverLogAndEmitSocket('Item not found in database', plaidItemId);
+    return { processed: false, message: 'Item not found' };
   }
 
-  switch (payload.webhook_code) {
-    case PlaidWebhookCode.SYNC_UPDATES_AVAILABLE:
+  switch (webhookCode) {
+    case PlaidWebhookCode.SYNC_UPDATES_AVAILABLE: {
+      // Check 4-hour rate limiting before processing
+      if (await isRateLimited(itemDoc, webhookCode)) {
+        const minutesRemaining = await getMinutesUntilNextSync(itemDoc);
+        serverLogAndEmitSocket(`Rate limited: ${minutesRemaining} minutes remaining`, plaidItemId);
+        return { processed: false, message: `Rate limited: ${minutesRemaining} minutes remaining` };
+      }
+
+      // Process transaction sync immediately using Plaid's /transactions/sync endpoint
+      serverLogAndEmitSocket('Starting transaction sync', plaidItemId);
+
+      const syncResult = await processWebhookTransactionSync(plaidItemId, itemDoc.userId, itemDoc);
+
+      if (syncResult.success) {
+        const totalSynced = syncResult.addedCount + syncResult.modifiedCount + syncResult.removedCount;
+        serverLogAndEmitSocket(`Transaction sync completed: ${totalSynced} transactions processed`, plaidItemId);
+        return {
+          processed: true,
+          message: `Synced ${syncResult.addedCount} new, ${syncResult.modifiedCount} modified, ${syncResult.removedCount} removed transactions`
+        };
+      } else {
+        serverLogAndEmitSocket(`Transaction sync failed: ${syncResult.error}`, plaidItemId);
+        return { processed: false, message: `Sync failed: ${syncResult.error}` };
+      }
+    }
+
     case PlaidWebhookCode.DEFAULT_UPDATE:
     case PlaidWebhookCode.INITIAL_UPDATE:
     case PlaidWebhookCode.HISTORICAL_UPDATE:
-      // Trigger actual transaction sync with splits support
-      console.log(`Transaction sync triggered for item: ${itemId}`);
-      
-      try {
-        // Find the user ID for this item
-        const plaidItemQuery = await db.collection('plaid_items')
-          .where('itemId', '==', itemId)
-          .limit(1)
-          .get();
-        
-        if (plaidItemQuery.empty) {
-          throw new Error(`Plaid item not found: ${itemId}`);
-        }
-        
-        const itemData = plaidItemQuery.docs[0].data();
-        const userId = itemData.userId;
-        
-        // Import the sync function
-        const { syncTransactionsForPlaidItem } = await import('../../utils/plaidTransactionSync');
-        
-        // Perform the sync
-        const syncResult = await syncTransactionsForPlaidItem(itemId, userId);
-        
-        return {
-          success: true,
-          processed: true,
-          webhookType: payload.webhook_type,
-          webhookCode: payload.webhook_code,
-          itemId: itemId,
-          transactionsAdded: syncResult.transactionsAdded,
-          transactionsUpdated: syncResult.transactionsUpdated,
-          errors: syncResult.errors,
-          message: `Transaction sync completed: ${syncResult.transactionsAdded} added, ${syncResult.transactionsUpdated} updated`
-        };
-        
-      } catch (error) {
-        console.error(`Error during transaction sync for item ${itemId}:`, error);
-        return {
-          success: false,
-          processed: false,
-          webhookType: payload.webhook_type,
-          webhookCode: payload.webhook_code,
-          itemId: itemId,
-          error: error instanceof Error ? error.message : 'Unknown sync error',
-          message: 'Transaction sync failed'
-        };
-      }
-    
-    case PlaidWebhookCode.TRANSACTIONS_REMOVED:
-      // Handle removed transactions
-      const removedTransactions = payload.removed_transactions || [];
-      console.log(`Transactions removed for item ${itemId}:`, removedTransactions);
-      return {
-        success: true,
-        processed: true,
-        webhookType: payload.webhook_type,
-        webhookCode: payload.webhook_code,
-        itemId: itemId,
-        removedCount: removedTransactions.length,
-        message: `${removedTransactions.length} transactions removed`
-      };
-    
+      // These are handled by SYNC_UPDATES_AVAILABLE in modern implementations
+      serverLogAndEmitSocket('Legacy webhook - using sync endpoint instead', plaidItemId);
+      return { processed: false, message: 'Legacy webhook ignored - using sync endpoint' };
+
+    case PlaidWebhookCode.TRANSACTIONS_REMOVED: {
+      const removedCount = requestBody.removed_transactions?.length || 0;
+      await queueTransactionRemoval(plaidItemId, requestBody.removed_transactions);
+
+      serverLogAndEmitSocket(`${removedCount} transactions queued for removal`, plaidItemId);
+      return { processed: true, message: `${removedCount} transactions queued for removal` };
+    }
+
     default:
-      console.log(`Unhandled transaction webhook code: ${payload.webhook_code}`);
-      return {
-        success: true,
-        processed: false,
-        message: `Unhandled transaction webhook code: ${payload.webhook_code}`
-      };
+      serverLogAndEmitSocket(`Unhandled transaction webhook code: ${webhookCode}`, plaidItemId);
+      return { processed: false, message: `Unhandled webhook code: ${webhookCode}` };
   }
 }
 
 /**
- * Process item webhooks
+ * Handle item webhooks
  */
-async function processItemWebhook(payload: any): Promise<any> {
-  const itemId = payload.item_id;
-  
-  if (!itemId) {
-    throw new Error('Missing item_id in item webhook');
-  }
+async function handleItemWebhook(
+  requestBody: any,
+  serverLogAndEmitSocket: (info: string, itemId: string) => void
+): Promise<{ processed: boolean; message: string }> {
+  const {
+    webhook_code: webhookCode,
+    item_id: plaidItemId,
+    error: webhookError
+  } = requestBody;
 
-  switch (payload.webhook_code) {
+  switch (webhookCode) {
     case PlaidWebhookCode.ERROR:
-      console.log(`Item error for ${itemId}:`, payload.error);
-      return {
-        success: true,
-        processed: true,
-        webhookType: payload.webhook_type,
-        webhookCode: payload.webhook_code,
-        itemId: itemId,
-        error: payload.error,
-        message: 'Item error processed'
-      };
-    
+      await updateItemStatus(plaidItemId, 'ERROR', webhookError);
+      serverLogAndEmitSocket(`Item error: ${webhookError?.error_code}`, plaidItemId);
+      return { processed: true, message: 'Item error status updated' };
+
     case PlaidWebhookCode.PENDING_EXPIRATION:
-      console.log(`Item pending expiration: ${itemId}`);
-      return {
-        success: true,
-        processed: true,
-        webhookType: payload.webhook_type,
-        webhookCode: payload.webhook_code,
-        itemId: itemId,
-        message: 'Item pending expiration'
-      };
-    
+      await updateItemStatus(plaidItemId, 'PENDING_EXPIRATION');
+      serverLogAndEmitSocket('Item pending expiration', plaidItemId);
+      return { processed: true, message: 'Item expiration status updated' };
+
     case PlaidWebhookCode.USER_PERMISSION_REVOKED:
-      console.log(`User permission revoked for item: ${itemId}`);
-      return {
-        success: true,
-        processed: true,
-        webhookType: payload.webhook_type,
-        webhookCode: payload.webhook_code,
-        itemId: itemId,
-        message: 'User permission revoked'
-      };
-    
+      await updateItemStatus(plaidItemId, 'PERMISSION_REVOKED');
+      serverLogAndEmitSocket('User permission revoked', plaidItemId);
+      return { processed: true, message: 'Item permission status updated' };
+
     case PlaidWebhookCode.NEW_ACCOUNTS_AVAILABLE:
-      console.log(`New accounts available for item: ${itemId}`);
-      return {
-        success: true,
-        processed: true,
-        webhookType: payload.webhook_type,
-        webhookCode: payload.webhook_code,
-        itemId: itemId,
-        message: 'New accounts available'
-      };
-    
+      // Handle when new accounts are available for the item
+      await queueAccountRefresh(plaidItemId);
+      serverLogAndEmitSocket('New accounts available - refresh queued', plaidItemId);
+      return { processed: true, message: 'New accounts refresh queued' };
+
     default:
-      console.log(`Unhandled item webhook code: ${payload.webhook_code}`);
-      return {
-        success: true,
-        processed: false,
-        message: `Unhandled item webhook code: ${payload.webhook_code}`
-      };
+      serverLogAndEmitSocket(`Unhandled item webhook code: ${webhookCode}`, plaidItemId);
+      return { processed: false, message: `Unhandled webhook code: ${webhookCode}` };
   }
 }
 
 /**
- * Process recurring transaction webhooks
+ * Handle recurring transaction webhooks
  */
-async function processRecurringTransactionWebhook(payload: any): Promise<any> {
-  const itemId = payload.item_id;
-  
-  if (!itemId) {
-    throw new Error('Missing item_id in recurring transaction webhook');
-  }
+async function handleRecurringTransactionsWebhook(
+  requestBody: any,
+  serverLogAndEmitSocket: (info: string, itemId: string) => void
+): Promise<{ processed: boolean; message: string }> {
+  const {
+    webhook_code: webhookCode,
+    item_id: plaidItemId,
+    stream_id: streamId
+  } = requestBody;
 
-  switch (payload.webhook_code) {
+  switch (webhookCode) {
     case PlaidWebhookCode.RECURRING_TRANSACTIONS_UPDATE:
-      console.log(`Recurring transactions update for item: ${itemId}`);
-      
-      try {
-        // Find the item to get userId
-        const itemQuery = await db.collection('users')
-          .where('plaidItems.itemId', '==', itemId)
-          .limit(1)
-          .get();
+      await queueRecurringTransactionSync(plaidItemId, streamId);
+      serverLogAndEmitSocket('Recurring transactions sync queued', plaidItemId);
+      return { processed: true, message: 'Recurring transactions sync queued' };
 
-        let userId = '';
-        if (!itemQuery.empty) {
-          // Try user's subcollection
-          const userDoc = itemQuery.docs[0];
-          userId = userDoc.id;
-        } else {
-          // Try top-level plaid_items collection
-          const plaidItemQuery = await db.collection('plaid_items')
-            .where('itemId', '==', itemId)
-            .limit(1)
-            .get();
-          
-          if (!plaidItemQuery.empty) {
-            userId = plaidItemQuery.docs[0].data().userId;
-          }
-        }
+    default:
+      serverLogAndEmitSocket(`Unhandled recurring transaction webhook code: ${webhookCode}`, plaidItemId);
+      return { processed: false, message: `Unhandled webhook code: ${webhookCode}` };
+  }
+}
 
-        if (!userId) {
-          throw new Error(`Could not find user for item: ${itemId}`);
-        }
+// ============================================================================
+// HELPER FUNCTIONS - Fast database operations for webhook processing
+// ============================================================================
 
-        // Create recurring transaction update record with new collection tracking
-        const updateRecord: Omit<PlaidRecurringTransactionUpdate, 'id' | 'createdAt' | 'updatedAt'> = {
-          itemId: itemId,
-          userId: userId,
-          updateType: PlaidRecurringUpdateType.STREAM_UPDATES,
-          streamId: payload.stream_id || undefined,
-          payload: payload,
-          processedAt: undefined,
-          processingStatus: PlaidWebhookProcessingStatus.PROCESSING,
-          processingError: undefined,
-          changesApplied: {
-            incomeStreamsAdded: 0,
-            incomeStreamsModified: 0,
-            incomeStreamsRemoved: 0,
-            outflowStreamsAdded: 0,
-            outflowStreamsModified: 0,
-            outflowStreamsRemoved: 0,
-            transactionsAffected: 0
-          }
-        };
+/**
+ * Retrieve item by Plaid item ID - searches both top-level and subcollections
+ */
+async function retrieveItemByPlaidItemId(plaidItemId: string) {
+  try {
+    console.log(`🔍 Searching for Plaid item: ${plaidItemId}`);
 
-        const updateRef = await db.collection('plaid_recurring_transaction_updates').add({
-          ...updateRecord,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now()
+    // First try top-level collection
+    console.log('🔍 Checking top-level plaid_items collection...');
+    const itemQuery = await db.collection('plaid_items')
+      .where('plaidItemId', '==', plaidItemId)  // Fixed: use plaidItemId instead of itemId
+      .limit(1)
+      .get();
+
+    console.log(`🔍 Top-level search result: ${itemQuery.size} items found`);
+
+    if (!itemQuery.empty) {
+      const itemDoc = itemQuery.docs[0];
+      const data = itemDoc.data();
+      console.log(`✅ Found item in top-level collection:`, {
+        docId: itemDoc.id,
+        userId: data.userId,
+        isActive: data.isActive,
+        hasAccessToken: !!data.accessToken
+      });
+      return {
+        id: itemDoc.id,
+        userId: data.userId,
+        lastSyncedAt: data.lastSyncedAt,
+        ...data
+      };
+    }
+
+    // If not found in top-level, search all user subcollections
+    console.log('🔍 Searching user subcollections...');
+    const usersSnapshot = await db.collection('users').get();
+    console.log(`🔍 Found ${usersSnapshot.size} users to search`);
+
+    for (const userDoc of usersSnapshot.docs) {
+      console.log(`🔍 Checking user: ${userDoc.id}`);
+
+      // First check all items in this user's subcollection for debugging
+      const allItemsQuery = await userDoc.ref.collection('plaidItems').get();
+      console.log(`🔍 User ${userDoc.id} has ${allItemsQuery.size} total plaidItems`);
+      if (allItemsQuery.size > 0) {
+        const itemIds = allItemsQuery.docs.map(doc => doc.data().plaidItemId || doc.data().itemId || doc.id);
+        console.log(`🔍 Available itemIds in user ${userDoc.id}:`, itemIds);
+
+        // Check the first item's full structure
+        const firstItem = allItemsQuery.docs[0].data();
+        console.log(`🔍 First item structure:`, {
+          docId: allItemsQuery.docs[0].id,
+          itemId: firstItem.itemId,
+          plaidItemId: firstItem.plaidItemId,
+          allFields: Object.keys(firstItem)
         });
+      }
 
-        // Trigger recurring transactions fetch for this item
-        // Note: In a real implementation, you might call the fetchRecurringTransactions function here
-        console.log(`Triggering recurring transactions sync for item: ${itemId}`);
+      const plaidItemsQuery = await userDoc.ref
+        .collection('plaidItems')
+        .where('plaidItemId', '==', plaidItemId)  // Fixed: use plaidItemId instead of itemId
+        .where('isActive', '==', true)            // Re-enabled isActive filter
+        .limit(1)
+        .get();
 
-        // Update the record as completed
-        await updateRef.update({
-          processingStatus: PlaidWebhookProcessingStatus.COMPLETED,
-          processedAt: Timestamp.now(),
-          updatedAt: Timestamp.now()
+      console.log(`🔍 Found ${plaidItemsQuery.size} items with itemId=${plaidItemId} in user ${userDoc.id}`);
+
+      if (!plaidItemsQuery.empty) {
+        const itemDoc = plaidItemsQuery.docs[0];
+        const data = itemDoc.data();
+        console.log(`✅ Found item in user subcollection:`, {
+          userId: userDoc.id,
+          docId: itemDoc.id,
+          isActive: data.isActive,
+          hasAccessToken: !!data.accessToken
         });
-
         return {
-          success: true,
-          processed: true,
-          webhookType: payload.webhook_type,
-          webhookCode: payload.webhook_code,
-          itemId: itemId,
-          userId: userId,
-          updateRecordId: updateRef.id,
-          message: 'Recurring transactions update processed'
-        };
-
-      } catch (error) {
-        console.error('Error processing recurring transactions webhook:', error);
-        return {
-          success: false,
-          error: {
-            code: 'RECURRING_TRANSACTIONS_WEBHOOK_ERROR',
-            message: error instanceof Error ? error.message : String(error)
-          }
+          id: itemDoc.id,
+          userId: userDoc.id,
+          lastSyncedAt: data.lastSyncedAt,
+          ...data
         };
       }
-    
-    default:
-      console.log(`Unhandled recurring transaction webhook code: ${payload.webhook_code}`);
-      return {
-        success: true,
-        processed: false,
-        message: `Unhandled recurring transaction webhook code: ${payload.webhook_code}`
-      };
+    }
+
+    console.log(`❌ Item ${plaidItemId} not found in any collection`);
+    return null;
+  } catch (error) {
+    console.error('Error retrieving item:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if item is rate limited (4-hour interval)
+ */
+async function isRateLimited(itemDoc: any, webhookCode: string): Promise<boolean> {
+  // Always allow INITIAL_UPDATE to process immediately
+  if (webhookCode === 'INITIAL_UPDATE') {
+    return false;
+  }
+
+  if (!itemDoc.lastSyncedAt) {
+    return false;
+  }
+
+  const now = Timestamp.now();
+  const FOUR_HOURS = 4 * 60 * 60 * 1000;
+  const timeSinceLastSync = now.toMillis() - itemDoc.lastSyncedAt.toMillis();
+
+  return timeSinceLastSync < FOUR_HOURS;
+}
+
+/**
+ * Get minutes until next sync is allowed
+ */
+async function getMinutesUntilNextSync(itemDoc: any): Promise<number> {
+  if (!itemDoc.lastSyncedAt) {
+    return 0;
+  }
+
+  const now = Timestamp.now();
+  const FOUR_HOURS = 4 * 60 * 60 * 1000;
+  const timeSinceLastSync = now.toMillis() - itemDoc.lastSyncedAt.toMillis();
+  const timeRemaining = FOUR_HOURS - timeSinceLastSync;
+
+  return Math.max(0, Math.round(timeRemaining / (1000 * 60)));
+}
+
+
+/**
+ * Queue transaction removal for background processing
+ */
+async function queueTransactionRemoval(plaidItemId: string, removedTransactions: any[]): Promise<void> {
+  try {
+    await db.collection('plaid_sync_queue').add({
+      type: 'TRANSACTION_REMOVAL',
+      plaidItemId,
+      removedTransactions,
+      priority: 'MEDIUM',
+      createdAt: Timestamp.now(),
+      processedAt: null,
+      status: 'PENDING'
+    });
+  } catch (error) {
+    console.error('Failed to queue transaction removal:', error);
+  }
+}
+
+/**
+ * Update item status in database
+ */
+async function updateItemStatus(plaidItemId: string, status: string, error?: any): Promise<void> {
+  try {
+    const itemQuery = await db.collection('plaid_items')
+      .where('itemId', '==', plaidItemId)
+      .limit(1)
+      .get();
+
+    if (!itemQuery.empty) {
+      await itemQuery.docs[0].ref.update({
+        status,
+        error: error || null,
+        updatedAt: Timestamp.now()
+      });
+    }
+  } catch (error) {
+    console.error('Failed to update item status:', error);
+  }
+}
+
+/**
+ * Queue account refresh for background processing
+ */
+async function queueAccountRefresh(plaidItemId: string): Promise<void> {
+  try {
+    await db.collection('plaid_sync_queue').add({
+      type: 'ACCOUNT_REFRESH',
+      plaidItemId,
+      priority: 'LOW',
+      createdAt: Timestamp.now(),
+      processedAt: null,
+      status: 'PENDING'
+    });
+  } catch (error) {
+    console.error('Failed to queue account refresh:', error);
+  }
+}
+
+/**
+ * Queue recurring transaction sync for background processing
+ */
+async function queueRecurringTransactionSync(plaidItemId: string, streamId?: string): Promise<void> {
+  try {
+    await db.collection('plaid_sync_queue').add({
+      type: 'RECURRING_TRANSACTION_SYNC',
+      plaidItemId,
+      streamId,
+      priority: 'MEDIUM',
+      createdAt: Timestamp.now(),
+      processedAt: null,
+      status: 'PENDING'
+    });
+  } catch (error) {
+    console.error('Failed to queue recurring transaction sync:', error);
   }
 }
 
@@ -522,9 +551,14 @@ function verifyWebhookSignature(body: string, signature: string): boolean {
   try {
     const crypto = require('crypto');
     const webhookSecret = plaidWebhookSecret.value();
-    
+
     if (!webhookSecret) {
       console.error('PLAID_WEBHOOK_SECRET not configured');
+      return false;
+    }
+
+    if (!signature || typeof signature !== 'string') {
+      console.warn('Invalid signature format provided');
       return false;
     }
 
@@ -533,11 +567,29 @@ function verifyWebhookSignature(body: string, signature: string): boolean {
       .update(body)
       .digest('hex');
 
-    // Timing-safe comparison
-    return crypto.timingSafeEqual(
-      Buffer.from(signature, 'hex'),
-      Buffer.from(expectedSignature, 'hex')
-    );
+    // Ensure both signatures are the same length before comparison
+    if (signature.length !== expectedSignature.length) {
+      console.warn('Signature length mismatch', {
+        provided: signature.length,
+        expected: expectedSignature.length
+      });
+      return false;
+    }
+
+    try {
+      // Timing-safe comparison
+      return crypto.timingSafeEqual(
+        Buffer.from(signature, 'hex'),
+        Buffer.from(expectedSignature, 'hex')
+      );
+    } catch (bufferError) {
+      // If there's an error creating buffers (e.g., invalid hex), return false
+      console.warn('Invalid hex format in signature', {
+        signature: signature.substring(0, 10) + '...',
+        error: bufferError instanceof Error ? bufferError.message : 'Unknown buffer error'
+      });
+      return false;
+    }
   } catch (error) {
     console.error('Error verifying webhook signature:', error);
     return false;
