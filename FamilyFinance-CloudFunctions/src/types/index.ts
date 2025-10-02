@@ -156,6 +156,19 @@ export interface TransactionSplit {
   amount: number;                 // Amount allocated to this split
   description?: string;           // Optional override description for this split
   isDefault: boolean;             // True for the auto-created split when transaction is created
+
+  // Enhanced status fields for budget tracking
+  isIgnored?: boolean;            // User marked to ignore from budget tracking
+  isRefund?: boolean;             // Transaction is a refund (subtract from spending)
+  isTaxDeductible?: boolean;      // Tax-deductible expense
+  ignoredReason?: string;         // Why user ignored this split
+  refundReason?: string;          // Reason for refund classification
+  taxDeductibleCategory?: string; // Tax category for deductible items
+
+  // Enhanced assignment metadata
+  excludedFromBudgets?: string[]; // Budget IDs to exclude this split from
+  manualBudgetAssignment?: boolean; // User manually assigned vs auto-assigned
+
   createdAt: Timestamp;
   updatedAt: Timestamp;
   createdBy: string;              // User who created this split
@@ -164,6 +177,7 @@ export interface TransactionSplit {
 export interface Transaction extends BaseDocument {
   userId: string;
   familyId: string;
+  accountId?: string;             // Plaid account ID for filtering transactions by account
   amount: number;
   currency: string;
   description: string;
@@ -189,6 +203,11 @@ export interface Transaction extends BaseDocument {
   affectedBudgets: string[];      // Array of budget IDs for flexibility
   primaryBudgetId?: string;       // The budget with the largest split amount (for default sorting)
   primaryBudgetPeriodId?: string; // The budget period with the largest split amount
+
+  // Enhanced filtering fields for quick queries
+  hasIgnoredSplits?: boolean;     // Quick flag for filtering ignored transactions
+  hasRefundSplits?: boolean;      // Quick flag for refund transactions
+  hasTaxDeductibleSplits?: boolean; // Quick flag for tax tracking
 }
 
 export enum TransactionType {
@@ -385,6 +404,16 @@ export interface AddTransactionSplitRequest {
   amount: number;
   categoryId?: TransactionCategory;
   description?: string;
+
+  // Enhanced status fields
+  isIgnored?: boolean;
+  isRefund?: boolean;
+  isTaxDeductible?: boolean;
+  ignoredReason?: string;
+  refundReason?: string;
+  taxDeductibleCategory?: string;
+  excludedFromBudgets?: string[];
+  manualBudgetAssignment?: boolean;
 }
 
 export interface UpdateTransactionSplitRequest {
@@ -395,6 +424,16 @@ export interface UpdateTransactionSplitRequest {
   amount?: number;
   categoryId?: TransactionCategory;
   description?: string;
+
+  // Enhanced status fields
+  isIgnored?: boolean;
+  isRefund?: boolean;
+  isTaxDeductible?: boolean;
+  ignoredReason?: string;
+  refundReason?: string;
+  taxDeductibleCategory?: string;
+  excludedFromBudgets?: string[];
+  manualBudgetAssignment?: boolean;
 }
 
 export interface DeleteTransactionSplitRequest {
@@ -406,6 +445,46 @@ export interface TransactionSplitResponse {
   success: boolean;
   split?: TransactionSplit;
   transaction?: Transaction;
+  message?: string;
+}
+
+// Enhanced Split Status Management Request/Response types
+export interface MarkSplitStatusRequest {
+  transactionId: string;
+  splitId: string;
+  isIgnored?: boolean;
+  isRefund?: boolean;
+  isTaxDeductible?: boolean;
+  ignoredReason?: string;
+  refundReason?: string;
+  taxDeductibleCategory?: string;
+}
+
+export interface BulkUpdateSplitStatusRequest {
+  updates: Array<{
+    transactionId: string;
+    splitId: string;
+    isIgnored?: boolean;
+    isRefund?: boolean;
+    isTaxDeductible?: boolean;
+    ignoredReason?: string;
+    refundReason?: string;
+    taxDeductibleCategory?: string;
+  }>;
+}
+
+export interface RecalculateBudgetSpendingRequest {
+  budgetPeriodId: string;
+  forceRecalculation?: boolean; // Force recalculation even if recent
+}
+
+export interface BudgetSpendingResponse {
+  success: boolean;
+  budgetPeriodId: string;
+  previousSpentAmount: number;
+  newSpentAmount: number;
+  affectedTransactions: number;
+  calculatedAt: string; // ISO timestamp
   message?: string;
 }
 
@@ -550,7 +629,7 @@ export interface PlaidItem extends BaseDocument {
   institutionName: string; // Human-readable institution name
   institutionLogo?: string; // Institution logo URL from Plaid
   accessToken: string; // ENCRYPTED Plaid access token
-  cursor?: string; // For transaction sync pagination
+  cursor?: string; // For transaction sync pagination (modern /transactions/sync)
   products: PlaidProduct[]; // Products enabled for this item
   availableProducts: PlaidProduct[]; // Products available but not yet enabled
   billedProducts: PlaidProduct[]; // Products being billed
@@ -560,6 +639,14 @@ export interface PlaidItem extends BaseDocument {
   lastWebhookReceived?: Timestamp; // Last webhook received for this item
   updateMode?: PlaidUpdateMode; // How this item should be updated
   isActive: boolean; // Whether this item is active and should be synced
+
+  // Enhanced sync optimization fields
+  syncFrequency: PlaidSyncFrequency; // User-selected sync frequency preference
+  lastSyncedAt?: Timestamp; // Last successful sync completion time
+  lastFullSyncAt?: Timestamp; // Last full historical sync (for cursor resets)
+  syncStats: PlaidSyncStats; // Performance and cost tracking statistics
+  nextScheduledSync?: Timestamp; // Next scheduled sync time (for non-webhook modes)
+  webhookEnabled: boolean; // Whether webhooks are configured for this item
 }
 
 export enum PlaidProduct {
@@ -593,6 +680,25 @@ export enum PlaidUpdateMode {
   WEBHOOK = "webhook", // Update via webhooks (preferred)
   POLLING = "polling", // Update via scheduled polling
   MANUAL = "manual" // Manual update only
+}
+
+// Enhanced sync frequency options for cost optimization
+export enum PlaidSyncFrequency {
+  REAL_TIME = "real_time",     // Immediate webhook response + on-demand refresh
+  STANDARD = "standard",       // Multiple daily updates via webhooks
+  ECONOMY = "economy",         // Daily batch updates only
+  MANUAL = "manual"           // User-triggered sync only
+}
+
+// Sync statistics for cost and performance tracking
+export interface PlaidSyncStats {
+  totalApiCalls: number;       // Total API calls made
+  totalTransactionsProcessed: number; // Total transactions processed
+  lastSyncDuration: number;    // Last sync duration in milliseconds
+  averageSyncDuration: number; // Average sync duration
+  errorCount: number;          // Number of sync errors
+  lastErrorAt?: Timestamp;     // When the last error occurred
+  costTier: PlaidSyncFrequency; // Current cost/frequency tier
 }
 
 // Plaid Accounts - bank accounts, credit cards, etc.
@@ -885,10 +991,90 @@ export enum PlaidWebhookCode {
 
 export enum PlaidWebhookProcessingStatus {
   PENDING = "pending",
-  PROCESSING = "processing", 
+  PROCESSING = "processing",
   COMPLETED = "completed",
   FAILED = "failed",
   SKIPPED = "skipped"
+}
+
+// Modern /transactions/sync API types
+export interface PlaidTransactionsSyncRequest {
+  access_token: string;
+  cursor?: string; // Null for initial sync, or cursor from previous response
+  count?: number; // Number of transactions to fetch (default 100, max 500)
+  account_ids?: string[]; // Optional: specific accounts to sync
+}
+
+export interface PlaidTransactionsSyncResponse {
+  added: PlaidTransactionSync[]; // New transactions
+  modified: PlaidTransactionSync[]; // Updated transactions
+  removed: PlaidRemovedTransaction[]; // Deleted transactions
+  next_cursor: string; // Cursor for next sync request
+  has_more: boolean; // Whether more data is available for pagination
+  request_id: string; // Plaid request ID for debugging
+}
+
+export interface PlaidTransactionSync {
+  account_id: string;
+  account_owner?: string;
+  amount: number;
+  authorized_date?: string;
+  authorized_datetime?: string;
+  category: string[];
+  category_id?: string;
+  check_number?: string;
+  counterparties?: Array<{
+    name: string;
+    type: string;
+    logo_url?: string;
+  }>;
+  date: string;
+  datetime?: string;
+  iso_currency_code?: string;
+  location?: {
+    address?: string;
+    city?: string;
+    region?: string;
+    postal_code?: string;
+    country?: string;
+    lat?: number;
+    lon?: number;
+    store_number?: string;
+  };
+  merchant_name?: string;
+  merchant_entity_id?: string;
+  name: string;
+  original_description?: string;
+  payment_meta?: Record<string, any>;
+  pending: boolean;
+  pending_transaction_id?: string;
+  personal_finance_category?: {
+    confidence_level: string;
+    detailed: string;
+    primary: string;
+  };
+  transaction_code?: string;
+  transaction_id: string;
+  transaction_type?: string;
+  unofficial_currency_code?: string;
+}
+
+export interface PlaidRemovedTransaction {
+  transaction_id: string;
+}
+
+// Enhanced sync result for modern API
+export interface ModernSyncResult {
+  itemId: string;
+  userId: string;
+  transactionsAdded: number;
+  transactionsModified: number;
+  transactionsRemoved: number;
+  newCursor: string;
+  hasMore: boolean;
+  errors: string[];
+  processingTimeMs: number;
+  apiCallsUsed: number; // Cost tracking
 }
 
 // Plaid Configuration - app-level Plaid settings
@@ -929,13 +1115,7 @@ export enum PlaidEnvironment {
   PRODUCTION = "production"
 }
 
-export enum PlaidSyncFrequency {
-  REAL_TIME = "real_time", // Webhook-driven only
-  HOURLY = "hourly",
-  EVERY_6_HOURS = "every_6_hours", 
-  DAILY = "daily",
-  MANUAL = "manual"
-}
+// Duplicate enum removed - using the one defined earlier
 
 // API Request/Response types for Plaid integration
 export interface CreatePlaidLinkTokenRequest {

@@ -247,9 +247,12 @@ service cloud.firestore {
       allow read: if isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
-      // Allow collection queries for authenticated users
-      // This is a broad permission for now to get transactions working
-      allow list: if isAuthenticated();
+      // SECURE: Only allow users to list their own transactions or family transactions
+      // Users can read their own transactions
+      // Family members can read family transactions if familyId is set
+      allow list: if isAuthenticated() &&
+                     (isOwner(resource.data.userId) ||
+                      (resource.data.familyId != null && inSameFamily(resource.data.familyId)));
       
       // Users can create transactions for themselves
       // Parents/Admins can create for family members
@@ -528,8 +531,10 @@ service cloud.firestore {
                      isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
-      // Allow collection queries for authenticated users to list their outflow periods
-      allow list: if isAuthenticated();
+      // SECURE: Only allow users to list their own outflow periods or family outflow periods
+      allow list: if isAuthenticated() &&
+                     (isOwner(resource.data.userId) ||
+                      (resource.data.familyId != null && inSameFamily(resource.data.familyId)));
       
       // Only cloud functions should create outflow periods (from onOutflowCreated trigger)
       allow create: if false;
@@ -555,9 +560,11 @@ service cloud.firestore {
                      isOwner(resource.data.userId) || 
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
       
-      // Allow collection queries for authenticated users to list their inflow periods
+      // SECURE: Only allow users to list their own inflow periods or family inflow periods
       // This covers cases where collection is empty or doesn't exist
-      allow list: if isAuthenticated();
+      allow list: if isAuthenticated() &&
+                     (isOwner(resource.data.userId) ||
+                      (resource.data.familyId != null && inSameFamily(resource.data.familyId)));
       
       // Only cloud functions should create inflow periods (from onInflowCreated trigger)
       allow create: if false;
@@ -786,20 +793,70 @@ service cloud.firestore {
              isValidSplitAmounts(splits, transactionAmount);
     }
     
-    // Validate individual transaction split
+    // Validate individual transaction split with enhanced status fields
     function isValidTransactionSplit(split) {
       return split is map &&
-             split.keys().hasAll(['id', 'budgetId', 'budgetPeriodId', 'budgetName', 'categoryId', 'amount', 'isDefault', 'createdAt', 'updatedAt', 'createdBy']) &&
+             // Core required fields
+             split.keys().hasAll(['id', 'categoryId', 'amount', 'isDefault', 'createdAt', 'updatedAt', 'createdBy']) &&
              split.id is string && split.id.size() > 0 &&
-             split.budgetId is string && split.budgetId.size() > 0 &&
-             split.budgetPeriodId is string && split.budgetPeriodId.size() > 0 &&
-             split.budgetName is string && split.budgetName.size() > 0 &&
              split.categoryId is string &&
              split.amount is number && split.amount > 0 &&
              split.isDefault is bool &&
              split.createdAt is timestamp &&
              split.updatedAt is timestamp &&
-             split.createdBy is string && split.createdBy.size() > 0;
+             split.createdBy is string && split.createdBy.size() > 0 &&
+
+             // Budget assignment fields (optional for unassigned splits)
+             (!split.keys().hasAny(['budgetId']) || (split.budgetId is string && split.budgetId.size() > 0)) &&
+             (!split.keys().hasAny(['budgetPeriodId']) || (split.budgetPeriodId is string && split.budgetPeriodId.size() > 0)) &&
+             (!split.keys().hasAny(['budgetName']) || (split.budgetName is string && split.budgetName.size() > 0)) &&
+
+             // Status fields validation
+             isValidSplitStatusFields(split) &&
+
+             // Optional fields validation
+             (!split.keys().hasAny(['description']) || split.description is string) &&
+             (!split.keys().hasAny(['userNotes']) || split.userNotes is string);
+    }
+
+    // Enhanced validation for split status fields
+    function isValidSplitStatusFields(split) {
+      return (
+        // Ignored status validation
+        (!split.keys().hasAny(['isIgnored']) || split.isIgnored is bool) &&
+        (!split.keys().hasAny(['ignoredReason']) || (split.ignoredReason is string && split.ignoredReason.size() <= 200)) &&
+
+        // Refund status validation
+        (!split.keys().hasAny(['isRefund']) || split.isRefund is bool) &&
+        (!split.keys().hasAny(['refundReason']) || (split.refundReason is string && split.refundReason.size() <= 200)) &&
+
+        // Tax deductible status validation
+        (!split.keys().hasAny(['isTaxDeductible']) || split.isTaxDeductible is bool) &&
+        (!split.keys().hasAny(['taxDeductibleCategory']) || (split.taxDeductibleCategory is string && split.taxDeductibleCategory.size() <= 100)) &&
+
+        // Budget exclusion validation
+        (!split.keys().hasAny(['excludedFromBudgets']) || split.excludedFromBudgets is bool) &&
+
+        // Manual budget assignment validation
+        (!split.keys().hasAny(['manualBudgetAssignment']) || split.manualBudgetAssignment is bool) &&
+
+        // Status consistency checks
+        isValidSplitStatusConsistency(split)
+      );
+    }
+
+    // Validate status field consistency
+    function isValidSplitStatusConsistency(split) {
+      return (
+        // If ignored reason is provided, isIgnored must be true
+        (!split.keys().hasAny(['ignoredReason']) || split.get('isIgnored', false) == true) &&
+
+        // If refund reason is provided, isRefund must be true
+        (!split.keys().hasAny(['refundReason']) || split.get('isRefund', false) == true) &&
+
+        // If tax deductible category is provided, isTaxDeductible must be true
+        (!split.keys().hasAny(['taxDeductibleCategory']) || split.get('isTaxDeductible', false) == true)
+      );
     }
     
     // Validate that split amounts don't exceed transaction amount

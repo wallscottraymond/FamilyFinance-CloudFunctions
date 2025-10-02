@@ -7,6 +7,7 @@
 import { PlaidApi, AccountsGetRequest } from 'plaid';
 import { db } from '../index';
 import * as admin from 'firebase-admin';
+import { encryptAccessToken } from './encryption';
 
 export interface ProcessedAccount {
   id: string;
@@ -75,8 +76,8 @@ export async function savePlaidItem(
 ): Promise<void> {
   try {
     console.log('Saving Plaid item to Firestore...', { itemId, institutionName });
-    
-    await db.collection('users').doc(userId).collection('plaidItems').doc(itemId).set({
+
+    await db.collection('plaid_items').doc(itemId).set({
       id: itemId,
       plaidItemId: itemId,
       userId: userId,
@@ -84,7 +85,7 @@ export async function savePlaidItem(
       institutionId: institutionId,
       institutionName: institutionName,
       institutionLogo: null,
-      accessToken: accessToken, // TODO: Encrypt this in production
+      accessToken: encryptAccessToken(accessToken), // Encrypted for security
       cursor: null,
       products: ['transactions'],
       status: 'good',
@@ -103,7 +104,7 @@ export async function savePlaidItem(
 }
 
 /**
- * Saves account documents to Firestore plaid_accounts collection
+ * Saves account documents to Firestore accounts collection
  */
 export async function savePlaidAccounts(
   accounts: ProcessedAccount[],
@@ -114,12 +115,12 @@ export async function savePlaidAccounts(
 ): Promise<void> {
   try {
     console.log(`Saving ${accounts.length} account documents to Firestore...`);
-    
+
     for (const account of accounts) {
       try {
         console.log(`Saving account: ${account.id} (${account.name}) - ${account.type}/${account.subtype}`);
-        
-        await db.collection('plaid_accounts').doc(account.id).set({
+
+        await db.collection('accounts').doc(account.id).set({
           id: account.id,
           plaidAccountId: account.id,
           accountId: account.id,
@@ -133,32 +134,24 @@ export async function savePlaidAccounts(
           accountSubtype: account.subtype,
           mask: account.mask,
           officialName: account.officialName,
-          balances: {
-            available: account.availableBalance,
-            current: account.currentBalance,
-            limit: null,
-            iso_currency_code: account.currencyCode,
-          },
-          currentBalance: account.currentBalance,
+          balance: account.currentBalance,
           availableBalance: account.availableBalance,
-          creditLimit: null,
+          limit: null,
           isoCurrencyCode: account.currencyCode,
-          currencyCode: account.currencyCode,
           isActive: true,
           isSyncEnabled: true,
-          lastUpdated: new Date(),
-          lastSyncedAt: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          lastBalanceUpdate: admin.firestore.Timestamp.now(),
+          createdAt: admin.firestore.Timestamp.now(),
+          updatedAt: admin.firestore.Timestamp.now(),
         });
-        
+
         console.log(`Successfully saved account: ${account.id}`);
       } catch (accountError) {
         console.error(`Failed to save account ${account.id}:`, accountError);
         throw new Error(`Account save failed for ${account.id}: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
       }
     }
-    
+
     console.log(`Successfully saved all ${accounts.length} accounts to Firestore`);
   } catch (error) {
     console.error('Failed to save accounts to Firestore:', error);

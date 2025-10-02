@@ -24,3 +24,15 @@ export {
   removeAllUserTransactions,
   removeAllUserData
 } from "./cleanupUserData";
+
+// Budget spending migration functions (temporarily disabled)
+// export {
+//   migrateTransactionBudgetSpending,
+//   getMigrationStatus
+// } from "./migrateTransactionBudgetSpending";
+
+// Plaid modern sync migration functions (temporarily disabled)
+// export {
+//   migratePlaidToModernSync,
+//   getPlaidMigrationRecommendations
+// } from "./migratePlaidToModernSync";

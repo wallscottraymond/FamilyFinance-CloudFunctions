@@ -23,15 +23,14 @@ import { corsMiddleware } from '../../middleware/cors';
 import { authenticateRequest, UserRole } from '../../utils/auth';
 import { validateRequest } from '../../utils/validation';
 import * as Joi from 'joi';
-import { createPlaidClient, exchangePublicToken } from '../../utils/plaidClient';
+import { exchangePublicToken } from '../../utils/plaidClient';
+import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
 import { fetchPlaidAccounts, savePlaidItem, savePlaidAccounts, ProcessedAccount } from '../../utils/plaidAccounts';
-import { processRecurringTransactions, RecurringProcessingResult } from '../../utils/plaidRecurring';
-import { SyncResult } from '../../utils/syncTransactions';
-import { db } from '../../index';
 
-// Define secrets for Plaid configuration
+// Define secrets for Firebase configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
 const plaidSecret = defineSecret('PLAID_SECRET');
+const tokenEncryptionKey = defineSecret('TOKEN_ENCRYPTION_KEY');
 
 // Request validation schema
 const exchangePlaidTokenSchema = Joi.object({
@@ -76,10 +75,6 @@ interface ExchangePlaidTokenResponse {
     itemId: string;
     accounts: ProcessedAccount[];
     institutionName: string;
-    processing?: {
-      transactions: SyncResult;
-      recurringTransactions: RecurringProcessingResult;
-    };
   };
   error?: {
     code: string;
@@ -97,7 +92,7 @@ export const exchangePlaidToken = onRequest(
     memory: '256MiB',
     timeoutSeconds: 30,
     cors: true,
-    secrets: [plaidClientId, plaidSecret],
+    secrets: [plaidClientId, plaidSecret, tokenEncryptionKey],
   },
   async (req, res) => {
     return new Promise<void>(async (resolve) => {
@@ -154,8 +149,8 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
 
     console.log('Exchanging public token for user:', user.uid, 'institution:', requestData.metadata.institution.name);
 
-    // Step 1: Create Plaid client and exchange token
-    const plaidClient = createPlaidClient(plaidClientId.value(), plaidSecret.value());
+    // Step 1: Create Plaid client and exchange token using centralized factory
+    const plaidClient = createStandardPlaidClient();
     const { accessToken, itemId } = await exchangePublicToken(plaidClient, requestData.publicToken);
 
     // Step 2: Fetch and save account data
@@ -178,43 +173,7 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
     );
 
     console.log('Plaid data saved to Firestore successfully');
-
-    // Step 3: Process recurring transactions
-    const accountIds = accounts.map(account => account.id);
-    const recurringResult = await processRecurringTransactions(
-      plaidClient,
-      accessToken,
-      accountIds,
-      user.uid
-    );
-
-    // Step 4: Make initial transactions sync to enable webhooks
-    console.log('🔄 Making initial transactions sync to enable webhook system...');
-
-    try {
-      // Import the same sync function used by webhooks
-      const { processWebhookTransactionSync } = await import('./syncPlaidTransactions');
-
-      // Find the saved item to get document reference
-      const itemDoc = await findPlaidItemByItemId(user.uid, itemId);
-
-      const transactionResult = await processWebhookTransactionSync(
-        itemId,
-        user.uid,
-        itemDoc
-      );
-
-      console.log('✅ Initial sync completed - webhooks now enabled:', {
-        success: transactionResult.success,
-        added: transactionResult.addedCount,
-        modified: transactionResult.modifiedCount,
-        removed: transactionResult.removedCount
-      });
-
-    } catch (error) {
-      console.log('⚠️ Initial sync failed, but item created. Webhooks may not fire:', error);
-      // Don't throw - item creation succeeded, sync can be retried via webhook
-    }
+    console.log('✅ onPlaidItemCreated trigger will handle all sync operations');
 
     // Prepare response
     const response: ExchangePlaidTokenResponse = {
@@ -223,19 +182,6 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
         itemId,
         accounts,
         institutionName: requestData.metadata.institution.name,
-        processing: {
-          transactions: {
-            itemId,
-            userId: user.uid,
-            totalTransactions: 0, // Will be populated by webhook
-            successfullyProcessed: 0,
-            failed: 0,
-            errors: [],
-            transactionsByAccount: {},
-            processingTimeMs: 0
-          },
-          recurringTransactions: recurringResult,
-        },
       },
       timestamp: new Date().toISOString(),
     };
@@ -245,15 +191,7 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
       itemId,
       institutionName: requestData.metadata.institution.name,
       accountCount: accounts.length,
-      initialSyncStatus: 'Initial /transactions/sync call made to enable webhooks',
-      recurringTransactions: {
-        accountsProcessed: recurringResult.accountsProcessed,
-        streamsSaved: recurringResult.totalStreams,
-        inflowStreams: recurringResult.inflowStreams,
-        outflowStreams: recurringResult.outflowStreams,
-        errors: recurringResult.errors
-      },
-      nextSteps: 'Transactions will be synced automatically via webhooks'
+      nextSteps: 'onPlaidItemCreated trigger will sync balances, transactions, and recurring transactions'
     });
 
     res.status(200).json(response);
@@ -261,68 +199,6 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
   } catch (error) {
     console.error('Error in handleTokenExchange:', error);
     throw error; // Re-throw to be handled by caller
-  }
-}
-
-/**
- * Find Plaid item by itemId for a user (helper function)
- */
-async function findPlaidItemByItemId(userId: string, itemId: string): Promise<{
-  id: string;
-  accessToken: string;
-  cursor?: string;
-  userId: string;
-  itemId: string;
-  isActive: boolean;
-} | null> {
-  try {
-    // Try subcollection first
-    const subCollectionQuery = await db.collection('users')
-      .doc(userId)
-      .collection('plaidItems')
-      .where('plaidItemId', '==', itemId)
-      .where('isActive', '==', true)
-      .limit(1)
-      .get();
-
-    if (!subCollectionQuery.empty) {
-      const doc = subCollectionQuery.docs[0];
-      const data = doc.data() as any;
-      return {
-        id: doc.id,
-        accessToken: data.accessToken,
-        cursor: data.cursor,
-        userId: data.userId,
-        itemId: data.itemId,
-        isActive: data.isActive
-      };
-    }
-
-    // Try top-level collection
-    const topLevelQuery = await db.collection('plaid_items')
-      .where('plaidItemId', '==', itemId)
-      .where('userId', '==', userId)
-      .where('isActive', '==', true)
-      .limit(1)
-      .get();
-
-    if (!topLevelQuery.empty) {
-      const doc = topLevelQuery.docs[0];
-      const data = doc.data() as any;
-      return {
-        id: doc.id,
-        accessToken: data.accessToken,
-        cursor: data.cursor,
-        userId: data.userId,
-        itemId: data.itemId,
-        isActive: data.isActive
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error finding Plaid item:', error);
-    return null;
   }
 }
 

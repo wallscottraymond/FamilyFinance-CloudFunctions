@@ -15,9 +15,17 @@ export { extendBudgetPeriodsRange } from "./extendBudgetPeriodsRange";
 export { extendRecurringBudgetPeriods } from "./extendRecurringBudgetPeriods";
 
 // Checklist items functions
-export { 
+export {
   addChecklistItem,
   updateChecklistItem,
   deleteChecklistItem,
   toggleChecklistItem
 } from "./checklistItems";
+
+// Budget spending tracking functions (temporarily disabled)
+// export {
+//   recalculateBudgetPeriodSpending,
+//   getBudgetPeriodSpendingDetails,
+//   batchRecalculateBudgetSpending,
+//   getUserBudgetSpendingReport
+// } from "./budgetSpendingTracker";

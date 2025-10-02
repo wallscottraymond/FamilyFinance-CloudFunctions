@@ -556,9 +556,30 @@ export const approveTransaction = onRequest({
 export { onOutflowCreated } from "./onOutflowCreated";
 export { onInflowCreated } from "./onInflowCreated";
 
-// Export transaction splitting functions
-export { 
-  addTransactionSplit,
-  updateTransactionSplit,
-  deleteTransactionSplit
-} from "./transactionSplits";
+// Temporarily disabled for deployment - files moved to temp_disabled
+// export {
+//   onTransactionCreated,
+//   onTransactionUpdated,
+//   onTransactionDeleted,
+//   recalculateAllBudgetSpending
+// } from "./onTransactionSplitChanged";
+
+// export {
+//   addTransactionSplit,
+//   updateTransactionSplit,
+//   deleteTransactionSplit
+// } from "./transactionSplits";
+
+// export {
+//   markSplitStatus,
+//   bulkUpdateSplitStatus,
+//   resetSplitStatus
+// } from "./manageSplitStatus";
+
+// export {
+//   getSmartBudgetSuggestions,
+//   autoAssignSplitToBudgets,
+//   validateBudgetAssignment,
+//   bulkAssignSplitsToBudgets,
+//   getBudgetAssignmentAnalytics
+// } from "./smartBudgetAssignment";

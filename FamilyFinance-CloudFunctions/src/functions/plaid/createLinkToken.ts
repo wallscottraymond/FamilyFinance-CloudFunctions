@@ -22,17 +22,16 @@ import { corsMiddleware } from '../../middleware/cors';
 import { authenticateRequest, UserRole } from '../../utils/auth';
 import { validateRequest } from '../../utils/validation';
 import * as Joi from 'joi';
-import { 
-  PlaidApi, 
-  Configuration, 
-  PlaidEnvironments, 
-  LinkTokenCreateRequest, 
-  CountryCode, 
+import {
+  PlaidApi,
+  LinkTokenCreateRequest,
+  CountryCode,
   Products,
   DepositoryAccountSubtype,
   CreditAccountSubtype,
   InvestmentAccountSubtype
 } from 'plaid';
+import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -65,21 +64,9 @@ interface CreateLinkTokenResponse {
   };
 }
 
-// Configure Plaid client without custom headers (credentials passed in request body)
-let plaidClient: PlaidApi | null = null;
-
+// Use centralized Plaid client factory
 function getPlaidClient(): PlaidApi {
-  if (!plaidClient) {
-    console.log('Creating Plaid client for sandbox environment');
-    
-    // Simple configuration without custom headers
-    const configuration = new Configuration({
-      basePath: PlaidEnvironments.sandbox,
-    });
-    
-    plaidClient = new PlaidApi(configuration);
-  }
-  return plaidClient;
+  return createStandardPlaidClient();
 }
 
 /**

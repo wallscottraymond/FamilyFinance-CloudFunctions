@@ -32,9 +32,27 @@
 // Export all Plaid-related cloud functions
 export { createLinkToken } from "./createLinkToken";
 export { exchangePlaidToken } from "./exchangePlaidToken"; // Using real Plaid API
-export { fetchRecurringTransactions } from "./fetchRecurringTransactions";
 export { plaidWebhook } from "./plaidWebhook";
-export { syncPlaidTransactions, getPlaidSyncStatus } from "./syncPlaidTransactions";
+export { plaidErrorHandler } from "./plaidErrorHandler";
+
+// New unified sync functions (triggered by onPlaidItemCreated)
+export { onPlaidItemCreated } from "./onPlaidItemCreated";
+export { syncBalancesCallable } from "./syncBalances";
+export { syncTransactionsCallable } from "./syncTransactions";
+export { syncRecurringTransactionsCallable } from "./syncRecurringTransactions";
+
+// Webhook testing functions for sandbox
+export {
+  fireTransactionWebhook,
+  fireIncomeWebhook,
+  fireItemWebhook,
+  getUserPlaidItems
+} from "./testWebhooks";
+// export { syncPlaidTransactions, getPlaidSyncStatus } from "./syncPlaidTransactions";
+// export { processScheduledSync } from "./processScheduledSync";
+// Temporarily disabled for deployment
+// export { manageSyncPreferences } from "./manageSyncPreferences";
+// export { getPlaidAnalytics } from "./getPlaidAnalytics";
 // export { refreshPlaidData } from "./refreshPlaidData";
 // export { unlinkPlaidAccount, getUnlinkPreview } from "./unlinkPlaidAccount";
 
@@ -64,6 +82,12 @@ export { syncPlaidTransactions, getPlaidSyncStatus } from "./syncPlaidTransactio
  * - Authentication: Webhook signature verification only
  * - Memory: 512MiB, Timeout: 60s
  * - CORS: Disabled (webhook endpoint)
+ * - Promise Pattern: ✓
+ *
+ * syncTransactionsForItem:
+ * - Purpose: Manually sync transactions for a specific Plaid item using /transactions/sync
+ * - Authentication: Requires VIEWER role
+ * - Memory: 512MiB, Timeout: 300s
  * - Promise Pattern: ✓
  * 
  * refreshPlaidData:

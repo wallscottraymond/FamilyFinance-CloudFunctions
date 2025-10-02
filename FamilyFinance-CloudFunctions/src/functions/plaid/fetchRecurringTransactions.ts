@@ -22,12 +22,11 @@ import { authenticateRequest, UserRole } from '../../utils/auth';
 import { validateRequest } from '../../utils/validation';
 import * as Joi from 'joi';
 import { db } from '../../index';
-import { 
-  PlaidApi, 
-  Configuration, 
-  PlaidEnvironments, 
+import {
+  PlaidApi,
   TransactionsRecurringGetRequest
 } from 'plaid';
+import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
 import {
   BaseRecurringTransaction,
   RecurringIncome,
@@ -52,20 +51,9 @@ const fetchRecurringTransactionsSchema = Joi.object({
   accountId: Joi.string().optional(),
 });
 
-// Configure Plaid client
-let plaidClient: PlaidApi | null = null;
-
+// Use centralized Plaid client factory
 function getPlaidClient(): PlaidApi {
-  if (!plaidClient) {
-    console.log('Creating Plaid client for sandbox environment');
-    
-    const configuration = new Configuration({
-      basePath: PlaidEnvironments.sandbox,
-    });
-    
-    plaidClient = new PlaidApi(configuration);
-  }
-  return plaidClient;
+  return createStandardPlaidClient();
 }
 
 /**

@@ -274,7 +274,7 @@ interface PlaidAccount {
 }
 ```
 
-**plaid_transactions** - Bank Transactions
+**transactions** - Bank Transactions
 ```typescript
 interface PlaidTransaction {
   transactionId: string; // Plaid transaction_id

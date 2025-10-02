@@ -31,7 +31,9 @@ import {
   PlaidWebhookProcessingStatus
 } from '../../types';
 import { Timestamp } from 'firebase-admin/firestore';
-import { processWebhookTransactionSync } from './syncPlaidTransactions';
+import { syncBalances } from './syncBalances';
+import { syncTransactions } from './syncTransactions';
+import { syncRecurringTransactions } from './syncRecurringTransactions';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -227,21 +229,24 @@ async function handleTransactionsWebhook(
         return { processed: false, message: `Rate limited: ${minutesRemaining} minutes remaining` };
       }
 
-      // Process transaction sync immediately using Plaid's /transactions/sync endpoint
+      // Process transaction sync using unified sync function
       serverLogAndEmitSocket('Starting transaction sync', plaidItemId);
 
-      const syncResult = await processWebhookTransactionSync(plaidItemId, itemDoc.userId, itemDoc);
+      const syncResult = await syncTransactions(plaidItemId, itemDoc.userId);
 
-      if (syncResult.success) {
-        const totalSynced = syncResult.addedCount + syncResult.modifiedCount + syncResult.removedCount;
+      if (syncResult.errors.length === 0) {
+        const totalSynced = syncResult.transactionsCreated + syncResult.transactionsModified + syncResult.transactionsRemoved;
         serverLogAndEmitSocket(`Transaction sync completed: ${totalSynced} transactions processed`, plaidItemId);
         return {
           processed: true,
-          message: `Synced ${syncResult.addedCount} new, ${syncResult.modifiedCount} modified, ${syncResult.removedCount} removed transactions`
+          message: `Synced ${syncResult.transactionsCreated} new, ${syncResult.transactionsModified} modified, ${syncResult.transactionsRemoved} removed transactions`
         };
       } else {
-        serverLogAndEmitSocket(`Transaction sync failed: ${syncResult.error}`, plaidItemId);
-        return { processed: false, message: `Sync failed: ${syncResult.error}` };
+        serverLogAndEmitSocket(`Transaction sync completed with errors: ${syncResult.errors.join(', ')}`, plaidItemId);
+        return {
+          processed: true,
+          message: `Synced with errors: ${syncResult.transactionsCreated} created, ${syncResult.errors.length} errors`
+        };
       }
     }
 
@@ -295,11 +300,18 @@ async function handleItemWebhook(
       serverLogAndEmitSocket('User permission revoked', plaidItemId);
       return { processed: true, message: 'Item permission status updated' };
 
-    case PlaidWebhookCode.NEW_ACCOUNTS_AVAILABLE:
-      // Handle when new accounts are available for the item
-      await queueAccountRefresh(plaidItemId);
-      serverLogAndEmitSocket('New accounts available - refresh queued', plaidItemId);
-      return { processed: true, message: 'New accounts refresh queued' };
+    case PlaidWebhookCode.NEW_ACCOUNTS_AVAILABLE: {
+      // Handle when new accounts are available for the item - sync balances immediately
+      const itemDoc = await retrieveItemByPlaidItemId(plaidItemId);
+      if (!itemDoc) {
+        serverLogAndEmitSocket('Item not found for new accounts sync', plaidItemId);
+        return { processed: false, message: 'Item not found' };
+      }
+
+      const balanceResult = await syncBalances(plaidItemId, itemDoc.userId);
+      serverLogAndEmitSocket(`New accounts synced: ${balanceResult.accountsUpdated} accounts updated`, plaidItemId);
+      return { processed: true, message: `${balanceResult.accountsUpdated} accounts updated` };
+    }
 
     default:
       serverLogAndEmitSocket(`Unhandled item webhook code: ${webhookCode}`, plaidItemId);
@@ -316,15 +328,27 @@ async function handleRecurringTransactionsWebhook(
 ): Promise<{ processed: boolean; message: string }> {
   const {
     webhook_code: webhookCode,
-    item_id: plaidItemId,
-    stream_id: streamId
+    item_id: plaidItemId
   } = requestBody;
 
+  // Get item for user context
+  const itemDoc = await retrieveItemByPlaidItemId(plaidItemId);
+  if (!itemDoc) {
+    serverLogAndEmitSocket('Item not found for recurring transaction sync', plaidItemId);
+    return { processed: false, message: 'Item not found' };
+  }
+
   switch (webhookCode) {
-    case PlaidWebhookCode.RECURRING_TRANSACTIONS_UPDATE:
-      await queueRecurringTransactionSync(plaidItemId, streamId);
-      serverLogAndEmitSocket('Recurring transactions sync queued', plaidItemId);
-      return { processed: true, message: 'Recurring transactions sync queued' };
+    case PlaidWebhookCode.RECURRING_TRANSACTIONS_UPDATE: {
+      // Sync recurring transactions using unified sync function
+      const syncResult = await syncRecurringTransactions(plaidItemId, itemDoc.userId);
+      const total = syncResult.inflowsCreated + syncResult.inflowsUpdated + syncResult.outflowsCreated + syncResult.outflowsUpdated;
+      serverLogAndEmitSocket(`Recurring transactions synced: ${total} streams processed`, plaidItemId);
+      return {
+        processed: true,
+        message: `Synced ${syncResult.inflowsCreated + syncResult.inflowsUpdated} inflows, ${syncResult.outflowsCreated + syncResult.outflowsUpdated} outflows`
+      };
+    }
 
     default:
       serverLogAndEmitSocket(`Unhandled recurring transaction webhook code: ${webhookCode}`, plaidItemId);
@@ -504,43 +528,6 @@ async function updateItemStatus(plaidItemId: string, status: string, error?: any
     }
   } catch (error) {
     console.error('Failed to update item status:', error);
-  }
-}
-
-/**
- * Queue account refresh for background processing
- */
-async function queueAccountRefresh(plaidItemId: string): Promise<void> {
-  try {
-    await db.collection('plaid_sync_queue').add({
-      type: 'ACCOUNT_REFRESH',
-      plaidItemId,
-      priority: 'LOW',
-      createdAt: Timestamp.now(),
-      processedAt: null,
-      status: 'PENDING'
-    });
-  } catch (error) {
-    console.error('Failed to queue account refresh:', error);
-  }
-}
-
-/**
- * Queue recurring transaction sync for background processing
- */
-async function queueRecurringTransactionSync(plaidItemId: string, streamId?: string): Promise<void> {
-  try {
-    await db.collection('plaid_sync_queue').add({
-      type: 'RECURRING_TRANSACTION_SYNC',
-      plaidItemId,
-      streamId,
-      priority: 'MEDIUM',
-      createdAt: Timestamp.now(),
-      processedAt: null,
-      status: 'PENDING'
-    });
-  } catch (error) {
-    console.error('Failed to queue recurring transaction sync:', error);
   }
 }
 
