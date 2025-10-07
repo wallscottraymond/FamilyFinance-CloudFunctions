@@ -258,21 +258,35 @@ interface PlaidItem {
 }
 ```
 
-**plaid_accounts** - Connected Bank Accounts
+**accounts** - Connected Bank Accounts
 ```typescript
-interface PlaidAccount {
-  accountId: string; // Plaid account_id
+interface Account {
+  id: string; // Document ID (same as plaidAccountId)
+  plaidAccountId: string; // Plaid account_id
+  accountId: string; // Alias for plaidAccountId
   itemId: string; // Reference to plaid_items
   userId: string; // Family Finance user ID
-  name: string; // Account name from institution
-  type: PlaidAccountType; // depository, credit, loan, etc.
-  subtype: PlaidAccountSubtype; // checking, savings, etc.
-  balances: PlaidAccountBalances; // Current balance info
+  familyId: string; // Family association
+  institutionId: string; // Plaid institution_id
+  institutionName: string; // Institution name
+  accountName: string; // Account name from institution
+  accountType: string; // depository, credit, loan, etc.
+  accountSubtype: string | null; // checking, savings, etc.
+  mask: string | null; // Account number mask
+  officialName: string | null; // Official account name
+  currentBalance: number; // Current balance (FIX: was 'balance', now 'currentBalance')
+  availableBalance: number | null; // Available balance
+  limit: number | null; // Credit limit for credit accounts
+  isoCurrencyCode: string; // Currency code (e.g., "USD")
   isActive: boolean; // Whether to include in sync
   isSyncEnabled: boolean; // Whether to sync transactions
-  lastSyncedAt?: Timestamp;
+  lastBalanceUpdate: Timestamp; // Last balance update time
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 ```
+
+**Important Fix (2025-10-03)**: The account balance field was corrected from `balance` to `currentBalance` throughout the codebase. The backend Cloud Function in `/src/utils/plaidAccounts.ts` now correctly saves balances to `currentBalance` field to match what the mobile app reads. This fixes the issue where account balances were showing as blank when adding new Plaid accounts.
 
 **transactions** - Bank Transactions
 ```typescript
@@ -345,11 +359,13 @@ interface PlaidWebhook {
    - `PENDING_EXPIRATION`: Mark item for re-authentication
 
 3. **Transaction Sync Flow:**
-   - Decrypt access token for API calls
-   - Fetch new/updated transactions from Plaid
-   - Store raw Plaid transactions in `plaid_transactions`
+   - Decrypt access token for API calls using AES-256-GCM
+   - Fetch new/updated transactions from Plaid API
+   - Map Plaid categories to app transaction categories (see Category Mapping section)
+   - Store raw Plaid transactions in Firestore `transactions` collection
    - Process transactions into Family Finance format
    - Update sync cursors and timestamps
+   - Log all operations for debugging and monitoring
 
 #### Data Loading Strategy
 
@@ -407,19 +423,27 @@ Optimized indexes for common query patterns:
 ```javascript
 // Plaid Items - User ownership with family visibility
 match /plaid_items/{itemId} {
-  allow read: if isOwner(resource.data.userId) || 
+  allow read: if isOwner(resource.data.userId) ||
                  inSameFamily(resource.data.familyId);
   allow create, update: if isOwner(request.resource.data.userId);
   allow delete: if isOwner(resource.data.userId) || isAdmin();
 }
 
-// Plaid Transactions - Strict user isolation
-match /plaid_transactions/{transactionId} {
-  allow read: if isOwner(resource.data.userId) || 
+// Accounts (Connected Bank Accounts) - User ownership with family visibility
+match /accounts/{accountId} {
+  allow read: if isOwner(resource.data.userId) ||
                  inSameFamily(resource.data.familyId);
-  allow create: if false; // Only cloud functions
-  allow update: if isOwner(resource.data.userId) && 
-                   isValidPlaidTransactionUpdate();
+  allow create, update: if false; // Only cloud functions can write
+  allow delete: if isOwner(resource.data.userId) || isAdmin();
+}
+
+// Transactions - User isolation with family sharing
+match /transactions/{transactionId} {
+  allow read: if isOwner(resource.data.userId) ||
+                 inSameFamily(resource.data.familyId);
+  allow create: if false; // Only cloud functions can create
+  allow update: if isOwner(resource.data.userId) &&
+                   isValidTransactionUpdate();
   allow delete: if isAdmin();
 }
 ```
@@ -444,14 +468,17 @@ match /plaid_transactions/{transactionId} {
 ### Integration Utilities
 
 **Core Utilities:**
-- `/src/utils/plaidSecurity.ts` - Encryption and webhook verification
-- `/src/utils/plaidSync.ts` - Webhook processing and transaction sync
+- `/src/utils/encryption.ts` - Access token encryption using AES-256-GCM
+- `/src/utils/plaidAccounts.ts` - Account data retrieval and storage
+- `/src/utils/syncTransactions.ts` - Transaction sync and category mapping
+- `/src/functions/plaid/` - Plaid integration Cloud Functions
 
 **Key Functions:**
-- `encryptAccessToken()` - Secure token storage
-- `verifyWebhookSignature()` - Webhook security validation
-- `processPlaidWebhook()` - Real-time event processing
-- `syncTransactionsForUser()` - Manual and scheduled sync
+- `encryptAccessToken()` - Secure token storage with AES-256-GCM
+- `fetchPlaidAccounts()` - Retrieve account details from Plaid API
+- `savePlaidItem()` - Save encrypted Plaid item to Firestore
+- `savePlaidAccounts()` - Save account documents with correct field names (currentBalance)
+- `mapPlaidCategoryToTransactionCategory()` - Map Plaid categories to app categories
 
 ### Development Setup
 
@@ -480,6 +507,38 @@ TOKEN_ENCRYPTION_KEY=64_character_hex_string
 - Webhook processing can handle concurrent requests
 - Transaction sync is designed for high volume
 - Firestore security rules optimize for user-specific queries
+
+### Category Mapping
+
+**Plaid to App Category Mapping:**
+The system automatically maps Plaid's category hierarchy to the app's transaction categories using `/src/utils/syncTransactions.ts`:
+
+```typescript
+// Category mappings (primary and secondary Plaid categories)
+{
+  'food and drink': FOOD,
+  'restaurants': FOOD,
+  'groceries': FOOD,
+  'transportation': TRANSPORTATION,
+  'gas stations': TRANSPORTATION,
+  'shops': CLOTHING,
+  'retail': CLOTHING,
+  'entertainment': ENTERTAINMENT,
+  'utilities': UTILITIES,
+  'healthcare': HEALTHCARE,
+  'housing': HOUSING,
+  'rent': HOUSING,
+  'mortgage': HOUSING,
+  'payroll': SALARY,
+  'deposit': OTHER_INCOME,
+}
+```
+
+**Default Behavior:**
+- Unmapped categories default to `OTHER_EXPENSE`
+- Category matching is case-insensitive
+- Checks both primary and secondary Plaid categories
+- Comprehensive logging for debugging category assignments
 
 ### Privacy & Compliance
 
@@ -808,6 +867,46 @@ firebase functions:log --only addChecklistItem,updateChecklistItem,deleteCheckli
 firebase emulators:start --only functions,firestore
 ```
 
+## Recent Updates and Bug Fixes
+
+### October 3, 2025 - Account Balance Field Fix
+
+**Issue**: Account balances were showing as blank when adding new Plaid accounts.
+
+**Root Cause**: Field name mismatch between backend and frontend:
+- Backend Cloud Function (`/src/utils/plaidAccounts.ts`) was saving balances to `balance` field
+- Mobile app was reading from `currentBalance` field
+
+**Fix Applied**:
+- Updated `/src/utils/plaidAccounts.ts:137` to save to `currentBalance` field
+- Standardized field name across entire codebase
+- Updated all CLAUDE.md documentation files to reflect correct field name
+
+**Files Changed**:
+- `/FamilyFinance-CloudFunctions/src/utils/plaidAccounts.ts`
+- `/CLAUDE.md` (main documentation)
+- `/FamilyFinanceMobile/src/contexts/CLAUDE.md`
+- `/FamilyFinanceMobile/src/services/CLAUDE.md`
+
+**Testing**: Verified that new Plaid account connections now display balances correctly.
+
+### Category Mapping Enhancement
+
+**Enhancement**: Improved Plaid category to app category mapping with comprehensive logging.
+
+**Implementation**: `/src/utils/syncTransactions.ts` includes detailed category mapping logic:
+- Maps Plaid's hierarchical categories to app's flat transaction categories
+- Case-insensitive matching on both primary and secondary Plaid categories
+- Comprehensive logging for debugging category assignments
+- Default fallback to `OTHER_EXPENSE` for unmapped categories
+
+**Supported Mappings**:
+- Food categories (food and drink, restaurants, groceries) → FOOD
+- Transportation (gas stations) → TRANSPORTATION
+- Housing (rent, mortgage) → HOUSING
+- Income (payroll, deposit) → SALARY/OTHER_INCOME
+- And more (see Category Mapping section for complete list)
+
 ## Notes for AI Assistants
 
 - Always check existing patterns before implementing new features
@@ -819,3 +918,6 @@ firebase emulators:start --only functions,firestore
 - For Plaid integration, always encrypt sensitive tokens and verify webhook signatures
 - Ensure proper error handling and retry logic for external API calls
 - Test Plaid integration thoroughly in sandbox environment before production
+- **CRITICAL**: Always use `currentBalance` field for account balances, never `balance`
+- Verify field names match between backend Cloud Functions and frontend mobile app
+- Reference the Category Mapping section when working with transaction categorization

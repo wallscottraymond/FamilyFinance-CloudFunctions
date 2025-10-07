@@ -20,8 +20,8 @@ import {
   SourcePeriod, 
   PeriodType,
   UserRole
-} from '../../types';
-import { authenticateRequest } from '../../utils/auth';
+} from '../../../../types';
+import { authenticateRequest } from '../../../../utils/auth';
 
 interface ExtendBudgetPeriodsRequest {
   periodId: string;       // Target period we need budget data for

@@ -2,32 +2,32 @@ import { onRequest } from "firebase-functions/v2/https";
 import { 
   Budget, 
   UserRole
-} from "../../types";
+} from "../../../../types";
 import { 
   getDocument, 
   updateDocument
-} from "../../utils/firestore";
+} from "../../../../utils/firestore";
 import { 
   authMiddleware, 
   createErrorResponse, 
   createSuccessResponse,
   checkFamilyAccess 
-} from "../../utils/auth";
-import { firebaseCors } from "../../middleware/cors";
+} from "../../../../utils/auth";
+import { firebaseCors } from "../../../../middleware/cors";
 
 /**
- * Update budget
+ * Delete budget
  */
-export const updateBudget = onRequest({
+export const deleteBudget = onRequest({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
   cors: true
 }, async (request, response) => {
   return firebaseCors(request, response, async () => {
-    if (request.method !== "PUT") {
+    if (request.method !== "DELETE") {
       return response.status(405).json(
-        createErrorResponse("method-not-allowed", "Only PUT requests are allowed")
+        createErrorResponse("method-not-allowed", "Only DELETE requests are allowed")
       );
     }
 
@@ -39,7 +39,7 @@ export const updateBudget = onRequest({
         );
       }
 
-      // Authenticate user (editors can update budgets they created or are members of)
+      // Authenticate user (editors can delete budgets they created)
       const authResult = await authMiddleware(request, UserRole.EDITOR);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
@@ -56,10 +56,10 @@ export const updateBudget = onRequest({
       }
 
       // Check permissions
-      const canEdit = user.role === UserRole.ADMIN || existingBudget.createdBy === user.id;
-      if (!canEdit) {
+      const canDelete = user.role === UserRole.ADMIN || existingBudget.createdBy === user.id;
+      if (!canDelete) {
         return response.status(403).json(
-          createErrorResponse("permission-denied", "Cannot edit this budget")
+          createErrorResponse("permission-denied", "Cannot delete this budget")
         );
       }
 
@@ -72,30 +72,23 @@ export const updateBudget = onRequest({
           );
         }
       } else {
-        // Individual budget - check ownership or membership
-        if (existingBudget.createdBy !== user.id! && !existingBudget.memberIds.includes(user.id!)) {
+        // Individual budget - check ownership
+        if (existingBudget.createdBy !== user.id!) {
           return response.status(403).json(
-            createErrorResponse("access-denied", "Cannot update budget you don't have access to")
+            createErrorResponse("access-denied", "Cannot delete budget created by another user")
           );
         }
       }
 
-      const updateData = request.body;
+      // Soft delete - mark as inactive
+      await updateDocument<Budget>("budgets", budgetId, { isActive: false });
 
-      // If amount is being updated, recalculate remaining
-      if (updateData.amount !== undefined) {
-        updateData.remaining = updateData.amount - existingBudget.spent;
-      }
-
-      // Update budget
-      const updatedBudget = await updateDocument<Budget>("budgets", budgetId, updateData);
-
-      return response.status(200).json(createSuccessResponse(updatedBudget));
+      return response.status(200).json(createSuccessResponse({ deleted: true }));
 
     } catch (error: any) {
-      console.error("Error updating budget:", error);
+      console.error("Error deleting budget:", error);
       return response.status(500).json(
-        createErrorResponse("internal-error", "Failed to update budget")
+        createErrorResponse("internal-error", "Failed to delete budget")
       );
     }
   });

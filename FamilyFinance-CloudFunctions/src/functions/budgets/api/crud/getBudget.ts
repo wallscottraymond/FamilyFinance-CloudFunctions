@@ -2,19 +2,19 @@ import { onRequest } from "firebase-functions/v2/https";
 import { 
   Budget, 
   UserRole
-} from "../../types";
+} from "../../../../types";
 import { 
   getDocument, 
   queryDocuments,
   updateDocument
-} from "../../utils/firestore";
+} from "../../../../utils/firestore";
 import { 
   authMiddleware, 
   createErrorResponse, 
   createSuccessResponse,
   checkFamilyAccess 
-} from "../../utils/auth";
-import { firebaseCors } from "../../middleware/cors";
+} from "../../../../utils/auth";
+import { firebaseCors } from "../../../../middleware/cors";
 
 /**
  * Get budget by ID

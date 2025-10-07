@@ -1,30 +1,31 @@
 import { onRequest } from "firebase-functions/v2/https";
-import { 
-  Transaction, 
+import {
+  Transaction,
   UserRole,
   TransactionStatus
 } from "../../types";
-import { 
-  createDocument, 
-  getDocument, 
-  updateDocument, 
-  deleteDocument, 
-  queryDocuments 
+import {
+  createDocument,
+  getDocument,
+  updateDocument,
+  deleteDocument,
+  queryDocuments
 } from "../../utils/firestore";
-import { 
-  authMiddleware, 
-  createErrorResponse, 
+import {
+  authMiddleware,
+  createErrorResponse,
   createSuccessResponse,
-  checkFamilyAccess 
+  checkFamilyAccess
 } from "../../utils/auth";
-import { 
-  validateRequest, 
-  createTransactionSchema, 
+import {
+  validateRequest,
+  createTransactionSchema,
   updateTransactionSchema,
   validateTransactionPermission
 } from "../../utils/validation";
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../middleware/cors";
+import { updateBudgetSpending } from "../../utils/budgetSpending";
 
 /**
  * Create a new transaction
@@ -137,6 +138,18 @@ export const createTransaction = onRequest({
       };
 
       const createdTransaction = await createDocument<Transaction>("transactions", transaction);
+
+      // Update budget spending based on transaction splits
+      try {
+        await updateBudgetSpending({
+          newTransaction: createdTransaction,
+          userId: user.id!,
+          familyId: user.familyId
+        });
+      } catch (budgetError) {
+        // Log error but don't fail transaction creation
+        console.error('Budget spending update failed after transaction creation:', budgetError);
+      }
 
       return response.status(201).json(createSuccessResponse(createdTransaction));
 
@@ -273,10 +286,23 @@ export const updateTransaction = onRequest({
 
       // Update transaction
       const updatedTransaction = await updateDocument<Transaction>(
-        "transactions", 
-        transactionId, 
+        "transactions",
+        transactionId,
         updateData
       );
+
+      // Update budget spending based on transaction changes
+      try {
+        await updateBudgetSpending({
+          oldTransaction: existingTransaction,
+          newTransaction: updatedTransaction,
+          userId: user.id!,
+          familyId: existingTransaction.familyId
+        });
+      } catch (budgetError) {
+        // Log error but don't fail transaction update
+        console.error('Budget spending update failed after transaction update:', budgetError);
+      }
 
       return response.status(200).json(createSuccessResponse(updatedTransaction));
 
@@ -341,6 +367,19 @@ export const deleteTransaction = onRequest({
         return response.status(403).json(
           createErrorResponse("access-denied", "Cannot access this transaction")
         );
+      }
+
+      // Update budget spending (reverse the spending) BEFORE deleting
+      try {
+        await updateBudgetSpending({
+          oldTransaction: existingTransaction,
+          newTransaction: undefined, // Indicates deletion
+          userId: user.id!,
+          familyId: existingTransaction.familyId
+        });
+      } catch (budgetError) {
+        // Log error but don't fail transaction deletion
+        console.error('Budget spending update failed before transaction deletion:', budgetError);
       }
 
       // Delete transaction

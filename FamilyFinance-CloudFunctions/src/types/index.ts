@@ -152,7 +152,7 @@ export interface TransactionSplit {
   budgetId: string;               // Reference to budgets collection for flexibility
   budgetPeriodId: string;         // Reference to specific budget_periods document
   budgetName: string;             // Denormalized budget name for display performance
-  categoryId: TransactionCategory; // Category for this split (can differ from main transaction)
+  categoryId: string;             // Category ID from categories collection (matched by detailed_plaid_category)
   amount: number;                 // Amount allocated to this split
   description?: string;           // Optional override description for this split
   isDefault: boolean;             // True for the auto-created split when transaction is created
@@ -181,7 +181,7 @@ export interface Transaction extends BaseDocument {
   amount: number;
   currency: string;
   description: string;
-  category: TransactionCategory;
+  category: string;               // Category ID from categories collection (matched by detailed_plaid_category)
   type: TransactionType;
   date: Timestamp;
   location?: TransactionLocation;
@@ -380,7 +380,7 @@ export enum NotificationPriority {
 export interface CreateTransactionRequest {
   amount: number;
   description: string;
-  category: TransactionCategory;
+  category: string;              // Category ID from categories collection
   type: TransactionType;
   date?: string; // ISO date string
   location?: TransactionLocation;
@@ -391,7 +391,7 @@ export interface CreateTransactionRequest {
 export interface UpdateTransactionRequest {
   amount?: number;
   description?: string;
-  category?: TransactionCategory;
+  category?: string;             // Category ID from categories collection
   location?: TransactionLocation;
   tags?: string[];
 }
@@ -1217,6 +1217,7 @@ export interface RecurringIncome extends BaseRecurringTransaction {
   isRegularSalary?: boolean; // True for primary salary income
   employerName?: string; // Employer or payer name
   taxable?: boolean; // Whether this income is taxable
+  inflowSource?: 'user' | 'plaid'; // Source of this inflow
 }
 
 // Recurring Outflows - stored in root 'outflows' collection
@@ -1227,6 +1228,7 @@ export interface RecurringOutflow extends BaseRecurringTransaction {
   merchantCategory?: string; // Standardized merchant category
   isCancellable?: boolean; // Whether this can be easily cancelled
   reminderDays?: number; // Days before due date to remind
+  outflowSource?: 'user' | 'plaid'; // Source of this outflow
 }
 
 // Legacy interface for backward compatibility - maps to both collections

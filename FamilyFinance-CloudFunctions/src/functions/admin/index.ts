@@ -8,6 +8,7 @@ export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdm
 export { debugOutflowPeriods } from "./debugOutflowPeriods";
 export { createTestOutflows } from "./createTestOutflows";
 export { uploadCategoriesData } from "./uploadCategoriesData";
+export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 
 // Transaction splitting migration functions
 export { 

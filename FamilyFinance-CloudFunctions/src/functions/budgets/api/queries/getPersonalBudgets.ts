@@ -1,23 +1,25 @@
 import { onRequest } from "firebase-functions/v2/https";
-import { 
-  Budget, 
-  UserRole
-} from "../../types";
-import { 
+import {
+  Budget,
+  UserRole,
+  WhereClause
+} from "../../../../types";
+import {
   queryDocuments,
   updateDocument
-} from "../../utils/firestore";
-import { 
-  authMiddleware, 
-  createErrorResponse, 
+} from "../../../../utils/firestore";
+import {
+  authMiddleware,
+  createErrorResponse,
   createSuccessResponse
-} from "../../utils/auth";
-import { firebaseCors } from "../../middleware/cors";
+} from "../../../../utils/auth";
+import { firebaseCors } from "../../../../middleware/cors";
 
 /**
- * Get family budgets
+ * Get personal budgets for individual users (not family-based)
+ * This function works for users regardless of family membership
  */
-export const getFamilyBudgets = onRequest({
+export const getPersonalBudgets = onRequest({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
@@ -39,35 +41,57 @@ export const getFamilyBudgets = onRequest({
 
       const { user } = authResult;
 
-      if (!user.familyId) {
-        return response.status(400).json(
-          createErrorResponse("no-family", "User must belong to a family")
-        );
-      }
-
-      const includeInactive = request.query.includeInactive === "true";
-      const limit = parseInt(request.query.limit as string) || 50;
-      const offset = parseInt(request.query.offset as string) || 0;
+      // Parse query parameters for filtering
+      const { startDate, endDate, category, isActive } = request.query;
 
       // Build query conditions
-      const whereConditions = [
-        { field: "familyId", operator: "==" as const, value: user.familyId },
+      const whereConditions: WhereClause[] = [
+        { field: "createdBy", operator: "==", value: user.id },
       ];
 
-      if (!includeInactive) {
-        whereConditions.push({ field: "isActive", operator: "==" as const, value: "true" });
+      // Add optional filters
+      if (startDate) {
+        whereConditions.push({
+          field: "startDate",
+          operator: ">=",
+          value: startDate as string
+        });
       }
 
-      // Query budgets
+      if (endDate) {
+        whereConditions.push({
+          field: "endDate",
+          operator: "<=",
+          value: endDate as string
+        });
+      }
+
+      if (category) {
+        whereConditions.push({
+          field: "categoryIds",
+          operator: "array-contains",
+          value: category as string
+        });
+      }
+
+      if (isActive !== undefined) {
+        whereConditions.push({
+          field: "isActive",
+          operator: "==",
+          value: isActive === 'true'
+        });
+      }
+
+      // Query personal budgets created by this user
       const budgets = await queryDocuments<Budget>("budgets", {
         where: whereConditions,
         orderBy: "createdAt",
         orderDirection: "desc",
-        limit,
-        offset,
       });
 
-      // Update spent amounts for all budgets
+      console.log(`[getPersonalBudgets] Found ${budgets.length} personal budgets for user ${user.id}`);
+
+      // Update spent amounts for all budgets (optional - can be disabled for performance)
       const updatedBudgets = await Promise.all(
         budgets.map(budget => updateBudgetSpentAmount(budget))
       );
@@ -75,9 +99,9 @@ export const getFamilyBudgets = onRequest({
       return response.status(200).json(createSuccessResponse(updatedBudgets));
 
     } catch (error: any) {
-      console.error("Error getting family budgets:", error);
+      console.error("Error getting personal budgets:", error);
       return response.status(500).json(
-        createErrorResponse("internal-error", "Failed to get family budgets")
+        createErrorResponse("internal-error", "Failed to get personal budgets")
       );
     }
   });

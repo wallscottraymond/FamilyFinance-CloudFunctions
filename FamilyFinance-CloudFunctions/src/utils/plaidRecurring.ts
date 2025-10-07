@@ -126,7 +126,10 @@ async function processInflowStreams(streams: any[], userId: string): Promise<{ p
         // Income-specific fields
         incomeType: 'other', // Default, user can categorize
         taxable: true, // Default assumption
-        
+
+        // Source tracking
+        inflowSource: 'plaid', // Source of this inflow: 'user' or 'plaid'
+
         // Metadata
         firstDate: stream.first_date ? admin.firestore.Timestamp.fromDate(new Date(stream.first_date)) : null,
         lastDate: stream.last_date ? admin.firestore.Timestamp.fromDate(new Date(stream.last_date)) : null,
@@ -187,7 +190,10 @@ async function processOutflowStreams(streams: any[], userId: string): Promise<{ 
         // Expense-specific fields
         expenseType: 'other', // Default, user can categorize
         isEssential: false, // User can mark as essential
-        
+
+        // Source tracking
+        outflowSource: 'plaid', // Source of this outflow: 'user' or 'plaid'
+
         // Metadata
         firstDate: stream.first_date ? admin.firestore.Timestamp.fromDate(new Date(stream.first_date)) : null,
         lastDate: stream.last_date ? admin.firestore.Timestamp.fromDate(new Date(stream.last_date)) : null,

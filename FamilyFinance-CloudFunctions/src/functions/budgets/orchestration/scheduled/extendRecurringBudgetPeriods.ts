@@ -20,7 +20,7 @@ import {
   BudgetPeriodDocument,
   SourcePeriod,
   PeriodType
-} from '../../types';
+} from '../../../../types';
 
 /**
  * Scheduled function to extend recurring budget periods

@@ -22,7 +22,6 @@ import {
   Transaction as FamilyTransaction,
   TransactionSplit,
   TransactionStatus,
-  TransactionCategory,
   TransactionType
 } from '../../types';
 import {
@@ -386,8 +385,19 @@ async function createTransactionFromPlaid(
   const transactionType = plaidTxn.amount > 0 ? TransactionType.EXPENSE : TransactionType.INCOME;
   const absoluteAmount = Math.abs(plaidTxn.amount);
 
-  // Map Plaid category
-  const category = mapPlaidCategory(plaidTxn.category || []);
+  // Log what we're getting from Plaid
+  console.log(`💳 Processing Plaid transaction:`, {
+    id: plaidTxn.transaction_id,
+    name: plaidTxn.name,
+    personal_finance_category: plaidTxn.personal_finance_category,
+    category: plaidTxn.category
+  });
+
+  // Map Plaid category using detailed category from Firestore
+  const detailedCategory = plaidTxn.personal_finance_category?.detailed || plaidTxn.category?.[plaidTxn.category.length - 1];
+  console.log(`🏷️ Using detailed category: "${detailedCategory}"`);
+
+  const category = await mapPlaidCategoryFromFirestore(detailedCategory);
 
   // Find active budget (optional - transactions can exist without budgets)
   let budgetId: string | undefined;
@@ -416,13 +426,13 @@ async function createTransactionFromPlaid(
     console.warn(`Could not find budget period for transaction ${plaidTxn.transaction_id}:`, error);
   }
 
-  // Create default split
+  // Create default split using the category ID from Firestore
   const defaultSplit: TransactionSplit = {
     id: db.collection('_dummy').doc().id,
     budgetId: budgetId || 'unassigned',
     budgetPeriodId,
     budgetName,
-    categoryId: category,
+    categoryId: category, // This is now the Firestore category document ID
     amount: absoluteAmount,
     description: undefined,
     isDefault: true,
@@ -439,7 +449,7 @@ async function createTransactionFromPlaid(
     amount: absoluteAmount,
     currency,
     description: plaidTxn.merchant_name || plaidTxn.name || 'Bank Transaction',
-    category,
+    category, // Category ID from Firestore categories collection
     type: transactionType,
     date: plaidTxn.date ? Timestamp.fromDate(new Date(plaidTxn.date)) : Timestamp.now(),
     location: plaidTxn.location ? {
@@ -473,37 +483,64 @@ async function createTransactionFromPlaid(
 }
 
 /**
- * Map Plaid categories to Family Finance categories
+ * Map Plaid detailed category to Family Finance category using Firestore categories collection
  */
-function mapPlaidCategory(plaidCategories: string[]): TransactionCategory {
-  if (!plaidCategories || plaidCategories.length === 0) {
-    return TransactionCategory.OTHER_EXPENSE;
+async function mapPlaidCategoryFromFirestore(detailedPlaidCategory: string | undefined): Promise<string> {
+  console.log(`🔍 Attempting to map Plaid category: "${detailedPlaidCategory}"`);
+
+  if (!detailedPlaidCategory) {
+    console.warn('⚠️ No detailed Plaid category provided, using default');
+    return 'other_expense';
   }
 
-  const primary = plaidCategories[0].toLowerCase();
-  const secondary = plaidCategories[1]?.toLowerCase() || '';
+  try {
+    // Query categories collection for matching detailed_plaid_category
+    console.log(`📊 Querying categories with detailed_plaid_category == "${detailedPlaidCategory}"`);
 
-  const mappings: Record<string, TransactionCategory> = {
-    'food and drink': TransactionCategory.FOOD,
-    'restaurants': TransactionCategory.FOOD,
-    'groceries': TransactionCategory.FOOD,
-    'transportation': TransactionCategory.TRANSPORTATION,
-    'shops': TransactionCategory.CLOTHING,
-    'entertainment': TransactionCategory.ENTERTAINMENT,
-    'healthcare': TransactionCategory.HEALTHCARE,
-    'utilities': TransactionCategory.UTILITIES,
-    'housing': TransactionCategory.HOUSING,
-    'rent': TransactionCategory.HOUSING,
-    'mortgage': TransactionCategory.HOUSING,
-    'payroll': TransactionCategory.SALARY,
-    'deposit': TransactionCategory.OTHER_INCOME,
-  };
+    const categoryQuery = await db.collection('categories')
+      .where('detailed_plaid_category', '==', detailedPlaidCategory)
+      .where('visible_by_default', '==', true)
+      .limit(1)
+      .get();
 
-  for (const [key, cat] of Object.entries(mappings)) {
-    if (primary.includes(key) || secondary.includes(key)) {
-      return cat;
+    console.log(`📊 Query returned ${categoryQuery.size} results`);
+
+    if (!categoryQuery.empty) {
+      const categoryDoc = categoryQuery.docs[0];
+      const categoryData = categoryDoc.data();
+
+      console.log(`✅ Mapped Plaid category "${detailedPlaidCategory}" to "${categoryData.name}" (${categoryDoc.id})`);
+
+      // Return the category document ID or name field based on your schema
+      return categoryDoc.id;
     }
-  }
 
-  return TransactionCategory.OTHER_EXPENSE;
+    // If no match found, try to find by primary category
+    const primaryCategory = detailedPlaidCategory.split('_')[0];
+    console.log(`⚠️ No exact match, trying primary category: "${primaryCategory}"`);
+
+    const fallbackQuery = await db.collection('categories')
+      .where('primary_plaid_category', '==', primaryCategory.toUpperCase())
+      .where('visible_by_default', '==', true)
+      .limit(1)
+      .get();
+
+    console.log(`📊 Fallback query returned ${fallbackQuery.size} results`);
+
+    if (!fallbackQuery.empty) {
+      const fallbackDoc = fallbackQuery.docs[0];
+      const fallbackData = fallbackDoc.data();
+
+      console.log(`⚠️ Using fallback category "${fallbackData.name}" (${fallbackDoc.id}) for "${detailedPlaidCategory}"`);
+
+      return fallbackDoc.id;
+    }
+
+    console.warn(`❌ No category match found for Plaid category: ${detailedPlaidCategory}`);
+    return 'other_expense';
+
+  } catch (error) {
+    console.error('❌ Error mapping Plaid category:', error);
+    return 'other_expense';
+  }
 }

@@ -134,7 +134,7 @@ export async function savePlaidAccounts(
           accountSubtype: account.subtype,
           mask: account.mask,
           officialName: account.officialName,
-          balance: account.currentBalance,
+          currentBalance: account.currentBalance, // Changed from 'balance' to 'currentBalance'
           availableBalance: account.availableBalance,
           limit: null,
           isoCurrencyCode: account.currencyCode,
