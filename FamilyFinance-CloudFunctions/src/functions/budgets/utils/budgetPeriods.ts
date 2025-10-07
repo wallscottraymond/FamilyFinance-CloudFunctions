@@ -24,6 +24,88 @@ export interface CreateBudgetPeriodsResult {
 }
 
 /**
+ * Result of date range determination for budget period generation
+ */
+export interface BudgetPeriodDateRange {
+  startDate: Date;
+  endDate: Date;
+  startPeriodId?: string;
+}
+
+/**
+ * Determine the date range for budget period generation
+ *
+ * This function encapsulates the complex logic for determining when to start
+ * and end budget period generation based on budget configuration.
+ *
+ * @param db - Firestore instance
+ * @param budget - Budget blueprint document
+ * @returns Date range for period generation
+ */
+export async function determineBudgetPeriodDateRange(
+  db: admin.firestore.Firestore,
+  budget: Budget
+): Promise<BudgetPeriodDateRange> {
+  // Determine start date - use budget startDate first, then selectedStartPeriod, then current date
+  let startDate: Date;
+  let startPeriodId: string | undefined;
+
+  if (budget.startDate) {
+    // Use the budget's specified start date
+    startDate = budget.startDate.toDate();
+    console.log(`[budgetPeriods] Using budget start date: ${startDate.toISOString()}`);
+  } else if (budget.selectedStartPeriod) {
+    // Fallback to selected start period
+    const selectedPeriodDoc = await db.collection('source_periods').doc(budget.selectedStartPeriod).get();
+    if (selectedPeriodDoc.exists) {
+      const selectedPeriod = selectedPeriodDoc.data();
+      startDate = selectedPeriod!.startDate.toDate();
+      startPeriodId = budget.selectedStartPeriod;
+      console.log(`[budgetPeriods] Using selected start period: ${startPeriodId} (${startDate.toISOString()})`);
+    } else {
+      console.warn(`[budgetPeriods] Selected start period ${budget.selectedStartPeriod} not found, falling back to current date`);
+      startDate = new Date();
+    }
+  } else {
+    // Final fallback to current date
+    startDate = new Date();
+    console.log('[budgetPeriods] No startDate or selectedStartPeriod provided, using current date');
+  }
+
+  // Determine end date for period generation based on budget type
+  let endDate: Date;
+
+  if (budget.budgetType === 'recurring') {
+    // Recurring budget: Generate 1 year of periods (will be extended by scheduled function)
+    endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + 12);
+    console.log(`[budgetPeriods] Recurring budget: Creating 1 year of periods until ${endDate.toISOString()}`);
+  } else {
+    // Limited/non-recurring budget: Use the specified end date
+    if (budget.budgetEndDate) {
+      endDate = budget.budgetEndDate.toDate();
+      console.log(`[budgetPeriods] Limited budget: Using budgetEndDate: ${endDate.toISOString()}`);
+    } else if (budget.endDate) {
+      endDate = budget.endDate.toDate();
+      console.log(`[budgetPeriods] Limited budget: Using legacy endDate: ${endDate.toISOString()}`);
+    } else {
+      // Default to 1 year if no end date specified
+      endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + 12);
+      console.log(`[budgetPeriods] Limited budget: No end date specified, defaulting to 1 year: ${endDate.toISOString()}`);
+    }
+  }
+
+  console.log(`[budgetPeriods] Final date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+  return {
+    startDate,
+    endDate,
+    startPeriodId,
+  };
+}
+
+/**
  * Create budget periods from source periods
  *
  * Queries source_periods collection and creates budget_periods with proper amount allocation:
