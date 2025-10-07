@@ -21,6 +21,7 @@ import {
   SourcePeriod,
   PeriodType
 } from '../../../../types';
+import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
 
 /**
  * Scheduled function to extend recurring budget periods
@@ -110,8 +111,12 @@ export const extendRecurringBudgetPeriods = onSchedule({
           // For recurring ongoing budgets, we always create periods in the rolling window
           // No need for complex end date logic since these are ongoing
 
-          // Calculate proportional amount for this period type
-          const allocatedAmount = calculateAllocatedAmount(budget.amount, sourcePeriod);
+          // Calculate allocated amount based on actual days in period
+          // Convert budget.period (BudgetPeriod) to PeriodType for calculation
+          const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
+                                    budget.period === 'weekly' ? PeriodType.WEEKLY :
+                                    PeriodType.MONTHLY; // Default to monthly for other types
+          const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
 
           const budgetPeriod: BudgetPeriodDocument = {
             id: `${budget.id}_${sourcePeriod.id}`,
@@ -190,33 +195,6 @@ export const extendRecurringBudgetPeriods = onSchedule({
   }
 });
 
-/**
- * Calculate proportional amount for a budget period based on period type and duration
- */
-function calculateAllocatedAmount(baseBudgetAmount: number, sourcePeriod: SourcePeriod): number {
-  switch (sourcePeriod.type) {
-    case PeriodType.MONTHLY:
-      // Full amount for monthly periods
-      return baseBudgetAmount;
-
-    case PeriodType.BI_MONTHLY:
-      // Half amount for bi-monthly periods (approximately half a month)
-      return baseBudgetAmount * 0.5;
-
-    case PeriodType.WEEKLY:
-      // Calculate based on actual days in the period vs average month
-      const startDate = sourcePeriod.startDate.toDate();
-      const endDate = sourcePeriod.endDate.toDate();
-      const daysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      const averageDaysInMonth = 30.44; // 365.25 / 12
-
-      return baseBudgetAmount * (daysInPeriod / averageDaysInMonth);
-
-    default:
-      console.warn(`Unknown period type: ${sourcePeriod.type}`);
-      return baseBudgetAmount;
-  }
-}
 
 /**
  * Efficiently create multiple budget_periods using Firestore batch operations

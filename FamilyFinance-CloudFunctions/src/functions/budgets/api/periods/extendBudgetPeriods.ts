@@ -18,11 +18,12 @@ import {
   Budget,
   BudgetPeriodDocument,
   SourcePeriod,
-  PeriodType,
-  UserRole
+  UserRole,
+  PeriodType
 } from '../../../../types';
 import { authenticateRequest } from '../../../../utils/auth';
 import { batchCreateBudgetPeriods } from '../../utils/budgetPeriods';
+import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
 
 interface ExtendBudgetPeriodsRequest {
   periodId: string;       // Target period we need budget data for
@@ -130,8 +131,12 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
 
       budgetsToExtend.push(budget);
 
-      // Calculate proportional amount for this period using period type logic
-      const allocatedAmount = calculateAllocatedAmountForPeriod(budget.amount, targetPeriod.type);
+      // Calculate allocated amount based on actual days in period
+      // Convert budget.period (BudgetPeriod) to PeriodType for calculation
+      const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
+                                budget.period === 'weekly' ? PeriodType.WEEKLY :
+                                PeriodType.MONTHLY; // Default to monthly for other types
+      const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, targetPeriod);
 
       const budgetPeriod: BudgetPeriodDocument = {
         id: `${budget.id}_${targetPeriod.id}`,
@@ -229,23 +234,3 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
 });
 
 
-/**
- * Calculate proportional amount for a budget period based on period type
- * Uses standard period type allocation logic
- */
-function calculateAllocatedAmountForPeriod(monthlyAmount: number, periodType: PeriodType): number {
-  switch (periodType) {
-    case PeriodType.MONTHLY:
-      return monthlyAmount; // Full amount for monthly
-
-    case PeriodType.BI_MONTHLY:
-      return monthlyAmount * 0.5; // Half amount for bi-monthly
-
-    case PeriodType.WEEKLY:
-      return monthlyAmount * (7 / 30.44); // Weekly proportion (7 days / avg month)
-
-    default:
-      console.warn(`[extendBudgetPeriods] Unknown period type: ${periodType}, defaulting to full amount`);
-      return monthlyAmount;
-  }
-}

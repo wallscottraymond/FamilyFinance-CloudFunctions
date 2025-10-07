@@ -7,6 +7,7 @@
 
 import * as admin from 'firebase-admin';
 import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from '../types';
+import { calculatePeriodAllocatedAmount } from '../functions/budgets/utils/calculatePeriodAllocatedAmount';
 
 /**
  * Result of budget period creation
@@ -66,8 +67,12 @@ export async function createBudgetPeriodsFromSource(
   sourcePeriodsSnapshot.forEach((doc) => {
     const sourcePeriod = { id: doc.id, ...doc.data() } as SourcePeriod;
 
-    // Calculate allocated amount based on period type
-    const allocatedAmount = calculateAllocatedAmount(budget.amount, sourcePeriod.type);
+    // Calculate allocated amount based on actual days in period
+    // Convert budget.period (BudgetPeriod) to PeriodType for calculation
+    const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
+                              budget.period === 'weekly' ? PeriodType.WEEKLY :
+                              PeriodType.MONTHLY; // Default to monthly for other types
+    const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
 
     const budgetPeriod: BudgetPeriodDocument = {
       id: `${budgetId}_${sourcePeriod.periodId}`,
@@ -123,26 +128,6 @@ export async function createBudgetPeriodsFromSource(
   });
 
   return result;
-}
-
-/**
- * Calculate allocated amount based on period type
- */
-function calculateAllocatedAmount(monthlyAmount: number, periodType: PeriodType): number {
-  switch (periodType) {
-    case PeriodType.MONTHLY:
-      return monthlyAmount; // Full amount for monthly
-
-    case PeriodType.BI_MONTHLY:
-      return monthlyAmount * 0.5; // Half amount for bi-monthly
-
-    case PeriodType.WEEKLY:
-      return monthlyAmount * (7 / 30.44); // Weekly proportion (7 days / avg month)
-
-    default:
-      console.warn(`[budgetPeriods] Unknown period type: ${periodType}, defaulting to full amount`);
-      return monthlyAmount;
-  }
 }
 
 /**

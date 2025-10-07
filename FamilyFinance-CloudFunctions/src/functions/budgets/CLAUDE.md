@@ -558,6 +558,121 @@ allocatedAmount = 500 × (7 / 30.44) = 114.90
 **Purpose:** Update budget blueprint with period range metadata
 **Sets:** activePeriodRange, lastExtended, periodsGeneratedUntil (for recurring)
 
+### Period Amount Allocation (`utils/calculatePeriodAllocatedAmount.ts`)
+
+#### `calculatePeriodAllocatedAmount()`
+**Purpose:** Calculate the allocated budget amount based on actual days in each period
+**Location:** Single source of truth for period amount allocation
+**Used by:** All budget period creation and extension functions
+
+**Function Signature:**
+```typescript
+export function calculatePeriodAllocatedAmount(
+  budgetAmount: number,
+  budgetPeriodType: PeriodType,
+  targetPeriod: SourcePeriod
+): number
+```
+
+**Parameters:**
+- `budgetAmount`: The budget amount in its original period type (from budget blueprint)
+- `budgetPeriodType`: The period type of the budget blueprint (MONTHLY, BI_MONTHLY, WEEKLY)
+- `targetPeriod`: The target source period to calculate allocation for
+
+**Returns:** The allocated amount for the target period based on actual days
+
+**Day-Based Allocation Logic:**
+
+The allocation is calculated based on the actual number of days in each period to ensure spending aligns correctly across all views:
+
+1. **For Monthly budgets converting to other periods:**
+   - **Day-by-day iteration:** Loops through each day in the target period
+   - **Month-specific daily rate:** Each day uses its month's daily rate (budgetAmount / days in that month)
+   - **Handles month-spanning:** Weeks or bi-monthly periods spanning multiple months get accurate allocations
+   - **Example:** Week with 3 days in Feb (28 days, $1/day) + 4 days in Mar (31 days, $0.90/day) = $3 + $3.60 = $6.60
+
+2. **For Weekly budgets converting to other periods:**
+   - **Fixed daily rate:** budgetAmount / 7
+   - **Simple multiplication:** Daily rate × days in target period
+
+3. **For Bi-monthly budgets converting to other periods:**
+   - **Period-specific daily rate:** budgetAmount / actual days in that bi-monthly period (15 or 13-16)
+   - **Simple multiplication:** Daily rate × days in target period
+
+**Key Examples:**
+
+**Example 1: Monthly budget viewed as bi-monthly**
+```typescript
+// February budget: $28/month → $1/day (28 days in Feb)
+// Bi-monthly period 1 (Feb 1-15): 15 days × $1/day = $15
+// Bi-monthly period 2 (Feb 16-28): 13 days × $1/day = $13
+// Total: $15 + $13 = $28 ✓ (correctly sums to monthly budget)
+```
+
+**Example 2: Monthly budget viewed as weekly (spanning months)**
+```typescript
+// February: $28/month → $1.00/day (28 days in Feb)
+// March: $28/month → $0.90/day (31 days in March)
+// Weekly period spanning both months:
+//   - 3 days in Feb: 3 × $1.00 = $3.00
+//   - 4 days in March: 4 × $0.90 = $3.60
+//   - Total: $6.60 for that week ✓
+```
+
+**Example 3: Weekly budget viewed as monthly**
+```typescript
+// Weekly budget: $70/week → $10/day
+// February (28 days): (28/7) × $70 = 4 weeks × $70 = $280
+// March (31 days): (31/7) × $70 = 4.43 weeks × $70 = $310
+```
+
+**Example 4: Weekly budget viewed as bi-monthly**
+```typescript
+// Weekly budget: $70/week → $10/day
+// Bi-monthly period (15 days): 15 × $10 = $150
+// Bi-monthly period (16 days): 16 × $10 = $160
+```
+
+**Design Decision:**
+
+This day-based approach was implemented to solve a critical alignment issue:
+
+**Problem:** Using average day calculations (like 7/30.44 for weekly) caused spending to misalign across different period views. A user tracking a $100/month budget would see different total spending when switching between monthly, bi-monthly, and weekly views.
+
+**Solution:** Calculate based on actual days in each specific period. This ensures:
+- **Perfect alignment:** Spending totals match regardless of view (monthly, bi-monthly, weekly)
+- **Accurate representation:** February with 28 days allocates less than March with 31 days
+- **Correct bi-monthly splits:** First half (1-15) and second half (16-end) correctly reflect actual days
+- **Multi-month week handling:** Weeks spanning multiple months correctly allocate from each month's budget
+
+**Historical Context:**
+
+This utility was created to eliminate code duplication across 5 different files and fix an inconsistency:
+
+1. `utils/budgetPeriods.ts` - Used average-based calculation
+2. `functions/budgets/utils/budgetPeriods.ts` - Used average-based calculation
+3. `api/periods/extendBudgetPeriods.ts` - Used average-based calculation
+4. `api/periods/extendBudgetPeriodsRange.ts` - Used average-based calculation
+5. `orchestration/scheduled/extendRecurringBudgetPeriods.ts` - **Had different implementation using actual days**
+
+The centralized utility now provides:
+- **Single source of truth** for day-based amount allocation
+- **Consistency** across all budget period generation
+- **Accurate calculations** using actual period days
+- **Maintainability** - change formula in one place
+- **Testability** - unit test independently
+
+#### `getDailyRate()`
+**Purpose:** Calculate the daily spending rate for a budget amount and period type
+**Parameters:**
+- `budgetAmount`: The budget amount
+- `budgetPeriodType`: The period type (MONTHLY, BI_MONTHLY, WEEKLY)
+- `periodDays`: Optional specific days in the period
+
+**Returns:** Daily spending rate for the budget
+
+**Use Case:** Calculating daily budgets, projecting spending, or debugging allocation calculations
+
 ### Budget Spending (`utils/budgetSpending.ts`)
 
 #### `updateBudgetSpending()`

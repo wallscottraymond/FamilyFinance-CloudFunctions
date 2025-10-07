@@ -26,6 +26,7 @@ import {
 } from '../../../../types';
 import { authenticateRequest } from '../../../../utils/auth';
 import { batchCreateBudgetPeriods } from '../../utils/budgetPeriods';
+import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
 
 interface ExtendBudgetPeriodsRangeRequest {
   startPeriodId: string;    // First period we need budget data for
@@ -151,8 +152,12 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
         
         budgetsToExtend.add(budget.id!);
 
-        // Calculate proportional amount for this period using period type logic
-        const allocatedAmount = calculateAllocatedAmountForPeriod(budget.amount, sourcePeriod.type);
+        // Calculate allocated amount based on actual days in period
+        // Convert budget.period (BudgetPeriod) to PeriodType for calculation
+        const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
+                                  budget.period === 'weekly' ? PeriodType.WEEKLY :
+                                  PeriodType.MONTHLY; // Default to monthly for other types
+        const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
         
         const budgetPeriod: BudgetPeriodDocument = {
           id: `${budget.id}_${sourcePeriod.id}`,
@@ -254,23 +259,3 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
   }
 });
 
-/**
- * Calculate proportional amount for a budget period based on period type
- * Uses standard period type allocation logic
- */
-function calculateAllocatedAmountForPeriod(monthlyAmount: number, periodType: PeriodType): number {
-  switch (periodType) {
-    case PeriodType.MONTHLY:
-      return monthlyAmount; // Full amount for monthly
-
-    case PeriodType.BI_MONTHLY:
-      return monthlyAmount * 0.5; // Half amount for bi-monthly
-
-    case PeriodType.WEEKLY:
-      return monthlyAmount * (7 / 30.44); // Weekly proportion (7 days / avg month)
-
-    default:
-      console.warn(`[extendBudgetPeriodsRange] Unknown period type: ${periodType}, defaulting to full amount`);
-      return monthlyAmount;
-  }
-}

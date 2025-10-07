@@ -18,7 +18,7 @@
     "dev": "concurrently \"npm run build:watch\" \"firebase emulators:start --only functions\""
   },
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

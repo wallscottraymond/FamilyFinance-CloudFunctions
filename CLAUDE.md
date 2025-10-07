@@ -13,7 +13,7 @@ FamilyFinance/
 ## Backend (FamilyFinance-CloudFunctions/)
 
 ### Technology Stack
-- Firebase Cloud Functions
+- Firebase Cloud Functions (2nd generation, Node.js 20)
 - TypeScript
 - Firestore database
 - Firebase Authentication
@@ -211,11 +211,16 @@ interface User {
 ## Environment Setup
 
 Ensure you have:
-- Node.js and npm
+- Node.js 20 LTS and npm (Cloud Functions requirement)
 - React Native CLI
-- Firebase CLI
+- Firebase CLI (v12.0.0 or later)
 - Xcode (for iOS development)
 - Android Studio (for Android development)
+
+**Node.js Version Management:**
+- Cloud Functions use Node.js 20 (as specified in `package.json` and `firebase.json`)
+- Local development should match: use `nvm use 20` or check `.nvmrc`
+- Node.js 18 will be decommissioned in October 2025
 
 ## Plaid Integration Architecture
 
