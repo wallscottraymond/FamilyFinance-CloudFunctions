@@ -29,12 +29,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Budget } from '../../../../types';
 import { recalculateBudgetSpendingOnCreate } from '../../utils/budgetSpending';
-import {
-  determineBudgetPeriodDateRange,
-  createBudgetPeriodsFromSource,
-  batchCreateBudgetPeriods,
-  updateBudgetPeriodRange
-} from '../../utils/budgetPeriods';
+import { generateBudgetPeriodsForNewBudget } from '../../utils/budgetPeriods';
 
 /**
  * Triggered when a budget is created
@@ -68,31 +63,8 @@ export const onBudgetCreate = onDocumentCreated({
 
     const db = admin.firestore();
 
-    // Determine date range for budget period generation
-    const dateRange = await determineBudgetPeriodDateRange(db, budgetData);
-    const { startDate, endDate } = dateRange;
-
-    // Create budget periods from source_periods
-    const result = await createBudgetPeriodsFromSource(
-      db,
-      budgetId,
-      budgetData,
-      startDate,
-      endDate
-    );
-
-    // Batch create all budget_periods in Firestore
-    await batchCreateBudgetPeriods(db, result.budgetPeriods);
-
-    // Update budget with period range tracking
-    await updateBudgetPeriodRange(
-      db,
-      budgetId,
-      result.firstPeriodId,
-      result.lastPeriodId,
-      endDate,
-      budgetData.budgetType === 'recurring'
-    );
+    // Generate budget periods using complete workflow
+    const result = await generateBudgetPeriodsForNewBudget(db, budgetId, budgetData);
 
     console.log(`Successfully created ${result.count} budget periods for budget ${budgetId}`);
 

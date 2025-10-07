@@ -14,14 +14,15 @@
 
 import { onCall, CallableRequest } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { 
-  Budget, 
-  BudgetPeriodDocument, 
-  SourcePeriod, 
+import {
+  Budget,
+  BudgetPeriodDocument,
+  SourcePeriod,
   PeriodType,
   UserRole
 } from '../../../../types';
 import { authenticateRequest } from '../../../../utils/auth';
+import { batchCreateBudgetPeriods } from '../../utils/budgetPeriods';
 
 interface ExtendBudgetPeriodsRequest {
   periodId: string;       // Target period we need budget data for
@@ -129,8 +130,8 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
 
       budgetsToExtend.push(budget);
 
-      // Calculate proportional amount for this period
-      const allocatedAmount = calculateAllocatedAmount(budget.amount, targetPeriod);
+      // Calculate proportional amount for this period using period type logic
+      const allocatedAmount = calculateAllocatedAmountForPeriod(budget.amount, targetPeriod.type);
 
       const budgetPeriod: BudgetPeriodDocument = {
         id: `${budget.id}_${targetPeriod.id}`,
@@ -229,51 +230,22 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
 
 
 /**
- * Efficiently create multiple budget_periods using Firestore batch operations
+ * Calculate proportional amount for a budget period based on period type
+ * Uses standard period type allocation logic
  */
-async function batchCreateBudgetPeriods(
-  db: admin.firestore.Firestore,
-  budgetPeriods: BudgetPeriodDocument[]
-): Promise<void> {
-  const BATCH_SIZE = 500; // Firestore batch limit
-
-  for (let i = 0; i < budgetPeriods.length; i += BATCH_SIZE) {
-    const batch = db.batch();
-    const batchPeriods = budgetPeriods.slice(i, i + BATCH_SIZE);
-
-    batchPeriods.forEach((budgetPeriod) => {
-      if (budgetPeriod.id) {
-        const docRef = db.collection('budget_periods').doc(budgetPeriod.id);
-        batch.set(docRef, budgetPeriod);
-      }
-    });
-
-    await batch.commit();
-    console.log(`📦 Created batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(budgetPeriods.length / BATCH_SIZE)} (${batchPeriods.length} periods)`);
-  }
-}
-
-/**
- * Calculate proportional amount for a budget period based on period type and duration
- */
-function calculateAllocatedAmount(baseBudgetAmount: number, sourcePeriod: SourcePeriod): number {
-  switch (sourcePeriod.type) {
+function calculateAllocatedAmountForPeriod(monthlyAmount: number, periodType: PeriodType): number {
+  switch (periodType) {
     case PeriodType.MONTHLY:
-      return baseBudgetAmount;
+      return monthlyAmount; // Full amount for monthly
 
     case PeriodType.BI_MONTHLY:
-      return baseBudgetAmount * 0.5;
+      return monthlyAmount * 0.5; // Half amount for bi-monthly
 
     case PeriodType.WEEKLY:
-      const startDate = sourcePeriod.startDate.toDate();
-      const endDate = sourcePeriod.endDate.toDate();
-      const daysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      const averageDaysInMonth = 30.44;
-
-      return baseBudgetAmount * (daysInPeriod / averageDaysInMonth);
+      return monthlyAmount * (7 / 30.44); // Weekly proportion (7 days / avg month)
 
     default:
-      console.warn(`Unknown period type: ${sourcePeriod.type}`);
-      return baseBudgetAmount;
+      console.warn(`[extendBudgetPeriods] Unknown period type: ${periodType}, defaulting to full amount`);
+      return monthlyAmount;
   }
 }

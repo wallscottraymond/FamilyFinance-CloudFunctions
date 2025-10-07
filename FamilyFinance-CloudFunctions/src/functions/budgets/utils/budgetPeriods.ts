@@ -152,10 +152,10 @@ export async function createBudgetPeriodsFromSource(
     const allocatedAmount = calculateAllocatedAmount(budget.amount, sourcePeriod.type);
 
     const budgetPeriod: BudgetPeriodDocument = {
-      id: `${budgetId}_${sourcePeriod.periodId}`,
+      id: `${budgetId}_${doc.id}`,
       budgetId: budgetId,
-      periodId: sourcePeriod.periodId,
-      sourcePeriodId: sourcePeriod.periodId,
+      periodId: doc.id,
+      sourcePeriodId: doc.id,
       familyId: String(budget.familyId || ''),
       userId: budget.createdBy,
       createdBy: budget.createdBy,
@@ -293,4 +293,60 @@ export async function updateBudgetPeriodRange(
     endPeriod: lastPeriodId,
     isRecurring,
   });
+}
+
+/**
+ * Complete workflow for generating budget periods for a new budget
+ *
+ * This workflow function encapsulates the entire period generation process:
+ * 1. Determine date range for period generation
+ * 2. Create budget periods from source periods
+ * 3. Batch create periods in Firestore
+ * 4. Update budget with period range metadata
+ *
+ * @param db - Firestore instance
+ * @param budgetId - Budget document ID
+ * @param budget - Budget document data
+ * @returns Result of period generation including count and period range
+ */
+export async function generateBudgetPeriodsForNewBudget(
+  db: admin.firestore.Firestore,
+  budgetId: string,
+  budget: Budget
+): Promise<CreateBudgetPeriodsResult> {
+  console.log(`[budgetPeriods] Starting complete budget period generation workflow for budget ${budgetId}`);
+
+  // Step 1: Determine date range for budget period generation
+  const dateRange = await determineBudgetPeriodDateRange(db, budget);
+  const { startDate, endDate } = dateRange;
+
+  // Step 2: Create budget periods from source_periods
+  const result = await createBudgetPeriodsFromSource(
+    db,
+    budgetId,
+    budget,
+    startDate,
+    endDate
+  );
+
+  // Step 3: Batch create all budget_periods in Firestore
+  await batchCreateBudgetPeriods(db, result.budgetPeriods);
+
+  // Step 4: Update budget with period range tracking
+  await updateBudgetPeriodRange(
+    db,
+    budgetId,
+    result.firstPeriodId,
+    result.lastPeriodId,
+    endDate,
+    budget.budgetType === 'recurring'
+  );
+
+  console.log(`[budgetPeriods] Completed budget period generation workflow for budget ${budgetId}:`, {
+    totalPeriods: result.count,
+    periodRange: `${result.firstPeriodId} to ${result.lastPeriodId}`,
+    periodCounts: result.periodTypeCounts,
+  });
+
+  return result;
 }
