@@ -122,9 +122,11 @@ export async function createBudgetPeriodsFromSource(
 ): Promise<CreateBudgetPeriodsResult> {
   console.log(`[budgetPeriods] Creating budget periods for budget ${budgetId} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
-  // Query source_periods
+  // Query source_periods that overlap with the budget date range
+  // Use endDate >= startDate to include periods that started before budget creation
+  // but are still active (e.g., current month when creating mid-month)
   const sourcePeriodsQuery = db.collection('source_periods')
-    .where('startDate', '>=', admin.firestore.Timestamp.fromDate(startDate))
+    .where('endDate', '>=', admin.firestore.Timestamp.fromDate(startDate))
     .where('startDate', '<=', admin.firestore.Timestamp.fromDate(endDate));
 
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
