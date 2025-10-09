@@ -162,9 +162,13 @@ export async function syncRecurringTransactions(
             },
             frequency: stream.frequency,
             lastDate: Timestamp.fromDate(new Date(stream.last_date)),
+            predictedNextDate: stream.predicted_next_date
+              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
+              : undefined,
             transactionIds: stream.transaction_ids,
             status: stream.status,
             isActive: stream.is_active,
+            isUserModified: stream.is_user_modified,
             lastSyncedAt: Timestamp.now(),
             updatedAt: Timestamp.now()
           });
@@ -199,7 +203,11 @@ export async function syncRecurringTransactions(
             frequency: stream.frequency as any,
             firstDate: Timestamp.fromDate(new Date(stream.first_date)),
             lastDate: Timestamp.fromDate(new Date(stream.last_date)),
+            predictedNextDate: stream.predicted_next_date
+              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
+              : undefined,
             transactionIds: stream.transaction_ids,
+            isUserModified: stream.is_user_modified,
             tags: [],
             isHidden: false,
             lastSyncedAt: Timestamp.now(),
@@ -244,9 +252,13 @@ export async function syncRecurringTransactions(
             },
             frequency: stream.frequency,
             lastDate: Timestamp.fromDate(new Date(stream.last_date)),
+            predictedNextDate: stream.predicted_next_date
+              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
+              : undefined,
             transactionIds: stream.transaction_ids,
             status: stream.status,
             isActive: stream.is_active,
+            isUserModified: stream.is_user_modified,
             lastSyncedAt: Timestamp.now(),
             updatedAt: Timestamp.now()
           });
@@ -281,7 +293,11 @@ export async function syncRecurringTransactions(
             frequency: stream.frequency as any,
             firstDate: Timestamp.fromDate(new Date(stream.first_date)),
             lastDate: Timestamp.fromDate(new Date(stream.last_date)),
+            predictedNextDate: stream.predicted_next_date
+              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
+              : undefined,
             transactionIds: stream.transaction_ids,
+            isUserModified: stream.is_user_modified,
             tags: [],
             isHidden: false,
             lastSyncedAt: Timestamp.now(),

@@ -1193,11 +1193,15 @@ export interface BaseRecurringTransaction extends BaseDocument {
   
   // Frequency and timing
   frequency: PlaidRecurringFrequency; // How often this recurs
-  
+
   // Historical data
   firstDate: Timestamp; // Date of first transaction in stream
   lastDate: Timestamp; // Date of last transaction in stream
+  predictedNextDate?: Timestamp; // Plaid's ML prediction of next occurrence
   transactionIds: string[]; // IDs of transactions that are part of this stream
+
+  // Stream modification tracking
+  isUserModified?: boolean; // Whether user has manually modified this stream
   
   // Family Finance specific fields
   userCategory?: TransactionCategory; // User-assigned category override

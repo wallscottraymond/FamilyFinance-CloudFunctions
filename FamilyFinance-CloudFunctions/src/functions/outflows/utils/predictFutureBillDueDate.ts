@@ -85,8 +85,9 @@ function adjustForWeekend(date: Date): Date {
 /**
  * Predict the next expected due date and draw date for a bill in a given period
  *
- * This function projects forward from the outflow's lastDate to find the next
- * occurrence that is on or after the period's start date. This ensures:
+ * This function uses Plaid's predictedNextDate if available, otherwise projects
+ * forward from the outflow's lastDate to find the next occurrence that is on or
+ * after the period's start date. This ensures:
  * - Periods where bill IS due show the current period's due date
  * - Periods where bill is NOT due show the next future due date
  *
@@ -96,7 +97,7 @@ function adjustForWeekend(date: Date): Date {
  *
  * @example
  * ```typescript
- * // Netflix: $15.99/month, lastDate = Dec 15
+ * // Netflix: $15.99/month, predictedNextDate = Jan 15 (or lastDate = Dec 15)
  * // For period Jan 1-7:
  * const dates = predictFutureBillDueDate(outflow, sourcePeriod);
  * // Result: { expectedDueDate: Jan 15, expectedDrawDate: Jan 15 }
@@ -110,8 +111,16 @@ export function predictFutureBillDueDate(
   outflow: RecurringOutflow,
   sourcePeriod: SourcePeriod
 ): PredictedBillDates {
-  // Start with the outflow's last known occurrence
-  let nextDueDate = outflow.lastDate.toDate();
+  // Start with Plaid's predicted date if available, otherwise use last known occurrence
+  let nextDueDate: Date;
+  if (outflow.predictedNextDate) {
+    nextDueDate = outflow.predictedNextDate.toDate();
+    console.log(`[predictFutureBillDueDate] Using Plaid predictedNextDate: ${nextDueDate.toISOString().split('T')[0]}`);
+  } else {
+    nextDueDate = outflow.lastDate.toDate();
+    console.log(`[predictFutureBillDueDate] No predictedNextDate, using lastDate: ${nextDueDate.toISOString().split('T')[0]}`);
+  }
+
   const periodStart = sourcePeriod.startDate.toDate();
 
   // Project forward by adding frequency intervals until we reach/exceed period start
