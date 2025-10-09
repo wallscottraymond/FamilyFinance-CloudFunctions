@@ -41,6 +41,9 @@ export { syncBalancesCallable } from "./syncBalances";
 export { syncTransactionsCallable } from "./syncTransactions";
 export { syncRecurringTransactionsCallable } from "./syncRecurringTransactions";
 
+// Account management functions
+export { removePlaidAccount } from "./removePlaidAccount";
+
 // Webhook testing functions for sandbox
 export {
   fireTransactionWebhook,
