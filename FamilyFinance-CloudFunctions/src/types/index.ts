@@ -1367,6 +1367,8 @@ export interface OutflowPeriod extends BaseDocument {
   // Payment status and tracking
   isDuePeriod: boolean; // True if the due date falls within this period
   dueDate?: Timestamp; // Actual due date if isDuePeriod is true
+  expectedDueDate: Timestamp; // Next expected due date relative to this period (may be in future)
+  expectedDrawDate: Timestamp; // Expected draw date (adjusts for weekends - Saturday/Sunday → Monday)
   isActive: boolean; // Whether this outflow period is active
   
   // Metadata from outflow (denormalized for performance)

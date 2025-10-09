@@ -6,3 +6,4 @@
 
 export * from './calculateWithholdingAmount';
 export * from './outflowPeriods';
+export * from './predictFutureBillDueDate';

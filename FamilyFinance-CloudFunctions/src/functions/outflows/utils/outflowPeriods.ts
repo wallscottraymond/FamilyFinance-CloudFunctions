@@ -17,6 +17,7 @@ import {
   calculatePaymentCycle,
   calculateWithholdingAmount
 } from './calculateWithholdingAmount';
+import { predictFutureBillDueDate } from './predictFutureBillDueDate';
 
 /**
  * Result of creating outflow periods
@@ -89,6 +90,9 @@ export async function createOutflowPeriodsFromSource(
     // Calculate withholding amounts for this period
     const periodCalc = calculateWithholdingAmount(sourcePeriod, cycleInfo, outflow);
 
+    // Predict next expected due date and draw date for this period
+    const expectedDates = predictFutureBillDueDate(outflow, sourcePeriod);
+
     const periodId = `${outflowId}_${sourcePeriod.id}`;
 
     const outflowPeriod: OutflowPeriod = {
@@ -118,6 +122,8 @@ export async function createOutflowPeriodsFromSource(
       // Payment status
       isDuePeriod: periodCalc.isDuePeriod,
       dueDate: periodCalc.dueDate,
+      expectedDueDate: expectedDates.expectedDueDate,
+      expectedDrawDate: expectedDates.expectedDrawDate,
       isActive: true,
 
       // Metadata from outflow (denormalized for performance)
