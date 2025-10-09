@@ -1,7 +1,23 @@
 /**
  * Outflows Functions Module
  *
- * Exports all outflow-related cloud functions
+ * Exports all outflow-related cloud functions organized by functionality
  */
 
-export * from './createRecurringOutflow';
+// Public API functions
+export * from './api';
+
+// Configuration
+export * from './config';
+
+// Background orchestration (triggers, scheduled jobs)
+export * from './orchestration';
+
+// Type definitions
+export * from './types';
+
+// Utility functions
+export * from './utils';
+
+// Admin and testing functions
+export * from './admin';

@@ -592,7 +592,6 @@ export const approveTransaction = onRequest({
 });
 
 // Export trigger functions
-export { onOutflowCreated } from "./onOutflowCreated";
 export { onInflowCreated } from "./onInflowCreated";
 
 // Temporarily disabled for deployment - files moved to temp_disabled

@@ -5,8 +5,6 @@ export { clearAndRegeneratePeriods } from "./clearAndRegeneratePeriods";
 export { testCurrentPeriods } from "./testCurrentPeriods";
 export { verifyUTCPeriods } from "./verifyUTCPeriods";
 export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdmin";
-export { debugOutflowPeriods } from "./debugOutflowPeriods";
-export { createTestOutflows } from "./createTestOutflows";
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 
