@@ -18,6 +18,8 @@ import {
   calculateWithholdingAmount
 } from './calculateWithholdingAmount';
 import { predictFutureBillDueDate } from './predictFutureBillDueDate';
+import { checkIsDuePeriod } from './checkIsDuePeriod';
+import { updateBillStatus } from './updateBillStatus';
 
 /**
  * Result of creating outflow periods
@@ -93,6 +95,28 @@ export async function createOutflowPeriodsFromSource(
     // Predict next expected due date and draw date for this period
     const expectedDates = predictFutureBillDueDate(outflow, sourcePeriod);
 
+    // Check if the expected due date falls within this period
+    const isDuePeriodByExpectedDate = checkIsDuePeriod(
+      expectedDates.expectedDueDate,
+      sourcePeriod.startDate,
+      sourcePeriod.endDate
+    );
+
+    // Use the expected due date check for isDuePeriod and amountDue
+    const isDuePeriod = isDuePeriodByExpectedDate;
+    const amountDue = isDuePeriod ? cycleInfo.billAmount : 0;
+    const dueDate = isDuePeriod ? expectedDates.expectedDueDate : undefined;
+
+    // Determine bill status using utility function
+    const billStatus = updateBillStatus(isDuePeriod, dueDate, expectedDates.expectedDueDate);
+
+    if (isDuePeriod) {
+      console.log(
+        `[createOutflowPeriodsFromSource] ${outflow.description} - DUE in ${sourcePeriod.id}: ` +
+        `$${amountDue.toFixed(2)} on ${expectedDates.expectedDueDate.toDate().toISOString().split('T')[0]}`
+      );
+    }
+
     const periodId = `${outflowId}_${sourcePeriod.id}`;
 
     const outflowPeriod: OutflowPeriod = {
@@ -117,13 +141,14 @@ export async function createOutflowPeriodsFromSource(
       billAmount: cycleInfo.billAmount,
       dailyWithholdingRate: periodCalc.amountWithheld / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate), // Calculate actual daily rate for this period
       amountWithheld: periodCalc.amountWithheld,
-      amountDue: periodCalc.amountDue,
+      amountDue: amountDue, // Use calculated amount based on expected due date
 
-      // Payment status
-      isDuePeriod: periodCalc.isDuePeriod,
-      dueDate: periodCalc.dueDate,
+      // Payment status - based on expected due date
+      isDuePeriod: isDuePeriod,
+      dueDate: dueDate,
       expectedDueDate: expectedDates.expectedDueDate,
       expectedDrawDate: expectedDates.expectedDrawDate,
+      status: billStatus, // Status determined by updateBillStatus utility
       isActive: true,
 
       // Metadata from outflow (denormalized for performance)

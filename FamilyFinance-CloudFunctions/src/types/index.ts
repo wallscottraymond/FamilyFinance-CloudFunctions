@@ -1347,40 +1347,41 @@ export interface PlaidRecurringTransactionStreamResponse {
 // Outflow Periods - Maps outflows to source periods with withholding calculations
 export interface OutflowPeriod extends BaseDocument {
   outflowId: string; // Reference to outflows collection document
-  periodId: string; // Reference to source_periods.id (same as sourcePeriodId)  
+  periodId: string; // Reference to source_periods.id (same as sourcePeriodId)
   sourcePeriodId: string; // Direct reference to source_periods.id for mapping
   userId: string; // Family Finance user ID
   familyId?: string; // Optional family association
-  
+
   // Period context (denormalized from source_periods for performance)
   periodType: PeriodType; // "weekly" | "monthly" | "bi_monthly"
   periodStartDate: Timestamp; // UTC timestamp - period start
   periodEndDate: Timestamp; // UTC timestamp - period end
-  
+
   // Payment cycle information
   cycleStartDate: Timestamp; // Last payment date (or calculated start)
   cycleEndDate: Timestamp; // Next payment date
   cycleDays: number; // Days in the payment cycle
-  
+
   // Financial calculations
   billAmount: number; // Full bill amount for this cycle
   dailyWithholdingRate: number; // billAmount ÷ cycleDays
   amountWithheld: number; // dailyRate × daysInPeriod (how much to withhold this period)
   amountDue: number; // billAmount if due date falls in this period, else 0
-  
+
   // Payment status and tracking
   isDuePeriod: boolean; // True if the due date falls within this period
   dueDate?: Timestamp; // Actual due date if isDuePeriod is true
   expectedDueDate: Timestamp; // Next expected due date relative to this period (may be in future)
   expectedDrawDate: Timestamp; // Expected draw date (adjusts for weekends - Saturday/Sunday → Monday)
+  status: string; // Payment status (e.g., "pending", "paid", "overdue")
   isActive: boolean; // Whether this outflow period is active
-  
+
   // Metadata from outflow (denormalized for performance)
   outflowDescription: string; // Description from outflow
   outflowMerchantName?: string; // Merchant name from outflow
   outflowExpenseType?: string; // Expense type from outflow
   outflowIsEssential?: boolean; // Whether this is an essential expense
-  
+
   // System tracking
   lastCalculated: Timestamp; // When amounts were last calculated
 }
