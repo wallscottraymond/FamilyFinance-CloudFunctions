@@ -15,9 +15,9 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
-import { syncBalances } from './syncBalances';
-import { syncTransactions } from './syncTransactions';
-import { syncRecurringTransactions } from './syncRecurringTransactions';
+import { syncBalances } from '../../api/sync/syncBalances';
+import { processWebhookTransactionSync } from '../../api/sync/syncTransactions';
+import { syncRecurringTransactions } from '../../api/sync/syncRecurring';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -58,7 +58,7 @@ export const onPlaidItemCreated = onDocumentCreated(
 
       // Step 2: Sync transactions to transactions collection with splits
       console.log('💳 Step 2: Syncing transactions...');
-      const transactionsResult = await syncTransactions(plaidItemId, userId);
+      const transactionsResult = await processWebhookTransactionSync(plaidItemId, userId, itemData);
       console.log('✅ Transactions synced:', transactionsResult);
 
       // Step 3: Sync recurring transactions to inflow/outflow collections
@@ -68,7 +68,9 @@ export const onPlaidItemCreated = onDocumentCreated(
 
       console.log(`🎉 Complete sync finished for item ${plaidItemId}:`, {
         accounts: balancesResult.accountsUpdated,
-        transactions: transactionsResult.transactionsCreated,
+        transactionsAdded: transactionsResult.addedCount,
+        transactionsModified: transactionsResult.modifiedCount,
+        transactionsRemoved: transactionsResult.removedCount,
         recurringInflows: recurringResult.inflowsCreated,
         recurringOutflows: recurringResult.outflowsCreated
       });
@@ -78,7 +80,7 @@ export const onPlaidItemCreated = onDocumentCreated(
 
       // Update the item with error status (optional - for debugging)
       try {
-        const { db } = await import('../../index');
+        const { db } = await import('../../../../index');
         await db.collection('plaid_items').doc(itemDocId).update({
           lastSyncError: error instanceof Error ? error.message : 'Unknown error',
           lastSyncErrorAt: new Date()

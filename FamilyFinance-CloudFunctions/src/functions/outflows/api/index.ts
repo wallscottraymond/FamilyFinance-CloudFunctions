@@ -5,3 +5,6 @@
  */
 
 export * from './crud';
+export * from './assignSplitToOutflowPeriod';
+export * from './unassignSplitFromOutflowPeriod';
+export * from './getOutflowPeriodTransactions';

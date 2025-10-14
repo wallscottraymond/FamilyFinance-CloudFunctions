@@ -14,10 +14,10 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { db } from '../../index';
-import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
-import { decryptAccessToken } from '../../utils/encryption';
+import { authenticateRequest, UserRole } from '../../../../utils/auth';
+import { db } from '../../../../index';
+import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
+import { decryptAccessToken } from '../../../../utils/encryption';
 import * as admin from 'firebase-admin';
 
 // Define secrets for Plaid configuration

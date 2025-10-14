@@ -18,9 +18,9 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { corsMiddleware } from '../../middleware/cors';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { validateRequest } from '../../utils/validation';
+import { corsMiddleware } from '../../../../middleware/cors';
+import { authenticateRequest, UserRole } from '../../../../utils/auth';
+import { validateRequest } from '../../../../utils/validation';
 import * as Joi from 'joi';
 import {
   PlaidApi,
@@ -31,7 +31,7 @@ import {
   CreditAccountSubtype,
   InvestmentAccountSubtype
 } from 'plaid';
-import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
+import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');

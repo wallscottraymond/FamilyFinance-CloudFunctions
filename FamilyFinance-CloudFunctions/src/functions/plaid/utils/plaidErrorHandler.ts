@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { authenticateRequest, UserRole } from '../../utils/auth';
+import { authenticateRequest, UserRole } from '../../../utils/auth';
 
 const db = getFirestore();
 

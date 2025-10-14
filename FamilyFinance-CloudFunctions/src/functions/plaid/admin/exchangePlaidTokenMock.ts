@@ -16,11 +16,11 @@
  */
 
 import { onRequest } from 'firebase-functions/v2/https';
-import { corsMiddleware } from '../../middleware/cors';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { validateRequest } from '../../utils/validation';
+import { corsMiddleware } from '../../../middleware/cors';
+import { authenticateRequest, UserRole } from '../../../utils/auth';
+import { validateRequest } from '../../../utils/validation';
 import * as Joi from 'joi';
-import { db } from '../../index';
+import { db } from '../../../index';
 
 // Request validation schema
 const exchangePlaidTokenSchema = Joi.object({

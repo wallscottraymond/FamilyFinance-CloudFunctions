@@ -19,7 +19,7 @@ import {
 } from './calculateWithholdingAmount';
 import { predictFutureBillDueDate } from './predictFutureBillDueDate';
 import { checkIsDuePeriod } from './checkIsDuePeriod';
-import { updateBillStatus } from './updateBillStatus';
+import { calculateOutflowPeriodStatus } from './calculateOutflowPeriodStatus';
 
 /**
  * Result of creating outflow periods
@@ -27,6 +27,28 @@ import { updateBillStatus } from './updateBillStatus';
 export interface CreateOutflowPeriodsResult {
   periodsCreated: number;
   periodIds: string[];
+}
+
+/**
+ * Calculate the date range for outflow period generation
+ *
+ * @param outflow - The recurring outflow
+ * @param monthsForward - Number of months to generate forward from now (default: 3)
+ * @returns Object with startDate and endDate
+ */
+export function calculatePeriodGenerationRange(
+  outflow: RecurringOutflow,
+  monthsForward: number = 3
+): { startDate: Date; endDate: Date } {
+  // Start from firstDate to capture historical periods
+  const startDate = outflow.firstDate.toDate();
+
+  // Extend N months forward from now
+  const now = new Date();
+  const endDate = new Date(now);
+  endDate.setMonth(endDate.getMonth() + monthsForward);
+
+  return { startDate, endDate };
 }
 
 // Note: Payment cycle and withholding calculations are now in calculateWithholdingAmount.ts
@@ -108,7 +130,14 @@ export async function createOutflowPeriodsFromSource(
     const dueDate = isDuePeriod ? expectedDates.expectedDueDate : undefined;
 
     // Determine bill status using utility function
-    const billStatus = updateBillStatus(isDuePeriod, dueDate, expectedDates.expectedDueDate);
+    // Note: At creation time, transactionSplits is empty. Status will be recalculated after auto-matching.
+    const billStatus = calculateOutflowPeriodStatus(
+      isDuePeriod,
+      dueDate,
+      expectedDates.expectedDueDate,
+      amountDue,
+      [] // Empty array at creation - will be populated by auto-matching
+    );
 
     if (isDuePeriod) {
       console.log(
@@ -150,6 +179,7 @@ export async function createOutflowPeriodsFromSource(
       expectedDrawDate: expectedDates.expectedDrawDate,
       status: billStatus, // Status determined by updateBillStatus utility
       isActive: true,
+      transactionSplits: [], // Initialize empty array for tracking payment transactions
 
       // Metadata from outflow (denormalized for performance)
       outflowDescription: outflow.description,

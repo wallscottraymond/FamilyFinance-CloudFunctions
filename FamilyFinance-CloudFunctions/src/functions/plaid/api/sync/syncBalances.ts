@@ -15,10 +15,10 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { getAccessToken } from '../../utils/encryption';
-import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
-import { db } from '../../index';
+import { authenticateRequest, UserRole } from '../../../../utils/auth';
+import { getAccessToken } from '../../../../utils/encryption';
+import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
+import { db } from '../../../../index';
 import { Timestamp } from 'firebase-admin/firestore';
 import { AccountsBalanceGetRequest } from 'plaid';
 

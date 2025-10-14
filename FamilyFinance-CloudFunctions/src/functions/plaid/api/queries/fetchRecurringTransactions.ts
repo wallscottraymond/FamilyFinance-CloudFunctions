@@ -17,16 +17,16 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { corsMiddleware } from '../../middleware/cors';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { validateRequest } from '../../utils/validation';
+import { corsMiddleware } from '../../../../middleware/cors';
+import { authenticateRequest, UserRole } from '../../../../utils/auth';
+import { validateRequest } from '../../../../utils/validation';
 import * as Joi from 'joi';
-import { db } from '../../index';
+import { db } from '../../../../index';
 import {
   PlaidApi,
   TransactionsRecurringGetRequest
 } from 'plaid';
-import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
+import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
 import {
   BaseRecurringTransaction,
   RecurringIncome,
@@ -38,7 +38,7 @@ import {
   FetchRecurringTransactionsRequest,
   FetchRecurringTransactionsResponse,
   PlaidItem
-} from '../../types';
+} from '../../../../types';
 import { Timestamp } from 'firebase-admin/firestore';
 
 // Define secrets for Plaid configuration

@@ -16,23 +16,11 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { getAccessToken } from '../../utils/encryption';
-import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
-import {
-  Transaction as FamilyTransaction,
-  TransactionSplit,
-  TransactionStatus,
-  TransactionCategory,
-  TransactionType,
-  PlaidAccount
-} from '../../types';
-import {
-  createDocument,
-  getDocument,
-  queryDocuments
-} from '../../utils/firestore';
-import { db } from '../../index';
+import { authenticateRequest, UserRole } from '../../../../utils/auth';
+import { getAccessToken } from '../../../../utils/encryption';
+import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
+import { getDocument } from '../../../../utils/firestore';
+import { db } from '../../../../index';
 import {
   Transaction,
   TransactionsSyncRequest,
@@ -40,6 +28,7 @@ import {
   RemovedTransaction
 } from 'plaid';
 import { Timestamp } from 'firebase-admin/firestore';
+import { formatTransactions } from '../../../transactions/utils/formatTransactions';
 
 // Define secrets for Firebase configuration (still needed for function setup)
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -248,7 +237,7 @@ export async function processWebhookTransactionSync(
     // Delegate error handling to centralized handler
     if (error.response?.data?.error_code) {
       console.log(`🔧 Delegating Plaid error handling for item ${itemId} to centralized handler`);
-      const { handlePlaidErrorInternal } = await import('./plaidErrorHandler');
+      const { handlePlaidErrorInternal } = await import('../../utils/plaidErrorHandler');
       try {
         await handlePlaidErrorInternal(itemId, userId, error, 'webhook-transaction-sync');
       } catch (handlerError) {
@@ -318,7 +307,7 @@ async function performTransactionSync(
 
       // Process added transactions (creates Family Finance transactions with splits)
       if (data.added.length > 0) {
-        const addedResult = await processAddedTransactions(
+        const addedResult = await formatTransactions(
           data.added,
           itemId,
           userId,
@@ -361,78 +350,6 @@ async function performTransactionSync(
     removedCount,
     nextCursor: currentCursor
   };
-}
-
-/**
- * Process newly added transactions from Plaid
- *
- * Creates Family Finance transactions with proper splits in the transactions collection.
- * This is the unified implementation used by both webhooks and manual sync.
- */
-async function processAddedTransactions(
-  addedTransactions: Transaction[],
-  itemId: string,
-  userId: string,
-  familyId: string | undefined,
-  currency: string
-): Promise<number> {
-  console.log(`➕ Processing ${addedTransactions.length} added transactions`);
-
-  let processedCount = 0;
-
-  try {
-    // Get account information for transactions
-    const accountIds = [...new Set(addedTransactions.map(t => t.account_id))];
-    console.log(`Looking for ${accountIds.length} unique accounts`);
-
-    const accountQuery = await queryDocuments('plaid_accounts', {
-      where: [
-        { field: 'accountId', operator: 'in', value: accountIds },
-        { field: 'userId', operator: '==', value: userId }
-      ]
-    });
-
-    const accountMap = new Map<string, PlaidAccount>();
-    accountQuery.forEach(account => {
-      accountMap.set((account as any).accountId, account as PlaidAccount);
-    });
-
-    console.log(`Found ${accountMap.size} accounts`);
-
-    // Process each transaction individually
-    for (const plaidTransaction of addedTransactions) {
-      try {
-        const account = accountMap.get(plaidTransaction.account_id);
-        if (!account) {
-          console.warn(`Account not found for transaction: ${plaidTransaction.transaction_id}`);
-          continue;
-        }
-
-        const transaction = await createTransactionFromPlaid(
-          plaidTransaction,
-          account,
-          userId,
-          familyId,
-          currency,
-          itemId
-        );
-
-        if (transaction) {
-          processedCount++;
-        }
-      } catch (error) {
-        console.error(`Error processing transaction ${plaidTransaction.transaction_id}:`, error);
-      }
-    }
-
-    console.log(`✅ Created ${processedCount} Family Finance transactions with splits from ${addedTransactions.length} Plaid transactions`);
-
-    return processedCount;
-
-  } catch (error) {
-    console.error('Error processing added transactions:', error);
-    return processedCount;
-  }
 }
 
 /**
@@ -631,223 +548,4 @@ async function updateItemCursor(itemDocId: string, cursor: string): Promise<void
   }
 }
 
-// ===== UTILITY FUNCTIONS MOVED FROM plaidTransactionSync.ts =====
-
-/**
- * Converts a Plaid transaction to Family Finance transaction format with splits
- */
-/**
- * Convert a Plaid transaction to Family Finance format with splits
- */
-async function createTransactionFromPlaid(
-  plaidTransaction: any,
-  plaidAccount: PlaidAccount,
-  userId: string,
-  familyId: string | undefined,
-  currency: string,
-  itemId: string
-): Promise<FamilyTransaction | null> {
-  try {
-
-    // Determine transaction type and category
-    const transactionType = plaidTransaction.amount > 0 ? TransactionType.EXPENSE : TransactionType.INCOME;
-    const absoluteAmount = Math.abs(plaidTransaction.amount);
-
-    // Map Plaid category to our transaction category
-    const category = mapPlaidCategoryToTransactionCategory(plaidTransaction.category);
-
-    // Try to find an appropriate budget for this transaction
-    let budgetId: string | undefined;
-    let budgetPeriodId = 'unassigned';
-    let budgetName = 'General';
-
-    // Look for active budget periods that match this transaction's category
-    const budgetPeriodsQuery = await queryDocuments('budget_periods', {
-      where: [
-        { field: 'userId', operator: '==', value: userId },
-        { field: 'isActive', operator: '==', value: true }
-      ],
-      orderBy: 'periodStart',
-      orderDirection: 'desc',
-      limit: 10
-    });
-
-    if (budgetPeriodsQuery.length > 0) {
-      // Use the most recent active budget period
-      const latestBudgetPeriod = budgetPeriodsQuery[0];
-      budgetId = (latestBudgetPeriod as any).budgetId;
-      budgetPeriodId = latestBudgetPeriod.id!;
-      budgetName = (latestBudgetPeriod as any).budgetName || 'General';
-    }
-
-    // Create default split for the transaction
-    const defaultSplit: TransactionSplit = {
-      id: db.collection('_dummy').doc().id,
-      budgetId: budgetId || 'unassigned',
-      budgetPeriodId,
-      budgetName,
-      categoryId: category,
-      amount: absoluteAmount,
-      description: undefined,
-      isDefault: true,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-      createdBy: userId,
-    };
-
-    // Create transaction with splitting support
-    const transaction: Omit<FamilyTransaction, "id" | "createdAt" | "updatedAt"> = {
-      userId,
-      familyId: familyId || '',
-      amount: absoluteAmount,
-      currency,
-      description: plaidTransaction.merchant_name || plaidTransaction.name || 'Bank Transaction',
-      category,
-      type: transactionType,
-      date: plaidTransaction.date ? Timestamp.fromDate(new Date(plaidTransaction.date)) : Timestamp.now(),
-      location: plaidTransaction.location ? {
-        name: plaidTransaction.location.address || undefined,
-        address: plaidTransaction.location.address || undefined,
-        latitude: plaidTransaction.location.lat || undefined,
-        longitude: plaidTransaction.location.lon || undefined,
-      } : undefined,
-      tags: [],
-      budgetId,
-      status: TransactionStatus.APPROVED, // Plaid transactions are automatically approved
-      metadata: {
-        createdBy: 'plaid_sync_unified',
-        source: 'plaid',
-        plaidTransactionId: plaidTransaction.transaction_id,
-        plaidAccountId: plaidTransaction.account_id,
-        plaidItemId: itemId,
-        plaidPending: plaidTransaction.pending,
-        requiresApproval: false,
-      },
-
-      // Transaction splitting fields
-      splits: [defaultSplit],
-      isSplit: false, // Single default split
-      totalAllocated: absoluteAmount,
-      unallocated: 0,
-      affectedBudgets: budgetId ? [budgetId] : [],
-      affectedBudgetPeriods: budgetPeriodId !== 'unassigned' ? [budgetPeriodId] : [],
-      primaryBudgetId: budgetId,
-      primaryBudgetPeriodId: budgetPeriodId !== 'unassigned' ? budgetPeriodId : undefined,
-    };
-
-    // Create the transaction
-    const createdTransaction = await createDocument<FamilyTransaction>("transactions", transaction);
-
-    console.log(`Created transaction ${createdTransaction.id} from Plaid transaction ${plaidTransaction.transaction_id}`);
-
-    return createdTransaction;
-
-  } catch (error) {
-    console.error('Error creating transaction from Plaid data:', {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined,
-      transactionId: plaidTransaction.transactionId,
-      userId,
-      familyId
-    });
-    return null;
-  }
-}
-
-/**
- * Maps Plaid category array to our TransactionCategory enum
- */
-function mapPlaidCategoryToTransactionCategory(plaidCategories: string[]): TransactionCategory {
-  if (!plaidCategories || plaidCategories.length === 0) {
-    return TransactionCategory.OTHER_EXPENSE;
-  }
-
-  const primaryCategory = plaidCategories[0].toLowerCase();
-  const secondaryCategory = plaidCategories[1]?.toLowerCase() || '';
-
-  // Map common Plaid categories to our categories
-  const categoryMappings: Record<string, TransactionCategory> = {
-    // Food & Dining
-    'food and drink': TransactionCategory.FOOD,
-    'restaurants': TransactionCategory.FOOD,
-    'fast food': TransactionCategory.FOOD,
-    'coffee shops': TransactionCategory.FOOD,
-    'groceries': TransactionCategory.FOOD,
-
-    // Transportation
-    'transportation': TransactionCategory.TRANSPORTATION,
-    'gas stations': TransactionCategory.TRANSPORTATION,
-    'public transportation': TransactionCategory.TRANSPORTATION,
-    'ride share': TransactionCategory.TRANSPORTATION,
-    'parking': TransactionCategory.TRANSPORTATION,
-
-    // Shopping & Clothing
-    'shops': TransactionCategory.CLOTHING,
-    'retail': TransactionCategory.CLOTHING,
-    'clothing': TransactionCategory.CLOTHING,
-    'department stores': TransactionCategory.CLOTHING,
-
-    // Entertainment
-    'entertainment': TransactionCategory.ENTERTAINMENT,
-    'movies': TransactionCategory.ENTERTAINMENT,
-    'music': TransactionCategory.ENTERTAINMENT,
-    'sports': TransactionCategory.ENTERTAINMENT,
-    'recreation': TransactionCategory.ENTERTAINMENT,
-
-    // Healthcare
-    'healthcare': TransactionCategory.HEALTHCARE,
-    'medical': TransactionCategory.HEALTHCARE,
-    'pharmacy': TransactionCategory.HEALTHCARE,
-    'dentist': TransactionCategory.HEALTHCARE,
-
-    // Utilities
-    'utilities': TransactionCategory.UTILITIES,
-    'internet': TransactionCategory.UTILITIES,
-    'phone': TransactionCategory.UTILITIES,
-    'cable': TransactionCategory.UTILITIES,
-
-    // Housing
-    'rent': TransactionCategory.HOUSING,
-    'mortgage': TransactionCategory.HOUSING,
-    'home improvement': TransactionCategory.HOUSING,
-
-    // Travel (map to entertainment as closest match)
-    'travel': TransactionCategory.ENTERTAINMENT,
-    'hotels': TransactionCategory.ENTERTAINMENT,
-    'airlines': TransactionCategory.ENTERTAINMENT,
-
-    // Income
-    'payroll': TransactionCategory.SALARY,
-    'deposit': TransactionCategory.OTHER_INCOME,
-  };
-
-  // Check primary category first
-  if (categoryMappings[primaryCategory]) {
-    return categoryMappings[primaryCategory];
-  }
-
-  // Check secondary category
-  if (categoryMappings[secondaryCategory]) {
-    return categoryMappings[secondaryCategory];
-  }
-
-  // Check if any category contains certain keywords
-  const allCategories = plaidCategories.join(' ').toLowerCase();
-
-  if (allCategories.includes('food') || allCategories.includes('restaurant') || allCategories.includes('grocery')) {
-    return TransactionCategory.FOOD;
-  }
-  if (allCategories.includes('gas') || allCategories.includes('fuel') || allCategories.includes('transport')) {
-    return TransactionCategory.TRANSPORTATION;
-  }
-  if (allCategories.includes('clothing') || allCategories.includes('apparel')) {
-    return TransactionCategory.CLOTHING;
-  }
-  if (allCategories.includes('entertainment') || allCategories.includes('movie') || allCategories.includes('game')) {
-    return TransactionCategory.ENTERTAINMENT;
-  }
-
-  // Default to OTHER_EXPENSE if no mapping found
-  return TransactionCategory.OTHER_EXPENSE;
-}
 

@@ -2,7 +2,7 @@
  * Outflow Periods Auto-Generation Trigger
  *
  * This Cloud Function automatically creates outflow_periods when an outflow is created.
- * It delegates to utility functions for period generation logic.
+ * It is a pure orchestration trigger that delegates all business logic to utility functions.
  *
  * Memory: 512MiB, Timeout: 60s
  */
@@ -10,7 +10,11 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { RecurringOutflow } from '../../../../types';
-import { createOutflowPeriodsFromSource } from '../../utils/outflowPeriods';
+import {
+  createOutflowPeriodsFromSource,
+  calculatePeriodGenerationRange
+} from '../../utils/outflowPeriods';
+import { orchestrateAutoMatchingWorkflow } from '../../utils/autoMatchTransactionToOutflowPeriods';
 
 /**
  * Triggered when an outflow is created
@@ -42,12 +46,8 @@ export const onOutflowCreated = onDocumentCreated({
 
     const db = admin.firestore();
 
-    // Calculate time range for period generation
-    // Start from firstDate (captures historical periods) and extend 3 months forward from now
-    const startDate = outflowData.firstDate.toDate();
-    const now = new Date();
-    const endDate = new Date(now);
-    endDate.setMonth(endDate.getMonth() + 3);
+    // Calculate time range for period generation using utility function
+    const { startDate, endDate } = calculatePeriodGenerationRange(outflowData, 3);
 
     console.log(`[onOutflowCreated] Generating outflow periods from ${startDate.toISOString()} (firstDate) to ${endDate.toISOString()} (3 months forward)`);
 
@@ -61,6 +61,23 @@ export const onOutflowCreated = onDocumentCreated({
     );
 
     console.log(`[onOutflowCreated] Successfully created ${result.periodsCreated} outflow periods for outflow ${outflowId}`);
+
+    // Auto-match historical transactions to outflow periods using orchestration function
+    const matchResult = await orchestrateAutoMatchingWorkflow(
+      db,
+      outflowId,
+      outflowData,
+      result.periodIds
+    );
+
+    console.log(`[onOutflowCreated] Auto-matching workflow complete:`, {
+      success: matchResult.success,
+      transactionsProcessed: matchResult.transactionsProcessed,
+      splitsAssigned: matchResult.splitsAssigned,
+      periodsUpdated: matchResult.periodsUpdated,
+      statusesUpdated: matchResult.statusesUpdated,
+      errors: matchResult.errors.length
+    });
 
   } catch (error) {
     console.error('[onOutflowCreated] Error:', error);

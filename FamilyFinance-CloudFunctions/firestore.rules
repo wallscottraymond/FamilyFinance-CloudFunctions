@@ -664,17 +664,52 @@ service cloud.firestore {
       let data = request.resource.data;
       let resource_data = resource.data;
       // Only allow updates to user-modifiable fields for outflow periods
+      // Including transactionSplits for payment tracking and status for recalculation
       let allowedFields = [
-        'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt', 'updatedAt'
+        'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt',
+        'transactionSplits', 'status', 'updatedAt'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
+
+      // Validate transactionSplits if they're being updated
+      let splitsValid = !changedFields.hasAny(['transactionSplits']) ||
+                       isValidTransactionSplitReferences(data.transactionSplits);
+
+      // Validate status if it's being updated
+      let statusValid = !changedFields.hasAny(['status']) ||
+                       (data.status is string && data.status in ['pending', 'due_soon', 'partial', 'paid', 'paid_early', 'overdue']);
+
       return changedFields.hasOnly(allowedFields) &&
+             splitsValid &&
+             statusValid &&
              // Ensure core immutable fields don't change
              data.outflowId == resource_data.outflowId &&
              data.periodId == resource_data.periodId &&
              data.userId == resource_data.userId &&
              data.billAmount == resource_data.billAmount &&
              data.dailyWithholdingRate == resource_data.dailyWithholdingRate;
+    }
+
+    // Validate transaction split references array for outflow periods
+    function isValidTransactionSplitReferences(splitRefs) {
+      return splitRefs is list &&
+             splitRefs.size() <= 50 && // Reasonable limit for payment history
+             splitRefs.all(ref, isValidTransactionSplitReference(ref));
+    }
+
+    // Validate individual transaction split reference
+    function isValidTransactionSplitReference(ref) {
+      return ref is map &&
+             ref.keys().hasAll(['transactionId', 'splitId', 'transactionDate', 'amount', 'description', 'paymentType', 'isAutoMatched', 'matchedAt', 'matchedBy']) &&
+             ref.transactionId is string && ref.transactionId.size() > 0 &&
+             ref.splitId is string && ref.splitId.size() > 0 &&
+             ref.transactionDate is timestamp &&
+             ref.amount is number && ref.amount > 0 &&
+             ref.description is string &&
+             ref.paymentType is string && ref.paymentType in ['regular', 'catch_up', 'advance', 'extra_principal'] &&
+             ref.isAutoMatched is bool &&
+             ref.matchedAt is timestamp &&
+             ref.matchedBy is string && ref.matchedBy.size() > 0;
     }
     
     // Validation function for inflow period updates

@@ -146,13 +146,35 @@ export interface FamilySettings {
 }
 
 // Transaction related types
-// Transaction Split interface for splitting transactions across multiple budgets
+// Payment Type enum for transaction splits
+export enum PaymentType {
+  REGULAR = 'regular',                    // Normal payment for the period
+  CATCH_UP = 'catch_up',                  // Payment covering past-due periods
+  ADVANCE = 'advance',                    // Payment for future periods
+  EXTRA_PRINCIPAL = 'extra_principal'     // Additional payment beyond required amount
+}
+
+// Transaction Split interface for splitting transactions across budgets AND outflows
 export interface TransactionSplit {
   id: string;                     // Unique identifier for the split
-  budgetId: string;               // Reference to budgets collection for flexibility
-  budgetPeriodId: string;         // Reference to specific budget_periods document
-  budgetName: string;             // Denormalized budget name for display performance
+  budgetId: string;               // Reference to budgets collection (empty string if assigned to outflow)
+  budgetPeriodId: string;         // Reference to specific budget_periods document (empty string if assigned to outflow)
+  budgetName: string;             // Denormalized budget name for display performance (empty string if assigned to outflow)
+
+  // NEW: Outflow assignment (mutually exclusive with budget assignment)
+  outflowPeriodId?: string;       // Reference to outflow_periods collection
+  outflowId?: string;             // Reference to outflows collection (for quick lookup)
+  outflowDescription?: string;    // Denormalized outflow description for display
+
+  // NEW: Bill assignment fields
+  billId?: string;                // Reference to outflows/bills collection
+  billName?: string;              // Denormalized bill name for display
+
+  // Category information
   categoryId: string;             // Category ID from categories collection (matched by detailed_plaid_category)
+  category?: string;              // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
+  categoryPrimary?: string;       // Plaid primary category (e.g., "FOOD_AND_DRINK")
+
   amount: number;                 // Amount allocated to this split
   description?: string;           // Optional override description for this split
   isDefault: boolean;             // True for the auto-created split when transaction is created
@@ -165,9 +187,18 @@ export interface TransactionSplit {
   refundReason?: string;          // Reason for refund classification
   taxDeductibleCategory?: string; // Tax category for deductible items
 
+  // NEW: Simple status flags
+  ignore?: boolean;               // Simple ignore flag for user convenience
+  return?: boolean;               // Transaction is a return/refund (simplified from isRefund)
+  deductible?: boolean;           // Tax deductible (simplified from isTaxDeductible)
+  note?: string;                  // User note for this split
+
   // Enhanced assignment metadata
   excludedFromBudgets?: string[]; // Budget IDs to exclude this split from
   manualBudgetAssignment?: boolean; // User manually assigned vs auto-assigned
+
+  // NEW: Payment type tracking for outflow assignments
+  paymentType?: PaymentType;      // Payment classification (regular, catch_up, advance, extra_principal)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -1344,6 +1375,31 @@ export interface PlaidRecurringTransactionStreamResponse {
 // OUTFLOW PERIODS TYPES
 // =======================
 
+// Outflow Period Status enum
+export enum OutflowPeriodStatus {
+  PENDING = 'pending',           // Not yet due, no payments
+  DUE_SOON = 'due_soon',        // Due within 3 days
+  PARTIAL = 'partial',           // Partially paid
+  PAID = 'paid',                 // Fully paid
+  PAID_EARLY = 'paid_early',    // Paid before due date
+  OVERDUE = 'overdue'           // Past due, unpaid
+}
+
+// Transaction Split Reference - Links outflow periods to transaction splits for payment tracking
+export interface TransactionSplitReference {
+  transactionId: string; // Reference to transactions collection (Plaid transaction ID, now used as document ID)
+  splitId: string; // Reference to specific split within transaction.splits array
+  transactionDate: Timestamp; // Date of the transaction
+  amount: number; // Amount of the split payment
+  description: string; // Transaction description for reference
+
+  // NEW: Payment tracking and classification
+  paymentType: PaymentType; // Payment classification (regular, catch_up, advance, extra_principal)
+  isAutoMatched: boolean; // Whether this was automatically matched by the system
+  matchedAt: Timestamp; // When the split was matched to this outflow period
+  matchedBy: string; // 'system' for auto-match, or userId for manual assignment
+}
+
 // Outflow Periods - Maps outflows to source periods with withholding calculations
 export interface OutflowPeriod extends BaseDocument {
   outflowId: string; // Reference to outflows collection document
@@ -1375,6 +1431,7 @@ export interface OutflowPeriod extends BaseDocument {
   expectedDrawDate: Timestamp; // Expected draw date (adjusts for weekends - Saturday/Sunday → Monday)
   status: string; // Payment status (e.g., "pending", "paid", "overdue")
   isActive: boolean; // Whether this outflow period is active
+  transactionSplits: TransactionSplitReference[]; // Array of transaction splits that have been applied to this bill payment
 
   // Metadata from outflow (denormalized for performance)
   outflowDescription: string; // Description from outflow

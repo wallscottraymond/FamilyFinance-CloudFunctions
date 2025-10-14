@@ -17,9 +17,9 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-// import { authenticateRequest, UserRole } from '../../utils/auth';
+// import { authenticateRequest, UserRole } from '../../../../utils/auth';
 // import * as Joi from 'joi';
-import { db } from '../../index';
+import { db } from '../../../../index';
 // import {
 //   PlaidApi,
 //   Configuration,
@@ -29,11 +29,11 @@ import {
   PlaidWebhookType,
   PlaidWebhookCode,
   PlaidWebhookProcessingStatus
-} from '../../types';
+} from '../../../../types';
 import { Timestamp } from 'firebase-admin/firestore';
-import { syncBalances } from './syncBalances';
-import { syncTransactions } from './syncTransactions';
-import { syncRecurringTransactions } from './syncRecurringTransactions';
+import { syncBalances } from '../../api/sync/syncBalances';
+import { processWebhookTransactionSync } from '../../api/sync/syncTransactions';
+import { syncRecurringTransactions } from '../../api/sync/syncRecurring';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -229,23 +229,24 @@ async function handleTransactionsWebhook(
         return { processed: false, message: `Rate limited: ${minutesRemaining} minutes remaining` };
       }
 
-      // Process transaction sync using unified sync function
+      // Process transaction sync using modern sync function
       serverLogAndEmitSocket('Starting transaction sync', plaidItemId);
 
-      const syncResult = await syncTransactions(plaidItemId, itemDoc.userId);
+      const syncResult = await processWebhookTransactionSync(plaidItemId, itemDoc.userId, itemDoc);
 
-      if (syncResult.errors.length === 0) {
-        const totalSynced = syncResult.transactionsCreated + syncResult.transactionsModified + syncResult.transactionsRemoved;
+      if (syncResult.success) {
+        const totalSynced = syncResult.addedCount + syncResult.modifiedCount + syncResult.removedCount;
         serverLogAndEmitSocket(`Transaction sync completed: ${totalSynced} transactions processed`, plaidItemId);
         return {
           processed: true,
-          message: `Synced ${syncResult.transactionsCreated} new, ${syncResult.transactionsModified} modified, ${syncResult.transactionsRemoved} removed transactions`
+          message: `Synced ${syncResult.addedCount} new, ${syncResult.modifiedCount} modified, ${syncResult.removedCount} removed transactions`
         };
       } else {
-        serverLogAndEmitSocket(`Transaction sync completed with errors: ${syncResult.errors.join(', ')}`, plaidItemId);
+        const errorMsg = syncResult.error || 'Unknown error';
+        serverLogAndEmitSocket(`Transaction sync failed: ${errorMsg}`, plaidItemId);
         return {
-          processed: true,
-          message: `Synced with errors: ${syncResult.transactionsCreated} created, ${syncResult.errors.length} errors`
+          processed: false,
+          message: `Sync failed: ${errorMsg}`
         };
       }
     }

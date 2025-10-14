@@ -18,14 +18,14 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { authenticateRequest, UserRole } from '../../utils/auth';
-import { db } from '../../index';
+import { authenticateRequest, UserRole } from '../../../utils/auth';
+import { db } from '../../../index';
 import {
   PlaidApi,
   SandboxItemFireWebhookRequest,
   SandboxItemFireWebhookRequestWebhookCodeEnum
 } from 'plaid';
-import { createStandardPlaidClient } from '../../utils/plaidClientFactory';
+import { createStandardPlaidClient } from '../../../utils/plaidClientFactory';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -116,18 +116,36 @@ async function findPlaidItem(userId: string, itemId: string) {
     console.log('❌ Subcollection plaidItemId query failed:', error);
   }
 
-  // If not found in subcollection, try top-level collection
-  console.log(`🔍 Trying top-level collection query...`);
-  const itemQuery = await db.collection('plaid_items')
-    .where('itemId', '==', itemId)
-    .where('userId', '==', userId)
-    .limit(1)
-    .get();
+  // Strategy 4: Direct lookup in top-level plaid_items collection using itemId as document ID
+  try {
+    console.log(`🔍 Strategy 4: Direct lookup in plaid_items collection`);
+    const itemDoc = await db.collection('plaid_items')
+      .doc(itemId)
+      .get();
 
-  console.log(`🔍 Top-level query result: ${itemQuery.size} documents found`);
-  if (!itemQuery.empty) {
-    console.log(`✅ Found item ${itemId} in top-level collection for user ${userId}`);
-    return itemQuery.docs[0];
+    console.log(`🔍 Document exists: ${itemDoc.exists}`);
+    if (itemDoc.exists) {
+      const data = itemDoc.data();
+      console.log(`🔍 Item data:`, {
+        userId: data?.userId,
+        isActive: data?.isActive,
+        institutionName: data?.institutionName,
+        hasAccessToken: !!data?.accessToken,
+        allFields: Object.keys(data || {})
+      });
+
+      // Verify this item belongs to the user
+      if (data?.userId === userId) {
+        console.log(`✅ Found item ${itemId} in plaid_items collection for user ${userId}`);
+        return itemDoc;
+      } else {
+        console.log(`❌ Item ${itemId} exists but belongs to different user (expected: ${userId}, actual: ${data?.userId})`);
+      }
+    } else {
+      console.log(`❌ Item ${itemId} not found as document ID in plaid_items collection`);
+    }
+  } catch (error) {
+    console.log('❌ plaid_items document lookup failed:', error);
   }
 
   // Final attempt: List all items for this user to see what we actually have
@@ -249,7 +267,7 @@ export const fireTransactionWebhook = onCall(
         if (itemId && userId) {
           console.log(`🔧 Delegating Plaid error handling for item ${itemId} to centralized handler`);
           // Import and call the handler directly (same runtime context)
-          const { handlePlaidErrorInternal } = await import('./plaidErrorHandler');
+          const { handlePlaidErrorInternal } = await import('../utils/plaidErrorHandler');
           // Fire-and-forget error handling - don't await to avoid delaying error response
           handlePlaidErrorInternal(itemId, userId, error, 'fire-transaction-webhook').catch(err =>
             console.error('Centralized error handler failed:', err)

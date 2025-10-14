@@ -18,12 +18,12 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
-import { 
-  RecurringIncome, 
-  InflowPeriod, 
-  SourcePeriod, 
+import {
+  RecurringIncome,
+  InflowPeriod,
+  SourcePeriod,
   PlaidRecurringFrequency
-} from '../../types';
+} from '../../../../types';
 
 /**
  * Triggered when an inflow is created
