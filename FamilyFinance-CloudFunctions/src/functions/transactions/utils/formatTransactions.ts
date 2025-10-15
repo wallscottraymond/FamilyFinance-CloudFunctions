@@ -317,8 +317,8 @@ async function buildTransactionData(
       console.log(`⚠️ No Plaid personal_finance_category for transaction ${plaidTransaction.transaction_id}, defaulting to: ${category}`);
     }
 
-    // Match transaction to budget period
-    const budgetMatch = await matchTransactionToBudgetPeriod(
+    // Match transaction to budget (not period)
+    const budgetMatch = await matchTransactionToBudget(
       userId,
       plaidTransaction.date ? new Date(plaidTransaction.date) : new Date()
     );
@@ -331,7 +331,7 @@ async function buildTransactionData(
     const defaultSplit: TransactionSplit = {
       id: db.collection('_dummy').doc().id,
       budgetId: budgetMatch.budgetId || 'unassigned',
-      budgetPeriodId: budgetMatch.budgetPeriodId,
+      budgetPeriodId: '', // Empty string - not tied to specific period
       budgetName: budgetMatch.budgetName,
       categoryId: category,
       category: categoryDetailed,        // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
@@ -393,9 +393,9 @@ async function buildTransactionData(
       totalAllocated: absoluteAmount,
       unallocated: 0,
       affectedBudgets: budgetMatch.budgetId ? [budgetMatch.budgetId] : [],
-      affectedBudgetPeriods: budgetMatch.budgetPeriodId !== 'unassigned' ? [budgetMatch.budgetPeriodId] : [],
+      affectedBudgetPeriods: [], // No longer tracking specific periods
       primaryBudgetId: budgetMatch.budgetId,
-      primaryBudgetPeriodId: budgetMatch.budgetPeriodId !== 'unassigned' ? budgetMatch.budgetPeriodId : undefined,
+      primaryBudgetPeriodId: undefined, // No longer using specific period IDs
     };
 
     return transaction as FamilyTransaction;
@@ -413,73 +413,89 @@ async function buildTransactionData(
 }
 
 /**
- * Match a transaction to a budget period based on its date
+ * Match a transaction to a budget based on its date and category
+ *
+ * Instead of matching to a specific budget period, match to the parent budget ID.
+ * This allows transactions to be tracked across all period types (weekly, monthly, etc.)
+ * that share the same budget.
  *
  * @param userId - User ID
  * @param transactionDate - Date of the transaction
- * @returns Budget match information (budgetId, budgetPeriodId, budgetName)
+ * @returns Budget match information (budgetId, budgetName)
  */
-export async function matchTransactionToBudgetPeriod(
+export async function matchTransactionToBudget(
   userId: string,
   transactionDate: Date
 ): Promise<{
   budgetId: string | undefined;
-  budgetPeriodId: string;
   budgetName: string;
 }> {
   const transactionTimestamp = Timestamp.fromDate(transactionDate);
 
-  console.log(`🔍 Looking for budget periods for user ${userId}, transaction date: ${transactionDate.toISOString()}`);
+  console.log(`🔍 Looking for active budgets for user ${userId}, transaction date: ${transactionDate.toISOString()}`);
 
-  // Query all active budget periods for the user
-  const budgetPeriodsQuery = await queryDocuments('budget_periods', {
+  // Query all active budgets for the user
+  const budgetsQuery = await queryDocuments('budgets', {
     where: [
-      { field: 'userId', operator: '==', value: userId },
+      { field: 'createdBy', operator: '==', value: userId },
       { field: 'isActive', operator: '==', value: true }
     ]
   });
 
-  console.log(`📊 Found ${budgetPeriodsQuery.length} active budget periods for user`);
+  console.log(`📊 Found ${budgetsQuery.length} active budgets for user`);
 
-  // Filter to find budget period that contains the transaction date
-  for (const period of budgetPeriodsQuery) {
-    const periodData = period as any;
-    const periodStart = periodData.periodStartDate || periodData.periodStart;
-    const periodEnd = periodData.periodEndDate || periodData.periodEnd;
+  // Filter to find budget that contains the transaction date
+  for (const budget of budgetsQuery) {
+    const budgetData = budget as any;
+    const budgetStart = budgetData.startDate;
+    const budgetEnd = budgetData.endDate;
+    const isOngoing = budgetData.isOngoing !== false; // Default to ongoing if not specified
 
-    console.log(`  📅 Checking period ${period.id}: start=${periodStart}, end=${periodEnd}`);
+    console.log(`  💰 Checking budget ${budget.id} (${budgetData.name}): start=${budgetStart}, isOngoing=${isOngoing}`);
 
-    if (periodStart && periodEnd) {
-      const startTimestamp = periodStart instanceof Timestamp
-        ? periodStart
-        : Timestamp.fromDate(new Date(periodStart));
-      const endTimestamp = periodEnd instanceof Timestamp
-        ? periodEnd
-        : Timestamp.fromDate(new Date(periodEnd));
+    if (budgetStart) {
+      const startTimestamp = budgetStart instanceof Timestamp
+        ? budgetStart
+        : Timestamp.fromDate(new Date(budgetStart));
 
-      console.log(`  ⏰ Period range: ${startTimestamp.toDate().toISOString()} to ${endTimestamp.toDate().toISOString()}`);
+      // Check if transaction is after budget start date
+      const isAfterStart = transactionTimestamp.toMillis() >= startTimestamp.toMillis();
+
+      // For ongoing budgets, only check start date
+      // For budgets with end dates, check both start and end
+      let isWithinRange = isAfterStart;
+
+      if (!isOngoing && budgetEnd) {
+        const endTimestamp = budgetEnd instanceof Timestamp
+          ? budgetEnd
+          : Timestamp.fromDate(new Date(budgetEnd));
+
+        const isBeforeEnd = transactionTimestamp.toMillis() <= endTimestamp.toMillis();
+        isWithinRange = isAfterStart && isBeforeEnd;
+
+        console.log(`  ⏰ Budget range: ${startTimestamp.toDate().toISOString()} to ${endTimestamp.toDate().toISOString()}`);
+      } else {
+        console.log(`  ⏰ Budget start: ${startTimestamp.toDate().toISOString()} (ongoing)`);
+      }
+
       console.log(`  🎯 Transaction timestamp: ${transactionTimestamp.toDate().toISOString()}`);
-      console.log(`  ✔️ In range? ${transactionTimestamp.toMillis() >= startTimestamp.toMillis() && transactionTimestamp.toMillis() <= endTimestamp.toMillis()}`);
+      console.log(`  ✔️ In range? ${isWithinRange}`);
 
-      // Check if transaction date falls within this period
-      if (transactionTimestamp.toMillis() >= startTimestamp.toMillis() &&
-          transactionTimestamp.toMillis() <= endTimestamp.toMillis()) {
-        console.log(`  🎉 MATCH! Using period ${period.id} (${periodData.budgetName})`);
+      if (isWithinRange) {
+        console.log(`  🎉 MATCH! Using budget ${budget.id} (${budgetData.name})`);
 
         return {
-          budgetId: periodData.budgetId,
-          budgetPeriodId: period.id!,
-          budgetName: periodData.budgetName || 'General'
+          budgetId: budget.id!,
+          budgetName: budgetData.name || 'General'
         };
       }
     }
   }
 
-  console.log(`⚠️ No matching budget period found for transaction dated ${transactionDate.toISOString()}`);
+  console.log(`⚠️ No matching budget found for transaction dated ${transactionDate.toISOString()}`);
 
   return {
     budgetId: undefined,
-    budgetPeriodId: 'unassigned',
     budgetName: 'General'
   };
 }
