@@ -158,13 +158,17 @@ export enum PaymentType {
 export interface TransactionSplit {
   id: string;                     // Unique identifier for the split
   budgetId: string;               // Reference to budgets collection (empty string if assigned to outflow)
-  budgetPeriodId: string;         // Reference to specific budget_periods document (empty string if assigned to outflow)
   budgetName: string;             // Denormalized budget name for display performance (empty string if assigned to outflow)
 
   // NEW: Outflow assignment (mutually exclusive with budget assignment)
   outflowPeriodId?: string;       // Reference to outflow_periods collection
   outflowId?: string;             // Reference to outflows collection (for quick lookup)
   outflowDescription?: string;    // Denormalized outflow description for display
+
+  // NEW: Period-type-specific outflow assignments (for multi-period payment tracking)
+  outflowMonthlyPeriodId?: string;   // Reference to monthly outflow_period
+  outflowWeeklyPeriodId?: string;    // Reference to weekly outflow_period
+  outflowBiWeeklyPeriodId?: string;  // Reference to bi-weekly outflow_period
 
   // NEW: Bill assignment fields
   billId?: string;                // Reference to outflows/bills collection
@@ -431,7 +435,6 @@ export interface UpdateTransactionRequest {
 export interface AddTransactionSplitRequest {
   transactionId: string;
   budgetId: string;
-  budgetPeriodId: string;
   amount: number;
   categoryId?: TransactionCategory;
   description?: string;
@@ -445,13 +448,17 @@ export interface AddTransactionSplitRequest {
   taxDeductibleCategory?: string;
   excludedFromBudgets?: string[];
   manualBudgetAssignment?: boolean;
+
+  // Period-type-specific outflow assignments
+  outflowMonthlyPeriodId?: string;
+  outflowWeeklyPeriodId?: string;
+  outflowBiWeeklyPeriodId?: string;
 }
 
 export interface UpdateTransactionSplitRequest {
   transactionId: string;
   splitId: string;
   budgetId?: string;
-  budgetPeriodId?: string;
   amount?: number;
   categoryId?: TransactionCategory;
   description?: string;
@@ -465,6 +472,11 @@ export interface UpdateTransactionSplitRequest {
   taxDeductibleCategory?: string;
   excludedFromBudgets?: string[];
   manualBudgetAssignment?: boolean;
+
+  // Period-type-specific outflow assignments
+  outflowMonthlyPeriodId?: string;
+  outflowWeeklyPeriodId?: string;
+  outflowBiWeeklyPeriodId?: string;
 }
 
 export interface DeleteTransactionSplitRequest {

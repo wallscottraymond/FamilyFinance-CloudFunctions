@@ -128,11 +128,16 @@ export const assignSplitToOutflowPeriod = onCall(
       if (clearBudgetAssignment) {
         console.log(`[assignSplit] Clearing budget assignment from split ${splitId}`);
         splits[splitIndex].budgetId = '';
-        splits[splitIndex].budgetPeriodId = '';
         splits[splitIndex].budgetName = '';
       }
 
       // Step 6: Update the split with outflow assignment
+      // Automatically populate the appropriate period-type field based on outflow period type
+      const periodTypeField = outflowPeriod.periodType === 'monthly' ? 'outflowMonthlyPeriodId' :
+                              outflowPeriod.periodType === 'weekly' ? 'outflowWeeklyPeriodId' :
+                              outflowPeriod.periodType === 'bi_monthly' ? 'outflowBiWeeklyPeriodId' :
+                              null;
+
       splits[splitIndex] = {
         ...splits[splitIndex],
         outflowPeriodId: outflowPeriodId,
@@ -140,6 +145,8 @@ export const assignSplitToOutflowPeriod = onCall(
         outflowDescription: outflowPeriod.outflowDescription,
         paymentType: paymentType as PaymentType,
         updatedAt: admin.firestore.Timestamp.now(),
+        // Automatically set the appropriate period-type field
+        ...(periodTypeField && { [periodTypeField]: outflowPeriodId })
       };
 
       // Step 7: Update transaction document

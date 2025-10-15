@@ -145,7 +145,6 @@ export const migrateTransactionsToSplits = onCall({
           const defaultSplit: TransactionSplit = {
             id: db.collection('_dummy').doc().id,
             budgetId: budgetId || 'unassigned',
-            budgetPeriodId: budgetPeriodId || 'unassigned',
             budgetName,
             categoryId: transactionData.category,
             amount: transactionData.amount,

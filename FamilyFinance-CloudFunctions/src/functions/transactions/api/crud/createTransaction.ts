@@ -98,7 +98,6 @@ export const createTransaction = onRequest({
       const defaultSplit = {
         id: admin.firestore().collection('_dummy').doc().id,
         budgetId: transactionData.budgetId || 'unassigned',
-        budgetPeriodId: 'unassigned', // Will be assigned later via budget period lookup
         budgetName: 'General',
         categoryId: transactionData.category,
         amount: transactionData.amount,

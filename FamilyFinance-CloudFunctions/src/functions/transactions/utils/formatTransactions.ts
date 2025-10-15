@@ -331,7 +331,6 @@ async function buildTransactionData(
     const defaultSplit: TransactionSplit = {
       id: db.collection('_dummy').doc().id,
       budgetId: budgetMatch.budgetId || 'unassigned',
-      budgetPeriodId: '', // Empty string - not tied to specific period
       budgetName: budgetMatch.budgetName,
       categoryId: category,
       category: categoryDetailed,        // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")

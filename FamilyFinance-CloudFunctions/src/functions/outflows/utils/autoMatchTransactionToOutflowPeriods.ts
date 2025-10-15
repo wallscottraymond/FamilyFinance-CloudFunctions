@@ -219,7 +219,7 @@ async function matchTransactionToOutflowPeriods(
   // Process each split in the transaction
   for (const split of transaction.splits) {
     // Skip if already assigned to budget or another outflow
-    if ((split.budgetPeriodId && split.budgetPeriodId !== '') || split.outflowPeriodId) {
+    if ((split.budgetId && split.budgetId !== '' && split.budgetId !== 'unassigned') || split.outflowPeriodId) {
       console.log(`[autoMatch] Split ${split.id} already assigned, skipping`);
       continue;
     }
