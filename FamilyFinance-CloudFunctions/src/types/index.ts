@@ -243,6 +243,31 @@ export interface Transaction extends BaseDocument {
   hasIgnoredSplits?: boolean;     // Quick flag for filtering ignored transactions
   hasRefundSplits?: boolean;      // Quick flag for refund transactions
   hasTaxDeductibleSplits?: boolean; // Quick flag for tax tracking
+
+  // NEW: Rules system - Original immutable Plaid data (for rule recalculation)
+  plaidData?: {
+    category: string;              // Original Plaid category array joined
+    detailedCategory?: string;     // Original detailed category
+    primaryCategory?: string;      // Original primary category
+    merchantName?: string;         // Original merchant name
+    amount: number;                // Original amount
+    date: Timestamp;               // Original transaction date
+    description: string;           // Original description/name
+    pending: boolean;              // Original pending status
+
+    // Store full personal_finance_category for reference
+    personalFinanceCategory?: {
+      primary: string;
+      detailed: string;
+      confidenceLevel?: string;
+    };
+  };
+
+  // NEW: Rule application tracking
+  appliedRules?: string[];          // Array of rule IDs currently applied
+  isRuleModified?: boolean;         // Has any rule modified this transaction?
+  lastRuleApplication?: Timestamp;  // When rules were last applied
+  ruleApplicationCount?: number;    // Number of times rules have been applied
 }
 
 export enum TransactionType {
