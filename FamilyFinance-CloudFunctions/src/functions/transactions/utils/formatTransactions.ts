@@ -395,6 +395,31 @@ async function buildTransactionData(
       affectedBudgetPeriods: [], // No longer tracking specific periods
       primaryBudgetId: budgetMatch.budgetId,
       primaryBudgetPeriodId: undefined, // No longer using specific period IDs
+
+      // Rules system - Store original immutable Plaid data
+      plaidData: {
+        category: plaidTransaction.category?.join(',') || '',
+        detailedCategory: categoryDetailed,
+        primaryCategory: categoryPrimary,
+        merchantName: plaidTransaction.merchant_name,
+        amount: plaidTransaction.amount,
+        date: plaidTransaction.date
+          ? Timestamp.fromDate(new Date(plaidTransaction.date))
+          : Timestamp.now(),
+        description: plaidTransaction.name,
+        pending: plaidTransaction.pending,
+        personalFinanceCategory: plaidTransaction.personal_finance_category ? {
+          primary: plaidTransaction.personal_finance_category.primary,
+          detailed: plaidTransaction.personal_finance_category.detailed,
+          confidenceLevel: plaidTransaction.personal_finance_category.confidence_level
+        } : undefined
+      },
+
+      // Rule application tracking (initialize as empty)
+      appliedRules: [],
+      isRuleModified: false,
+      lastRuleApplication: undefined,
+      ruleApplicationCount: 0
     };
 
     return transaction as FamilyTransaction;
