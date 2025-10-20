@@ -327,6 +327,11 @@ async function buildTransactionData(
     const categoryPrimary = plaidTransaction.personal_finance_category?.primary;
     const categoryDetailed = plaidTransaction.personal_finance_category?.detailed;
 
+    // Transaction date for payment tracking
+    const transactionDate = plaidTransaction.date
+      ? Timestamp.fromDate(new Date(plaidTransaction.date))
+      : Timestamp.now();
+
     // Create default split for the transaction
     const defaultSplit: TransactionSplit = {
       id: db.collection('_dummy').doc().id,
@@ -346,6 +351,9 @@ async function buildTransactionData(
       note: undefined,
       billId: undefined,
       billName: undefined,
+
+      // Payment date (matches transaction date)
+      paymentDate: transactionDate,
 
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),

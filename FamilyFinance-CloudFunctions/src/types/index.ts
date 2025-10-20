@@ -203,6 +203,7 @@ export interface TransactionSplit {
 
   // NEW: Payment type tracking for outflow assignments
   paymentType?: PaymentType;      // Payment classification (regular, catch_up, advance, extra_principal)
+  paymentDate?: Timestamp;        // Date when payment was made (matches transaction.date)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;

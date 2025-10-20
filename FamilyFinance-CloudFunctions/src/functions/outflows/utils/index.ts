@@ -10,3 +10,4 @@ export * from './predictFutureBillDueDate';
 export * from './calculateOutflowPeriodStatus';
 export * from './checkIsDuePeriod';
 export * from './autoMatchTransactionToOutflowPeriods';
+export * from './findMatchingOutflowPeriods';

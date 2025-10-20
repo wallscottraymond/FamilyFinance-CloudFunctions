@@ -811,6 +811,411 @@ curl https://us-central1-{project}.cloudfunctions.net/debugOutflowPeriods?userId
 - Reminder customization
 - Withholding strategy options
 
+## Transaction Split Assignment to Outflows
+
+### Multi-Period Assignment Architecture
+
+The system supports assigning transaction splits to outflow periods across ALL THREE period types (monthly, weekly, bi-weekly) simultaneously. This ensures consistency across different period views.
+
+**Key Concepts:**
+- **Bi-directional References:** Transaction splits store outflow period IDs; outflow periods store transaction split references
+- **Multi-Period Assignment:** One transaction split can be assigned to all three period types at once
+- **Payment Date Tracking:** Each split includes `paymentDate` matching the transaction date
+- **Advance Payment Support:** Users can manually specify target periods for advance payments
+
+### Transaction Split Interface
+
+```typescript
+interface TransactionSplit {
+  id: string;
+
+  // Budget assignment
+  budgetId: string;
+  budgetName: string;
+
+  // Outflow assignment (all three period types)
+  outflowId?: string;                    // Parent outflow ID
+  outflowDescription?: string;           // Denormalized outflow description
+  outflowPeriodId?: string;              // Primary period reference (monthly preferred)
+  outflowMonthlyPeriodId?: string;       // Monthly period ID
+  outflowWeeklyPeriodId?: string;        // Weekly period ID
+  outflowBiWeeklyPeriodId?: string;      // Bi-weekly period ID
+
+  // Payment tracking
+  paymentType?: PaymentType;             // regular, catch_up, advance, extra_principal
+  paymentDate?: Timestamp;               // Date when payment was made (matches transaction.date)
+
+  // Other fields...
+  amount: number;
+  categoryId: string;
+  description?: string;
+  isDefault: boolean;
+
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;
+}
+```
+
+### TransactionSplitReference Interface
+
+Stored in outflow_periods to track assigned payments:
+
+```typescript
+interface TransactionSplitReference {
+  transactionId: string;           // Reference to transactions document
+  splitId: string;                 // Specific split within transaction
+  transactionDate: Timestamp;      // When transaction occurred
+  amount: number;                  // Split amount
+  description: string;             // Transaction description
+  paymentType: PaymentType;        // Payment classification
+  isAutoMatched: boolean;          // Was this auto-matched or manual?
+  matchedAt: Timestamp;            // When assignment occurred
+  matchedBy: string;               // User ID or 'system'
+}
+```
+
+### API Functions for Split Assignment
+
+#### `assignSplitToAllOutflowPeriods` (Callable Function)
+**Location:** `api/assignSplitToAllOutflowPeriods.ts`
+**Auth:** EDITOR role required
+**Purpose:** Assign a transaction split to ALL three outflow period types simultaneously
+
+**Request:**
+```typescript
+interface AssignSplitToAllOutflowPeriodsRequest {
+  transactionId: string;              // Transaction containing the split
+  splitId: string;                    // Specific split to assign
+  outflowId: string;                  // Parent outflow ID (not period ID!)
+  paymentType?: PaymentType;          // regular, catch_up, advance, extra_principal
+  clearBudgetAssignment?: boolean;    // Clear budget fields when moving to outflow
+  targetPeriodId?: string;            // Optional: Specific period for advance payments
+}
+```
+
+**Response:**
+```typescript
+interface AssignSplitToAllOutflowPeriodsResponse {
+  success: boolean;
+  split?: TransactionSplit;           // Updated split with all period references
+  monthlyPeriod?: OutflowPeriod;      // Monthly period (if found)
+  weeklyPeriod?: OutflowPeriod;       // Weekly period (if found)
+  biWeeklyPeriod?: OutflowPeriod;     // Bi-weekly period (if found)
+  periodsUpdated: number;             // Count of periods updated
+  message?: string;
+}
+```
+
+**What Happens:**
+1. Validates transaction, split, and outflow ownership
+2. Finds all three matching outflow periods:
+   - **Without targetPeriodId:** Matches based on transaction date
+   - **With targetPeriodId:** Matches based on source period overlap (for advance payments)
+3. Updates transaction split with ALL period references:
+   - Sets `outflowId`, `outflowDescription`
+   - Sets `outflowPeriodId` (primary reference)
+   - Sets `outflowMonthlyPeriodId`, `outflowWeeklyPeriodId`, `outflowBiWeeklyPeriodId`
+   - Sets `paymentType` and `paymentDate`
+   - Optionally clears `budgetId` and `budgetName`
+4. Adds `TransactionSplitReference` to all three outflow periods
+5. Recalculates status for all updated periods
+
+**Example Usage:**
+```typescript
+// Regular payment (auto-detect periods from transaction date)
+const result = await assignSplitToAllOutflowPeriods({
+  transactionId: "txn_123",
+  splitId: "split_456",
+  outflowId: "outflow_789",
+  paymentType: "regular",
+  clearBudgetAssignment: true
+});
+
+// Advance payment (manually specify target period)
+const result = await assignSplitToAllOutflowPeriods({
+  transactionId: "txn_123",
+  splitId: "split_456",
+  outflowId: "outflow_789",
+  paymentType: "advance",
+  targetPeriodId: "2025-M10",  // October 2025 monthly period
+  clearBudgetAssignment: true
+});
+```
+
+#### `unassignSplitFromAllOutflowPeriods` (Callable Function)
+**Location:** `api/unassignSplitFromAllOutflowPeriods.ts`
+**Auth:** EDITOR role required
+**Purpose:** Remove a transaction split assignment from ALL outflow periods
+
+**Request:**
+```typescript
+interface UnassignSplitFromAllOutflowPeriodsRequest {
+  transactionId: string;
+  splitId: string;
+  restoreBudgetAssignment?: boolean;  // Restore original budget assignment
+}
+```
+
+**Response:**
+```typescript
+interface UnassignSplitFromAllOutflowPeriodsResponse {
+  success: boolean;
+  split?: TransactionSplit;
+  periodsUpdated: number;
+  message?: string;
+}
+```
+
+**What Happens:**
+1. Retrieves transaction and validates ownership
+2. Finds split and extracts all three period IDs
+3. Clears outflow assignment from split:
+   - Removes `outflowId`, `outflowDescription`
+   - Removes all period ID references
+   - Removes `paymentType` and `paymentDate`
+   - Optionally restores `budgetId` and `budgetName`
+4. Removes `TransactionSplitReference` from all three outflow periods
+5. Recalculates status for all affected periods
+
+### Utility Functions
+
+#### `findMatchingOutflowPeriods`
+**Location:** `utils/findMatchingOutflowPeriods.ts`
+**Purpose:** Find all three period types based on transaction date
+
+```typescript
+interface MatchingOutflowPeriodsResult {
+  monthlyPeriodId: string | null;
+  weeklyPeriodId: string | null;
+  biWeeklyPeriodId: string | null;
+  foundCount: number;
+}
+
+async function findMatchingOutflowPeriods(
+  db: Firestore,
+  outflowId: string,
+  transactionDate: Timestamp
+): Promise<MatchingOutflowPeriodsResult>
+```
+
+**Logic:**
+- Queries `outflow_periods` where transaction date falls within period range
+- Separates results by `periodType` (MONTHLY, WEEKLY, BI_MONTHLY)
+- Returns all three period IDs (or null if not found)
+- Logs warning if fewer than 3 periods found
+
+#### `findMatchingOutflowPeriodsBySourcePeriod`
+**Location:** `utils/findMatchingOutflowPeriods.ts`
+**Purpose:** Find all three period types based on a target source period
+
+```typescript
+async function findMatchingOutflowPeriodsBySourcePeriod(
+  db: Firestore,
+  outflowId: string,
+  targetPeriodId: string
+): Promise<MatchingOutflowPeriodsResult>
+```
+
+**Logic:**
+1. Fetches source period to get date range
+2. Queries `outflow_periods` where period overlaps with source period range
+3. Prefers exact matches (where `periodId === targetPeriodId`)
+4. Returns all three period types that overlap with target period
+
+**Use Case:** Advance payments where user pays multiple periods ahead
+- User pays $300 for 3 months rent
+- Creates 3 separate splits from one transaction
+- Each split assigned to different monthly period using `targetPeriodId`
+
+#### `validatePeriodsFound`
+**Location:** `utils/findMatchingOutflowPeriods.ts`
+**Purpose:** Validate at least one period was found
+
+```typescript
+function validatePeriodsFound(result: MatchingOutflowPeriodsResult): void {
+  if (result.foundCount === 0) {
+    throw new Error('No matching outflow periods found...');
+  }
+}
+```
+
+#### `calculateOutflowPeriodStatus`
+**Location:** `utils/calculateOutflowPeriodStatus.ts`
+**Purpose:** Calculate period status based on payments and due dates
+
+```typescript
+type OutflowPeriodStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'not_due';
+
+function calculateOutflowPeriodStatus(
+  isDuePeriod: boolean,
+  dueDate: Timestamp | undefined,
+  expectedDueDate: Timestamp | undefined,
+  amountDue: number,
+  transactionSplits: TransactionSplitReference[]
+): OutflowPeriodStatus
+```
+
+**Status Logic:**
+- **not_due:** Not a due period (no payment expected)
+- **pending:** Due period with no payments
+- **partial:** Due period with some payment (< amount due)
+- **paid:** Due period with full payment (≥ amount due)
+- **overdue:** Past due date with insufficient payment
+
+### Payment Types
+
+```typescript
+enum PaymentType {
+  REGULAR = 'regular',              // Normal on-time payment
+  CATCH_UP = 'catch_up',            // Payment for past-due bill
+  ADVANCE = 'advance',              // Payment made well before due date
+  EXTRA_PRINCIPAL = 'extra_principal' // Extra payment beyond required amount
+}
+```
+
+**Auto-Detection Logic (in auto-match):**
+- **EXTRA_PRINCIPAL:** Amount > bill amount × 1.1 (10% tolerance)
+- **CATCH_UP:** Payment before due date, but due date has passed
+- **ADVANCE:** Payment > 7 days before due date
+- **REGULAR:** All other payments
+
+### Payment Date Tracking
+
+**All transaction splits include `paymentDate` field:**
+- Set when split is created (matches `transaction.date`)
+- Preserved when split is assigned to outflows
+- Ensures consistent payment tracking across all operations
+
+**Updated in all split creation points:**
+1. `formatTransactions.ts` - Plaid transaction import
+2. `migrateTransactionsToSplits.ts` - Migration of existing transactions
+3. `assignSplitToAllOutflowPeriods.ts` - Manual outflow assignment
+4. `autoMatchTransactionToOutflowPeriods.ts` - Auto-matching historical transactions
+
+### Common Workflows
+
+#### Assigning a Payment to a Bill
+
+1. **User marks transaction as bill payment:**
+   - Opens transaction detail screen
+   - Selects "Assign to Bill"
+   - Chooses outflow from list
+   - Selects payment type
+
+2. **System assigns to all period types:**
+   - Calls `assignSplitToAllOutflowPeriods`
+   - Finds matching monthly, weekly, bi-weekly periods
+   - Updates transaction split with all references
+   - Adds payment to all three outflow periods
+   - Recalculates status (pending → paid)
+
+3. **User sees updated status:**
+   - Monthly view: "Internet Bill - Paid"
+   - Weekly view: "Internet Bill - Paid"
+   - Bi-weekly view: "Internet Bill - Paid"
+   - All views stay in sync
+
+#### Paying Multiple Periods in Advance
+
+1. **User pays 3 months rent ($3,000):**
+   - Transaction imported from bank
+   - Total amount: $3,000
+
+2. **User creates 3 splits:**
+   - Split 1: $1,000 for October 2025
+   - Split 2: $1,000 for November 2025
+   - Split 3: $1,000 for December 2025
+
+3. **Assigns each split to target period:**
+   ```typescript
+   // October rent
+   await assignSplitToAllOutflowPeriods({
+     transactionId: "txn_123",
+     splitId: "split_1",
+     outflowId: "rent_outflow",
+     paymentType: "advance",
+     targetPeriodId: "2025-M10"  // October source period
+   });
+
+   // November rent
+   await assignSplitToAllOutflowPeriods({
+     transactionId: "txn_123",
+     splitId: "split_2",
+     outflowId: "rent_outflow",
+     paymentType: "advance",
+     targetPeriodId: "2025-M11"  // November source period
+   });
+
+   // December rent
+   await assignSplitToAllOutflowPeriods({
+     transactionId: "txn_123",
+     splitId: "split_3",
+     outflowId: "rent_outflow",
+     paymentType: "advance",
+     targetPeriodId: "2025-M12"  // December source period
+   });
+   ```
+
+4. **System updates all periods:**
+   - Each split assigned to its target monthly period
+   - Also assigned to overlapping weekly/bi-weekly periods
+   - All three months show as paid in advance
+
+#### Unassigning an Incorrect Payment
+
+1. **User realizes mistake:**
+   - Assigned wrong transaction to bill
+   - Opens transaction detail
+
+2. **User removes assignment:**
+   - Taps "Unassign from Bill"
+   - Confirms action
+
+3. **System clears assignment:**
+   - Calls `unassignSplitFromAllOutflowPeriods`
+   - Removes split from all three period types
+   - Restores original budget assignment
+   - Recalculates period status (paid → pending)
+
+### Auto-Matching Historical Transactions
+
+When an outflow is created (Plaid-detected), the system automatically matches historical transactions:
+
+**Process:**
+1. `onOutflowCreated` trigger fires
+2. After creating periods, calls `orchestrateAutoMatchingWorkflow`
+3. Fetches all transactions in `outflow.transactionIds` array
+4. For each transaction:
+   - Finds matching outflow period based on date
+   - Determines payment type (regular, catch_up, advance)
+   - Assigns split to appropriate period
+   - Sets `paymentDate` to match transaction date
+5. Recalculates all period statuses
+
+**Auto-Match Configuration:**
+- Only matches unassigned splits
+- Skips splits already assigned to budgets or other outflows
+- Marks as `isAutoMatched: true` in `TransactionSplitReference`
+- Logs all matches for debugging
+
+### Performance Considerations
+
+**Multi-Period Assignment:**
+- Uses batch operations for atomic updates
+- Maximum 3 periods updated per assignment (one per type)
+- Efficient queries using indexed fields
+
+**Status Recalculation:**
+- Only recalculates affected periods
+- Uses denormalized data to avoid joins
+- Simple aggregation of split amounts
+
+**Payment Tracking:**
+- `paymentDate` stored directly on splits (no additional queries)
+- Consistent across all operations
+- Enables historical payment analysis
+
 ## Notes for AI Assistants
 
 - **Outflows are recurring bills** - they define the expense pattern
@@ -828,3 +1233,9 @@ curl https://us-central1-{project}.cloudfunctions.net/debugOutflowPeriods?userId
 - **Document breaking changes** and migration strategies
 - **Focus on individual users first** - family features come later
 - **Match budgets structure** for consistency across modules
+- **CRITICAL: Multi-period assignment** - Always assign splits to ALL THREE period types (monthly, weekly, bi-weekly)
+- **CRITICAL: Payment date tracking** - Always set `paymentDate` field on splits to match `transaction.date`
+- **Bi-directional references** - Splits store period IDs, periods store split references
+- **Advance payment support** - Use `targetPeriodId` to manually specify periods for advance payments
+- **Payment type auto-detection** - System determines payment type based on amount and timing
+- **Status recalculation** - Always recalculate period status after assignment/unassignment changes

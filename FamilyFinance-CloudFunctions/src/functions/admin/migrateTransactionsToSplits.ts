@@ -150,6 +150,7 @@ export const migrateTransactionsToSplits = onCall({
             amount: transactionData.amount,
             description: undefined,
             isDefault: true,
+            paymentDate: transactionData.date, // Payment date matches transaction date
             createdAt: transactionData.createdAt || now,
             updatedAt: now,
             createdBy: transactionData.userId,

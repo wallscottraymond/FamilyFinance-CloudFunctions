@@ -366,6 +366,7 @@ async function updateTransactionSplitWithOutflowAssignment(
     outflowId: outflow.id!,
     outflowDescription: outflow.description,
     paymentType,
+    paymentDate: transactionData.date, // Payment date matches transaction date
     updatedAt: admin.firestore.Timestamp.now()
   };
 
