@@ -47,9 +47,9 @@ export const onOutflowCreated = onDocumentCreated({
     const db = admin.firestore();
 
     // Calculate time range for period generation using utility function
-    const { startDate, endDate } = calculatePeriodGenerationRange(outflowData, 3);
+    const { startDate, endDate } = calculatePeriodGenerationRange(outflowData, 15);
 
-    console.log(`[onOutflowCreated] Generating outflow periods from ${startDate.toISOString()} (firstDate) to ${endDate.toISOString()} (3 months forward)`);
+    console.log(`[onOutflowCreated] Generating outflow periods from ${startDate.toISOString()} (firstDate) to ${endDate.toISOString()} (15 months forward)`);
 
     // Create outflow periods using utility function
     const result = await createOutflowPeriodsFromSource(

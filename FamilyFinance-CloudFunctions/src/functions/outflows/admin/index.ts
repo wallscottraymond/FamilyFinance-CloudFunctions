@@ -6,5 +6,6 @@
 
 export * from './createTestOutflows';
 export * from './debugOutflowPeriods';
+export * from './extendOutflowPeriods';
 export * from './migrateTransactionSplits';
 export * from './debugTransactionMatching';

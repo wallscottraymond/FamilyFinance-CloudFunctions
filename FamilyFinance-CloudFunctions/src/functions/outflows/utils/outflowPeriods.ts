@@ -33,12 +33,12 @@ export interface CreateOutflowPeriodsResult {
  * Calculate the date range for outflow period generation
  *
  * @param outflow - The recurring outflow
- * @param monthsForward - Number of months to generate forward from now (default: 3)
+ * @param monthsForward - Number of months to generate forward from now (default: 15)
  * @returns Object with startDate and endDate
  */
 export function calculatePeriodGenerationRange(
   outflow: RecurringOutflow,
-  monthsForward: number = 3
+  monthsForward: number = 15
 ): { startDate: Date; endDate: Date } {
   // Start from firstDate to capture historical periods
   const startDate = outflow.firstDate.toDate();

@@ -50,39 +50,48 @@ export function calculateOutflowPeriodStatus(
     return sum;
   }, 0);
 
-  // If amount is fully paid or overpaid
-  if (totalPaid >= amountDue && amountDue > 0) {
-    // Check if paid before due date
-    if (isDuePeriod && dueDate && dueDate.toMillis() > now.toMillis()) {
-      return OutflowPeriodStatus.PAID_EARLY;
-    }
-    return OutflowPeriodStatus.PAID;
-  }
-
-  // If partially paid (some payment, but not enough)
-  if (totalPaid > 0 && totalPaid < amountDue) {
-    // Check if we're past due date
-    if (isDuePeriod && dueDate && dueDate.toMillis() < now.toMillis()) {
-      return OutflowPeriodStatus.OVERDUE; // Past due and still underpaid
-    }
-    return OutflowPeriodStatus.PARTIAL; // Partial payment, still within timeframe
-  }
-
-  // No payments yet
-  if (totalPaid === 0) {
-    // Check if overdue
-    if (isDuePeriod && dueDate && dueDate.toMillis() < now.toMillis()) {
-      return OutflowPeriodStatus.OVERDUE;
+  // If this is a due period (amountDue > 0)
+  if (isDuePeriod && amountDue > 0) {
+    // If amount is fully paid or overpaid
+    if (totalPaid >= amountDue) {
+      // Check if paid before due date
+      if (dueDate && dueDate.toMillis() > now.toMillis()) {
+        return OutflowPeriodStatus.PAID_EARLY;
+      }
+      return OutflowPeriodStatus.PAID;
     }
 
-    // Check if due soon (within 3 days)
-    if (isDuePeriod && dueDate) {
-      const msUntilDue = dueDate.toMillis() - now.toMillis();
-      const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
-      if (msUntilDue > 0 && msUntilDue < threeDaysInMs) {
-        return OutflowPeriodStatus.DUE_SOON;
+    // If partially paid (some payment, but not enough)
+    if (totalPaid > 0 && totalPaid < amountDue) {
+      // Check if we're past due date
+      if (dueDate && dueDate.toMillis() < now.toMillis()) {
+        return OutflowPeriodStatus.OVERDUE; // Past due and still underpaid
+      }
+      return OutflowPeriodStatus.PARTIAL; // Partial payment, still within timeframe
+    }
+
+    // No payments yet for due period
+    if (totalPaid === 0) {
+      // Check if overdue
+      if (dueDate && dueDate.toMillis() < now.toMillis()) {
+        return OutflowPeriodStatus.OVERDUE;
+      }
+
+      // Check if due soon (within 3 days)
+      if (dueDate) {
+        const msUntilDue = dueDate.toMillis() - now.toMillis();
+        const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+        if (msUntilDue > 0 && msUntilDue < threeDaysInMs) {
+          return OutflowPeriodStatus.DUE_SOON;
+        }
       }
     }
+  }
+
+  // If this is NOT a due period (amountDue = 0) but has payments assigned
+  // Mark as paid if there are any payments (user has assigned transaction to this period)
+  if (!isDuePeriod && totalPaid > 0) {
+    return OutflowPeriodStatus.PAID;
   }
 
   // Default: pending (not yet due, no payments)

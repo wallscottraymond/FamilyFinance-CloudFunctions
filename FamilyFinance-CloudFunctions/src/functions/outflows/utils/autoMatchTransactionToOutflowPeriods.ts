@@ -198,6 +198,9 @@ async function getTransactionsByPlaidIds(
 
 /**
  * Match a single transaction to outflow periods
+ *
+ * IMPORTANT: This function must assign splits to ALL THREE period types
+ * (monthly, weekly, bi-weekly) to maintain consistency across period views.
  */
 async function matchTransactionToOutflowPeriods(
   db: admin.firestore.Firestore,
@@ -206,15 +209,15 @@ async function matchTransactionToOutflowPeriods(
   outflowPeriods: OutflowPeriod[],
   result: AutoMatchResult
 ): Promise<void> {
-  // Find the appropriate outflow period based on transaction date
-  const targetPeriod = findMatchingOutflowPeriod(transaction.date, outflowPeriods);
+  // Find ALL THREE matching period types (monthly, weekly, bi-weekly)
+  const matchingPeriods = findAllMatchingOutflowPeriods(transaction.date, outflowPeriods);
 
-  if (!targetPeriod) {
-    console.warn(`[autoMatch] No matching period found for transaction ${transaction.id} dated ${transaction.date.toDate().toISOString()}`);
+  if (matchingPeriods.foundCount === 0) {
+    console.warn(`[autoMatch] No matching periods found for transaction ${transaction.id} dated ${transaction.date.toDate().toISOString()}`);
     return;
   }
 
-  console.log(`[autoMatch] Matching transaction ${transaction.id} to period ${targetPeriod.id}`);
+  console.log(`[autoMatch] Matching transaction ${transaction.id} to ${matchingPeriods.foundCount} periods`);
 
   // Process each split in the transaction
   for (const split of transaction.splits) {
@@ -224,14 +227,23 @@ async function matchTransactionToOutflowPeriods(
       continue;
     }
 
-    // Determine payment type based on amount and dates
+    // Determine payment type (use monthly period if available, otherwise first found)
+    const primaryPeriod = matchingPeriods.monthlyPeriod ||
+                         matchingPeriods.weeklyPeriod ||
+                         matchingPeriods.biWeeklyPeriod;
+
+    if (!primaryPeriod) {
+      console.warn(`[autoMatch] No primary period found for split ${split.id}`);
+      continue;
+    }
+
     const paymentType = determinePaymentType(
       split.amount,
       transaction.date,
-      targetPeriod
+      primaryPeriod
     );
 
-    // Create TransactionSplitReference
+    // Create TransactionSplitReference for each period type
     const splitRef: TransactionSplitReference = {
       transactionId: transaction.id!,
       splitId: split.id,
@@ -244,42 +256,68 @@ async function matchTransactionToOutflowPeriods(
       matchedBy: 'system'
     };
 
-    // Update transaction split with outflow assignment
-    await updateTransactionSplitWithOutflowAssignment(
+    // Update transaction split with ALL THREE period assignments
+    await updateTransactionSplitWithAllOutflowPeriods(
       db,
       transaction.id!,
       split,
-      targetPeriod,
+      matchingPeriods,
       outflow,
-      paymentType
+      paymentType,
+      transaction.date
     );
 
-    // Add split reference to outflow period
-    await addSplitReferenceToOutflowPeriod(
-      db,
-      targetPeriod.id!,
-      splitRef
-    );
+    // Add split reference to ALL outflow periods (monthly, weekly, bi-weekly)
+    const periodIdsToUpdate: string[] = [];
+
+    if (matchingPeriods.monthlyPeriod) {
+      await addSplitReferenceToOutflowPeriod(db, matchingPeriods.monthlyPeriod.id!, splitRef);
+      periodIdsToUpdate.push(matchingPeriods.monthlyPeriod.id!);
+    }
+
+    if (matchingPeriods.weeklyPeriod) {
+      await addSplitReferenceToOutflowPeriod(db, matchingPeriods.weeklyPeriod.id!, splitRef);
+      periodIdsToUpdate.push(matchingPeriods.weeklyPeriod.id!);
+    }
+
+    if (matchingPeriods.biWeeklyPeriod) {
+      await addSplitReferenceToOutflowPeriod(db, matchingPeriods.biWeeklyPeriod.id!, splitRef);
+      periodIdsToUpdate.push(matchingPeriods.biWeeklyPeriod.id!);
+    }
 
     result.splitsAssigned++;
-    console.log(`[autoMatch] Assigned split ${split.id} to period ${targetPeriod.id} as ${paymentType}`);
+    console.log(`[autoMatch] Assigned split ${split.id} to ${periodIdsToUpdate.length} periods as ${paymentType}`);
   }
 
-  // Mark this period as updated (for recalculation)
+  // Mark periods as updated (for recalculation)
   if (!result.periodsUpdated) {
     result.periodsUpdated = 0;
   }
-  result.periodsUpdated++;
+  result.periodsUpdated += matchingPeriods.foundCount;
 }
 
 /**
- * Find the outflow period that matches the transaction date
+ * Find ALL THREE matching outflow period types (monthly, weekly, bi-weekly)
+ *
+ * This ensures consistency across all period views when auto-matching transactions.
  */
-function findMatchingOutflowPeriod(
+function findAllMatchingOutflowPeriods(
   transactionDate: admin.firestore.Timestamp,
   outflowPeriods: OutflowPeriod[]
-): OutflowPeriod | null {
+): {
+  monthlyPeriod: OutflowPeriod | null;
+  weeklyPeriod: OutflowPeriod | null;
+  biWeeklyPeriod: OutflowPeriod | null;
+  foundCount: number;
+} {
   const txnMs = transactionDate.toMillis();
+
+  const result = {
+    monthlyPeriod: null as OutflowPeriod | null,
+    weeklyPeriod: null as OutflowPeriod | null,
+    biWeeklyPeriod: null as OutflowPeriod | null,
+    foundCount: 0
+  };
 
   for (const period of outflowPeriods) {
     const startMs = period.periodStartDate.toMillis();
@@ -287,11 +325,21 @@ function findMatchingOutflowPeriod(
 
     // Check if transaction date falls within this period
     if (txnMs >= startMs && txnMs <= endMs) {
-      return period;
+      // Separate by period type (using lowercase enum values)
+      if (period.periodType === 'monthly') {
+        result.monthlyPeriod = period;
+        result.foundCount++;
+      } else if (period.periodType === 'weekly') {
+        result.weeklyPeriod = period;
+        result.foundCount++;
+      } else if (period.periodType === 'bi_monthly') {
+        result.biWeeklyPeriod = period;
+        result.foundCount++;
+      }
     }
   }
 
-  return null;
+  return result;
 }
 
 /**
@@ -333,15 +381,23 @@ function determinePaymentType(
 }
 
 /**
- * Update transaction split with outflow assignment
+ * Update transaction split with ALL THREE outflow period assignments
+ *
+ * This ensures the split has references to monthly, weekly, and bi-weekly periods
+ * so it appears correctly in all period views.
  */
-async function updateTransactionSplitWithOutflowAssignment(
+async function updateTransactionSplitWithAllOutflowPeriods(
   db: admin.firestore.Firestore,
   transactionId: string,
   split: TransactionSplit,
-  outflowPeriod: OutflowPeriod,
+  matchingPeriods: {
+    monthlyPeriod: OutflowPeriod | null;
+    weeklyPeriod: OutflowPeriod | null;
+    biWeeklyPeriod: OutflowPeriod | null;
+  },
   outflow: RecurringOutflow,
-  paymentType: PaymentType
+  paymentType: PaymentType,
+  paymentDate: admin.firestore.Timestamp
 ): Promise<void> {
   const transactionRef = db.collection('transactions').doc(transactionId);
 
@@ -360,13 +416,25 @@ async function updateTransactionSplitWithOutflowAssignment(
     throw new Error(`Split ${split.id} not found in transaction ${transactionId}`);
   }
 
+  // Primary period ID (prefer monthly, fallback to weekly, then bi-weekly)
+  const primaryPeriodId = matchingPeriods.monthlyPeriod?.id ||
+                         matchingPeriods.weeklyPeriod?.id ||
+                         matchingPeriods.biWeeklyPeriod?.id;
+
   splits[splitIndex] = {
     ...splits[splitIndex],
-    outflowPeriodId: outflowPeriod.id!,
+    // Outflow assignment
     outflowId: outflow.id!,
     outflowDescription: outflow.description,
+    // Primary period reference
+    outflowPeriodId: primaryPeriodId,
+    // ALL THREE period type references
+    outflowMonthlyPeriodId: matchingPeriods.monthlyPeriod?.id || undefined,
+    outflowWeeklyPeriodId: matchingPeriods.weeklyPeriod?.id || undefined,
+    outflowBiWeeklyPeriodId: matchingPeriods.biWeeklyPeriod?.id || undefined,
+    // Payment tracking
     paymentType,
-    paymentDate: transactionData.date, // Payment date matches transaction date
+    paymentDate, // Payment date matches transaction date
     updatedAt: admin.firestore.Timestamp.now()
   };
 
