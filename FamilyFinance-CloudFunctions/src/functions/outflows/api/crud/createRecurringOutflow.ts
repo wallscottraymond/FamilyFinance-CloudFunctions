@@ -114,15 +114,46 @@ export const createRecurringOutflow = onCall<CreateRecurringOutflowRequest, Prom
         familyId,
       } = request.data;
 
+      // Validation constants
+      const VALIDATION = {
+        MAX_AMOUNT: 1000000,           // $1M max
+        MIN_AMOUNT: 0.01,              // $0.01 min
+        MAX_DESCRIPTION_LENGTH: 200,
+        MAX_NOTES_LENGTH: 1000,
+        MAX_MERCHANT_NAME_LENGTH: 100,
+        MIN_DUE_DAY: 1,
+        MAX_DUE_DAY: 31,
+      };
+
       // Validate required fields
       if (!description || !description.trim()) {
         throw new HttpsError('invalid-argument', 'Bill name (description) is required');
       }
 
-      if (!amount || amount <= 0) {
-        throw new HttpsError('invalid-argument', 'Amount must be greater than 0');
+      // Validate description length
+      if (description.trim().length > VALIDATION.MAX_DESCRIPTION_LENGTH) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Description must be ${VALIDATION.MAX_DESCRIPTION_LENGTH} characters or less (current: ${description.trim().length})`
+        );
       }
 
+      // Validate amount with upper and lower bounds
+      if (!amount || amount < VALIDATION.MIN_AMOUNT) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Amount must be at least $${VALIDATION.MIN_AMOUNT}`
+        );
+      }
+
+      if (amount > VALIDATION.MAX_AMOUNT) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Amount cannot exceed $${VALIDATION.MAX_AMOUNT.toLocaleString()}`
+        );
+      }
+
+      // Validate frequency
       if (!frequency) {
         throw new HttpsError('invalid-argument', 'Frequency is required');
       }
@@ -130,6 +161,43 @@ export const createRecurringOutflow = onCall<CreateRecurringOutflowRequest, Prom
       const validFrequencies = ['weekly', 'bi_weekly', 'monthly', 'quarterly', 'yearly'];
       if (!validFrequencies.includes(frequency)) {
         throw new HttpsError('invalid-argument', `Frequency must be one of: ${validFrequencies.join(', ')}`);
+      }
+
+      // Validate dueDay if provided
+      if (dueDay !== undefined && dueDay !== null) {
+        if (!Number.isInteger(dueDay) || dueDay < VALIDATION.MIN_DUE_DAY || dueDay > VALIDATION.MAX_DUE_DAY) {
+          throw new HttpsError(
+            'invalid-argument',
+            `Due day must be an integer between ${VALIDATION.MIN_DUE_DAY} and ${VALIDATION.MAX_DUE_DAY} (current: ${dueDay})`
+          );
+        }
+      }
+
+      // Validate merchantName length if provided
+      if (merchantName && merchantName.trim().length > VALIDATION.MAX_MERCHANT_NAME_LENGTH) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Merchant name must be ${VALIDATION.MAX_MERCHANT_NAME_LENGTH} characters or less (current: ${merchantName.trim().length})`
+        );
+      }
+
+      // Validate userNotes length if provided
+      if (userNotes && userNotes.trim().length > VALIDATION.MAX_NOTES_LENGTH) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Notes must be ${VALIDATION.MAX_NOTES_LENGTH} characters or less (current: ${userNotes.trim().length})`
+        );
+      }
+
+      // Validate expense type if provided
+      if (expenseType) {
+        const validExpenseTypes = ['subscription', 'utility', 'loan', 'rent', 'insurance', 'tax', 'other'];
+        if (!validExpenseTypes.includes(expenseType)) {
+          throw new HttpsError(
+            'invalid-argument',
+            `Expense type must be one of: ${validExpenseTypes.join(', ')}`
+          );
+        }
       }
 
       // Generate a unique stream ID for user-created bills

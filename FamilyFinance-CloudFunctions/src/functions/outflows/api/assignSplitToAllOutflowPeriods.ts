@@ -1,164 +1,42 @@
 /**
- * =============================================================================
  * Assign Split to All Outflow Periods - Callable Cloud Function
- * =============================================================================
  *
- * This function assigns a transaction split to ALL THREE outflow period types
- * (monthly, weekly, bi-weekly) simultaneously to maintain consistency across
- * all period views in the Family Finance app.
+ * Assigns a transaction split to ALL THREE outflow period types (monthly, weekly, bi-weekly)
+ * simultaneously to maintain consistency across all period views in the app.
  *
- * WHY THIS EXISTS:
- * ----------------
- * The Family Finance app displays bills in three different period views:
- * - Monthly View: Calendar month organization (e.g., October 2025)
- * - Weekly View: Weekly organization (e.g., Week 40 of 2025)
- * - Bi-Weekly View: Two-week period organization
+ * CRITICAL: This is the ONLY supported method for assigning splits to outflows.
+ * Always assigns to all three period types to keep views synchronized.
  *
- * When a user marks a transaction as a bill payment, ALL THREE views must show
- * the payment consistently. This function ensures that by:
- * 1. Finding all three matching outflow periods
- * 2. Updating the transaction split with ALL period references
- * 3. Adding the payment to ALL three outflow_periods documents
- * 4. Recalculating status for ALL three periods atomically
+ * PARAMETERS:
+ * - transactionId: Transaction containing the split
+ * - splitId: Specific split to assign
+ * - outflowId: Parent outflow ID (not period ID!)
+ * - paymentType: 'regular' | 'catch_up' | 'advance' | 'extra_principal'
+ * - clearBudgetAssignment: Clear budget fields when moving to outflow
+ * - targetPeriodId: Optional specific period for advance payments
  *
- * CORE FUNCTIONALITY:
- * -------------------
- * 1. **Validation**: Ensures user owns transaction, split, and outflow
- * 2. **Period Finding**: Locates all three matching periods (monthly/weekly/bi-weekly)
- * 3. **Bi-Directional Update**:
- *    - Transaction split stores period IDs
- *    - Outflow periods store split references
- * 4. **Status Recalculation**: Updates period status (pending → paid, etc.)
- * 5. **Atomic Operations**: Uses Firestore batches for data consistency
+ * MATCHING MODES:
+ * 1. Auto-detect (default): Uses transaction date to find matching periods
+ * 2. Manual target: Uses targetPeriodId for advance payments across multiple periods
  *
- * TWO MATCHING MODES:
- * -------------------
- * MODE 1: Auto-detect from transaction date (default)
- *   - Uses transaction.date to find periods containing that date
- *   - Best for: Regular payments made on the transaction date
- *   - Example: User pays Internet bill on Oct 15 → finds Oct periods
- *
- * MODE 2: Manual target period (advance payments)
- *   - Uses targetPeriodId to find periods overlapping target period
- *   - Best for: Advance payments spanning multiple periods
- *   - Example: User pays 3 months rent → creates 3 splits with different targetPeriodIds
- *
- * DATA ARCHITECTURE:
- * ------------------
- * Bi-directional references between transaction splits and outflow periods:
- *
- * TransactionSplit (in transactions collection):
- *   - outflowId: "outflow_123"
- *   - outflowDescription: "Internet Bill"
- *   - outflowPeriodId: "outflow_123_2025-M10" (primary)
- *   - outflowMonthlyPeriodId: "outflow_123_2025-M10"
- *   - outflowWeeklyPeriodId: "outflow_123_2025-W40"
- *   - outflowBiWeeklyPeriodId: "outflow_123_2025-BM20"
- *   - paymentType: "regular"
- *   - paymentDate: Timestamp(2025-10-15)
- *
- * OutflowPeriod (in outflow_periods collection):
- *   - transactionSplits: [
- *       {
- *         transactionId: "txn_456",
- *         splitId: "split_789",
- *         amount: 89.99,
- *         paymentType: "regular",
- *         isAutoMatched: false
- *       }
- *     ]
+ * RETURNS:
+ * - success: boolean
+ * - split: Updated transaction split with all period references
+ * - monthlyPeriod, weeklyPeriod, biWeeklyPeriod: Updated period documents
+ * - periodsUpdated: Count of periods updated (up to 3)
  *
  * PAYMENT TYPES:
- * --------------
  * - REGULAR: Normal on-time payment
  * - CATCH_UP: Payment for past-due bill
- * - ADVANCE: Payment made well before due date (> 7 days)
+ * - ADVANCE: Payment > 7 days before due date
  * - EXTRA_PRINCIPAL: Payment exceeding required amount
  *
- * PAYMENT DATE TRACKING:
- * ----------------------
- * The `paymentDate` field on the transaction split is CRITICAL:
- * - Always set to match transaction.date
- * - Preserved across all operations
- * - Enables historical payment analysis
- * - Used for payment timing calculations
- *
- * BUDGET CLEARING:
- * ----------------
- * When clearBudgetAssignment = true:
- * - Removes split from budget tracking
- * - Clears budgetId and budgetName fields
- * - Moves split from budget → outflow categorization
- *
- * USE CASES:
- * ----------
- * 1. Regular Bill Payment:
- *    User: "I paid my Internet bill today"
- *    → assignSplitToAllOutflowPeriods(txnId, splitId, outflowId, "regular")
- *    → Finds periods containing today's date
- *    → Marks all three periods as paid
- *
- * 2. Advance Payment (Single Period):
- *    User: "I paid next month's rent early"
- *    → assignSplitToAllOutflowPeriods(txnId, splitId, outflowId, "advance", true, "2025-M11")
- *    → Finds periods overlapping November 2025
- *    → Marks November periods as paid in advance
- *
- * 3. Advance Payment (Multiple Periods):
- *    User: "I paid 3 months rent with one transaction"
- *    → Create 3 splits from the transaction
- *    → assignSplitToAllOutflowPeriods(txnId, split1Id, outflowId, "advance", true, "2025-M10")
- *    → assignSplitToAllOutflowPeriods(txnId, split2Id, outflowId, "advance", true, "2025-M11")
- *    → assignSplitToAllOutflowPeriods(txnId, split3Id, outflowId, "advance", true, "2025-M12")
- *    → Each split assigned to different month's periods
- *
- * FIRESTORE OPERATIONS:
- * ---------------------
- * 1. Read: transactions/{transactionId}
- * 2. Read: outflows/{outflowId}
- * 3. Query: outflow_periods (find matching periods)
- * 4. Batch Update: transactions/{transactionId} (update split)
- * 5. Batch Update: outflow_periods/* (add split references)
- * 6. Batch Update: outflow_periods/* (recalculate statuses)
- *
  * SECURITY:
- * ---------
  * - Requires EDITOR role or higher
- * - User must own the transaction (transaction.userId === auth.uid)
- * - User must own the outflow (outflow.userId === auth.uid)
- * - Split must belong to transaction (split exists in transaction.splits)
+ * - User must own transaction and outflow
  * - Cannot reassign split already assigned to another outflow
  *
- * PERFORMANCE:
- * ------------
- * - Memory: 256MiB (handles complex period calculations)
- * - Timeout: 30 seconds (ample time for batch operations)
- * - Batch operations: Atomic updates (all succeed or all fail)
- * - Max periods updated: 3 (one per type)
- *
- * ERROR HANDLING:
- * ---------------
- * - Missing parameters → HttpsError('invalid-argument')
- * - Invalid payment type → HttpsError('invalid-argument')
- * - Transaction not found → HttpsError('not-found')
- * - Outflow not found → HttpsError('not-found')
- * - Split not found → HttpsError('not-found')
- * - Permission denied → HttpsError('permission-denied')
- * - Split already assigned → HttpsError('failed-precondition')
- * - No matching periods → HttpsError with descriptive message
- *
- * FILE LOCATION:
- * --------------
- * src/functions/outflows/api/assignSplitToAllOutflowPeriods.ts
- *
- * This is an API function (user-facing callable function) in the outflows module.
- *
- * RELATED FILES:
- * --------------
- * - unassignSplitFromAllOutflowPeriods.ts: Reverse operation (remove assignment)
- * - findMatchingOutflowPeriods.ts: Period finding utilities
- * - calculateOutflowPeriodStatus.ts: Status calculation logic
- * - autoMatchTransactionToOutflowPeriods.ts: Automatic assignment for historical transactions
+ * See CLAUDE.md for detailed workflow examples and data architecture.
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -371,28 +249,78 @@ export const assignSplitToAllOutflowPeriods = onCall(
         });
       }
 
+      // Step 10: Fetch period documents for status recalculation BEFORE batch commit
+      // This allows us to cache the period data and avoid re-reading after the batch update
+      const cachedPeriods: {
+        monthly?: OutflowPeriod;
+        weekly?: OutflowPeriod;
+        biWeekly?: OutflowPeriod;
+      } = {};
+
+      // Fetch all periods in parallel before committing the batch
+      const periodFetchPromises: Promise<void>[] = [];
+
+      if (matchingPeriods.monthlyPeriodId) {
+        periodFetchPromises.push(
+          db.collection('outflow_periods').doc(matchingPeriods.monthlyPeriodId).get()
+            .then(doc => {
+              if (doc.exists) {
+                cachedPeriods.monthly = { id: doc.id, ...doc.data() } as OutflowPeriod;
+              }
+            })
+        );
+      }
+
+      if (matchingPeriods.weeklyPeriodId) {
+        periodFetchPromises.push(
+          db.collection('outflow_periods').doc(matchingPeriods.weeklyPeriodId).get()
+            .then(doc => {
+              if (doc.exists) {
+                cachedPeriods.weekly = { id: doc.id, ...doc.data() } as OutflowPeriod;
+              }
+            })
+        );
+      }
+
+      if (matchingPeriods.biWeeklyPeriodId) {
+        periodFetchPromises.push(
+          db.collection('outflow_periods').doc(matchingPeriods.biWeeklyPeriodId).get()
+            .then(doc => {
+              if (doc.exists) {
+                cachedPeriods.biWeekly = { id: doc.id, ...doc.data() } as OutflowPeriod;
+              }
+            })
+        );
+      }
+
+      // Wait for all period fetches to complete
+      await Promise.all(periodFetchPromises);
+
+      // Now commit the batch with split references
       await batch.commit();
 
       console.log(`[assignSplitToAll] Added split reference to ${matchingPeriods.foundCount} outflow periods`);
 
-      // Step 10: Recalculate status for all updated periods (separate batch for reads)
+      // Step 11: Recalculate status using cached period data (no additional reads needed!)
       const statusBatch = db.batch();
 
       let monthlyPeriod: OutflowPeriod | undefined;
       let weeklyPeriod: OutflowPeriod | undefined;
       let biWeeklyPeriod: OutflowPeriod | undefined;
 
-      if (matchingPeriods.monthlyPeriodId) {
+      if (matchingPeriods.monthlyPeriodId && cachedPeriods.monthly) {
         const monthlyRef = db.collection('outflow_periods').doc(matchingPeriods.monthlyPeriodId);
-        const monthlyDoc = await monthlyRef.get();
-        monthlyPeriod = { id: monthlyDoc.id, ...monthlyDoc.data() } as OutflowPeriod;
+        monthlyPeriod = cachedPeriods.monthly;
+
+        // Update transactionSplits in memory to include the new split
+        const updatedSplits = [...(monthlyPeriod.transactionSplits || []), splitRef];
 
         const newStatus = calculateOutflowPeriodStatus(
           monthlyPeriod.isDuePeriod,
           monthlyPeriod.dueDate,
           monthlyPeriod.expectedDueDate,
           monthlyPeriod.amountDue,
-          monthlyPeriod.transactionSplits || []
+          updatedSplits // Use updated splits for status calculation
         );
 
         if (newStatus !== monthlyPeriod.status) {
@@ -405,17 +333,19 @@ export const assignSplitToAllOutflowPeriods = onCall(
         }
       }
 
-      if (matchingPeriods.weeklyPeriodId) {
+      if (matchingPeriods.weeklyPeriodId && cachedPeriods.weekly) {
         const weeklyRef = db.collection('outflow_periods').doc(matchingPeriods.weeklyPeriodId);
-        const weeklyDoc = await weeklyRef.get();
-        weeklyPeriod = { id: weeklyDoc.id, ...weeklyDoc.data() } as OutflowPeriod;
+        weeklyPeriod = cachedPeriods.weekly;
+
+        // Update transactionSplits in memory to include the new split
+        const updatedSplits = [...(weeklyPeriod.transactionSplits || []), splitRef];
 
         const newStatus = calculateOutflowPeriodStatus(
           weeklyPeriod.isDuePeriod,
           weeklyPeriod.dueDate,
           weeklyPeriod.expectedDueDate,
           weeklyPeriod.amountDue,
-          weeklyPeriod.transactionSplits || []
+          updatedSplits // Use updated splits for status calculation
         );
 
         if (newStatus !== weeklyPeriod.status) {
@@ -428,17 +358,19 @@ export const assignSplitToAllOutflowPeriods = onCall(
         }
       }
 
-      if (matchingPeriods.biWeeklyPeriodId) {
+      if (matchingPeriods.biWeeklyPeriodId && cachedPeriods.biWeekly) {
         const biWeeklyRef = db.collection('outflow_periods').doc(matchingPeriods.biWeeklyPeriodId);
-        const biWeeklyDoc = await biWeeklyRef.get();
-        biWeeklyPeriod = { id: biWeeklyDoc.id, ...biWeeklyDoc.data() } as OutflowPeriod;
+        biWeeklyPeriod = cachedPeriods.biWeekly;
+
+        // Update transactionSplits in memory to include the new split
+        const updatedSplits = [...(biWeeklyPeriod.transactionSplits || []), splitRef];
 
         const newStatus = calculateOutflowPeriodStatus(
           biWeeklyPeriod.isDuePeriod,
           biWeeklyPeriod.dueDate,
           biWeeklyPeriod.expectedDueDate,
           biWeeklyPeriod.amountDue,
-          biWeeklyPeriod.transactionSplits || []
+          updatedSplits // Use updated splits for status calculation
         );
 
         if (newStatus !== biWeeklyPeriod.status) {

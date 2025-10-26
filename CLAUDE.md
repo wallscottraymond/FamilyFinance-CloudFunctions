@@ -22,11 +22,17 @@ FamilyFinance/
 - `src/functions/` - Cloud function implementations
   - `auth/` - Authentication functions
   - `budgets/` - Budget management functions
-  - `families/` - Family management functions
+  - `families/` - Family management functions (DEPRECATED - being replaced by groups)
+  - `groups/` - Group management functions (NEW)
+  - `sharing/` - Resource sharing functions (NEW)
   - `transactions/` - Transaction processing functions
   - `users/` - User management functions
 - `src/utils/` - Utility functions (auth, firestore, validation)
 - `src/types/` - TypeScript type definitions
+  - `index.ts` - Main types export and legacy types
+  - `users.ts` - User roles, system roles, demo accounts (NEW)
+  - `groups.ts` - Group system types and API interfaces (NEW)
+  - `sharing.ts` - Resource sharing types and permissions (NEW)
 - `src/middleware/` - CORS and other middleware
 
 ### Development Commands
@@ -75,13 +81,169 @@ npm run android    # Run on Android emulator
 - Comprehensive security rules implemented for all collections
 - Optimized Firestore indexes for efficient queries
 
+## RBAC & Group-Based Sharing System (NEW - 2025-01)
+
+### Overview
+
+The application now implements a comprehensive Role-Based Access Control (RBAC) system with flexible group-based sharing, replacing the previous family-centric model.
+
+### System Architecture
+
+#### Three-Layer Permission Model
+
+1. **System Roles** - App-wide capabilities
+2. **Group Roles** - Per-group permissions
+3. **Resource Roles** - Per-resource access control
+
+### System Roles
+
+Users are assigned ONE system-level role that determines their overall capabilities:
+
+```typescript
+enum SystemRole {
+  ADMIN = "admin",              // Full access including developer settings
+  POWER_USER = "power_user",    // Full access except developer settings
+  STANDARD_USER = "standard_user", // Cannot add Plaid accounts
+  DEMO_USER = "demo_user"       // View-only access to demo account
+}
+```
+
+#### System Role Capabilities Matrix
+
+| Capability | Admin | Power User | Standard User | Demo User |
+|-----------|-------|------------|---------------|-----------|
+| Add Plaid Accounts | ✓ | ✓ | ❌ | ❌ |
+| Developer Settings | ✓ | ❌ | ❌ | ❌ |
+| Create Budgets | ✓ | ✓ | ✓ | ❌ |
+| Create Transactions | ✓ | ✓ | ✓ | ❌ |
+| Share Resources | ✓ | ✓ | ✓ | ❌ |
+| Join/Create Groups | ✓ | ✓ | ✓ | ❌ |
+
+### Groups System (Replaces Families)
+
+#### Group Structure
+
+```typescript
+interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  createdBy: string;          // Original creator
+  ownerId: string;            // Current owner (transferable)
+  members: GroupMember[];
+  settings: GroupSettings;
+  isActive: boolean;
+}
+```
+
+#### Group Roles
+
+```typescript
+enum GroupRole {
+  OWNER = "owner",      // Full control of group
+  ADMIN = "admin",      // Full control except owner removal/group deletion
+  EDITOR = "editor",    // Can edit shared resources, not manage members
+  VIEWER = "viewer"     // Read-only, can leave notes
+}
+```
+
+### Resource Sharing System
+
+#### Shareable Resources
+
+All major resources support sharing:
+- Budgets & Budget Periods
+- Transactions
+- Accounts (Plaid)
+- Outflows & Outflow Periods
+- Inflows & Inflow Periods
+
+#### Resource Sharing Structure
+
+```typescript
+interface ResourceSharing {
+  isShared: boolean;
+  sharedWith: ResourceShare[];
+  inheritPermissions: boolean;  // For period resources
+}
+
+interface ResourceShare {
+  type: 'group' | 'user';      // Share with group or individual
+  targetId: string;             // Group ID or User ID
+  role: ResourceRole;           // owner, editor, viewer
+  sharedBy: string;             // Who created the share
+  sharedAt: Timestamp;
+  permissions?: {
+    canEdit: boolean;
+    canDelete: boolean;
+    canReshare: boolean;
+    canViewDetails: boolean;    // For accounts: hide balances
+  };
+}
+```
+
+#### Permission Inheritance
+
+Period-based resources inherit permissions from their parent:
+- `budget_periods` inherit from `budgets`
+- `outflow_periods` inherit from `outflows`
+- `inflow_periods` inherit from `inflows`
+
+Can be overridden at individual period level if needed.
+
+### Demo Accounts
+
+```typescript
+interface DemoAccount {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+  allowedDemoUsers: string[];  // User IDs with demo_user role
+  createdBy: string;
+  sampleDataGenerated: boolean;
+}
+```
+
+Demo users have read-only access to their assigned demo account for product demonstration purposes.
+
+### Migration from Families
+
+#### Backward Compatibility
+
+During transition, resources support both old and new systems:
+
+```typescript
+interface Budget {
+  // NEW SYSTEM
+  createdBy: string;
+  ownerId: string;
+  sharing: ResourceSharing;
+
+  // LEGACY (deprecated)
+  familyId?: string;           // For backward compatibility
+  userId?: string;             // Use ownerId instead
+  memberIds?: string[];        // Use sharing.sharedWith
+  isShared?: boolean;          // Use sharing.isShared
+}
+```
+
+#### Migration Strategy
+
+1. **Phase 1**: Add new fields (non-breaking)
+2. **Phase 2**: Populate new fields from existing data
+3. **Phase 3**: Update security rules to support both
+4. **Phase 4**: Migrate frontend to use new fields
+5. **Phase 5**: Deprecate old fields (marked for future removal)
+
 ### User Authentication & Profile System
 
 #### Automatic User Profile Creation
 - When a user creates an account via Firebase Authentication, a Cloud Function (`createUserProfile`) automatically triggers
 - Creates a comprehensive user document in the `users` collection with:
   - Basic profile info (email, displayName, photoURL)
-  - Default role (viewer) that can be updated when joining/creating families
+  - Default system role (standard_user)
+  - Empty groupMemberships array
   - Comprehensive user preferences with locale-aware defaults
   - Security settings and privacy controls
 
@@ -912,6 +1074,30 @@ firebase emulators:start --only functions,firestore
 - Income (payroll, deposit) → SALARY/OTHER_INCOME
 - And more (see Category Mapping section for complete list)
 
+## RBAC Implementation Status
+
+**Status**: IN PROGRESS (~15% complete)
+**Tracking Document**: `/RBAC_IMPLEMENTATION_STATUS.md`
+
+### Completed
+- ✅ Core type system (users.ts, groups.ts, sharing.ts)
+- ✅ Updated User interface with system roles
+- ✅ Updated Budget interface with sharing
+- ✅ Backward compatibility structure
+
+### In Progress
+- 🔄 Updating remaining resource types
+- 🔄 Firestore security rules
+- 🔄 Cloud Functions for groups and sharing
+
+### Not Started
+- ⏸️ Mobile app type updates
+- ⏸️ Mobile contexts and services
+- ⏸️ Data migration scripts
+- ⏸️ UI components
+
+**For detailed progress and next steps, see** `/RBAC_IMPLEMENTATION_STATUS.md`
+
 ## Notes for AI Assistants
 
 - Always check existing patterns before implementing new features
@@ -926,3 +1112,6 @@ firebase emulators:start --only functions,firestore
 - **CRITICAL**: Always use `currentBalance` field for account balances, never `balance`
 - Verify field names match between backend Cloud Functions and frontend mobile app
 - Reference the Category Mapping section when working with transaction categorization
+- **NEW**: When working with permissions, always use the RBAC system (systemRole, groupRole, resourceRole)
+- **NEW**: Support backward compatibility with familyId during migration period
+- **NEW**: Check `/RBAC_IMPLEMENTATION_STATUS.md` for current implementation progress

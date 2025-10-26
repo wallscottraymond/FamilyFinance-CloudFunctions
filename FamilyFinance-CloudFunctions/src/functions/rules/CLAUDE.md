@@ -1,5 +1,28 @@
 # Rules System - Cloud Functions
 
+## ⚠️ RBAC System Migration (2025-01)
+
+**IMPORTANT**: The Rules System will be updated to support the new RBAC (Role-Based Access Control) and group-based sharing system.
+
+### Upcoming Changes:
+- **CategoryRule interface** will add ownership and sharing fields (`createdBy`, `ownerId`, `sharing`)
+- Rules can be shared with groups for collaborative rule management
+- Legacy `familyId` field will remain for backward compatibility
+- **Security rules** will validate resource-level permissions
+- **Cloud Functions** will check SystemRole capabilities before rule operations
+
+### Current Status:
+- Phase 1 (Types) completed - Backend types updated in `/src/types/`
+- Phase 2 (Resource Updates) in progress - Rules interface needs updating
+- See `/RBAC_IMPLEMENTATION_STATUS.md` for detailed migration status
+
+### For Detailed Architecture:
+- See main `/CLAUDE.md` for RBAC system architecture
+- Review `/src/types/sharing.ts` for sharing interfaces
+- Check `/src/types/users.ts` for system role capabilities
+
+---
+
 ## Overview
 
 The Rules System is a powerful transaction categorization engine that enables users to create custom rules for automatically categorizing, tagging, and modifying transactions. Built on a **rules-based recalculation architecture**, the system preserves original Plaid data immutably while computing current transaction state by applying user-defined rules.

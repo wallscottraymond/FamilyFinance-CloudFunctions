@@ -39,15 +39,15 @@ export const updateBudget = onRequest({
         );
       }
 
-      // Authenticate user (editors can update budgets they created or are members of)
-      const authResult = await authMiddleware(request, UserRole.EDITOR);
+      // Authenticate user (minimum VIEWER role - ownership checked next)
+      const authResult = await authMiddleware(request, UserRole.VIEWER);
       if (!authResult.success || !authResult.user) {
         return response.status(401).json(authResult.error);
       }
 
       const { user } = authResult;
 
-      // Get existing budget
+      // Get existing budget to check ownership
       const existingBudget = await getDocument<Budget>("budgets", budgetId);
       if (!existingBudget) {
         return response.status(404).json(
@@ -55,11 +55,13 @@ export const updateBudget = onRequest({
         );
       }
 
-      // Check permissions
-      const canEdit = user.role === UserRole.ADMIN || existingBudget.createdBy === user.id;
-      if (!canEdit) {
+      // Check permissions: OWNER always allowed, OR EDITOR/ADMIN role
+      const isOwner = existingBudget.createdBy === user.id;
+      const isEditor = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
+
+      if (!isOwner && !isEditor) {
         return response.status(403).json(
-          createErrorResponse("permission-denied", "Cannot edit this budget")
+          createErrorResponse("permission-denied", "Cannot edit this budget - you must be the owner or have editor role")
         );
       }
 

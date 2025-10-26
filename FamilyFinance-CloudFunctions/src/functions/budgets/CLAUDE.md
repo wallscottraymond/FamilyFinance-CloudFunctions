@@ -1,5 +1,28 @@
 # Budget System - Cloud Functions
 
+## ⚠️ RBAC System Migration (2025-01)
+
+**IMPORTANT**: The Budget System is being updated to support the new RBAC (Role-Based Access Control) and group-based sharing system.
+
+### Upcoming Changes:
+- **Budget interface** will add ownership and sharing fields (`createdBy`, `ownerId`, `sharing`)
+- **BudgetPeriodDocument** will inherit sharing from parent budget
+- Legacy `familyId` field will remain for backward compatibility during migration
+- **Security rules** will be updated to check resource-level permissions
+- **Cloud Functions** will need permission validation before operations
+
+### Current Status:
+- Phase 1 (Types) completed - Backend types updated in `/src/types/`
+- Phase 2 (Resource Updates) in progress
+- See `/RBAC_IMPLEMENTATION_STATUS.md` for detailed migration status
+
+### For Detailed Architecture:
+- See main `/CLAUDE.md` for RBAC system architecture
+- Review `/src/types/sharing.ts` for sharing interfaces
+- Check `/src/types/users.ts` for system role capabilities
+
+---
+
 ## Overview
 
 The Budget System is a comprehensive budget management module that enables users to create, track, and manage personal and shared budgets with granular period-based tracking. It supports multiple budget types, automatic period generation, real-time spending calculations, and detailed checklist-based tracking.

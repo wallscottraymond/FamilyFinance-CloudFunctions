@@ -1,4 +1,12 @@
 import { Timestamp } from "firebase-admin/firestore";
+import { SystemRole } from "./users";
+import { GroupMembership } from "./groups";
+import { ResourceSharing } from "./sharing";
+
+// Export new modular types
+export * from "./users";
+export * from "./groups";
+export * from "./sharing";
 
 // Base interface for all documents
 export interface BaseDocument {
@@ -12,15 +20,24 @@ export interface User extends BaseDocument {
   email: string;
   displayName: string;
   photoURL?: string;
-  familyId?: string; // Optional - only set when user joins a family/group
-  role: UserRole; // Role within family/group context (individual users default to EDITOR)
+
+  // RBAC fields (NEW - optional during migration)
+  systemRole?: SystemRole;          // System-level role
+  groupMemberships?: GroupMembership[]; // Groups user belongs to
+  demoAccountId?: string;           // For demo_user role
+
+  // Legacy fields (DEPRECATED but REQUIRED for backward compatibility)
+  familyId?: string;                // DEPRECATED - use groupMemberships instead
+  role: UserRole;                   // DEPRECATED - use systemRole instead (REQUIRED for existing code)
+
   preferences: UserPreferences;
   isActive: boolean;
 }
 
+// Legacy enum - kept for backward compatibility
 export enum UserRole {
   ADMIN = "admin",
-  EDITOR = "editor", 
+  EDITOR = "editor",
   VIEWER = "viewer"
 }
 
@@ -345,8 +362,18 @@ export interface TransactionLocation {
 export interface Budget extends BaseDocument {
   name: string;
   description?: string;
-  familyId?: string; // Optional - only set for shared/group budgets
-  createdBy: string; // Always set to the user who created the budget
+
+  // RBAC fields (NEW - optional during migration)
+  ownerId?: string;               // Current owner (NEW)
+  sharing?: ResourceSharing;      // Sharing configuration (NEW)
+
+  // Legacy fields (DEPRECATED but kept for backward compatibility)
+  familyId?: string;              // DEPRECATED - use sharing.sharedWith instead
+  createdBy: string;              // Always set to the user who created the budget
+  memberIds: string[];            // DEPRECATED - use sharing.sharedWith instead
+  isShared: boolean;              // DEPRECATED - use sharing.isShared instead
+
+  // Budget configuration
   amount: number;
   currency: string;
   categoryIds: string[]; // Changed from categories to categoryIds - references to categories collection
@@ -357,8 +384,6 @@ export interface Budget extends BaseDocument {
   remaining: number;
   alertThreshold: number; // Percentage (0-100)
   isActive: boolean;
-  memberIds: string[]; // Users who can spend from this budget (for individual budgets, just the creator)
-  isShared: boolean; // True for group/family budgets, false for individual budgets
 
   // New fields for budget periods integration
   budgetType: 'recurring' | 'limited';

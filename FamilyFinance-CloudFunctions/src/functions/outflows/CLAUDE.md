@@ -1,5 +1,28 @@
 # Outflows System - Cloud Functions
 
+## ⚠️ RBAC System Migration (2025-01)
+
+**IMPORTANT**: The Outflows System will be updated to support the new RBAC (Role-Based Access Control) and group-based sharing system.
+
+### Upcoming Changes:
+- **RecurringOutflow interface** will add ownership and sharing fields (`createdBy`, `ownerId`, `sharing`)
+- **OutflowPeriod interface** will inherit sharing from parent outflow
+- Legacy `familyId` field will remain for backward compatibility
+- **Security rules** will validate resource-level permissions
+- **Cloud Functions** will check permissions before operations
+
+### Current Status:
+- Phase 1 (Types) completed - Backend types updated in `/src/types/`
+- Phase 2 (Resource Updates) in progress - Outflow interfaces need updating
+- See `/RBAC_IMPLEMENTATION_STATUS.md` for detailed migration status
+
+### For Detailed Architecture:
+- See main `/CLAUDE.md` for RBAC system architecture
+- Review `/src/types/sharing.ts` for sharing interfaces
+- Check `/src/types/users.ts` for system role capabilities
+
+---
+
 ## Overview
 
 The Outflows System is a recurring bill management module that enables users to create, track, and monitor recurring expenses (bills) with automatic period-based withholding calculations. It supports both Plaid-synced recurring transactions and user-created bills, with automatic period generation and financial planning features.
@@ -876,6 +899,8 @@ interface TransactionSplitReference {
 ```
 
 ### API Functions for Split Assignment
+
+> **Migration Note (October 2025):** Single-period assignment functions (`assignSplitToOutflowPeriod` and `unassignSplitFromOutflowPeriod`) have been removed as redundant. These functions only updated ONE period type, while the multi-period versions below correctly update ALL THREE period types (monthly, weekly, bi-weekly) simultaneously. The multi-period approach is the ONLY supported method for assigning splits to outflows, ensuring consistency across all period views.
 
 #### `assignSplitToAllOutflowPeriods` (Callable Function)
 **Location:** `api/assignSplitToAllOutflowPeriods.ts`

@@ -159,8 +159,9 @@ async function getTransactionsByPlaidIds(
     const batchIds = plaidTransactionIds.slice(i, i + BATCH_SIZE);
 
     // FIRST: Try to fetch transactions directly by document ID (NEW format)
-    const promises = batchIds.map(id => db.collection('transactions').doc(id).get());
-    const docs = await Promise.all(promises);
+    // Use getAll() for efficient batch reading instead of Promise.all with individual gets
+    const docRefs = batchIds.map(id => db.collection('transactions').doc(id));
+    const docs = await db.getAll(...docRefs);
 
     docs.forEach(doc => {
       if (doc.exists) {
