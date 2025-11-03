@@ -163,9 +163,18 @@ export async function createBudgetPeriodsFromSource(
       budgetId: budgetId,
       periodId: doc.id,
       sourcePeriodId: doc.id,
+
+      // === INHERIT RBAC FIELDS FROM PARENT BUDGET ===
+      createdBy: budget.createdBy,
+      ownerId: budget.ownerId,
+      groupId: budget.groupId,
+      isPrivate: budget.isPrivate,
+      accessibleBy: budget.accessibleBy,
+
+      // === LEGACY FIELDS (Backward compatibility) ===
       familyId: String(budget.familyId || ''),
       userId: budget.createdBy,
-      createdBy: budget.createdBy,
+
       periodType: sourcePeriod.type,
       periodStart: sourcePeriod.startDate,
       periodEnd: sourcePeriod.endDate,

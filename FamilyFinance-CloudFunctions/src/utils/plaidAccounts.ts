@@ -8,6 +8,11 @@ import { PlaidApi, AccountsGetRequest } from 'plaid';
 import { db } from '../index';
 import * as admin from 'firebase-admin';
 import { encryptAccessToken } from './encryption';
+import {
+  buildAccessControl,
+  buildMetadata,
+  buildRelationships
+} from './documentStructure';
 
 export interface ProcessedAccount {
   id: string;
@@ -104,29 +109,67 @@ export async function savePlaidItem(
 }
 
 /**
- * Saves account documents to Firestore accounts collection
+ * Saves account documents to Firestore accounts collection using hybrid structure
  */
 export async function savePlaidAccounts(
   accounts: ProcessedAccount[],
   itemId: string,
   userId: string,
   institutionId: string,
-  institutionName: string
+  institutionName: string,
+  groupId?: string | null
 ): Promise<void> {
   try {
     console.log(`Saving ${accounts.length} account documents to Firestore...`);
 
     for (const account of accounts) {
       try {
-        console.log(`Saving account: ${account.id} (${account.name}) - ${account.type}/${account.subtype}`);
+        console.log(`Building account: ${account.id} (${account.name}) - ${account.type}/${account.subtype}`);
 
-        await db.collection('accounts').doc(account.id).set({
+        const now = admin.firestore.Timestamp.now();
+
+        // Step 1: Build complete account structure with defaults
+        // Convert single groupId to groupIds array
+        const groupIds: string[] = groupId ? [groupId] : [];
+
+        const accountDoc = {
+          // === QUERY-CRITICAL FIELDS AT ROOT (defaults) ===
           id: account.id,
           plaidAccountId: account.id,
           accountId: account.id,
-          itemId: itemId,
           userId: userId,
-          familyId: '', // TODO: Get user's familyId from userData
+          groupIds,
+          isActive: true,
+          createdAt: now,
+
+          // === NESTED ACCESS CONTROL OBJECT (defaults) ===
+          access: buildAccessControl(userId, userId, groupIds),
+
+          // === NESTED CATEGORIES OBJECT ===
+          categories: {
+            primary: account.type,
+            secondary: account.subtype || undefined,
+            tags: [],
+            plaidPrimary: account.type,
+            plaidDetailed: account.subtype || undefined
+          },
+
+          // === NESTED METADATA OBJECT ===
+          metadata: buildMetadata(userId, 'plaid', {
+            plaidAccountId: account.id,
+            plaidItemId: itemId,
+            lastSyncedAt: now,
+            notes: `${institutionName} - ${account.name}`
+          }),
+
+          // === NESTED RELATIONSHIPS OBJECT ===
+          relationships: buildRelationships({
+            parentId: itemId,
+            parentType: 'plaid_item'
+          }),
+
+          // === ACCOUNT-SPECIFIC FIELDS AT ROOT ===
+          itemId: itemId,
           institutionId: institutionId,
           institutionName: institutionName,
           accountName: account.name,
@@ -134,16 +177,24 @@ export async function savePlaidAccounts(
           accountSubtype: account.subtype,
           mask: account.mask,
           officialName: account.officialName,
-          currentBalance: account.currentBalance, // Changed from 'balance' to 'currentBalance'
+          currentBalance: account.currentBalance,
           availableBalance: account.availableBalance,
           limit: null,
           isoCurrencyCode: account.currencyCode,
-          isActive: true,
           isSyncEnabled: true,
-          lastBalanceUpdate: admin.firestore.Timestamp.now(),
-          createdAt: admin.firestore.Timestamp.now(),
-          updatedAt: admin.firestore.Timestamp.now(),
+          lastBalanceUpdate: now,
+          updatedAt: now,
+        };
+
+        // Log document creation
+        console.log('Document created:', {
+          userId: accountDoc.userId,
+          groupIds,
+          groupCount: groupIds.length
         });
+
+        // Save to Firestore
+        await db.collection('accounts').doc(account.id).set(accountDoc);
 
         console.log(`Successfully saved account: ${account.id}`);
       } catch (accountError) {

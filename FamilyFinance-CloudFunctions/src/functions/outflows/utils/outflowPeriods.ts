@@ -20,6 +20,11 @@ import {
 import { predictFutureBillDueDate } from './predictFutureBillDueDate';
 import { checkIsDuePeriod } from './checkIsDuePeriod';
 import { calculateOutflowPeriodStatus } from './calculateOutflowPeriodStatus';
+import {
+  inheritAccessControl,
+  inheritCategories,
+  inheritMetadata
+} from '../../../utils/documentStructure';
 
 /**
  * Result of creating outflow periods
@@ -108,7 +113,7 @@ export async function createOutflowPeriodsFromSource(
   const outflowPeriods: OutflowPeriod[] = [];
   const periodIds: string[] = [];
 
-  sourcePeriodsSnapshot.forEach((doc) => {
+  for (const doc of sourcePeriodsSnapshot.docs) {
     const sourcePeriod = { id: doc.id, ...doc.data() } as SourcePeriod;
 
     // Calculate withholding amounts for this period
@@ -148,14 +153,48 @@ export async function createOutflowPeriodsFromSource(
 
     const periodId = `${outflowId}_${sourcePeriod.id}`;
 
-    const outflowPeriod: OutflowPeriod = {
+    // Step 1: Build complete outflow period structure with defaults
+    const outflowPeriodDoc: OutflowPeriod = {
       id: periodId,
       outflowId: outflowId,
       periodId: sourcePeriod.id!,
       sourcePeriodId: sourcePeriod.id!,
-      userId: outflow.userId,
-      familyId: outflow.familyId,
 
+      // === QUERY-CRITICAL FIELDS AT ROOT (defaults) ===
+      userId: outflow.userId,
+      groupId: outflow.groupId || null,
+      isActive: true,
+      createdAt: now,
+
+      // === NESTED ACCESS CONTROL OBJECT (defaults) ===
+      access: inheritAccessControl(outflow.access, outflow.userId),
+
+      // === NESTED CATEGORIES OBJECT (inherited from parent) ===
+      categories: inheritCategories(outflow.categories),
+
+      // === NESTED METADATA OBJECT (inherited + period-specific) ===
+      metadata: {
+        ...inheritMetadata(outflow.metadata, {
+          inheritedFrom: outflowId!
+        }),
+        lastCalculated: now,
+        outflowDescription: outflow.description,
+        outflowMerchantName: outflow.merchantName,
+        outflowIsEssential: outflow.isEssential
+      } as any,
+
+      // === NESTED RELATIONSHIPS OBJECT ===
+      relationships: {
+        parentId: outflowId,
+        parentType: 'outflow',
+        linkedIds: [sourcePeriod.id!],
+        relatedDocs: [
+          { type: 'source_period', id: sourcePeriod.id! }
+        ],
+        transactionSplitIds: []
+      },
+
+      // === OUTFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
       // Period context (denormalized for performance)
       periodType: sourcePeriod.type,
       periodStartDate: sourcePeriod.startDate,
@@ -168,33 +207,30 @@ export async function createOutflowPeriodsFromSource(
 
       // Financial calculations
       billAmount: cycleInfo.billAmount,
-      dailyWithholdingRate: periodCalc.amountWithheld / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate), // Calculate actual daily rate for this period
+      dailyWithholdingRate: periodCalc.amountWithheld / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate),
       amountWithheld: periodCalc.amountWithheld,
-      amountDue: amountDue, // Use calculated amount based on expected due date
+      amountDue: amountDue,
 
       // Payment status - based on expected due date
       isDuePeriod: isDuePeriod,
       dueDate: dueDate,
       expectedDueDate: expectedDates.expectedDueDate,
       expectedDrawDate: expectedDates.expectedDrawDate,
-      status: billStatus, // Status determined by updateBillStatus utility
-      isActive: true,
-      transactionSplits: [], // Initialize empty array for tracking payment transactions
-
-      // Metadata from outflow (denormalized for performance)
-      outflowDescription: outflow.description,
-      outflowMerchantName: outflow.merchantName,
-      outflowExpenseType: outflow.expenseType,
-      outflowIsEssential: outflow.isEssential,
+      status: billStatus,
+      transactionSplits: [],
 
       // System fields
-      createdAt: now,
       updatedAt: now,
       lastCalculated: now,
-    };
+    } as any;
 
-    outflowPeriods.push(outflowPeriod);
+    outflowPeriods.push(outflowPeriodDoc);
     periodIds.push(periodId);
+  }
+
+  console.log('Document created:', {
+    userId: outflow.userId,
+    groupId: outflow.groupId || null
   });
 
   console.log(`[createOutflowPeriodsFromSource] Creating ${outflowPeriods.length} outflow periods`);

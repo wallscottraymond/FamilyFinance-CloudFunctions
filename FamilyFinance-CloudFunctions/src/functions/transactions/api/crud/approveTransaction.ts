@@ -9,7 +9,7 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import { Transaction, UserRole, TransactionStatus } from "../../../../types";
-import { getDocument, updateDocument } from "../../../../utils/firestore";
+import { getDocument } from "../../../../utils/firestore";
 import {
   authMiddleware,
   createErrorResponse,
@@ -18,6 +18,7 @@ import {
 } from "../../../../utils/auth";
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
+import { db } from "../../../../index";
 
 /**
  * Approve or reject transaction
@@ -61,8 +62,8 @@ export const approveTransaction = onRequest({
         );
       }
 
-      // Check family access
-      if (!await checkFamilyAccess(user.id!, transaction.familyId)) {
+      // Check group access (backward compatible with familyId)
+      if (transaction.familyId && !await checkFamilyAccess(user.id!, transaction.familyId)) {
         return response.status(403).json(
           createErrorResponse("access-denied", "Cannot access this transaction")
         );
@@ -77,11 +78,18 @@ export const approveTransaction = onRequest({
 
       // Update transaction status
       const newStatus = action === "approve" ? TransactionStatus.APPROVED : TransactionStatus.REJECTED;
-      const updatedTransaction = await updateDocument<Transaction>("transactions", transactionId, {
+
+      // Get the transaction first to update metadata
+      const transactionRef = db.collection('transactions').doc(transactionId);
+      await transactionRef.update({
         status: newStatus,
-        approvedBy: user.id,
-        approvedAt: admin.firestore.Timestamp.now(),
+        'metadata.approvedBy': user.id,
+        'metadata.approvedAt': admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now()
       });
+
+      const updatedDoc = await transactionRef.get();
+      const updatedTransaction = { id: updatedDoc.id, ...updatedDoc.data() } as Transaction;
 
       return response.status(200).json(createSuccessResponse(updatedTransaction));
 

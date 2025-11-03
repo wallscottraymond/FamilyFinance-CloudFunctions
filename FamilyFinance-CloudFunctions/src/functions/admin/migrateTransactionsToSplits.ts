@@ -103,7 +103,7 @@ export const migrateTransactionsToSplits = onCall({
           }
 
           // Determine budget for default split
-          let budgetId = transactionData.budgetId;
+          let budgetId = transactionData.splits?.[0]?.budgetId; // Use first split's budgetId if exists
           let budgetPeriodId: string | undefined;
           let budgetName = 'General';
 
@@ -146,14 +146,28 @@ export const migrateTransactionsToSplits = onCall({
             id: db.collection('_dummy').doc().id,
             budgetId: budgetId || 'unassigned',
             budgetName,
-            categoryId: transactionData.category,
+            categoryId: transactionData.categories?.primary || 'other',
             amount: transactionData.amount,
-            description: undefined,
+            description: null,
             isDefault: true,
+            // Period IDs - migration script sets to null (can be backfilled later)
+            monthlyPeriodId: null,
+            weeklyPeriodId: null,
+            biWeeklyPeriodId: null,
+            // Assignment references
+            outflowId: null,
+            // Status fields
+            isIgnored: false,
+            isRefund: false,
+            isTaxDeductible: false,
+            ignoredReason: null,
+            refundReason: null,
+            taxDeductibleCategory: null,
+            note: null,
             paymentDate: transactionData.date, // Payment date matches transaction date
             createdAt: transactionData.createdAt || now,
             updatedAt: now,
-            createdBy: transactionData.userId,
+            createdBy: transactionData.userId || transactionData.access?.createdBy || '',
           };
 
           // Prepare transaction update

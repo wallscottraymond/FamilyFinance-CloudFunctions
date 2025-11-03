@@ -1,30 +1,30 @@
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import { 
-  Family, 
-  UserRole, 
+import {
+  Family as Group,
+  UserRole,
   InviteCode
-} from "../../types";
-import { 
-  getDocument, 
+} from "../../../../types";
+import {
+  getDocument,
   updateDocument
-} from "../../utils/firestore";
-import { 
-  authMiddleware, 
-  createErrorResponse, 
+} from "../../../../utils/firestore";
+import {
+  authMiddleware,
+  createErrorResponse,
   createSuccessResponse,
   generateInviteCode
-} from "../../utils/auth";
-import { 
-  validateRequest, 
+} from "../../../../utils/auth";
+import {
+  validateRequest,
   inviteCodeSchema
-} from "../../utils/validation";
-import { firebaseCors } from "../../middleware/cors";
+} from "../../../../utils/validation";
+import { firebaseCors } from "../../../../middleware/cors";
 
 /**
- * Generate family invite code
+ * Generate group invite code
  */
-export const generateFamilyInvite = onRequest({
+export const generateGroupInvite = onRequest({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
@@ -46,9 +46,11 @@ export const generateFamilyInvite = onRequest({
 
       const { user } = authResult;
 
-      if (!user.familyId) {
+      // Get groupId (stored as familyId for backward compatibility)
+      const groupId = user.familyId;
+      if (!groupId) {
         return response.status(400).json(
-          createErrorResponse("no-family", "User does not belong to any family")
+          createErrorResponse("no-group", "User does not belong to any group")
         );
       }
 
@@ -62,26 +64,37 @@ export const generateFamilyInvite = onRequest({
 
       const { role, expiresInHours } = validation.value;
 
-      // Get current family
-      const family = await getDocument<Family>("families", user.familyId);
-      if (!family) {
+      // Try to get group from groups collection first, fallback to families collection
+      let group = await getDocument<Group>("groups", groupId);
+      if (!group) {
+        // Backward compatibility: try families collection
+        group = await getDocument<Group>("families", groupId);
+      }
+
+      if (!group) {
         return response.status(404).json(
-          createErrorResponse("family-not-found", "Family not found")
+          createErrorResponse("group-not-found", "Group not found")
         );
       }
 
       // Generate unique invite code
       let inviteCode: string;
       let codeExists = true;
-      
+
       while (codeExists) {
         inviteCode = generateInviteCode(8);
-        // Check if code already exists in any family
-        const existingFamily = await admin.firestore()
-          .collection("families")
-          .where("inviteCodes", "array-contains-any", [inviteCode])
-          .get();
-        codeExists = !existingFamily.empty;
+        // Check if code already exists in any group or family
+        const [existingGroup, existingFamily] = await Promise.all([
+          admin.firestore()
+            .collection("groups")
+            .where("inviteCodes", "array-contains-any", [inviteCode])
+            .get(),
+          admin.firestore()
+            .collection("families")
+            .where("inviteCodes", "array-contains-any", [inviteCode])
+            .get()
+        ]);
+        codeExists = !existingGroup.empty || !existingFamily.empty;
       }
 
       const expiresAt = new Date();
@@ -95,9 +108,16 @@ export const generateFamilyInvite = onRequest({
         isActive: true,
       };
 
-      // Add invite code to family
-      const updatedInviteCodes = [...family.inviteCodes, newInviteCode];
-      await updateDocument<Family>("families", user.familyId, {
+      // Add invite code to group
+      const updatedInviteCodes = [...group.inviteCodes, newInviteCode];
+
+      // Update groups collection
+      await updateDocument<Group>("groups", groupId, {
+        inviteCodes: updatedInviteCodes,
+      });
+
+      // Backward compatibility: also update families collection
+      await updateDocument<Group>("families", groupId, {
         inviteCodes: updatedInviteCodes,
       });
 
@@ -108,7 +128,7 @@ export const generateFamilyInvite = onRequest({
       }));
 
     } catch (error: any) {
-      console.error("Error generating family invite:", error);
+      console.error("Error generating group invite:", error);
       return response.status(500).json(
         createErrorResponse("internal-error", "Failed to generate invite code")
       );

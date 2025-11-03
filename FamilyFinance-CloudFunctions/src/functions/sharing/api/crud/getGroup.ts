@@ -1,23 +1,23 @@
 import { onRequest } from "firebase-functions/v2/https";
-import { 
-  Family, 
-  User, 
+import {
+  Family as Group,
+  User,
   UserRole
-} from "../../types";
-import { 
+} from "../../../../types";
+import {
   getDocument
-} from "../../utils/firestore";
-import { 
-  authMiddleware, 
-  createErrorResponse, 
+} from "../../../../utils/firestore";
+import {
+  authMiddleware,
+  createErrorResponse,
   createSuccessResponse
-} from "../../utils/auth";
-import { firebaseCors } from "../../middleware/cors";
+} from "../../../../utils/auth";
+import { firebaseCors } from "../../../../middleware/cors";
 
 /**
- * Get family details
+ * Get group details
  */
-export const getFamily = onRequest({
+export const getGroup = onRequest({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
@@ -39,28 +39,35 @@ export const getFamily = onRequest({
 
       const { user } = authResult;
 
-      if (!user.familyId) {
+      // Get groupId (stored as familyId for backward compatibility)
+      const groupId = user.familyId;
+      if (!groupId) {
         return response.status(404).json(
-          createErrorResponse("no-family", "User does not belong to any family")
+          createErrorResponse("no-group", "User does not belong to any group")
         );
       }
 
-      // Get family document
-      const family = await getDocument<Family>("families", user.familyId);
-      if (!family) {
+      // Try to get group from groups collection first, fallback to families collection
+      let group = await getDocument<Group>("groups", groupId);
+      if (!group) {
+        // Backward compatibility: try families collection
+        group = await getDocument<Group>("families", groupId);
+      }
+
+      if (!group) {
         return response.status(404).json(
-          createErrorResponse("family-not-found", "Family not found")
+          createErrorResponse("group-not-found", "Group not found")
         );
       }
 
-      // Get family members details
-      const memberPromises = family.memberIds.map(memberId => 
+      // Get group members details
+      const memberPromises = group.memberIds.map(memberId =>
         getDocument<User>("users", memberId)
       );
       const members = (await Promise.all(memberPromises)).filter(member => member !== null);
 
-      const familyWithMembers = {
-        ...family,
+      const groupWithMembers = {
+        ...group,
         members: members.map(member => ({
           id: member!.id,
           email: member!.email,
@@ -71,12 +78,12 @@ export const getFamily = onRequest({
         })),
       };
 
-      return response.status(200).json(createSuccessResponse(familyWithMembers));
+      return response.status(200).json(createSuccessResponse(groupWithMembers));
 
     } catch (error: any) {
-      console.error("Error getting family:", error);
+      console.error("Error getting group:", error);
       return response.status(500).json(
-        createErrorResponse("internal-error", "Failed to get family")
+        createErrorResponse("internal-error", "Failed to get group")
       );
     }
   });

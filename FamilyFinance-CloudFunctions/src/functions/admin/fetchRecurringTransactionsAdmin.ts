@@ -19,7 +19,6 @@ import {
   TransactionsRecurringGetRequest
 } from 'plaid';
 import {
-  BaseRecurringTransaction,
   RecurringIncome,
   RecurringOutflow,
   PlaidRecurringTransactionStatus,
@@ -342,35 +341,67 @@ async function processRecurringStreamsAdmin(
         .limit(1)
         .get();
 
-      // Parse base stream data
-      const baseData: Omit<BaseRecurringTransaction, 'id' | 'createdAt' | 'updatedAt'> = {
+      // Parse base stream data - using hybrid structure
+      const baseData: any = {
+        // === QUERY-CRITICAL FIELDS AT ROOT ===
+        userId: itemData.userId,
+        groupId: itemData.familyId,
+        accessibleBy: [itemData.userId],
         streamId: stream.stream_id,
         itemId: itemData.itemId,
-        userId: itemData.userId,
-        familyId: itemData.familyId,
         accountId: stream.account_id,
         isActive: stream.is_active !== false,
         status: mapPlaidRecurringStatus(stream.status),
+
+        // === NESTED ACCESS CONTROL ===
+        access: {
+          ownerId: itemData.userId,
+          createdBy: itemData.userId,
+          sharedWith: [],
+          visibility: 'private' as const,
+          permissions: {}
+        },
+
+        // === NESTED CATEGORIES ===
+        categories: {
+          primary: stream.category?.[0] || 'other',
+          secondary: stream.category?.[1],
+          tags: []
+        },
+
+        // === NESTED METADATA ===
+        metadata: {
+          source: 'plaid' as const,
+          createdBy: itemData.userId,
+          updatedBy: itemData.userId,
+          updatedAt: Timestamp.now(),
+          version: 1,
+          lastSyncedAt: Timestamp.now(),
+          syncVersion: 1,
+          plaidPersonalFinanceCategory: stream.personal_finance_category ? {
+            primary: stream.personal_finance_category.primary,
+            detailed: stream.personal_finance_category.detailed,
+            confidenceLevel: stream.personal_finance_category.confidence_level,
+          } : undefined
+        },
+
+        // === NESTED RELATIONSHIPS ===
+        relationships: {
+          parentId: itemData.itemId,
+          parentType: 'plaid_item' as const,
+          linkedIds: [],
+          relatedDocs: []
+        },
+
+        // === RECURRING TRANSACTION FIELDS ===
         description: stream.description || stream.merchant_name || 'Unknown',
         merchantName: stream.merchant_name || null,
-        category: stream.category || [],
-        personalFinanceCategory: stream.personal_finance_category ? {
-          primary: stream.personal_finance_category.primary,
-          detailed: stream.personal_finance_category.detailed,
-          confidenceLevel: stream.personal_finance_category.confidence_level,
-        } : undefined,
         averageAmount: mapPlaidAmount(stream.average_amount),
         lastAmount: mapPlaidAmount(stream.last_amount),
         frequency: mapPlaidFrequency(stream.frequency),
         firstDate: Timestamp.fromDate(new Date(stream.first_date)),
         lastDate: Timestamp.fromDate(new Date(stream.last_date)),
-        transactionIds: stream.transaction_ids || [],
-        userCategory: undefined,
-        userNotes: undefined,
-        tags: [],
         isHidden: false,
-        lastSyncedAt: Timestamp.now(),
-        syncVersion: 1,
       };
 
       // Add type-specific fields
@@ -417,16 +448,16 @@ async function processRecurringStreamsAdmin(
           status: documentData.status,
           description: documentData.description,
           merchantName: documentData.merchantName,
-          category: documentData.category,
-          personalFinanceCategory: documentData.personalFinanceCategory,
+          categories: documentData.categories,
+          'metadata.plaidPersonalFinanceCategory': documentData.metadata.plaidPersonalFinanceCategory,
           averageAmount: documentData.averageAmount,
           lastAmount: documentData.lastAmount,
           frequency: documentData.frequency,
           firstDate: documentData.firstDate,
           lastDate: documentData.lastDate,
-          transactionIds: documentData.transactionIds,
-          lastSyncedAt: documentData.lastSyncedAt,
-          syncVersion: (existingData.syncVersion || 0) + 1,
+          'metadata.lastSyncedAt': documentData.metadata.lastSyncedAt,
+          'metadata.syncVersion': (existingData.metadata?.syncVersion || 0) + 1,
+          'metadata.updatedAt': Timestamp.now(),
           updatedAt: Timestamp.now(),
         };
 

@@ -14,12 +14,15 @@ import {
   createErrorResponse, 
   createSuccessResponse
 } from "../../../../utils/auth";
-import { 
-  validateRequest, 
+import {
+  validateRequest,
   createBudgetSchema,
   validateCategoryIds
 } from "../../../../utils/validation";
 import { firebaseCors } from "../../../../middleware/cors";
+import {
+  buildAccessControl
+} from "../../../../utils/documentStructure";
 
 /**
  * Create a new budget
@@ -137,12 +140,38 @@ export const createBudget = onRequest({
         }
       }
 
-      // Create budget
-      const budget: Omit<Budget, "id" | "createdAt" | "updatedAt"> = {
+      // Determine groupIds for access control (convert single groupId to array)
+      const groupIds: string[] = [];
+      const singleGroupId = budgetData.groupId || (isSharedBudget ? user.familyId : null);
+      if (singleGroupId) {
+        groupIds.push(singleGroupId);
+      }
+
+      // Step 1: Build complete budget structure with defaults
+      const budgetDoc: Omit<Budget, "id" | "createdAt" | "updatedAt"> = {
+        // === QUERY-CRITICAL FIELDS AT ROOT (defaults) ===
+        userId: user.id!,
+        groupIds,
+        isActive: true,
+
+        // === NESTED ACCESS CONTROL OBJECT (defaults) ===
+        access: buildAccessControl(user.id!, user.id!, groupIds),
+
+        // === NEW RBAC FIELDS ===
+        createdBy: user.id!,
+        ownerId: user.id!,
+        isPrivate: groupIds.length === 0,
+
+        // === LEGACY FIELDS (Backward compatibility) ===
+        familyId: isSharedBudget ? user.familyId : undefined,
+        groupId: singleGroupId, // Keep for backward compatibility
+        accessibleBy: [user.id!], // Deprecated - kept for compatibility
+        memberIds: [user.id!], // Deprecated - kept for compatibility
+        isShared: isSharedBudget,
+
+        // === BUDGET DATA ===
         name: budgetData.name,
         description: budgetData.description,
-        familyId: isSharedBudget ? user.familyId : undefined, // Only set for shared budgets
-        createdBy: user.id!,
         amount: budgetData.amount,
         currency: currency,
         categoryIds: budgetData.categoryIds, // Use validated category IDs
@@ -153,9 +182,6 @@ export const createBudget = onRequest({
         spent: 0,
         remaining: budgetData.amount,
         alertThreshold: budgetData.alertThreshold || 80,
-        isActive: true,
-        memberIds: budgetData.memberIds || [user.id!], // For individual budgets, just the creator
-        isShared: isSharedBudget,
         selectedStartPeriod: budgetData.selectedStartPeriod, // Pass through for onBudgetCreate trigger
 
         // Budget end date functionality
@@ -163,7 +189,19 @@ export const createBudget = onRequest({
         budgetEndDate: budgetEndDate ? admin.firestore.Timestamp.fromDate(budgetEndDate) : undefined,
       };
 
-      const createdBudget = await createDocument<Budget>("budgets", budget);
+      // Step 2: Budget is ready (no more enhanceWithGroupSharing needed)
+      // Access control is now handled by Firestore security rules checking groupIds
+      console.log(`✅ [createBudget] Budget created:`, {
+        userId: user.id,
+        groupIds,
+        groupCount: groupIds.length,
+        isPrivate: groupIds.length === 0
+      });
+
+      const finalBudget: Omit<Budget, "id" | "createdAt" | "updatedAt"> = budgetDoc;
+
+      // Step 4: Save to Firestore (single write)
+      const createdBudget = await createDocument<Budget>("budgets", finalBudget);
 
       return response.status(201).json(createSuccessResponse(createdBudget));
 

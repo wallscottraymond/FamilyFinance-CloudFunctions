@@ -65,7 +65,7 @@ export const getBudgetSummary = onRequest({
         }
       } else {
         // Individual budget - check ownership or membership
-        if (budget.createdBy !== user.id! && !budget.memberIds.includes(user.id!)) {
+        if (budget.createdBy !== user.id! && !(budget.memberIds || []).includes(user.id!)) {
           return response.status(403).json(
             createErrorResponse("access-denied", "Cannot access this budget")
           );

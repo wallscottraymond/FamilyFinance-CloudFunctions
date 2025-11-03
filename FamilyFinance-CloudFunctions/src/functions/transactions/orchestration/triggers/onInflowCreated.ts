@@ -24,6 +24,11 @@ import {
   SourcePeriod,
   PlaidRecurringFrequency
 } from '../../../../types';
+import {
+  inheritAccessControl,
+  inheritCategories,
+  inheritMetadata
+} from '../../../../utils/documentStructure';
 
 /**
  * Triggered when an inflow is created
@@ -83,59 +88,89 @@ export const onInflowCreated = onDocumentCreated({
     
     // Create inflow_periods for each source period
     const inflowPeriods: InflowPeriod[] = [];
-    
-    sourcePeriodsSnapshot.forEach((doc) => {
+
+    for (const doc of sourcePeriodsSnapshot.docs) {
       const sourcePeriod = { id: doc.id, ...doc.data() } as SourcePeriod;
-      
+
       // Calculate earning amounts for this period
       const periodCalc = calculatePeriodAmounts(
-        sourcePeriod, 
-        cycleInfo, 
+        sourcePeriod,
+        cycleInfo,
         inflowData
       );
-      
-      const inflowPeriod: InflowPeriod = {
+
+      // Step 1: Build complete inflow period structure with defaults
+      const inflowPeriodDoc: InflowPeriod = {
         id: `${inflowId}_${sourcePeriod.id}`,
         inflowId: inflowId!,
         periodId: sourcePeriod.id!,
         sourcePeriodId: sourcePeriod.id!,
+
+        // === QUERY-CRITICAL FIELDS AT ROOT (defaults) ===
         userId: inflowData.userId,
-        familyId: inflowData.familyId,
-        
+        groupId: inflowData.groupId || null,
+        isActive: true,
+        createdAt: now,
+
+        // === NESTED ACCESS CONTROL OBJECT (defaults) ===
+        access: inheritAccessControl(inflowData.access, inflowData.userId),
+
+        // === NESTED CATEGORIES OBJECT (inherited from parent) ===
+        categories: inheritCategories(inflowData.categories),
+
+        // === NESTED METADATA OBJECT (inherited + period-specific) ===
+        metadata: {
+          ...inheritMetadata(inflowData.metadata, {
+            inheritedFrom: inflowId!
+          }),
+          lastCalculated: now,
+          inflowDescription: inflowData.description,
+          inflowMerchantName: inflowData.merchantName,
+          inflowIsRegularSalary: inflowData.isRegularSalary
+        } as any,
+
+        // === NESTED RELATIONSHIPS OBJECT ===
+        relationships: {
+          parentId: inflowId,
+          parentType: 'inflow',
+          linkedIds: [sourcePeriod.id!],
+          relatedDocs: [
+            { type: 'source_period', id: sourcePeriod.id! }
+          ]
+        },
+
+        // === INFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
         // Period context (denormalized for performance)
         periodType: sourcePeriod.type,
         periodStartDate: sourcePeriod.startDate,
         periodEndDate: sourcePeriod.endDate,
-        
+
         // Payment cycle information
         cycleStartDate: cycleInfo.cycleStartDate,
         cycleEndDate: cycleInfo.cycleEndDate,
         cycleDays: cycleInfo.cycleDays,
-        
+
         // Financial calculations
         incomeAmount: cycleInfo.incomeAmount,
         dailyEarningRate: cycleInfo.dailyRate,
         amountEarned: periodCalc.amountEarned,
         amountReceived: periodCalc.amountReceived,
-        
+
         // Payment status
         isReceiptPeriod: periodCalc.isReceiptPeriod,
         receiptDate: periodCalc.receiptDate,
-        isActive: true,
-        
-        // Metadata from inflow (denormalized for performance)
-        inflowDescription: inflowData.description,
-        inflowMerchantName: inflowData.merchantName,
-        inflowIncomeType: inflowData.incomeType,
-        inflowIsRegularSalary: inflowData.isRegularSalary,
-        
+
         // System fields
-        createdAt: now,
         updatedAt: now,
         lastCalculated: now,
-      };
-      
-      inflowPeriods.push(inflowPeriod);
+      } as any;
+
+      inflowPeriods.push(inflowPeriodDoc);
+    }
+
+    console.log('Document created:', {
+      userId: inflowData.userId,
+      groupId: inflowData.groupId || null
     });
     
     console.log(`Creating ${inflowPeriods.length} inflow periods`);

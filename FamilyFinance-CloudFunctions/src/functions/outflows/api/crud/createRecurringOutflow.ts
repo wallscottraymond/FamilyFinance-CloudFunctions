@@ -10,6 +10,11 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
+import {
+  buildAccessControl,
+  buildMetadata,
+  buildRelationships
+} from '../../../../utils/documentStructure';
 
 // Initialize Firestore
 const db = getFirestore();
@@ -26,7 +31,7 @@ export interface CreateRecurringOutflowRequest {
   isEssential?: boolean; // Whether this is an essential expense
   dueDay?: number; // Day of month when bill is due (for monthly bills)
   userNotes?: string; // User notes
-  familyId?: string; // Optional family association
+  groupId?: string; // Group this outflow belongs to (optional)
 }
 
 /**
@@ -111,7 +116,7 @@ export const createRecurringOutflow = onCall<CreateRecurringOutflowRequest, Prom
         isEssential,
         dueDay,
         userNotes,
-        familyId,
+        groupId,
       } = request.data;
 
       // Validation constants
@@ -206,24 +211,57 @@ export const createRecurringOutflow = onCall<CreateRecurringOutflowRequest, Prom
       // Calculate next due date
       const nextDueDate = calculateNextDueDate(frequency, dueDay);
 
-      // Create the recurring outflow document
-      const outflowData = {
-        // Core identification
-        streamId,
-        itemId: 'manual', // Not from Plaid
+      const now = Timestamp.now();
+
+      // Step 1: Build complete outflow document with defaults
+      // Convert single groupId to groupIds array
+      const groupIds: string[] = groupId ? [groupId] : [];
+
+      const outflowDoc = {
+        // === QUERY-CRITICAL FIELDS AT ROOT (defaults) ===
         userId,
-        familyId: familyId || null,
-        accountId: 'manual', // User-created, no specific account
-
-        // Stream classification
+        groupIds,
+        streamId,
         isActive: true,
-        status: 'MATURE', // User-created bills are immediately mature
+        status: 'MATURE',
+        createdAt: FieldValue.serverTimestamp(),
+        lastDate: now,
 
-        // Transaction details
+        // === NESTED ACCESS CONTROL OBJECT (defaults) ===
+        access: buildAccessControl(userId, userId, groupIds),
+
+        // === NESTED CATEGORIES OBJECT ===
+        categories: {
+          primary: expenseType || 'other',
+          secondary: merchantName?.trim() || undefined,
+          tags: []
+        },
+
+        // === NESTED METADATA OBJECT ===
+        metadata: buildMetadata(userId, 'manual', {
+          notes: userNotes?.trim() || undefined,
+          lastSyncedAt: now,
+          version: 1,
+          isUserCreated: true,
+          outflowSource: 'user',
+          dueDay: frequency === 'monthly' ? (dueDay || 1) : undefined,
+          nextDueDate: nextDueDate
+        }),
+
+        // === NESTED RELATIONSHIPS OBJECT ===
+        relationships: buildRelationships({
+          parentId: 'manual',
+          parentType: 'user',
+          accountId: 'manual'
+        }),
+
+        // === OUTFLOW-SPECIFIC FIELDS AT ROOT ===
+        itemId: 'manual',
+        accountId: 'manual',
         description: description.trim(),
         merchantName: merchantName?.trim() || null,
-        category: expenseType ? [expenseType] : ['other'], // Simple category array
-        personalFinanceCategory: null, // Not applicable for manual entries
+        category: expenseType ? [expenseType] : ['other'],
+        personalFinanceCategory: null,
 
         // Amount information (in Plaid format for consistency)
         averageAmount: {
@@ -239,42 +277,29 @@ export const createRecurringOutflow = onCall<CreateRecurringOutflowRequest, Prom
 
         // Frequency and timing
         frequency: mapFrequencyToPlaidFormat(frequency),
-
-        // Historical data
-        firstDate: Timestamp.now(), // Created now
-        lastDate: Timestamp.now(), // Created now
-        transactionIds: [], // No actual transactions yet
-
-        // Family Finance specific fields
-        userCategory: null, // Can be set later
-        userNotes: userNotes?.trim() || null,
-        tags: [],
-        isHidden: false,
+        firstDate: now,
+        transactionIds: [],
 
         // Outflow-specific fields
         expenseType: expenseType || 'other',
         isEssential: isEssential || false,
         merchantCategory: null,
-        isCancellable: true, // User-created bills are cancellable
-        reminderDays: 3, // Default reminder 3 days before due
-
-        // Additional metadata for user-created bills
-        isUserCreated: true, // Flag to distinguish from Plaid-synced bills
-        outflowSource: 'user', // Source of this outflow: 'user' or 'plaid'
-        dueDay: frequency === 'monthly' ? (dueDay || 1) : null,
-        nextDueDate, // When this bill is next due
-
-        // Sync metadata (not applicable but required by interface)
-        lastSyncedAt: Timestamp.now(),
+        isCancellable: true,
+        reminderDays: 3,
+        isHidden: false,
         syncVersion: 1,
-
-        // Timestamps
-        createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
 
-      // Create the document in the outflows collection
-      const outflowRef = await db.collection('outflows').add(outflowData);
+      // Log document creation
+      console.log('Document created:', {
+        userId,
+        groupIds,
+        groupCount: groupIds.length
+      });
+
+      // Save to Firestore
+      const outflowRef = await db.collection('outflows').add(outflowDoc);
 
       console.log(`[createRecurringOutflow] Created recurring outflow ${outflowRef.id} for user ${userId}`);
 

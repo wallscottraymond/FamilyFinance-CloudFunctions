@@ -75,7 +75,7 @@ export const updateBudget = onRequest({
         }
       } else {
         // Individual budget - check ownership or membership
-        if (existingBudget.createdBy !== user.id! && !existingBudget.memberIds.includes(user.id!)) {
+        if (existingBudget.createdBy !== user.id! && !(existingBudget.memberIds || []).includes(user.id!)) {
           return response.status(403).json(
             createErrorResponse("access-denied", "Cannot update budget you don't have access to")
           );

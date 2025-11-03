@@ -118,7 +118,7 @@ export const getOutflowPeriodTransactions = onCall(
           success: true,
           outflowPeriod: {
             id: outflowPeriod.id!,
-            outflowDescription: outflowPeriod.outflowDescription,
+            outflowDescription: outflowPeriod.metadata.outflowDescription,
             amountDue: outflowPeriod.amountDue,
             status: outflowPeriod.status,
             isDuePeriod: outflowPeriod.isDuePeriod,
@@ -172,15 +172,15 @@ export const getOutflowPeriodTransactions = onCall(
                 amount: transaction.amount,
                 description: transaction.description,
                 date: transaction.date,
-                merchantName: transaction.metadata?.merchantName as string | undefined,
-                category: transaction.category,
+                merchantName: transaction.metadata?.plaidMerchantName as string | undefined,
+                category: transaction.categories?.primary,
                 pending: false, // Assuming transactions are no longer pending if they're synced
                 accountId: transaction.accountId
               },
               split: {
                 id: split.id,
                 amount: split.amount,
-                description: split.description,
+                description: split.description ?? undefined,
                 categoryId: split.categoryId
               },
               splitReference: splitRef
@@ -232,7 +232,7 @@ export const getOutflowPeriodTransactions = onCall(
         success: true,
         outflowPeriod: {
           id: outflowPeriod.id!,
-          outflowDescription: outflowPeriod.outflowDescription,
+          outflowDescription: outflowPeriod.metadata.outflowDescription,
           amountDue: outflowPeriod.amountDue,
           status: outflowPeriod.status,
           isDuePeriod: outflowPeriod.isDuePeriod,

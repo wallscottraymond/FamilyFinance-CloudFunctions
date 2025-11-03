@@ -153,9 +153,14 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
     const plaidClient = createStandardPlaidClient();
     const { accessToken, itemId } = await exchangePublicToken(plaidClient, requestData.publicToken);
 
-    // Step 2: Fetch and save account data
+    // Step 2: Fetch user's groupId for RBAC
+    const { getDocument } = await import('../../../../utils/firestore');
+    const userDoc = await getDocument('users', user.uid);
+    const groupId = (userDoc as any)?.familyId || (userDoc as any)?.groupId || null;
+
+    // Step 3: Fetch and save account data with hybrid structure
     const accounts = await fetchPlaidAccounts(plaidClient, accessToken, itemId);
-    
+
     await savePlaidItem(
       itemId,
       user.uid,
@@ -169,7 +174,8 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
       itemId,
       user.uid,
       requestData.metadata.institution.institution_id,
-      requestData.metadata.institution.name
+      requestData.metadata.institution.name,
+      groupId
     );
 
     console.log('Plaid data saved to Firestore successfully');

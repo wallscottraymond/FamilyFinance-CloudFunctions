@@ -30,6 +30,13 @@ import {
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
 import { updateBudgetSpending } from "../../../../utils/budgetSpending";
+import {
+  buildAccessControl,
+  buildTransactionCategories,
+  buildMetadata,
+  buildRelationships
+} from "../../../../utils/documentStructure";
+import { matchTransactionSplitsToSourcePeriods } from "../../utils/matchTransactionSplitsToSourcePeriods";
 
 /**
  * Create a new transaction
@@ -94,53 +101,107 @@ export const createTransaction = onRequest({
         );
       }
 
-      // Create default split for the transaction
+      // Determine group membership (convert legacy familyId to groupIds array)
+      const groupIds: string[] = [];
+      if (transactionData.groupId) {
+        groupIds.push(transactionData.groupId);
+      } else if (user.familyId) {
+        groupIds.push(user.familyId);
+      }
+
+      // Transaction date for payment tracking and period matching
+      const transactionDate = transactionData.date
+        ? admin.firestore.Timestamp.fromDate(new Date(transactionData.date))
+        : admin.firestore.Timestamp.now();
+
+      // Create default split for the transaction (period IDs will be populated below)
       const defaultSplit = {
         id: admin.firestore().collection('_dummy').doc().id,
         budgetId: transactionData.budgetId || 'unassigned',
         budgetName: 'General',
         categoryId: transactionData.category,
+        category: null,
+        categoryPrimary: null,
         amount: transactionData.amount,
-        description: undefined,
+        description: null,
         isDefault: true,
+
+        // Source period IDs (will be populated by matchTransactionSplitsToSourcePeriods)
+        monthlyPeriodId: null,
+        weeklyPeriodId: null,
+        biWeeklyPeriodId: null,
+
+        // Assignment references (populated when assigned)
+        outflowId: null,
+
+        // Enhanced status fields
+        isIgnored: false,
+        isRefund: false,
+        isTaxDeductible: false,
+        ignoredReason: null,
+        refundReason: null,
+        taxDeductibleCategory: null,
+        note: null,
+
+        // Payment tracking
+        paymentDate: transactionDate,
+
         createdAt: admin.firestore.Timestamp.now(),
         updatedAt: admin.firestore.Timestamp.now(),
         createdBy: user.id!,
       };
 
-      // Create transaction with splitting support
+      // Create transaction using hybrid structure
       const transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
+        // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
         userId: user.id!,
-        familyId: user.familyId,
+        groupIds,
+        accountId: undefined, // Not available in CreateTransactionRequest
         amount: transactionData.amount,
-        currency: (family as any).settings.currency,
-        description: transactionData.description,
-        category: transactionData.category,
-        type: transactionData.type,
-        date: transactionData.date
-          ? admin.firestore.Timestamp.fromDate(new Date(transactionData.date))
-          : admin.firestore.Timestamp.now(),
-        location: transactionData.location,
-        tags: transactionData.tags || [],
-        budgetId: transactionData.budgetId,
+        date: transactionDate,
         status: permissionCheck.requiresApproval ? TransactionStatus.PENDING : TransactionStatus.APPROVED,
-        metadata: {
-          createdBy: user.id,
-          requiresApproval: permissionCheck.requiresApproval,
+        isActive: true,
+
+        // === NESTED ACCESS CONTROL OBJECT ===
+        access: buildAccessControl(user.id!, user.id!, groupIds),
+
+        // === NESTED CATEGORIES OBJECT ===
+        categories: buildTransactionCategories(transactionData.category, {
+          tags: transactionData.tags || [],
+          budgetCategory: transactionData.budgetId
+        }),
+
+        // === NESTED METADATA OBJECT ===
+        metadata: buildMetadata(user.id!, 'manual', {
+          requiresApproval: permissionCheck.requiresApproval
+        }),
+
+        // === NESTED RELATIONSHIPS OBJECT ===
+        relationships: {
+          ...buildRelationships({
+            budgetId: transactionData.budgetId
+          }),
+          affectedBudgets: transactionData.budgetId ? [transactionData.budgetId] : [],
+          affectedBudgetPeriods: [], // Will be populated when budget period is assigned
+          primaryBudgetId: transactionData.budgetId,
+          primaryBudgetPeriodId: undefined // Will be assigned when budget period is determined
         },
 
-        // New splitting fields
+        // === TRANSACTION-SPECIFIC FIELDS AT ROOT ===
+        currency: (family as any).settings.currency,
+        description: transactionData.description,
+        type: transactionData.type,
         splits: [defaultSplit],
-        isSplit: false, // Single default split
+        isSplit: false,
         totalAllocated: transactionData.amount,
         unallocated: 0,
-        affectedBudgets: transactionData.budgetId ? [transactionData.budgetId] : [],
-        affectedBudgetPeriods: [], // Will be populated when budget period is assigned
-        primaryBudgetId: transactionData.budgetId || undefined,
-        primaryBudgetPeriodId: undefined, // Will be assigned when budget period is determined
       };
 
-      const createdTransaction = await createDocument<Transaction>("transactions", transaction);
+      // Match transaction splits to source periods (app-wide)
+      const transactionsWithPeriods = await matchTransactionSplitsToSourcePeriods([transaction as Transaction]);
+      const transactionWithPeriods = transactionsWithPeriods[0];
+
+      const createdTransaction = await createDocument<Transaction>("transactions", transactionWithPeriods);
 
       // Update budget spending based on transaction splits
       try {

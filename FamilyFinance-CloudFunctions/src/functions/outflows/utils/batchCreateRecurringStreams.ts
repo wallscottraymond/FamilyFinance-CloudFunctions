@@ -48,17 +48,37 @@ export async function batchCreateInflowStreams(
           // Update existing stream
           const existingDoc = existingQuery.docs[0];
           await existingDoc.ref.update({
+            // Descriptive fields
             description: inflow.description,
             merchantName: inflow.merchantName,
+
+            // Amounts (now flattened)
             averageAmount: inflow.averageAmount,
             lastAmount: inflow.lastAmount,
+            currency: inflow.currency,
+            unofficialCurrency: inflow.unofficialCurrency,
+
+            // Dates & frequency
             frequency: inflow.frequency,
             lastDate: inflow.lastDate,
             predictedNextDate: inflow.predictedNextDate,
+
+            // Status & control
             status: inflow.status,
             isActive: inflow.isActive,
+            isUserModified: inflow.isUserModified,
+
+            // Classification
+            incomeType: inflow.incomeType,
+            isRegularSalary: inflow.isRegularSalary,
+
+            // Nested objects
+            categories: inflow.categories,
+            relationships: inflow.relationships,
+
+            // Metadata update
             'metadata.lastSyncedAt': Timestamp.now(),
-            'metadata.updatedAt': Timestamp.now(),
+            'metadata.plaidConfidenceLevel': inflow.metadata.plaidConfidenceLevel,
             updatedAt: Timestamp.now()
           });
 
@@ -133,17 +153,37 @@ export async function batchCreateOutflowStreams(
           // Update existing stream
           const existingDoc = existingQuery.docs[0];
           await existingDoc.ref.update({
+            // Descriptive fields
             description: outflow.description,
             merchantName: outflow.merchantName,
+
+            // Amounts (now flattened)
             averageAmount: outflow.averageAmount,
             lastAmount: outflow.lastAmount,
+            currency: outflow.currency,
+            unofficialCurrency: outflow.unofficialCurrency,
+
+            // Dates & frequency
             frequency: outflow.frequency,
             lastDate: outflow.lastDate,
             predictedNextDate: outflow.predictedNextDate,
+
+            // Status & control
             status: outflow.status,
             isActive: outflow.isActive,
+            isUserModified: outflow.isUserModified,
+
+            // Classification
+            expenseType: outflow.expenseType,
+            isEssential: outflow.isEssential,
+
+            // Nested objects
+            categories: outflow.categories,
+            relationships: outflow.relationships,
+
+            // Metadata update
             'metadata.lastSyncedAt': Timestamp.now(),
-            'metadata.updatedAt': Timestamp.now(),
+            'metadata.plaidConfidenceLevel': outflow.metadata.plaidConfidenceLevel,
             updatedAt: Timestamp.now()
           });
 

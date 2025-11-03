@@ -66,8 +66,8 @@ export const deleteTransaction = onRequest({
         );
       }
 
-      // Check family access
-      if (!await checkFamilyAccess(user.id!, existingTransaction.familyId)) {
+      // Check group access (backward compatible with familyId)
+      if (existingTransaction.familyId && !await checkFamilyAccess(user.id!, existingTransaction.familyId)) {
         return response.status(403).json(
           createErrorResponse("access-denied", "Cannot access this transaction")
         );

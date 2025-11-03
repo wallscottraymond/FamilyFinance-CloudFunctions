@@ -7,7 +7,7 @@ admin.initializeApp();
 // Export all function modules
 export * from "./functions/auth";
 export * from "./functions/users"; // Includes auth triggers (onUserCreate, onUserDelete)
-export * from "./functions/families";
+export * from "./functions/sharing"; // Group management (CRUD + orchestration triggers)
 export * from "./functions/transactions";
 export * from "./functions/budgets";
 export * from "./functions/categories"; // Categories management functions

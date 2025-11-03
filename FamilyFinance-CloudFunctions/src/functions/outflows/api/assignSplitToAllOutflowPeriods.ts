@@ -182,16 +182,6 @@ export const assignSplitToAllOutflowPeriods = onCall(
         budgetName: clearBudgetAssignment ? '' : splits[splitIndex].budgetName,
         // Set outflow assignment
         outflowId: outflowId,
-        outflowDescription: outflow.description,
-        // Primary period reference (monthly if available, otherwise first found)
-        outflowPeriodId: matchingPeriods.monthlyPeriodId ||
-                        matchingPeriods.weeklyPeriodId ||
-                        matchingPeriods.biWeeklyPeriodId ||
-                        undefined,
-        // All three period type references
-        outflowMonthlyPeriodId: matchingPeriods.monthlyPeriodId || undefined,
-        outflowWeeklyPeriodId: matchingPeriods.weeklyPeriodId || undefined,
-        outflowBiWeeklyPeriodId: matchingPeriods.biWeeklyPeriodId || undefined,
         // Payment classification
         paymentType: paymentType as PaymentType,
         // Payment date (matches transaction date)

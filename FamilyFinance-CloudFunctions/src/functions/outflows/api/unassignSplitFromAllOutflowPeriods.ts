@@ -94,27 +94,49 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
 
       const split = splits[splitIndex];
 
-      // Step 3: Extract all period IDs from the split
-      const periodIds: string[] = [];
-      if (split.outflowMonthlyPeriodId) periodIds.push(split.outflowMonthlyPeriodId);
-      if (split.outflowWeeklyPeriodId) periodIds.push(split.outflowWeeklyPeriodId);
-      if (split.outflowBiWeeklyPeriodId) periodIds.push(split.outflowBiWeeklyPeriodId);
-
-      if (periodIds.length === 0) {
-        throw new HttpsError('failed-precondition', 'Split is not assigned to any outflow periods');
+      // Step 3: Check if split is assigned to an outflow
+      if (!split.outflowId) {
+        throw new HttpsError('failed-precondition', 'Split is not assigned to any outflow');
       }
 
-      console.log(`[unassignSplitFromAll] Found ${periodIds.length} period assignments to remove`);
+      const outflowId = split.outflowId;
 
-      // Step 4: Clear all outflow fields from the split
+      // Extract source period IDs from the split (these identify which periods to search)
+      const sourcePeriodIds: string[] = [];
+      if (split.monthlyPeriodId) sourcePeriodIds.push(split.monthlyPeriodId);
+      if (split.weeklyPeriodId) sourcePeriodIds.push(split.weeklyPeriodId);
+      if (split.biWeeklyPeriodId) sourcePeriodIds.push(split.biWeeklyPeriodId);
+
+      if (sourcePeriodIds.length === 0) {
+        throw new HttpsError('failed-precondition', 'Split has no source period IDs');
+      }
+
+      console.log(`[unassignSplitFromAll] Searching for outflow periods matching outflowId ${outflowId} and source periods: ${sourcePeriodIds.join(', ')}`);
+
+      // Find outflow_periods that match these source periods and outflow ID
+      const outflowPeriodIds: string[] = [];
+      for (const sourcePeriodId of sourcePeriodIds) {
+        const periodsQuery = await db.collection('outflow_periods')
+          .where('userId', '==', userId)
+          .where('outflowId', '==', outflowId)
+          .where('periodId', '==', sourcePeriodId)
+          .get();
+
+        periodsQuery.forEach(doc => {
+          outflowPeriodIds.push(doc.id);
+        });
+      }
+
+      if (outflowPeriodIds.length === 0) {
+        throw new HttpsError('failed-precondition', 'No matching outflow periods found');
+      }
+
+      console.log(`[unassignSplitFromAll] Found ${outflowPeriodIds.length} outflow periods to remove split from`);
+
+      // Step 4: Clear outflow assignment from the split (source period IDs remain)
       splits[splitIndex] = {
         ...splits[splitIndex],
-        outflowPeriodId: undefined,
-        outflowId: undefined,
-        outflowDescription: undefined,
-        outflowMonthlyPeriodId: undefined,
-        outflowWeeklyPeriodId: undefined,
-        outflowBiWeeklyPeriodId: undefined,
+        outflowId: null,
         paymentType: undefined,
         updatedAt: admin.firestore.Timestamp.now(),
       };
@@ -130,7 +152,7 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
       // Step 6: Batch remove split reference from ALL outflow periods
       const removeBatch = db.batch();
 
-      for (const periodId of periodIds) {
+      for (const periodId of outflowPeriodIds) {
         const periodRef = db.collection('outflow_periods').doc(periodId);
         const periodDoc = await periodRef.get();
 
@@ -152,7 +174,7 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
 
       await removeBatch.commit();
 
-      console.log(`[unassignSplitFromAll] Removed split reference from ${periodIds.length} periods`);
+      console.log(`[unassignSplitFromAll] Removed split reference from ${outflowPeriodIds.length} periods`);
 
       // Step 7: Recalculate status for all updated periods
       const statusBatch = db.batch();
@@ -161,7 +183,7 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
       let weeklyPeriod: OutflowPeriod | undefined;
       let biWeeklyPeriod: OutflowPeriod | undefined;
 
-      for (const periodId of periodIds) {
+      for (const periodId of outflowPeriodIds) {
         const periodRef = db.collection('outflow_periods').doc(periodId);
         const periodDoc = await periodRef.get();
 
@@ -198,15 +220,15 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
 
       await statusBatch.commit();
 
-      console.log(`[unassignSplitFromAll] Successfully unassigned split from ${periodIds.length} periods`);
+      console.log(`[unassignSplitFromAll] Successfully unassigned split from ${outflowPeriodIds.length} periods`);
 
       const response: UnassignSplitFromAllOutflowPeriodsResponse = {
         success: true,
         monthlyPeriod,
         weeklyPeriod,
         biWeeklyPeriod,
-        periodsUpdated: periodIds.length,
-        message: `Split unassigned from ${periodIds.length} periods`
+        periodsUpdated: outflowPeriodIds.length,
+        message: `Split unassigned from ${outflowPeriodIds.length} periods`
       };
 
       return response;

@@ -7,12 +7,19 @@ export { verifyUTCPeriods } from "./verifyUTCPeriods";
 export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdmin";
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
+export { verifyAccessControl } from "./verifyAccessControl";
 
 // Transaction splitting migration functions
-export { 
-  migrateTransactionsToSplits, 
-  verifyTransactionSplitsMigration 
+export {
+  migrateTransactionsToSplits,
+  verifyTransactionSplitsMigration
 } from "./migrateTransactionsToSplits";
+
+// RBAC migration functions
+export {
+  migrateTransactionsRBAC,
+  verifyTransactionsRBAC
+} from "./migrateTransactionsRBAC";
 
 // User data cleanup functions
 export {

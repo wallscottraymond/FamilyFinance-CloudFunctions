@@ -1,7 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { SystemRole } from "./users";
 import { GroupMembership } from "./groups";
-import { ResourceSharing } from "./sharing";
 
 // Export new modular types
 export * from "./users";
@@ -13,6 +12,114 @@ export interface BaseDocument {
   id?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+// =======================
+// HYBRID DOCUMENT STRUCTURE - NESTED OBJECTS
+// =======================
+
+/**
+ * Access Control Object
+ * Simplified access control using groupIds-based sharing
+ * Access is determined by group membership checked in Firestore security rules
+ */
+export interface AccessControl {
+  createdBy: string;              // Original creator
+  ownerId: string;                // Current owner
+  isPrivate: boolean;             // Quick filter: true if no group (groupIds.length === 0)
+}
+
+/**
+ * Categories Object
+ * Contains all categorization and classification fields
+ * Supports both app categories and Plaid categories
+ */
+export interface Categories {
+  primary: string;                // Main category
+  secondary?: string;             // Sub-category
+  tags: string[];                 // User-defined tags
+  budgetCategory?: string;        // Budget mapping
+  // Plaid-specific fields (only present in Plaid transactions)
+  plaidPrimary?: string;          // Plaid primary category (e.g., "FOOD_AND_DRINK")
+  plaidDetailed?: string;         // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
+  plaidCategories?: string[];     // Legacy Plaid category array
+}
+
+/**
+ * Metadata Object
+ * Contains all audit trail and document lifecycle fields
+ * Includes source tracking and version control
+ */
+export interface Metadata {
+  updatedAt: Timestamp;
+  updatedBy?: string;
+  version: number;
+  source: string;                 // 'plaid', 'manual', 'import', 'api', etc.
+  requiresApproval?: boolean;
+  // Plaid-specific metadata (only present in Plaid-sourced documents)
+  plaidTransactionId?: string;
+  plaidAccountId?: string;
+  plaidItemId?: string;
+  plaidPending?: boolean;
+  plaidMerchantName?: string;
+  plaidName?: string;
+  // Additional metadata
+  notes?: string;
+  lastSyncedAt?: Timestamp;
+  syncError?: string;
+  // Period-specific
+  inheritedFrom?: string;         // For periods: parent ID they inherited from
+}
+
+/**
+ * Relationships Object
+ * Contains all document relationships and references
+ * Tracks parent-child and linked document relationships
+ */
+export interface Relationships {
+  parentId?: string;              // Parent document (for periods, splits, etc.)
+  parentType?: string;            // Type of parent ('outflow', 'inflow', 'budget', etc.)
+  childIds?: string[];            // Child documents
+  budgetId?: string;              // Related budget
+  accountId?: string;             // Related account
+  linkedIds?: string[];           // Other linked documents
+  relatedDocs?: Array<{           // Structured relationships
+    type: string;
+    id: string;
+    relationshipType?: string;
+  }>;
+}
+
+// =======================
+// STANDARDIZED RESOURCE OWNERSHIP & ACCESS CONTROL
+// =======================
+
+/**
+ * Standardized ownership and sharing fields for all shareable resources.
+ * All resources (Transaction, Budget, Outflow, etc.) should include these fields.
+ *
+ * NOTE: All fields are OPTIONAL during migration to allow gradual adoption.
+ * New resources should populate all fields. Existing resources can be migrated incrementally.
+ */
+export interface ResourceOwnership {
+  // === OWNERSHIP (Optional during migration) ===
+  createdBy?: string;              // User who originally created this resource
+  ownerId?: string;                // Current owner (can be transferred)
+
+  // === GROUP MEMBERSHIP (Optional during migration) ===
+  groupIds?: string[];             // Groups this resource belongs to (empty array = private)
+                                   // Resources can belong to multiple groups
+
+  // === ACCESS CONTROL (Optional during migration) ===
+  isPrivate?: boolean;             // Quick filter: true if groupIds.length === 0
+
+  // === LEGACY FIELDS (Backward Compatibility - REQUIRED for existing code) ===
+  userId?: string;                 // DEPRECATED - maps to ownerId
+  familyId?: string;               // DEPRECATED - can be mapped to groupIds[0] for single-group scenario
+  groupId?: string | null;         // DEPRECATED - can be mapped to groupIds[0] for single-group scenario
+  accessibleBy?: string[];         // DEPRECATED - no longer used (access via Firestore rules)
+  memberIds?: string[];            // DEPRECATED - no longer used (access via Firestore rules)
+  isShared?: boolean;              // DEPRECATED - maps to !isPrivate
 }
 
 // User related types
@@ -177,42 +284,36 @@ export interface TransactionSplit {
   budgetId: string;               // Reference to budgets collection (empty string if assigned to outflow)
   budgetName: string;             // Denormalized budget name for display performance (empty string if assigned to outflow)
 
-  // NEW: Outflow assignment (mutually exclusive with budget assignment)
-  outflowPeriodId?: string;       // Reference to outflow_periods collection
-  outflowId?: string;             // Reference to outflows collection (for quick lookup)
-  outflowDescription?: string;    // Denormalized outflow description for display
+  // Source period IDs based on transaction date (always populated)
+  monthlyPeriodId: string | null;        // Monthly source period ID containing transaction date
+  weeklyPeriodId: string | null;         // Weekly source period ID containing transaction date
+  biWeeklyPeriodId: string | null;       // Bi-weekly source period ID containing transaction date
 
-  // NEW: Period-type-specific outflow assignments (for multi-period payment tracking)
-  outflowMonthlyPeriodId?: string;   // Reference to monthly outflow_period
-  outflowWeeklyPeriodId?: string;    // Reference to weekly outflow_period
-  outflowBiWeeklyPeriodId?: string;  // Reference to bi-weekly outflow_period
-
-  // NEW: Bill assignment fields
-  billId?: string;                // Reference to outflows/bills collection
-  billName?: string;              // Denormalized bill name for display
+  // Assignment references (populated when assigned)
+  outflowId?: string | null;             // Reference to outflows collection (when assigned to outflow)
 
   // Category information
   categoryId: string;             // Category ID from categories collection (matched by detailed_plaid_category)
-  category?: string;              // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
-  categoryPrimary?: string;       // Plaid primary category (e.g., "FOOD_AND_DRINK")
+  category?: string | null;              // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
+  categoryPrimary?: string | null;       // Plaid primary category (e.g., "FOOD_AND_DRINK")
 
   amount: number;                 // Amount allocated to this split
-  description?: string;           // Optional override description for this split
+  description?: string | null;           // Optional override description for this split
   isDefault: boolean;             // True for the auto-created split when transaction is created
 
   // Enhanced status fields for budget tracking
   isIgnored?: boolean;            // User marked to ignore from budget tracking
   isRefund?: boolean;             // Transaction is a refund (subtract from spending)
   isTaxDeductible?: boolean;      // Tax-deductible expense
-  ignoredReason?: string;         // Why user ignored this split
-  refundReason?: string;          // Reason for refund classification
-  taxDeductibleCategory?: string; // Tax category for deductible items
+  ignoredReason?: string | null;         // Why user ignored this split
+  refundReason?: string | null;          // Reason for refund classification
+  taxDeductibleCategory?: string | null; // Tax category for deductible items
 
   // NEW: Simple status flags
   ignore?: boolean;               // Simple ignore flag for user convenience
   return?: boolean;               // Transaction is a return/refund (simplified from isRefund)
   deductible?: boolean;           // Tax deductible (simplified from isTaxDeductible)
-  note?: string;                  // User note for this split
+  note?: string | null;                  // User note for this split
 
   // Enhanced assignment metadata
   excludedFromBudgets?: string[]; // Budget IDs to exclude this split from
@@ -227,65 +328,86 @@ export interface TransactionSplit {
   createdBy: string;              // User who created this split
 }
 
-export interface Transaction extends BaseDocument {
-  userId: string;
-  familyId: string;
-  accountId?: string;             // Plaid account ID for filtering transactions by account
-  amount: number;
+export interface Transaction extends BaseDocument, ResourceOwnership {
+  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
+  userId: string;                 // LEGACY: maps to access.ownerId (REQUIRED for existing queries)
+  groupIds: string[];             // Groups this transaction belongs to (empty array = private) (REQUIRED for queries)
+  accountId?: string;             // Plaid account ID for filtering transactions by account (REQUIRED for index)
+  amount: number;                 // Transaction amount (REQUIRED for range queries)
+  date: Timestamp;                // Transaction date (REQUIRED for sorting/range queries)
+  status: TransactionStatus;      // Transaction status (REQUIRED for filtering)
+  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
+  isActive: boolean;              // Whether transaction is active (REQUIRED for filtering)
+
+  // === NESTED ACCESS CONTROL OBJECT ===
+  access: AccessControl;          // Access control and sharing fields
+
+  // === NESTED CATEGORIES OBJECT ===
+  categories: Categories & {      // Transaction categorization (extends base Categories)
+    // Transaction-specific category fields
+    budgetCategory?: string;      // Budget category assignment
+  };
+
+  // === NESTED METADATA OBJECT ===
+  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
+    // Transaction-specific metadata
+    approvedBy?: string;
+    approvedAt?: Timestamp;
+    receiptUrl?: string;
+    location?: TransactionLocation;
+    recurringTransactionId?: string;
+
+    // Rules system - Original immutable Plaid data (for rule recalculation)
+    plaidData?: {
+      category: string;            // Original Plaid category array joined
+      detailedCategory?: string;   // Original detailed category
+      primaryCategory?: string;    // Original primary category
+      merchantName?: string;       // Original merchant name
+      amount: number;              // Original amount
+      date: Timestamp;             // Original transaction date
+      description: string;         // Original description/name
+      pending: boolean;            // Original pending status
+
+      // Store full personal_finance_category for reference
+      personalFinanceCategory?: {
+        primary: string;
+        detailed: string;
+        confidenceLevel?: string;
+      };
+    };
+
+    // Rule application tracking
+    appliedRules?: string[];       // Array of rule IDs currently applied
+    isRuleModified?: boolean;      // Has any rule modified this transaction?
+    lastRuleApplication?: Timestamp; // When rules were last applied
+    ruleApplicationCount?: number; // Number of times rules have been applied
+  };
+
+  // === NESTED RELATIONSHIPS OBJECT ===
+  relationships: Relationships & { // Document relationships (extends base Relationships)
+    // Transaction-specific relationship fields
+    budgetId?: string;             // Legacy budget assignment (maintained for backward compatibility)
+    affectedBudgets: string[];     // Array of budget IDs for flexibility
+    primaryBudgetId?: string;      // The budget with the largest split amount (for default sorting)
+    primaryBudgetPeriodId?: string; // The budget period with the largest split amount
+    affectedBudgetPeriods: string[]; // Array of budget period IDs for efficient querying
+  };
+
+  // === TRANSACTION-SPECIFIC FIELDS AT ROOT ===
   currency: string;
   description: string;
-  category: string;               // Category ID from categories collection (matched by detailed_plaid_category)
   type: TransactionType;
-  date: Timestamp;
-  location?: TransactionLocation;
-  receiptUrl?: string;
-  tags: string[];
-  budgetId?: string;              // Legacy field - maintained for backward compatibility
-  recurringTransactionId?: string;
-  status: TransactionStatus;
-  approvedBy?: string;
-  approvedAt?: Timestamp;
-  metadata: Record<string, any>;
-  
+
   // New splitting functionality
   splits: TransactionSplit[];     // Array of transaction splits
   isSplit: boolean;               // True if transaction has multiple splits or user has modified splits
   totalAllocated: number;         // Sum of all split amounts
   unallocated: number;            // amount - totalAllocated (remaining unallocated amount)
-  affectedBudgetPeriods: string[]; // Array of budget period IDs for efficient querying
-  affectedBudgets: string[];      // Array of budget IDs for flexibility
-  primaryBudgetId?: string;       // The budget with the largest split amount (for default sorting)
-  primaryBudgetPeriodId?: string; // The budget period with the largest split amount
 
   // Enhanced filtering fields for quick queries
   hasIgnoredSplits?: boolean;     // Quick flag for filtering ignored transactions
   hasRefundSplits?: boolean;      // Quick flag for refund transactions
   hasTaxDeductibleSplits?: boolean; // Quick flag for tax tracking
-
-  // NEW: Rules system - Original immutable Plaid data (for rule recalculation)
-  plaidData?: {
-    category: string;              // Original Plaid category array joined
-    detailedCategory?: string;     // Original detailed category
-    primaryCategory?: string;      // Original primary category
-    merchantName?: string;         // Original merchant name
-    amount: number;                // Original amount
-    date: Timestamp;               // Original transaction date
-    description: string;           // Original description/name
-    pending: boolean;              // Original pending status
-
-    // Store full personal_finance_category for reference
-    personalFinanceCategory?: {
-      primary: string;
-      detailed: string;
-      confidenceLevel?: string;
-    };
-  };
-
-  // NEW: Rule application tracking
-  appliedRules?: string[];          // Array of rule IDs currently applied
-  isRuleModified?: boolean;         // Has any rule modified this transaction?
-  lastRuleApplication?: Timestamp;  // When rules were last applied
-  ruleApplicationCount?: number;    // Number of times rules have been applied
 }
 
 export enum TransactionType {
@@ -359,19 +481,15 @@ export interface TransactionLocation {
 }
 
 // Budget related types
-export interface Budget extends BaseDocument {
+export interface Budget extends BaseDocument, ResourceOwnership {
   name: string;
   description?: string;
 
-  // RBAC fields (NEW - optional during migration)
-  ownerId?: string;               // Current owner (NEW)
-  sharing?: ResourceSharing;      // Sharing configuration (NEW)
-
-  // Legacy fields (DEPRECATED but kept for backward compatibility)
-  familyId?: string;              // DEPRECATED - use sharing.sharedWith instead
-  createdBy: string;              // Always set to the user who created the budget
-  memberIds: string[];            // DEPRECATED - use sharing.sharedWith instead
-  isShared: boolean;              // DEPRECATED - use sharing.isShared instead
+  // === NESTED OBJECTS (Hybrid Structure) ===
+  access: AccessControl;      // Nested access control object
+  categories?: Categories;    // Optional categories (budgets may not need full categorization)
+  metadata?: Metadata;        // Optional metadata
+  relationships?: Relationships; // Optional relationships
 
   // Budget configuration
   amount: number;
@@ -472,6 +590,7 @@ export interface CreateTransactionRequest {
   location?: TransactionLocation;
   tags?: string[];
   budgetId?: string;
+  groupId?: string;              // NEW: Group this transaction belongs to (optional)
 }
 
 export interface UpdateTransactionRequest {
@@ -592,8 +711,9 @@ export interface CreateBudgetRequest {
   startDate: string; // ISO date string
   endDate?: string; // ISO date string - Legacy field for backward compatibility
   alertThreshold?: number;
-  memberIds?: string[]; // Optional - for shared budgets only
-  isShared?: boolean; // Optional - defaults to false (individual budget)
+  memberIds?: string[]; // Optional - for shared budgets only (DEPRECATED)
+  isShared?: boolean; // Optional - defaults to false (individual budget) (DEPRECATED)
+  groupId?: string; // NEW: Group this budget belongs to (optional)
   selectedStartPeriod?: string; // Optional - specific period ID to start budget periods from
 
   // Budget end date functionality
@@ -667,16 +787,12 @@ export interface ChecklistItem {
 }
 
 // Budget Periods - Links budgets to specific source periods with proportional amounts
-export interface BudgetPeriodDocument extends BaseDocument {
+// NOTE: Budget periods INHERIT ownership from parent budget (no separate ownership)
+export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
   budgetId: string;           // Reference to budgets collection
   budgetName: string;         // Denormalized budget name for performance
   periodId: string;           // Reference to source_periods.id (same as sourcePeriodId)
   sourcePeriodId: string;     // Direct reference to source_periods.id for mapping
-  familyId?: string;          // Optional - same as budget familyId for easy querying
-  
-  // Ownership and permissions
-  userId: string;             // Same as budget.createdBy for security rules
-  createdBy: string;          // Original budget creator (explicit tracking)
   
   // Period context (denormalized from source_periods for performance)
   periodType: PeriodType;     // "weekly" | "monthly" | "bi_monthly"
@@ -797,29 +913,49 @@ export interface PlaidSyncStats {
 
 // Plaid Accounts - bank accounts, credit cards, etc.
 export interface PlaidAccount extends BaseDocument {
-  accountId: string; // Plaid account_id
-  itemId: string; // Reference to plaid_items document
-  userId: string; // Family Finance user ID  
-  familyId?: string; // Optional family association
-  persistentAccountId?: string; // Plaid persistent_account_id for tracking across reconnections
-  name: string; // Account name from institution
-  mask?: string; // Account number mask (e.g., "0000")
-  officialName?: string; // Official account name from institution
-  type: PlaidAccountType;
-  subtype: PlaidAccountSubtype;
-  balances: PlaidAccountBalances;
-  verificationStatus?: PlaidVerificationStatus;
-  isActive: boolean; // Whether this account should be included in transactions
-  isSyncEnabled: boolean; // Whether to sync transactions for this account
-  lastSyncedAt?: Timestamp; // Last time transactions were synced
-  metadata: {
+  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
+  userId: string;                 // Family Finance user ID (REQUIRED for existing queries)
+  groupId: string | null;         // Group this account belongs to (null = private) (REQUIRED for existing queries)
+  accessibleBy: string[];         // Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+  accountId: string;              // Plaid account_id (REQUIRED for filtering)
+  itemId: string;                 // Reference to plaid_items document (REQUIRED for filtering)
+  isActive: boolean;              // Whether this account should be included in transactions (REQUIRED for filtering)
+  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
+
+  // === NESTED ACCESS CONTROL OBJECT ===
+  access: AccessControl;          // Access control and sharing fields
+
+  // === NESTED CATEGORIES OBJECT ===
+  categories: Categories & {      // Account categorization (extends base Categories)
+    // Account-specific category fields
+    accountType: PlaidAccountType;     // Account type for categorization
+    accountSubtype: PlaidAccountSubtype; // Account subtype
+  };
+
+  // === NESTED METADATA OBJECT ===
+  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
+    // Account-specific metadata
+    persistentAccountId?: string; // Plaid persistent_account_id for tracking across reconnections
+    verificationStatus?: PlaidVerificationStatus;
+    isSyncEnabled: boolean;       // Whether to sync transactions for this account
+    lastSyncedAt?: Timestamp;     // Last time transactions were synced
     institution: {
-      name: string;
-      logo?: string;
+      id: string;                 // Institution ID
+      name: string;               // Institution name
+      logo?: string;              // Institution logo URL
     };
-    linkedAt: Timestamp; // When account was first linked
+    linkedAt: Timestamp;          // When account was first linked
     lastBalanceUpdate: Timestamp; // Last time balance was updated
   };
+
+  // === NESTED RELATIONSHIPS OBJECT ===
+  relationships: Relationships;   // Document relationships
+
+  // === ACCOUNT-SPECIFIC FIELDS AT ROOT ===
+  name: string;                   // Account name from institution
+  mask?: string;                  // Account number mask (e.g., "0000")
+  officialName?: string;          // Official account name from institution
+  balances: PlaidAccountBalances; // Current balance information
 }
 
 export enum PlaidAccountType {
@@ -1264,48 +1400,59 @@ export interface PlaidItemStatusResponse {
 // =======================
 
 // Base interface for recurring income and outflow transactions
-export interface BaseRecurringTransaction extends BaseDocument {
-  streamId: string; // Plaid recurring stream ID
-  itemId: string; // Reference to plaid_items document
-  userId: string; // Family Finance user ID
-  familyId?: string; // Optional family association
-  accountId: string; // Primary account where this recurring stream appears
-  
-  // Stream classification
-  isActive: boolean; // Whether this stream is still active
-  status: PlaidRecurringTransactionStatus; // Current status of the stream
-  
-  // Transaction details
-  description: string; // Recurring transaction description
-  merchantName?: string; // Merchant name if available
-  category: string[]; // Plaid category hierarchy
-  personalFinanceCategory?: PlaidPersonalFinanceCategory; // Enhanced categorization
-  
+export interface BaseRecurringTransaction extends BaseDocument, ResourceOwnership {
+  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
+  userId: string;                 // Family Finance user ID (REQUIRED for existing queries)
+  groupId: string | null;         // Group this recurring transaction belongs to (null = private) (REQUIRED for existing queries)
+  accessibleBy: string[];         // Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+  streamId: string;               // Plaid recurring stream ID (REQUIRED for filtering)
+  itemId: string;                 // Reference to plaid_items document (REQUIRED for filtering)
+  accountId: string;              // Primary account where this recurring stream appears (REQUIRED for filtering)
+  isActive: boolean;              // Whether this stream is still active (REQUIRED for filtering)
+  status: PlaidRecurringTransactionStatus; // Current status of the stream (REQUIRED for filtering)
+  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
+
+  // === NESTED ACCESS CONTROL OBJECT ===
+  access: AccessControl;          // Access control and sharing fields
+
+  // === NESTED CATEGORIES OBJECT ===
+  categories: Categories & {      // Recurring transaction categorization (extends base Categories)
+    // Recurring transaction-specific category fields
+    plaidCategoryHierarchy: string[]; // Plaid category hierarchy (e.g., ["Food and Drink", "Restaurants"])
+    plaidCategoryId: string;      // Plaid category_id
+    personalFinanceCategory?: PlaidPersonalFinanceCategory; // Enhanced categorization
+    userCategory?: TransactionCategory; // User-assigned category override
+  };
+
+  // === NESTED METADATA OBJECT ===
+  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
+    // Recurring transaction-specific metadata
+    isUserModified?: boolean;     // Whether user has manually modified this stream
+    isHidden: boolean;            // Whether user has hidden this recurring transaction
+    syncVersion: number;          // Version for optimistic concurrency control
+  };
+
+  // === NESTED RELATIONSHIPS OBJECT ===
+  relationships: Relationships & { // Document relationships (extends base Relationships)
+    // Recurring transaction-specific relationship fields
+    transactionIds: string[];     // IDs of transactions that are part of this stream
+  };
+
+  // === RECURRING TRANSACTION-SPECIFIC FIELDS AT ROOT ===
+  description: string;            // Recurring transaction description
+  merchantName?: string;          // Merchant name if available
+
   // Amount information
   averageAmount: PlaidRecurringAmount; // Average amount data
   lastAmount: PlaidRecurringAmount; // Most recent amount data
-  
+
   // Frequency and timing
   frequency: PlaidRecurringFrequency; // How often this recurs
 
   // Historical data
-  firstDate: Timestamp; // Date of first transaction in stream
-  lastDate: Timestamp; // Date of last transaction in stream
-  predictedNextDate?: Timestamp; // Plaid's ML prediction of next occurrence
-  transactionIds: string[]; // IDs of transactions that are part of this stream
-
-  // Stream modification tracking
-  isUserModified?: boolean; // Whether user has manually modified this stream
-  
-  // Family Finance specific fields
-  userCategory?: TransactionCategory; // User-assigned category override
-  userNotes?: string; // User-added notes
-  tags: string[]; // User-added tags
-  isHidden: boolean; // Whether user has hidden this recurring transaction
-  
-  // Sync metadata
-  lastSyncedAt: Timestamp; // When this recurring transaction was last synced from Plaid
-  syncVersion: number; // Version for optimistic concurrency control
+  firstDate: Timestamp;           // Date of first transaction in stream
+  lastDate: Timestamp;            // Date of last transaction in stream
+  predictedNextDate?: Timestamp;  // Plaid's ML prediction of next occurrence
 }
 
 // Recurring Income - stored in root 'inflow' collection
@@ -1464,46 +1611,75 @@ export interface TransactionSplitReference {
 }
 
 // Outflow Periods - Maps outflows to source periods with withholding calculations
-export interface OutflowPeriod extends BaseDocument {
-  outflowId: string; // Reference to outflows collection document
-  periodId: string; // Reference to source_periods.id (same as sourcePeriodId)
-  sourcePeriodId: string; // Direct reference to source_periods.id for mapping
-  userId: string; // Family Finance user ID
-  familyId?: string; // Optional family association
+// NOTE: Outflow periods INHERIT ownership from parent outflow (no separate ownership)
+export interface OutflowPeriod extends BaseDocument, ResourceOwnership {
+  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
+  // INHERITED FROM PARENT OUTFLOW - Must match parent for query efficiency
+  userId: string;                 // INHERITED: Family Finance user ID (REQUIRED for existing queries)
+  groupId: string | null;         // INHERITED: Group this outflow belongs to (REQUIRED for existing queries)
+  accessibleBy: string[];         // INHERITED: Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
 
-  // Period context (denormalized from source_periods for performance)
-  periodType: PeriodType; // "weekly" | "monthly" | "bi_monthly"
-  periodStartDate: Timestamp; // UTC timestamp - period start
-  periodEndDate: Timestamp; // UTC timestamp - period end
+  // Period-specific query fields
+  outflowId: string;              // Reference to outflows collection document (REQUIRED for filtering)
+  periodId: string;               // Reference to source_periods.id (REQUIRED for filtering)
+  sourcePeriodId: string;         // Direct reference to source_periods.id for mapping (REQUIRED for filtering)
+  periodType: PeriodType;         // "weekly" | "monthly" | "bi_monthly" (REQUIRED for filtering)
+  isActive: boolean;              // Whether this outflow period is active (REQUIRED for filtering)
+  status: string;                 // Payment status (e.g., "pending", "paid", "overdue") (REQUIRED for filtering)
+  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
+  periodStartDate: Timestamp;     // UTC timestamp - period start (REQUIRED for range queries)
+  periodEndDate: Timestamp;       // UTC timestamp - period end (REQUIRED for range queries)
 
+  // === NESTED ACCESS CONTROL OBJECT ===
+  // INHERITED FROM PARENT with period-specific overrides
+  access: AccessControl;          // Access control and sharing fields (inherited from parent outflow)
+
+  // === NESTED CATEGORIES OBJECT ===
+  // INHERITED FROM PARENT with denormalized fields
+  categories: Categories & {      // Outflow period categorization (inherited from parent outflow)
+    // Outflow-specific denormalized fields from parent
+    outflowExpenseType?: string;  // Expense type from outflow (denormalized)
+  };
+
+  // === NESTED METADATA OBJECT ===
+  // INHERITED FROM PARENT with period-specific fields
+  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
+    // Period-specific metadata
+    inheritedFrom: string;        // Parent outflow ID (shows inheritance)
+    lastCalculated: Timestamp;    // When amounts were last calculated
+
+    // Denormalized from parent outflow for performance
+    outflowDescription: string;   // Description from outflow
+    outflowMerchantName?: string; // Merchant name from outflow
+    outflowIsEssential?: boolean; // Whether this is an essential expense
+  };
+
+  // === NESTED RELATIONSHIPS OBJECT ===
+  relationships: Relationships & { // Document relationships (extends base Relationships)
+    // Period-specific relationship fields
+    parentId: string;             // Reference to parent outflow (same as outflowId)
+    parentType: string;           // "outflow" (indicates parent document type)
+    transactionSplitIds: string[]; // IDs of transaction splits applied to this period
+  };
+
+  // === OUTFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
   // Payment cycle information
-  cycleStartDate: Timestamp; // Last payment date (or calculated start)
-  cycleEndDate: Timestamp; // Next payment date
-  cycleDays: number; // Days in the payment cycle
+  cycleStartDate: Timestamp;      // Last payment date (or calculated start)
+  cycleEndDate: Timestamp;        // Next payment date
+  cycleDays: number;              // Days in the payment cycle
 
   // Financial calculations
-  billAmount: number; // Full bill amount for this cycle
-  dailyWithholdingRate: number; // billAmount ÷ cycleDays
-  amountWithheld: number; // dailyRate × daysInPeriod (how much to withhold this period)
-  amountDue: number; // billAmount if due date falls in this period, else 0
+  billAmount: number;             // Full bill amount for this cycle
+  dailyWithholdingRate: number;   // billAmount ÷ cycleDays
+  amountWithheld: number;         // dailyRate × daysInPeriod (how much to withhold this period)
+  amountDue: number;              // billAmount if due date falls in this period, else 0
 
   // Payment status and tracking
-  isDuePeriod: boolean; // True if the due date falls within this period
-  dueDate?: Timestamp; // Actual due date if isDuePeriod is true
-  expectedDueDate: Timestamp; // Next expected due date relative to this period (may be in future)
-  expectedDrawDate: Timestamp; // Expected draw date (adjusts for weekends - Saturday/Sunday → Monday)
-  status: string; // Payment status (e.g., "pending", "paid", "overdue")
-  isActive: boolean; // Whether this outflow period is active
+  isDuePeriod: boolean;           // True if the due date falls within this period
+  dueDate?: Timestamp;            // Actual due date if isDuePeriod is true
+  expectedDueDate: Timestamp;     // Next expected due date relative to this period (may be in future)
+  expectedDrawDate: Timestamp;    // Expected draw date (adjusts for weekends - Saturday/Sunday → Monday)
   transactionSplits: TransactionSplitReference[]; // Array of transaction splits that have been applied to this bill payment
-
-  // Metadata from outflow (denormalized for performance)
-  outflowDescription: string; // Description from outflow
-  outflowMerchantName?: string; // Merchant name from outflow
-  outflowExpenseType?: string; // Expense type from outflow
-  outflowIsEssential?: boolean; // Whether this is an essential expense
-
-  // System tracking
-  lastCalculated: Timestamp; // When amounts were last calculated
 }
 
 // =======================
@@ -1533,42 +1709,70 @@ export interface PeriodManagementConfig {
 // =======================
 
 // Inflow Periods - Maps inflows to source periods with earning calculations
-export interface InflowPeriod extends BaseDocument {
-  inflowId: string; // Reference to inflows collection document
-  periodId: string; // Reference to source_periods.id (same as sourcePeriodId)  
-  sourcePeriodId: string; // Direct reference to source_periods.id for mapping
-  userId: string; // Family Finance user ID
-  familyId?: string; // Optional family association
-  
-  // Period context (denormalized from source_periods for performance)
-  periodType: PeriodType; // "weekly" | "monthly" | "bi_monthly"
-  periodStartDate: Timestamp; // UTC timestamp - period start
-  periodEndDate: Timestamp; // UTC timestamp - period end
-  
+// NOTE: Inflow periods INHERIT ownership from parent inflow (no separate ownership)
+export interface InflowPeriod extends BaseDocument, ResourceOwnership {
+  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
+  // INHERITED FROM PARENT INFLOW - Must match parent for query efficiency
+  userId: string;                 // INHERITED: Family Finance user ID (REQUIRED for existing queries)
+  groupId: string | null;         // INHERITED: Group this inflow belongs to (REQUIRED for existing queries)
+  accessibleBy: string[];         // INHERITED: Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+
+  // Period-specific query fields
+  inflowId: string;               // Reference to inflows collection document (REQUIRED for filtering)
+  periodId: string;               // Reference to source_periods.id (REQUIRED for filtering)
+  sourcePeriodId: string;         // Direct reference to source_periods.id for mapping (REQUIRED for filtering)
+  periodType: PeriodType;         // "weekly" | "monthly" | "bi_monthly" (REQUIRED for filtering)
+  isActive: boolean;              // Whether this inflow period is active (REQUIRED for filtering)
+  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
+  periodStartDate: Timestamp;     // UTC timestamp - period start (REQUIRED for range queries)
+  periodEndDate: Timestamp;       // UTC timestamp - period end (REQUIRED for range queries)
+
+  // === NESTED ACCESS CONTROL OBJECT ===
+  // INHERITED FROM PARENT with period-specific overrides
+  access: AccessControl;          // Access control and sharing fields (inherited from parent inflow)
+
+  // === NESTED CATEGORIES OBJECT ===
+  // INHERITED FROM PARENT with denormalized fields
+  categories: Categories & {      // Inflow period categorization (inherited from parent inflow)
+    // Inflow-specific denormalized fields from parent
+    inflowIncomeType?: string;    // Income type from inflow (denormalized)
+  };
+
+  // === NESTED METADATA OBJECT ===
+  // INHERITED FROM PARENT with period-specific fields
+  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
+    // Period-specific metadata
+    inheritedFrom: string;        // Parent inflow ID (shows inheritance)
+    lastCalculated: Timestamp;    // When amounts were last calculated
+
+    // Denormalized from parent inflow for performance
+    inflowDescription: string;    // Description from inflow
+    inflowMerchantName?: string;  // Merchant name from inflow
+    inflowIsRegularSalary?: boolean; // Whether this is regular salary income
+  };
+
+  // === NESTED RELATIONSHIPS OBJECT ===
+  relationships: Relationships & { // Document relationships (extends base Relationships)
+    // Period-specific relationship fields
+    parentId: string;             // Reference to parent inflow (same as inflowId)
+    parentType: string;           // "inflow" (indicates parent document type)
+  };
+
+  // === INFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
   // Payment cycle information
-  cycleStartDate: Timestamp; // Last payment date (or calculated start)
-  cycleEndDate: Timestamp; // Next payment date
-  cycleDays: number; // Days in the payment cycle
-  
+  cycleStartDate: Timestamp;      // Last payment date (or calculated start)
+  cycleEndDate: Timestamp;        // Next payment date
+  cycleDays: number;              // Days in the payment cycle
+
   // Financial calculations
-  incomeAmount: number; // Full income amount for this cycle
-  dailyEarningRate: number; // incomeAmount ÷ cycleDays
-  amountEarned: number; // dailyRate × daysInPeriod (how much earned this period)
-  amountReceived: number; // incomeAmount if receipt date falls in this period, else 0
-  
+  incomeAmount: number;           // Full income amount for this cycle
+  dailyEarningRate: number;       // incomeAmount ÷ cycleDays
+  amountEarned: number;           // dailyRate × daysInPeriod (how much earned this period)
+  amountReceived: number;         // incomeAmount if receipt date falls in this period, else 0
+
   // Payment status and tracking
-  isReceiptPeriod: boolean; // True if the receipt date falls within this period
-  receiptDate?: Timestamp; // Actual receipt date if isReceiptPeriod is true
-  isActive: boolean; // Whether this inflow period is active
-  
-  // Metadata from inflow (denormalized for performance)
-  inflowDescription: string; // Description from inflow
-  inflowMerchantName?: string; // Merchant name from inflow
-  inflowIncomeType?: string; // Income type from inflow
-  inflowIsRegularSalary?: boolean; // Whether this is regular salary income
-  
-  // System tracking
-  lastCalculated: Timestamp; // When amounts were last calculated
+  isReceiptPeriod: boolean;       // True if the receipt date falls within this period
+  receiptDate?: Timestamp;        // Actual receipt date if isReceiptPeriod is true
 }
 
 // =======================

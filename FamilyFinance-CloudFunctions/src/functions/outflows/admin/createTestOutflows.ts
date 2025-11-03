@@ -6,7 +6,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { RecurringOutflow, PlaidRecurringFrequency } from '../../../types';
+import { PlaidRecurringFrequency } from '../../../types';
 
 // Initialize Firebase Admin if not already initialized
 if (getApps().length === 0) {
@@ -30,19 +30,57 @@ export const createTestOutflows = onRequest({
     const now = Timestamp.now();
     const futureDate = Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)); // 30 days from now
 
-    // Sample outflows to create
-    const testOutflows: Omit<RecurringOutflow, 'id'>[] = [
+    // Sample outflows to create - using hybrid structure
+    const testOutflows: any[] = [
       {
+        // === QUERY-CRITICAL FIELDS AT ROOT ===
+        userId: targetUserId,
+        groupId: 'test-family-1',
+        accessibleBy: [targetUserId],
         streamId: 'test-stream-1',
         itemId: 'test-item-1',
-        userId: targetUserId,
-        familyId: 'test-family-1',
         accountId: 'test-account-1',
         isActive: true,
-        status: 'MATURE' as any, // PlaidRecurringTransactionStatus.MATURE
+        status: 'MATURE' as any,
+
+        // === NESTED ACCESS CONTROL ===
+        access: {
+          ownerId: targetUserId,
+          createdBy: targetUserId,
+          sharedWith: [],
+          visibility: 'private' as const,
+          permissions: {}
+        },
+
+        // === NESTED CATEGORIES ===
+        categories: {
+          primary: 'utility',
+          secondary: 'telecommunication',
+          tags: []
+        },
+
+        // === NESTED METADATA ===
+        metadata: {
+          source: 'test' as const,
+          createdBy: targetUserId,
+          updatedBy: targetUserId,
+          updatedAt: now,
+          version: 1,
+          lastSyncedAt: now,
+          syncVersion: 1
+        },
+
+        // === NESTED RELATIONSHIPS ===
+        relationships: {
+          parentId: 'test-item-1',
+          parentType: 'plaid_item' as const,
+          linkedIds: [],
+          relatedDocs: []
+        },
+
+        // === OUTFLOW-SPECIFIC FIELDS ===
         description: 'Internet Bill',
         merchantName: 'Comcast',
-        category: ['Service', 'Telecommunication Services'],
         averageAmount: {
           amount: 89.99,
           isoCurrencyCode: 'USD'
@@ -54,27 +92,50 @@ export const createTestOutflows = onRequest({
         frequency: PlaidRecurringFrequency.MONTHLY,
         firstDate: Timestamp.fromDate(new Date('2024-01-01')),
         lastDate: futureDate,
-        transactionIds: [],
-        tags: [],
         isHidden: false,
-        lastSyncedAt: now,
-        syncVersion: 1,
         expenseType: 'utility',
         isEssential: true,
         createdAt: now,
         updatedAt: now,
       },
       {
+        userId: targetUserId,
+        groupId: 'test-family-1',
+        accessibleBy: [targetUserId],
         streamId: 'test-stream-2',
         itemId: 'test-item-1',
-        userId: targetUserId,
-        familyId: 'test-family-1',
         accountId: 'test-account-1',
         isActive: true,
         status: 'MATURE' as any,
+        access: {
+          ownerId: targetUserId,
+          createdBy: targetUserId,
+          sharedWith: [],
+          visibility: 'private' as const,
+          permissions: {}
+        },
+        categories: {
+          primary: 'entertainment',
+          secondary: 'music',
+          tags: []
+        },
+        metadata: {
+          source: 'test' as const,
+          createdBy: targetUserId,
+          updatedBy: targetUserId,
+          updatedAt: now,
+          version: 1,
+          lastSyncedAt: now,
+          syncVersion: 1
+        },
+        relationships: {
+          parentId: 'test-item-1',
+          parentType: 'plaid_item' as const,
+          linkedIds: [],
+          relatedDocs: []
+        },
         description: 'Spotify Premium',
         merchantName: 'Spotify',
-        category: ['Entertainment', 'Music and Audio'],
         averageAmount: {
           amount: 14.99,
           isoCurrencyCode: 'USD'
@@ -86,27 +147,50 @@ export const createTestOutflows = onRequest({
         frequency: PlaidRecurringFrequency.MONTHLY,
         firstDate: Timestamp.fromDate(new Date('2024-01-15')),
         lastDate: futureDate,
-        transactionIds: [],
-        tags: [],
         isHidden: false,
-        lastSyncedAt: now,
-        syncVersion: 1,
         expenseType: 'subscription',
         isEssential: false,
         createdAt: now,
         updatedAt: now,
       },
       {
+        userId: targetUserId,
+        groupId: 'test-family-1',
+        accessibleBy: [targetUserId],
         streamId: 'test-stream-3',
         itemId: 'test-item-1',
-        userId: targetUserId,
-        familyId: 'test-family-1',
         accountId: 'test-account-1',
         isActive: true,
         status: 'MATURE' as any,
+        access: {
+          ownerId: targetUserId,
+          createdBy: targetUserId,
+          sharedWith: [],
+          visibility: 'private' as const,
+          permissions: {}
+        },
+        categories: {
+          primary: 'food',
+          secondary: 'groceries',
+          tags: []
+        },
+        metadata: {
+          source: 'test' as const,
+          createdBy: targetUserId,
+          updatedBy: targetUserId,
+          updatedAt: now,
+          version: 1,
+          lastSyncedAt: now,
+          syncVersion: 1
+        },
+        relationships: {
+          parentId: 'test-item-1',
+          parentType: 'plaid_item' as const,
+          linkedIds: [],
+          relatedDocs: []
+        },
         description: 'Grocery Budget',
         merchantName: 'Various Stores',
-        category: ['Food and Drink', 'Groceries'],
         averageAmount: {
           amount: 125.00,
           isoCurrencyCode: 'USD'
@@ -118,11 +202,7 @@ export const createTestOutflows = onRequest({
         frequency: PlaidRecurringFrequency.WEEKLY,
         firstDate: Timestamp.fromDate(new Date('2024-01-07')),
         lastDate: futureDate,
-        transactionIds: [],
-        tags: [],
         isHidden: false,
-        lastSyncedAt: now,
-        syncVersion: 1,
         expenseType: 'other',
         isEssential: true,
         createdAt: now,

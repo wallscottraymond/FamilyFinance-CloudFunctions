@@ -21,8 +21,9 @@ import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory'
 import { db } from '../../../../index';
 import { Timestamp } from 'firebase-admin/firestore';
 import { formatRecurringInflows } from '../../../inflows/utils/formatRecurringInflows';
+import { enhanceRecurringInflows } from '../../../inflows/utils/enhanceRecurringInflows';
 import { formatRecurringOutflows } from '../../../outflows/utils/formatRecurringOutflows';
-import { enhanceInflowStreams, enhanceOutflowStreams } from '../../../outflows/utils/enhanceRecurringStreams';
+import { enhanceRecurringOutflows } from '../../../outflows/utils/enhanceRecurringOutflows';
 import { batchCreateInflowStreams, batchCreateOutflowStreams } from '../../../outflows/utils/batchCreateRecurringStreams';
 
 // Define secrets
@@ -150,7 +151,7 @@ export async function syncRecurringTransactions(
       console.log(`✅ Step 1/3: Formatted ${formattedInflows.length} inflow streams`);
 
       // Step 2: Enhance inflow streams (future transformations placeholder)
-      const enhancedInflows = await enhanceInflowStreams(formattedInflows, userId);
+      const enhancedInflows = await enhanceRecurringInflows(formattedInflows, userId);
       console.log(`✅ Step 2/3: Enhanced ${enhancedInflows.length} inflow streams`);
 
       // Step 3: Batch create/update inflow streams
@@ -176,7 +177,7 @@ export async function syncRecurringTransactions(
       console.log(`✅ Step 1/3: Formatted ${formattedOutflows.length} outflow streams`);
 
       // Step 2: Enhance outflow streams (future transformations placeholder)
-      const enhancedOutflows = await enhanceOutflowStreams(formattedOutflows, userId);
+      const enhancedOutflows = await enhanceRecurringOutflows(formattedOutflows, userId);
       console.log(`✅ Step 2/3: Enhanced ${enhancedOutflows.length} outflow streams`);
 
       // Step 3: Batch create/update outflow streams
