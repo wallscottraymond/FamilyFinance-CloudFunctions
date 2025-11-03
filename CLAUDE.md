@@ -1156,6 +1156,313 @@ The system automatically maps Plaid's category hierarchy to the app's transactio
 - Granular privacy controls per user
 - Account-level visibility settings
 
+### Recurring Transactions (Inflows & Outflows)
+
+**Overview:**
+The system automatically detects and tracks recurring income (inflows) and expenses (outflows) from Plaid's `/transactions/recurring/get` API endpoint. This data powers bill tracking, subscription management, and predictable cash flow analysis.
+
+#### 3-Step Pipeline Architecture
+
+All recurring transaction processing follows a standardized 3-step pipeline:
+
+1. **Format** (Plaid → Internal Structure) - Pure data mapping
+2. **Enhance** (Future Transformations) - Business logic placeholder
+3. **Batch Create/Update** (Firestore Upsert) - Database persistence
+
+**Pipeline Flow:**
+```
+Plaid API → Format → Enhance → Batch Create/Update → Firestore
+```
+
+#### Document Structure (Optimized for Firestore - 2025-01-03)
+
+**Inflow/Outflow Collection Structure:**
+```typescript
+interface RecurringInflow {
+  // === IDENTITY & OWNERSHIP (Query-Critical at Root) ===
+  userId: string;
+  groupId: string | null;
+  accessibleBy: string[];
+  streamId: string;              // Plaid stream_id (unique per stream)
+  itemId: string;                // Plaid item reference
+  accountId: string;             // Plaid account reference
+
+  // === STATUS & CONTROL (Query-Critical at Root) ===
+  isActive: boolean;
+  status: 'ACTIVE' | 'INACTIVE' | 'USER_MODIFIED';
+  isUserModified: boolean;
+  isHidden: boolean;
+
+  // === DESCRIPTIVE INFO ===
+  description: string;
+  merchantName: string | null;
+
+  // === AMOUNTS (Flattened for Efficient Queries) ===
+  averageAmount: number;         // Direct number (not nested object!)
+  lastAmount: number;
+  currency: string;              // Default: 'USD'
+  unofficialCurrency: string | null;
+
+  // === DATES & FREQUENCY (Query-Critical at Root) ===
+  frequency: 'WEEKLY' | 'BIWEEKLY' | 'SEMI_MONTHLY' | 'MONTHLY' | 'ANNUALLY';
+  firstDate: Timestamp;
+  lastDate: Timestamp;
+  predictedNextDate: Timestamp | null;
+
+  // === CLASSIFICATION ===
+  incomeType: 'salary' | 'freelance' | 'investment' | 'other';  // For inflows
+  isRegularSalary: boolean;                                    // For inflows
+
+  // === NESTED CATEGORIES (Descriptive Metadata) ===
+  categories: {
+    primary: string;             // Plaid primary category
+    detailed: string;            // Plaid detailed category
+    tags: string[];
+    plaidCategories: string[];   // Original Plaid category array
+    plaidCategoryId: string | null;
+  };
+
+  // === NESTED RELATIONSHIPS (Foreign Keys & Links) ===
+  relationships: {
+    plaidItemId: string;         // Reference to plaid_items
+    plaidAccountId: string;      // Reference to accounts
+    transactionIds: string[];    // CRITICAL: Links to individual transactions
+  };
+
+  // === NESTED METADATA (Sync & Audit Trail) ===
+  metadata: {
+    source: 'plaid';
+    createdBy: string;
+    lastSyncedAt: Timestamp;
+    plaidConfidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  };
+}
+
+interface RecurringOutflow {
+  // Same structure as Inflow, but with:
+  expenseType: 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other';
+  isEssential: boolean;
+}
+```
+
+**Key Optimizations (2025-01-03):**
+- ✅ **Flattened amounts** - Direct `averageAmount: 100` instead of nested object for efficient queries
+- ✅ **Root-level query fields** - All frequently queried fields at document root
+- ✅ **Smart categorization** - Automatic expense type and essentiality detection
+- ✅ **Transaction linking** - `relationships.transactionIds[]` connects streams to actual transactions
+- ✅ **Removed deprecated fields** - No more `access` nested object (replaced by new group system)
+
+#### Implementation Files
+
+**Inflow Pipeline:**
+- `/src/functions/inflows/utils/formatRecurringInflows.ts` - Step 1: Format
+- `/src/functions/inflows/utils/enhanceRecurringInflows.ts` - Step 2: Enhance (placeholder)
+
+**Outflow Pipeline:**
+- `/src/functions/outflows/utils/formatRecurringOutflows.ts` - Step 1: Format
+- `/src/functions/outflows/utils/enhanceRecurringOutflows.ts` - Step 2: Enhance (placeholder)
+
+**Shared Utilities:**
+- `/src/functions/outflows/utils/batchCreateRecurringStreams.ts` - Step 3: Batch operations for both inflows and outflows
+
+**Orchestration:**
+- `/src/functions/plaid/api/sync/syncRecurring.ts` - Main sync function
+- `/src/functions/plaid/orchestration/triggers/onPlaidItemCreated.ts` - Auto-sync trigger
+
+#### Smart Categorization Logic
+
+**Expense Type Detection** (`determineExpenseType()`):
+```typescript
+// Analyzes Plaid's detailed category to auto-classify expenses
+'UTILITIES' → 'utility'
+'RENT' | 'MORTGAGE' → 'rent'
+'INSURANCE' → 'insurance'
+'LOAN' | 'CREDIT_CARD_PAYMENT' → 'loan'
+'TAX' → 'tax'
+MONTHLY | ANNUALLY → 'subscription' (fallback)
+default → 'other'
+```
+
+**Essential Expense Detection** (`isEssentialExpense()`):
+```typescript
+// Identifies non-negotiable expenses
+Essential categories: RENT, MORTGAGE, UTILITIES, INSURANCE, LOAN,
+                     HEALTHCARE, MEDICAL, PHARMACY, GROCERIES
+```
+
+**Salary Detection:**
+```typescript
+// Identifies regular salary vs other income
+isRegularSalary = (plaidCategory === 'INCOME_WAGES')
+```
+
+#### Sync Process
+
+**Automatic Sync Trigger:**
+```typescript
+// When a user links a Plaid account:
+onPlaidItemCreated → syncRecurringTransactions(plaidItemId, userId)
+```
+
+**Manual Sync:**
+```typescript
+// Callable function for on-demand sync
+syncRecurringTransactionsCallable({ plaidItemId })
+```
+
+**Sync Flow:**
+1. Fetch Plaid item and decrypt access token
+2. Call Plaid `/transactions/recurring/get` API
+3. Split response into `inflow_streams` and `outflow_streams`
+4. **Inflow Pipeline:** Format → Enhance → Batch Create/Update
+5. **Outflow Pipeline:** Format → Enhance → Batch Create/Update
+6. Update `plaid_item.lastRecurringSyncedAt`
+7. Return counts: `{ inflowsCreated, inflowsUpdated, outflowsCreated, outflowsUpdated, errors }`
+
+#### Upsert Logic (Create vs Update)
+
+The system intelligently handles both new and existing streams:
+
+```typescript
+// Check if stream exists by streamId + userId
+const existingQuery = await db.collection('outflows')
+  .where('streamId', '==', outflow.streamId)
+  .where('userId', '==', userId)
+  .limit(1)
+  .get();
+
+if (!existingQuery.empty) {
+  // UPDATE: Preserve user modifications, update Plaid data
+  await existingDoc.ref.update({
+    averageAmount, lastAmount, currency,
+    frequency, lastDate, predictedNextDate,
+    categories, relationships,  // CRITICAL: Updates transaction IDs
+    'metadata.lastSyncedAt': Timestamp.now()
+  });
+} else {
+  // CREATE: New stream from Plaid
+  await db.collection('outflows').doc().set({
+    ...outflow,
+    id: docRef.id,
+    createdAt: Timestamp.now()
+  });
+}
+```
+
+#### Firestore Indexes (Recommended)
+
+```json
+// Active streams by predicted next date
+{
+  "collectionGroup": "outflows",
+  "fields": [
+    { "fieldPath": "userId", "order": "ASCENDING" },
+    { "fieldPath": "isActive", "order": "ASCENDING" },
+    { "fieldPath": "predictedNextDate", "order": "ASCENDING" }
+  ]
+},
+
+// Essential expenses by amount
+{
+  "collectionGroup": "outflows",
+  "fields": [
+    { "fieldPath": "userId", "order": "ASCENDING" },
+    { "fieldPath": "isEssential", "order": "ASCENDING" },
+    { "fieldPath": "averageAmount", "order": "DESCENDING" }
+  ]
+},
+
+// Regular salary tracking
+{
+  "collectionGroup": "inflows",
+  "fields": [
+    { "fieldPath": "userId", "order": "ASCENDING" },
+    { "fieldPath": "isRegularSalary", "order": "ASCENDING" },
+    { "fieldPath": "predictedNextDate", "order": "ASCENDING" }
+  ]
+}
+```
+
+#### Common Use Cases
+
+**Bill Tracking:**
+```typescript
+// Fetch upcoming bills in next 30 days
+const upcomingBills = await db.collection('outflows')
+  .where('userId', '==', userId)
+  .where('isActive', '==', true)
+  .where('predictedNextDate', '>=', now)
+  .where('predictedNextDate', '<=', thirtyDaysFromNow)
+  .orderBy('predictedNextDate')
+  .get();
+```
+
+**Subscription Management:**
+```typescript
+// Find all subscriptions
+const subscriptions = await db.collection('outflows')
+  .where('userId', '==', userId)
+  .where('expenseType', '==', 'subscription')
+  .where('isActive', '==', true)
+  .get();
+```
+
+**Cash Flow Forecasting:**
+```typescript
+// Calculate expected monthly cash flow
+const expectedIncome = (await getActiveInflows(userId))
+  .reduce((sum, inflow) => sum + inflow.averageAmount, 0);
+
+const expectedExpenses = (await getActiveOutflows(userId))
+  .reduce((sum, outflow) => sum + outflow.averageAmount, 0);
+
+const netCashFlow = expectedIncome - expectedExpenses;
+```
+
+#### Transaction ID Linking
+
+**Critical Feature:** Each recurring stream maintains an array of transaction IDs that match the pattern:
+
+```typescript
+relationships: {
+  transactionIds: ['txn_123', 'txn_456', 'txn_789']  // From Plaid
+}
+```
+
+**Usage:**
+- Link individual transactions to their recurring stream
+- Track payment history for recurring bills
+- Detect missed or late payments
+- Verify actual amounts vs predicted amounts
+
+#### Bug Fixes & History
+
+**2025-01-03: Fixed Transaction IDs Not Being Saved**
+- **Issue:** `relationships.transactionIds` was not being updated during stream updates
+- **Root Cause:** `batchCreateRecurringStreams.ts` update operations only updated specific fields
+- **Fix:** Added `relationships` to the update operation field list
+- **Impact:** Both CREATE and UPDATE operations now properly save transaction IDs
+
+**2025-01-03: Optimized Document Structure**
+- **Removed:** Deprecated `access` nested object
+- **Flattened:** Amount fields from nested objects to root-level numbers
+- **Streamlined:** Metadata from 7 fields to 4 essential fields
+- **Added:** Smart categorization (expense type, essential detection, salary detection)
+
+#### Future Enhancements (Placeholders)
+
+**Inflow Enhancements** (`enhanceRecurringInflows.ts`):
+- Salary vs other income detection
+- Employer name standardization
+- Tax withholding analysis
+- Income stability and trends
+
+**Outflow Enhancements** (`enhanceRecurringOutflows.ts`):
+- Expense category mapping/enrichment
+- Budget assignment recommendations
+- Spending pattern analysis
+- Subscription detection and management
+
 ## Budget Period Checklist System
 
 ### Overview
