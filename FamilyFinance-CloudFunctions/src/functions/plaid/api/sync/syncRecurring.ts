@@ -18,10 +18,11 @@ import { defineSecret } from 'firebase-functions/params';
 import { authenticateRequest, UserRole } from '../../../../utils/auth';
 import { getAccessToken } from '../../../../utils/encryption';
 import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
-import { RecurringIncome, RecurringOutflow } from '../../../../types';
-import { createDocument, updateDocument, queryDocuments } from '../../../../utils/firestore';
 import { db } from '../../../../index';
 import { Timestamp } from 'firebase-admin/firestore';
+import { formatInflowStreams, formatOutflowStreams } from '../../../outflows/utils/formatRecurringStreams';
+import { enhanceInflowStreams, enhanceOutflowStreams } from '../../../outflows/utils/enhanceRecurringStreams';
+import { batchCreateInflowStreams, batchCreateOutflowStreams } from '../../../outflows/utils/batchCreateRecurringStreams';
 
 // Define secrets
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -129,190 +130,63 @@ export async function syncRecurringTransactions(
       access_token: accessToken,
     });
 
-    const inflowStreams = recurringResponse.data.inflow_streams || [];
-    const outflowStreams = recurringResponse.data.outflow_streams || [];
+    const rawInflowStreams = recurringResponse.data.inflow_streams || [];
+    const rawOutflowStreams = recurringResponse.data.outflow_streams || [];
 
-    console.log(`📥 Retrieved ${inflowStreams.length} inflow streams and ${outflowStreams.length} outflow streams`);
+    console.log(`📥 Retrieved ${rawInflowStreams.length} inflow streams and ${rawOutflowStreams.length} outflow streams`);
 
-    // Step 3: Process inflow streams (recurring income)
-    for (const stream of inflowStreams) {
-      try {
-        // Check if stream already exists
-        const existingQuery = await queryDocuments('inflows', {
-          where: [
-            { field: 'streamId', operator: '==', value: stream.stream_id },
-            { field: 'userId', operator: '==', value: userId }
-          ],
-          limit: 1
-        });
+    // === INFLOW PIPELINE ===
+    if (rawInflowStreams.length > 0) {
+      console.log(`🔄 [syncRecurringTransactions] === STARTING INFLOW PIPELINE ===`);
 
-        if (existingQuery.length > 0) {
-          // Update existing stream
-          const existingDoc = existingQuery[0];
-          await updateDocument('inflows', existingDoc.id!, {
-            description: stream.description,
-            merchantName: stream.merchant_name,
-            averageAmount: {
-              amount: stream.average_amount.amount,
-              isoCurrencyCode: stream.average_amount.iso_currency_code
-            },
-            lastAmount: {
-              amount: stream.last_amount.amount,
-              isoCurrencyCode: stream.last_amount.iso_currency_code
-            },
-            frequency: stream.frequency,
-            lastDate: Timestamp.fromDate(new Date(stream.last_date)),
-            predictedNextDate: stream.predicted_next_date
-              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
-              : undefined,
-            transactionIds: stream.transaction_ids,
-            status: stream.status,
-            isActive: stream.is_active,
-            isUserModified: stream.is_user_modified,
-            lastSyncedAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-          });
+      // Step 1: Format inflow streams (Plaid → Internal structure)
+      const formattedInflows = await formatInflowStreams(
+        rawInflowStreams,
+        plaidItemId,
+        userId,
+        itemData.familyId
+      );
+      console.log(`✅ Step 1/3: Formatted ${formattedInflows.length} inflow streams`);
 
-          result.inflowsUpdated++;
-        } else {
-          // Create new stream
-          const inflowDoc: Omit<RecurringIncome, 'id' | 'createdAt' | 'updatedAt'> = {
-            streamId: stream.stream_id,
-            itemId: plaidItemId,
-            userId,
-            familyId: itemData.familyId,
-            accountId: stream.account_id,
-            isActive: stream.is_active,
-            status: stream.status as any,
-            description: stream.description,
-            merchantName: stream.merchant_name || undefined,
-            category: stream.category || [],
-            personalFinanceCategory: stream.personal_finance_category ? {
-              primary: stream.personal_finance_category.primary,
-              detailed: stream.personal_finance_category.detailed,
-              confidenceLevel: stream.personal_finance_category.confidence_level || undefined
-            } : undefined,
-            averageAmount: {
-              amount: stream.average_amount.amount || 0,
-              isoCurrencyCode: stream.average_amount.iso_currency_code || undefined
-            },
-            lastAmount: {
-              amount: stream.last_amount.amount || 0,
-              isoCurrencyCode: stream.last_amount.iso_currency_code || undefined
-            },
-            frequency: stream.frequency as any,
-            firstDate: Timestamp.fromDate(new Date(stream.first_date)),
-            lastDate: Timestamp.fromDate(new Date(stream.last_date)),
-            predictedNextDate: stream.predicted_next_date
-              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
-              : undefined,
-            transactionIds: stream.transaction_ids,
-            isUserModified: stream.is_user_modified,
-            tags: [],
-            isHidden: false,
-            lastSyncedAt: Timestamp.now(),
-            syncVersion: 1
-          };
+      // Step 2: Enhance inflow streams (future transformations placeholder)
+      const enhancedInflows = await enhanceInflowStreams(formattedInflows, userId);
+      console.log(`✅ Step 2/3: Enhanced ${enhancedInflows.length} inflow streams`);
 
-          await createDocument('inflows', inflowDoc);
-          result.inflowsCreated++;
-        }
-      } catch (error) {
-        const errorMsg = `Failed to process inflow stream ${stream.stream_id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        result.errors.push(errorMsg);
-        console.error(errorMsg);
-      }
+      // Step 3: Batch create/update inflow streams
+      const inflowResult = await batchCreateInflowStreams(enhancedInflows, userId);
+      console.log(`✅ Step 3/3: Created ${inflowResult.created} inflows, updated ${inflowResult.updated} inflows`);
+
+      result.inflowsCreated = inflowResult.created;
+      result.inflowsUpdated = inflowResult.updated;
+      result.errors.push(...inflowResult.errors);
     }
 
-    // Step 4: Process outflow streams (recurring expenses)
-    for (const stream of outflowStreams) {
-      try {
-        // Check if stream already exists
-        const existingQuery = await queryDocuments('outflows', {
-          where: [
-            { field: 'streamId', operator: '==', value: stream.stream_id },
-            { field: 'userId', operator: '==', value: userId }
-          ],
-          limit: 1
-        });
+    // === OUTFLOW PIPELINE ===
+    if (rawOutflowStreams.length > 0) {
+      console.log(`🔄 [syncRecurringTransactions] === STARTING OUTFLOW PIPELINE ===`);
 
-        if (existingQuery.length > 0) {
-          // Update existing stream
-          const existingDoc = existingQuery[0];
-          await updateDocument('outflows', existingDoc.id!, {
-            description: stream.description,
-            merchantName: stream.merchant_name,
-            averageAmount: {
-              amount: stream.average_amount.amount,
-              isoCurrencyCode: stream.average_amount.iso_currency_code
-            },
-            lastAmount: {
-              amount: stream.last_amount.amount,
-              isoCurrencyCode: stream.last_amount.iso_currency_code
-            },
-            frequency: stream.frequency,
-            lastDate: Timestamp.fromDate(new Date(stream.last_date)),
-            predictedNextDate: stream.predicted_next_date
-              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
-              : undefined,
-            transactionIds: stream.transaction_ids,
-            status: stream.status,
-            isActive: stream.is_active,
-            isUserModified: stream.is_user_modified,
-            lastSyncedAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-          });
+      // Step 1: Format outflow streams (Plaid → Internal structure)
+      const formattedOutflows = await formatOutflowStreams(
+        rawOutflowStreams,
+        plaidItemId,
+        userId,
+        itemData.familyId
+      );
+      console.log(`✅ Step 1/3: Formatted ${formattedOutflows.length} outflow streams`);
 
-          result.outflowsUpdated++;
-        } else {
-          // Create new stream
-          const outflowDoc: Omit<RecurringOutflow, 'id' | 'createdAt' | 'updatedAt'> = {
-            streamId: stream.stream_id,
-            itemId: plaidItemId,
-            userId,
-            familyId: itemData.familyId,
-            accountId: stream.account_id,
-            isActive: stream.is_active,
-            status: stream.status as any,
-            description: stream.description,
-            merchantName: stream.merchant_name || undefined,
-            category: stream.category || [],
-            personalFinanceCategory: stream.personal_finance_category ? {
-              primary: stream.personal_finance_category.primary,
-              detailed: stream.personal_finance_category.detailed,
-              confidenceLevel: stream.personal_finance_category.confidence_level || undefined
-            } : undefined,
-            averageAmount: {
-              amount: stream.average_amount.amount || 0,
-              isoCurrencyCode: stream.average_amount.iso_currency_code || undefined
-            },
-            lastAmount: {
-              amount: stream.last_amount.amount || 0,
-              isoCurrencyCode: stream.last_amount.iso_currency_code || undefined
-            },
-            frequency: stream.frequency as any,
-            firstDate: Timestamp.fromDate(new Date(stream.first_date)),
-            lastDate: Timestamp.fromDate(new Date(stream.last_date)),
-            predictedNextDate: stream.predicted_next_date
-              ? Timestamp.fromDate(new Date(stream.predicted_next_date))
-              : undefined,
-            transactionIds: stream.transaction_ids,
-            isUserModified: stream.is_user_modified,
-            tags: [],
-            isHidden: false,
-            lastSyncedAt: Timestamp.now(),
-            syncVersion: 1
-          };
+      // Step 2: Enhance outflow streams (future transformations placeholder)
+      const enhancedOutflows = await enhanceOutflowStreams(formattedOutflows, userId);
+      console.log(`✅ Step 2/3: Enhanced ${enhancedOutflows.length} outflow streams`);
 
-          await createDocument('outflows', outflowDoc);
-          result.outflowsCreated++;
-        }
-      } catch (error) {
-        const errorMsg = `Failed to process outflow stream ${stream.stream_id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        result.errors.push(errorMsg);
-        console.error(errorMsg);
-      }
+      // Step 3: Batch create/update outflow streams
+      const outflowResult = await batchCreateOutflowStreams(enhancedOutflows, userId);
+      console.log(`✅ Step 3/3: Created ${outflowResult.created} outflows, updated ${outflowResult.updated} outflows`);
+
+      result.outflowsCreated = outflowResult.created;
+      result.outflowsUpdated = outflowResult.updated;
+      result.errors.push(...outflowResult.errors);
     }
+
 
     // Update the plaid_item with last recurring sync time
     await itemDoc.ref.update({
