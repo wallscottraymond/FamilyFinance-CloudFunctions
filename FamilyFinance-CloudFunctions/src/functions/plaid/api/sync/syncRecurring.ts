@@ -20,7 +20,8 @@ import { getAccessToken } from '../../../../utils/encryption';
 import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
 import { db } from '../../../../index';
 import { Timestamp } from 'firebase-admin/firestore';
-import { formatInflowStreams, formatOutflowStreams } from '../../../outflows/utils/formatRecurringStreams';
+import { formatRecurringInflows } from '../../../inflows/utils/formatRecurringInflows';
+import { formatRecurringOutflows } from '../../../outflows/utils/formatRecurringOutflows';
 import { enhanceInflowStreams, enhanceOutflowStreams } from '../../../outflows/utils/enhanceRecurringStreams';
 import { batchCreateInflowStreams, batchCreateOutflowStreams } from '../../../outflows/utils/batchCreateRecurringStreams';
 
@@ -140,7 +141,7 @@ export async function syncRecurringTransactions(
       console.log(`🔄 [syncRecurringTransactions] === STARTING INFLOW PIPELINE ===`);
 
       // Step 1: Format inflow streams (Plaid → Internal structure)
-      const formattedInflows = await formatInflowStreams(
+      const formattedInflows = await formatRecurringInflows(
         rawInflowStreams,
         plaidItemId,
         userId,
@@ -166,7 +167,7 @@ export async function syncRecurringTransactions(
       console.log(`🔄 [syncRecurringTransactions] === STARTING OUTFLOW PIPELINE ===`);
 
       // Step 1: Format outflow streams (Plaid → Internal structure)
-      const formattedOutflows = await formatOutflowStreams(
+      const formattedOutflows = await formatRecurringOutflows(
         rawOutflowStreams,
         plaidItemId,
         userId,
