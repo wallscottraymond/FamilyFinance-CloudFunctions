@@ -29,6 +29,15 @@ import {
 } from 'plaid';
 import { Timestamp } from 'firebase-admin/firestore';
 import { formatTransactions } from '../../../transactions/utils/formatTransactions';
+import { matchCategoriesToTransactions } from '../../../transactions/utils/matchCategoriesToTransactions';
+import { matchTransactionSplitsToSourcePeriods } from '../../../transactions/utils/matchTransactionSplitsToSourcePeriods';
+import { matchTransactionSplitsToBudgets } from '../../../transactions/utils/matchTransactionSplitsToBudgets';
+import { matchTransactionSplitsToOutflows } from '../../../transactions/utils/matchTransactionSplitsToOutflows';
+import { batchCreateTransactions } from '../../../transactions/utils/batchCreateTransactions';
+import {
+  buildPlaidTransactionUpdate,
+  buildTransactionDeletionUpdate
+} from '../../../../utils/documentStructure';
 
 // Define secrets for Firebase configuration (still needed for function setup)
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -305,16 +314,41 @@ async function performTransactionSync(
         nextCursor: data.next_cursor
       });
 
-      // Process added transactions (creates Family Finance transactions with splits)
+      // Process added transactions using new sequential pipeline
       if (data.added.length > 0) {
-        const addedResult = await formatTransactions(
+        console.log(`🔄 [performTransactionSync] Processing ${data.added.length} added transactions through sequential pipeline`);
+
+        // Step 1: Format transactions (pure Plaid → Transaction mapping with nulls)
+        const transactions = await formatTransactions(
           data.added,
           itemId,
           userId,
-          familyId,
+          undefined, // groupId = null for now
           currency
         );
-        addedCount += addedResult;
+        console.log(`✅ Step 1/6: Formatted ${transactions.length} transactions`);
+
+        // Step 2: Match transaction splits to categories (in-memory)
+        const withCategories = await matchCategoriesToTransactions(transactions, userId);
+        console.log(`✅ Step 2/6: Matched categories for ${withCategories.length} transaction splits`);
+
+        // Step 3: Match transaction splits to source periods (in-memory) - maps monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId
+        const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
+        console.log(`✅ Step 3/6: Matched ${withPeriods.length} transaction splits to source periods (monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId)`);
+
+        // Step 4: Match budget IDs to splits (in-memory)
+        const withBudgets = await matchTransactionSplitsToBudgets(withPeriods, userId);
+        console.log(`✅ Step 4/6: Matched budget IDs for ${withBudgets.length} transaction splits`);
+
+        // Step 5: Match outflow IDs to splits (in-memory)
+        const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, userId);
+        console.log(`✅ Step 5/6: Matched outflow IDs for ${final.length} transaction splits (${outflowUpdates.length} outflow updates)`);
+
+        // Step 6: Batch create transactions (single atomic operation)
+        const count = await batchCreateTransactions(final, outflowUpdates);
+        console.log(`✅ Step 6/6: Created ${count} transactions in Firebase`);
+
+        addedCount += count;
       }
 
       // Process modified transactions
@@ -354,6 +388,15 @@ async function performTransactionSync(
 
 /**
  * Process modified transactions from Plaid
+ *
+ * Checks if material data has changed (amount, date, category, pending status).
+ * If material changes detected, re-runs the full 6-step pipeline to update:
+ * - Categories
+ * - Source period IDs (monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId)
+ * - Budget IDs
+ * - Outflow IDs
+ *
+ * If only minor changes (name, status), updates fields directly.
  */
 async function processModifiedTransactions(
   modifiedTransactions: Transaction[],
@@ -363,10 +406,13 @@ async function processModifiedTransactions(
   console.log(`🔄 Processing ${modifiedTransactions.length} modified transactions`);
 
   let processedCount = 0;
+  const materialChanges: Transaction[] = [];
+  const minorChanges: Array<{ transaction: Transaction; existingDoc: any }> = [];
 
   try {
+    // Step 1: Categorize changes as material or minor
     for (const transaction of modifiedTransactions) {
-      // Find existing family transaction with Plaid transaction ID
+      // Find existing family transaction with Plaid transaction ID (using nested metadata structure)
       const existingQuery = await db.collection('transactions')
         .where('metadata.plaidTransactionId', '==', transaction.transaction_id)
         .where('userId', '==', userId)
@@ -375,36 +421,125 @@ async function processModifiedTransactions(
 
       if (!existingQuery.empty) {
         const existingDoc = existingQuery.docs[0];
-
-        // Update the raw Plaid transaction
-        await existingDoc.ref.update({
-          amount: transaction.amount,
-          category: transaction.category,
-          merchantName: transaction.merchant_name,
-          pending: transaction.pending,
-          name: transaction.name,
-          location: transaction.location,
-          updatedAt: Timestamp.now()
-        });
-
-        // Update corresponding family transaction if it exists
         const existingData = existingDoc.data();
-        if (existingData.familyTransactionId) {
-          await db.collection('transactions')
-            .doc(existingData.familyTransactionId)
-            .update({
-              amount: Math.abs(transaction.amount),
-              description: transaction.merchant_name || transaction.name,
-              updatedAt: Timestamp.now(),
-              'metadata.plaidPending': transaction.pending
-            });
-        }
 
-        processedCount++;
+        // Check if material data has changed
+        const hasMaterialChange = checkForMaterialChanges(transaction, existingData);
+
+        if (hasMaterialChange) {
+          console.log(`🔄 Material change detected for transaction ${transaction.transaction_id} - will re-run pipeline`);
+          materialChanges.push(transaction);
+        } else {
+          console.log(`✏️ Minor change detected for transaction ${transaction.transaction_id} - will update directly`);
+          minorChanges.push({ transaction, existingDoc });
+        }
       }
     }
 
-    console.log(`✅ Updated ${processedCount} modified transactions`);
+    // Step 2: Handle material changes - re-run full 6-step pipeline
+    if (materialChanges.length > 0) {
+      console.log(`🔄 Re-processing ${materialChanges.length} transactions with material changes through full pipeline`);
+
+      // Get user context for currency
+      const userDoc = await getDocument('users', userId);
+      const familyId = (userDoc as any)?.familyId;
+      let currency = 'USD';
+      if (familyId) {
+        const familyDoc = await getDocument('families', familyId);
+        if (familyDoc) {
+          currency = (familyDoc as any).settings?.currency || 'USD';
+        }
+      }
+
+      // Step 1: Format transactions
+      const formattedTransactions = await formatTransactions(
+        materialChanges,
+        itemId,
+        userId,
+        undefined,
+        currency
+      );
+      console.log(`✅ Step 1/6: Formatted ${formattedTransactions.length} modified transactions`);
+
+      // Step 2: Match categories
+      const withCategories = await matchCategoriesToTransactions(formattedTransactions, userId);
+      console.log(`✅ Step 2/6: Matched categories for ${withCategories.length} transaction splits`);
+
+      // Step 3: Match source periods (CRITICAL - re-match period IDs)
+      const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
+      console.log(`✅ Step 3/6: Re-matched source periods for ${withPeriods.length} transaction splits`);
+
+      // Step 4: Match budgets
+      const withBudgets = await matchTransactionSplitsToBudgets(withPeriods, userId);
+      console.log(`✅ Step 4/6: Re-matched budgets for ${withBudgets.length} transaction splits`);
+
+      // Step 5: Match outflows
+      const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, userId);
+      console.log(`✅ Step 5/6: Re-matched outflows for ${final.length} transaction splits`);
+
+      // Step 6: Update existing transactions (not create new ones)
+      for (const updatedTransaction of final) {
+        const plaidTxnId = updatedTransaction.metadata?.plaidTransactionId;
+        if (!plaidTxnId) continue;
+
+        // Find the existing transaction document
+        const existingQuery = await db.collection('transactions')
+          .where('metadata.plaidTransactionId', '==', plaidTxnId)
+          .where('userId', '==', userId)
+          .limit(1)
+          .get();
+
+        if (!existingQuery.empty) {
+          const existingDoc = existingQuery.docs[0];
+
+          // Update with all re-matched data
+          await existingDoc.ref.update({
+            amount: updatedTransaction.amount,
+            date: updatedTransaction.date,
+            description: updatedTransaction.description,
+            categories: updatedTransaction.categories,
+            splits: updatedTransaction.splits, // This includes updated period IDs, budget IDs, outflow IDs
+            relationships: updatedTransaction.relationships,
+            metadata: {
+              ...updatedTransaction.metadata,
+              lastModified: Timestamp.now(),
+            },
+            updatedAt: Timestamp.now(),
+          });
+
+          processedCount++;
+          console.log(`✅ Updated transaction ${plaidTxnId} with re-matched data (including period IDs)`);
+        }
+      }
+
+      // Apply outflow updates if any
+      if (outflowUpdates.length > 0) {
+        const { FieldValue } = await import('firebase-admin/firestore');
+        for (const update of outflowUpdates) {
+          const periodRef = db.collection('outflow_periods').doc(update.periodId);
+          await periodRef.update({
+            transactionSplits: FieldValue.arrayUnion(update.transactionSplitRef),
+            status: 'paid',
+            updatedAt: Timestamp.now()
+          });
+        }
+        console.log(`✅ Applied ${outflowUpdates.length} outflow period updates for modified transactions`);
+      }
+    }
+
+    // Step 3: Handle minor changes - direct update
+    for (const { transaction, existingDoc } of minorChanges) {
+      const existingData = existingDoc.data();
+
+      // Build update object using shared utility (ensures hybrid structure consistency)
+      const updates = buildPlaidTransactionUpdate(transaction, existingData);
+
+      // Apply the updates
+      await existingDoc.ref.update(updates);
+      processedCount++;
+    }
+
+    console.log(`✅ Updated ${processedCount} modified transactions (${materialChanges.length} with full pipeline, ${minorChanges.length} with direct updates)`);
     return processedCount;
 
   } catch (error) {
@@ -414,7 +549,56 @@ async function processModifiedTransactions(
 }
 
 /**
+ * Check if a transaction has material changes that require re-running the pipeline
+ *
+ * Material changes include:
+ * - Amount change
+ * - Date change
+ * - Category change
+ * - Pending status change (pending → posted)
+ *
+ * Non-material changes:
+ * - Name/description updates
+ * - Merchant name updates
+ */
+function checkForMaterialChanges(plaidTransaction: Transaction, existingData: any): boolean {
+  // Check amount change
+  if (Math.abs(plaidTransaction.amount - existingData.amount) > 0.01) {
+    console.log(`  💰 Amount changed: ${existingData.amount} → ${plaidTransaction.amount}`);
+    return true;
+  }
+
+  // Check date change
+  const newDate = Timestamp.fromDate(new Date(plaidTransaction.date));
+  const existingDate = existingData.date as Timestamp;
+  if (newDate.toMillis() !== existingDate.toMillis()) {
+    console.log(`  📅 Date changed: ${existingDate.toDate()} → ${newDate.toDate()}`);
+    return true;
+  }
+
+  // Check pending status change
+  const newPending = plaidTransaction.pending || false;
+  const existingPending = existingData.metadata?.pending || false;
+  if (newPending !== existingPending) {
+    console.log(`  ⏳ Pending status changed: ${existingPending} → ${newPending}`);
+    return true;
+  }
+
+  // Check category change (Plaid's category array)
+  const newCategory = plaidTransaction.personal_finance_category?.primary || plaidTransaction.category?.[0];
+  const existingCategory = existingData.categories?.primary;
+  if (newCategory && newCategory !== existingCategory) {
+    console.log(`  🏷️ Category changed: ${existingCategory} → ${newCategory}`);
+    return true;
+  }
+
+  // No material changes detected
+  return false;
+}
+
+/**
  * Process removed transactions from Plaid
+ * Uses shared buildTransactionDeletionUpdate utility for consistency
  */
 async function processRemovedTransactions(
   removedTransactions: RemovedTransaction[],
@@ -427,7 +611,7 @@ async function processRemovedTransactions(
 
   try {
     for (const removedTransaction of removedTransactions) {
-      // Find and remove family transaction with Plaid transaction ID
+      // Find family transaction with Plaid transaction ID (using nested metadata structure)
       const existingQuery = await db.collection('transactions')
         .where('metadata.plaidTransactionId', '==', removedTransaction.transaction_id)
         .where('userId', '==', userId)
@@ -436,27 +620,17 @@ async function processRemovedTransactions(
 
       if (!existingQuery.empty) {
         const existingDoc = existingQuery.docs[0];
-        const existingData = existingDoc.data();
 
-        // Mark corresponding family transaction as deleted if it exists
-        if (existingData.familyTransactionId) {
-          await db.collection('transactions')
-            .doc(existingData.familyTransactionId)
-            .update({
-              status: 'DELETED',
-              updatedAt: Timestamp.now(),
-              'metadata.deletedByPlaid': true,
-              'metadata.plaidRemovalReason': 'Transaction removed by institution'
-            });
-        }
+        // Build deletion update using shared utility (ensures hybrid structure consistency)
+        const deletionUpdates = buildTransactionDeletionUpdate('Transaction removed by institution');
 
-        // Remove the Plaid transaction
-        await existingDoc.ref.delete();
+        // Apply soft delete instead of hard delete (preserves data for audit trail)
+        await existingDoc.ref.update(deletionUpdates);
         processedCount++;
       }
     }
 
-    console.log(`✅ Removed ${processedCount} transactions`);
+    console.log(`✅ Marked ${processedCount} transactions as deleted`);
     return processedCount;
 
   } catch (error) {
