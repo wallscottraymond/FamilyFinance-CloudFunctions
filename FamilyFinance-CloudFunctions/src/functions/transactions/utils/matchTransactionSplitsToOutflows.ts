@@ -91,8 +91,8 @@ export async function matchTransactionSplitsToOutflows(
     // Process each transaction
     let matchedCount = 0;
     transactions.forEach(transaction => {
-      const txnDate = transaction.date.toMillis();
-      const merchantName = transaction.metadata?.plaidMerchantName?.toLowerCase();
+      const txnDate = transaction.transactionDate.toMillis();
+      const merchantName = transaction.merchantName?.toLowerCase();
 
       // Try to match each split to an outflow period
       transaction.splits.forEach(split => {
@@ -149,10 +149,10 @@ export async function matchTransactionSplitsToOutflows(
           outflowUpdates.push({
             periodId: bestMatch.id,
             transactionSplitRef: {
-              transactionId: transaction.id || '',
-              splitId: split.id,
+              transactionId: transaction.transactionId,
+              splitId: split.splitId,
               amount: split.amount,
-              paymentDate: transaction.date
+              paymentDate: transaction.transactionDate
             }
           });
 

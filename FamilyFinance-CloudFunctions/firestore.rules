@@ -257,40 +257,37 @@ service cloud.firestore {
     // =======================
     
     match /transactions/{transactionId} {
-      // Group-based access: Users can read transactions they have access to via groupIds array
-      // Falls back to userId/familyId for legacy transactions
+      // Group-based access: Users can read transactions they have access to via groupId
+      // NEW FLAT STRUCTURE: Uses ownerId and groupId at root level
       allow read: if isAuthenticated() && (
-                     isOwner(resource.data.userId) ||
-                     canAccessGroup(resource.data.groupIds) ||
-                     (resource.data.familyId != null && inSameFamily(resource.data.familyId)) ||
-                     (resource.data.accessibleBy != null && request.auth.uid in resource.data.accessibleBy)
+                     isOwner(resource.data.ownerId) ||
+                     (resource.data.groupId != null && inSameFamily(resource.data.groupId))
                   );
 
-      // Group-based access: Allow list queries using groupIds array
-      // This supports queries on groupIds for efficient group-based filtering
+      // Group-based access: Allow list queries using groupId
+      // This supports queries on groupId for efficient group-based filtering
       allow list: if isAuthenticated();
 
       // Users can create transactions for themselves
       // Parents/Admins can create for family members
       // Cloud functions can create Plaid transactions
-      // Group-based access: Ensure groupIds is set correctly
+      // NEW FLAT STRUCTURE: Uses ownerId and groupId
       allow create: if isAuthenticated() &&
-                       (isOwner(request.resource.data.userId) || canManage()) &&
+                       (isOwner(request.resource.data.ownerId) || canManage()) &&
                        isValidTransactionData();
 
       // Users can update their own transactions (splits, notes, visibility)
       // Parents/Admins can update family transactions
-      // Group-based access: Check groupIds array or fallback to userId/familyId
+      // NEW FLAT STRUCTURE: Uses ownerId and groupId
       allow update: if isAuthenticated() && (
-                       isOwner(resource.data.userId) ||
-                       canAccessGroup(resource.data.groupIds) ||
-                       (resource.data.familyId != null && canManage() && inSameFamily(resource.data.familyId)) ||
-                       (resource.data.accessibleBy != null && request.auth.uid in resource.data.accessibleBy)
+                       isOwner(resource.data.ownerId) ||
+                       (resource.data.groupId != null && canManage() && inSameFamily(resource.data.groupId))
                     );
 
       // Users can delete their own manual transactions
       // Admins can delete any transaction
-      allow delete: if (isOwner(resource.data.userId) && resource.data.source != 'plaid') ||
+      // NEW FLAT STRUCTURE: Uses ownerId
+      allow delete: if (isOwner(resource.data.ownerId) && resource.data.source != 'plaid') ||
                        isAdmin();
     }
     
@@ -790,19 +787,18 @@ service cloud.firestore {
              data.errorHandling is map && data.errorHandling.keys().hasAll(['maxRetries', 'retryDelayMs', 'errorReportingEnabled']);
     }
     
-    // Transaction validation functions
+    // Transaction validation functions - NEW FLAT STRUCTURE
     function isValidTransactionData() {
       let data = request.resource.data;
-      return data.keys().hasAll(['id', 'userId', 'amount', 'date', 'name', 'source', 'status']) &&
-             data.id is string && data.id.size() > 0 &&
-             data.userId is string && data.userId.size() > 0 &&
-             data.amount is number &&
-             data.date is string &&
+      return data.keys().hasAll(['transactionId', 'ownerId', 'transactionDate', 'name', 'source', 'transactionStatus', 'splits']) &&
+             data.transactionId is string && data.transactionId.size() > 0 &&
+             data.ownerId is string && data.ownerId.size() > 0 &&
+             data.transactionDate is timestamp &&
              data.name is string && data.name.size() > 0 &&
              data.source is string && data.source in ['manual', 'plaid', 'import'] &&
-             data.status is string && data.status in ['pending', 'posted', 'cleared'] &&
-             data.isManual is bool &&
-             (data.familyId == null || data.familyId is string);
+             data.transactionStatus is string && data.transactionStatus in ['pending', 'approved', 'declined'] &&
+             data.splits is list && data.splits.size() > 0 &&
+             (data.groupId == null || data.groupId is string);
     }
 
     // Budget validation function
@@ -875,30 +871,33 @@ service cloud.firestore {
              isValidSplitAmounts(splits, transactionAmount);
     }
     
-    // Validate individual transaction split with enhanced status fields
+    // Validate individual transaction split with enhanced status fields - NEW FLAT STRUCTURE
     function isValidTransactionSplit(split) {
       return split is map &&
-             // Core required fields
-             split.keys().hasAll(['id', 'categoryId', 'amount', 'isDefault', 'createdAt', 'updatedAt', 'createdBy']) &&
-             split.id is string && split.id.size() > 0 &&
-             split.categoryId is string &&
+             // Core required fields - NEW NAMING
+             split.keys().hasAll(['splitId', 'plaidPrimaryCategory', 'amount', 'isDefault', 'createdAt', 'updatedAt']) &&
+             split.splitId is string && split.splitId.size() > 0 &&
+             split.plaidPrimaryCategory is string &&
              split.amount is number && split.amount > 0 &&
              split.isDefault is bool &&
              split.createdAt is timestamp &&
              split.updatedAt is timestamp &&
-             split.createdBy is string && split.createdBy.size() > 0 &&
 
              // Budget assignment fields (optional for unassigned splits)
              (!split.keys().hasAny(['budgetId']) || (split.budgetId is string && split.budgetId.size() > 0)) &&
-             (!split.keys().hasAny(['budgetPeriodId']) || (split.budgetPeriodId is string && split.budgetPeriodId.size() > 0)) &&
-             (!split.keys().hasAny(['budgetName']) || (split.budgetName is string && split.budgetName.size() > 0)) &&
+
+             // Period ID fields
+             (!split.keys().hasAny(['monthlyPeriodId']) || (split.monthlyPeriodId == null || split.monthlyPeriodId is string)) &&
+             (!split.keys().hasAny(['weeklyPeriodId']) || (split.weeklyPeriodId == null || split.weeklyPeriodId is string)) &&
+             (!split.keys().hasAny(['biWeeklyPeriodId']) || (split.biWeeklyPeriodId == null || split.biWeeklyPeriodId is string)) &&
 
              // Status fields validation
              isValidSplitStatusFields(split) &&
 
              // Optional fields validation
              (!split.keys().hasAny(['description']) || split.description is string) &&
-             (!split.keys().hasAny(['userNotes']) || split.userNotes is string);
+             (!split.keys().hasAny(['tags']) || split.tags is list) &&
+             (!split.keys().hasAny(['rules']) || split.rules is list);
     }
 
     // Enhanced validation for split status fields

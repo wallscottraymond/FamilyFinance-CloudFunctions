@@ -50,7 +50,7 @@ export async function matchTransactionSplitsToBudgets(
     // Process each transaction
     let matchedCount = 0;
     transactions.forEach(transaction => {
-      const txnDate = transaction.date.toMillis();
+      const txnDate = transaction.transactionDate.toMillis();
 
       // Find budget that contains this transaction date
       let matchedBudget = null;
@@ -78,19 +78,8 @@ export async function matchTransactionSplitsToBudgets(
         transaction.splits = transaction.splits.map(split => ({
           ...split,
           budgetId: matchedBudget!.id,
-          budgetName: matchedBudget!.name,
           updatedAt: Timestamp.now()
         }));
-
-        // Update transaction-level budget tracking
-        if (transaction.categories) {
-          transaction.categories.budgetCategory = matchedBudget.id;
-        }
-
-        if (transaction.relationships) {
-          transaction.relationships.primaryBudgetId = matchedBudget.id;
-          transaction.relationships.affectedBudgets = [matchedBudget.id];
-        }
 
         matchedCount++;
       }

@@ -279,10 +279,10 @@ export enum PaymentType {
 }
 
 // Transaction Split interface for splitting transactions across budgets AND outflows
+// UPDATED: Flat structure with renamed fields for consistency
 export interface TransactionSplit {
-  id: string;                     // Unique identifier for the split
-  budgetId: string;               // Reference to budgets collection (empty string if assigned to outflow)
-  budgetName: string;             // Denormalized budget name for display performance (empty string if assigned to outflow)
+  splitId: string;                // Unique identifier for the split (renamed from 'id')
+  budgetId: string;               // Reference to budgets collection ('unassigned' if not assigned)
 
   // Source period IDs based on transaction date (always populated)
   monthlyPeriodId: string | null;        // Monthly source period ID containing transaction date
@@ -292,10 +292,11 @@ export interface TransactionSplit {
   // Assignment references (populated when assigned)
   outflowId?: string | null;             // Reference to outflows collection (when assigned to outflow)
 
-  // Category information
-  categoryId: string;             // Category ID from categories collection (matched by detailed_plaid_category)
-  category?: string | null;              // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
-  categoryPrimary?: string | null;       // Plaid primary category (e.g., "FOOD_AND_DRINK")
+  // Category information - UPDATED with new field names
+  plaidPrimaryCategory: string;          // Plaid primary category (e.g., "FOOD_AND_DRINK")
+  plaidDetailedCategory: string;         // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
+  internalPrimaryCategory: string | null;   // User override primary category
+  internalDetailedCategory: string | null;  // User override detailed category
 
   amount: number;                 // Amount allocated to this split
   description?: string | null;           // Optional override description for this split
@@ -307,107 +308,65 @@ export interface TransactionSplit {
   isTaxDeductible?: boolean;      // Tax-deductible expense
   ignoredReason?: string | null;         // Why user ignored this split
   refundReason?: string | null;          // Reason for refund classification
-  taxDeductibleCategory?: string | null; // Tax category for deductible items
 
-  // NEW: Simple status flags
-  ignore?: boolean;               // Simple ignore flag for user convenience
-  return?: boolean;               // Transaction is a return/refund (simplified from isRefund)
-  deductible?: boolean;           // Tax deductible (simplified from isTaxDeductible)
-  note?: string | null;                  // User note for this split
-
-  // Enhanced assignment metadata
-  excludedFromBudgets?: string[]; // Budget IDs to exclude this split from
-  manualBudgetAssignment?: boolean; // User manually assigned vs auto-assigned
-
-  // NEW: Payment type tracking for outflow assignments
+  // Payment type tracking for outflow assignments
   paymentType?: PaymentType;      // Payment classification (regular, catch_up, advance, extra_principal)
-  paymentDate?: Timestamp;        // Date when payment was made (matches transaction.date)
+  paymentDate: Timestamp;        // Date when payment was made (matches transaction.transactionDate)
+
+  // New array fields
+  rules: string[];                // Rule IDs applied to this split
+  tags: string[];                 // User-defined tags for this split
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  createdBy: string;              // User who created this split
 }
 
-export interface Transaction extends BaseDocument, ResourceOwnership {
-  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
-  userId: string;                 // LEGACY: maps to access.ownerId (REQUIRED for existing queries)
-  groupIds: string[];             // Groups this transaction belongs to (empty array = private) (REQUIRED for queries)
-  accountId?: string;             // Plaid account ID for filtering transactions by account (REQUIRED for index)
-  amount: number;                 // Transaction amount (REQUIRED for range queries)
-  date: Timestamp;                // Transaction date (REQUIRED for sorting/range queries)
-  status: TransactionStatus;      // Transaction status (REQUIRED for filtering)
-  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
-  isActive: boolean;              // Whether transaction is active (REQUIRED for filtering)
+// NEW FLAT TRANSACTION INTERFACE - Optimized for Firestore indexing
+export interface Transaction extends BaseDocument {
+  // === DOCUMENT METADATA (inherited from BaseDocument) ===
+  id: string;                     // Firestore document ID (same as transactionId)
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 
-  // === NESTED ACCESS CONTROL OBJECT ===
-  access: AccessControl;          // Access control and sharing fields
+  // === QUERY-CRITICAL FIELDS AT ROOT ===
+  transactionId: string;          // Plaid transaction_id (used as Firestore document ID)
+  ownerId: string;                // User who owns this transaction (renamed from userId)
+  groupId: string | null;         // Group this transaction belongs to (null = private)
+  transactionDate: Timestamp;     // Transaction date (renamed from 'date')
+  accountId: string;              // Plaid account ID
+  createdBy: string;              // User who created this transaction
+  updatedBy: string;              // User who last updated this transaction
+  currency: string;               // ISO currency code (e.g., "USD")
+  description: string;            // Transaction description
 
-  // === NESTED CATEGORIES OBJECT ===
-  categories: Categories & {      // Transaction categorization (extends base Categories)
-    // Transaction-specific category fields
-    budgetCategory?: string;      // Budget category assignment
-  };
+  // === CATEGORY FIELDS (flattened from nested object) ===
+  internalDetailedCategory: string | null;   // User override detailed category
+  internalPrimaryCategory: string | null;    // User override primary category
+  plaidDetailedCategory: string;   // Plaid detailed category
+  plaidPrimaryCategory: string;    // Plaid primary category
 
-  // === NESTED METADATA OBJECT ===
-  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
-    // Transaction-specific metadata
-    approvedBy?: string;
-    approvedAt?: Timestamp;
-    receiptUrl?: string;
-    location?: TransactionLocation;
-    recurringTransactionId?: string;
+  // === PLAID METADATA (flattened from nested metadata object) ===
+  plaidItemId: string;            // Plaid item ID
+  source: 'plaid' | 'manual' | 'import'; // Transaction source
+  transactionStatus: TransactionStatus;  // Transaction status (renamed from 'status')
 
-    // Rules system - Original immutable Plaid data (for rule recalculation)
-    plaidData?: {
-      category: string;            // Original Plaid category array joined
-      detailedCategory?: string;   // Original detailed category
-      primaryCategory?: string;    // Original primary category
-      merchantName?: string;       // Original merchant name
-      amount: number;              // Original amount
-      date: Timestamp;             // Original transaction date
-      description: string;         // Original description/name
-      pending: boolean;            // Original pending status
+  // === TYPE AND IDENTIFIERS ===
+  type: TransactionType | null;   // Transaction type (income, expense, transfer)
+  name: string;                   // Transaction name from Plaid
+  merchantName: string | null;    // Merchant name from Plaid
 
-      // Store full personal_finance_category for reference
-      personalFinanceCategory?: {
-        primary: string;
-        detailed: string;
-        confidenceLevel?: string;
-      };
-    };
-
-    // Rule application tracking
-    appliedRules?: string[];       // Array of rule IDs currently applied
-    isRuleModified?: boolean;      // Has any rule modified this transaction?
-    lastRuleApplication?: Timestamp; // When rules were last applied
-    ruleApplicationCount?: number; // Number of times rules have been applied
-  };
-
-  // === NESTED RELATIONSHIPS OBJECT ===
-  relationships: Relationships & { // Document relationships (extends base Relationships)
-    // Transaction-specific relationship fields
-    budgetId?: string;             // Legacy budget assignment (maintained for backward compatibility)
-    affectedBudgets: string[];     // Array of budget IDs for flexibility
-    primaryBudgetId?: string;      // The budget with the largest split amount (for default sorting)
-    primaryBudgetPeriodId?: string; // The budget period with the largest split amount
-    affectedBudgetPeriods: string[]; // Array of budget period IDs for efficient querying
-  };
-
-  // === TRANSACTION-SPECIFIC FIELDS AT ROOT ===
-  currency: string;
-  description: string;
-  type: TransactionType;
-
-  // New splitting functionality
+  // === SPLITS ARRAY ===
   splits: TransactionSplit[];     // Array of transaction splits
-  isSplit: boolean;               // True if transaction has multiple splits or user has modified splits
-  totalAllocated: number;         // Sum of all split amounts
-  unallocated: number;            // amount - totalAllocated (remaining unallocated amount)
 
-  // Enhanced filtering fields for quick queries
-  hasIgnoredSplits?: boolean;     // Quick flag for filtering ignored transactions
-  hasRefundSplits?: boolean;      // Quick flag for refund transactions
-  hasTaxDeductibleSplits?: boolean; // Quick flag for tax tracking
+  // === INITIAL PLAID DATA (preserved for reference) ===
+  initialPlaidData: {
+    plaidAccountId: string;
+    plaidMerchantName: string;
+    plaidName: string;
+    plaidTransactionId: string;
+    plaidPending: boolean;
+    source: 'plaid';
+  };
 }
 
 export enum TransactionType {

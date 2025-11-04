@@ -9,17 +9,17 @@ export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 export { verifyAccessControl } from "./verifyAccessControl";
 
-// Transaction splitting migration functions
-export {
-  migrateTransactionsToSplits,
-  verifyTransactionSplitsMigration
-} from "./migrateTransactionsToSplits";
+// Transaction splitting migration functions (DEPRECATED - stubbed out)
+// export {
+//   migrateTransactionsToSplits,
+//   verifyTransactionSplitsMigration
+// } from "./migrateTransactionsToSplits";
 
-// RBAC migration functions
-export {
-  migrateTransactionsRBAC,
-  verifyTransactionsRBAC
-} from "./migrateTransactionsRBAC";
+// RBAC migration functions (DEPRECATED - stubbed out)
+// export {
+//   migrateTransactionsRBAC,
+//   verifyTransactionsRBAC
+// } from "./migrateTransactionsRBAC";
 
 // User data cleanup functions
 export {

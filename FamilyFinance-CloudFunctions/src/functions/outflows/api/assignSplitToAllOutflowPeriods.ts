@@ -125,7 +125,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
       const transaction = { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
 
       // Verify user owns the transaction
-      if (transaction.userId !== userId) {
+      if (transaction.ownerId !== userId) {
         throw new HttpsError('permission-denied', 'You can only assign your own transaction splits');
       }
 
@@ -146,7 +146,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       // Step 3: Find the split in the transaction
       const splits = transaction.splits || [];
-      const splitIndex = splits.findIndex(s => s.id === splitId);
+      const splitIndex = splits.findIndex(s => s.splitId === splitId);
 
       if (splitIndex === -1) {
         throw new HttpsError('not-found', `Split ${splitId} not found in transaction ${transactionId}`);
@@ -167,8 +167,8 @@ export const assignSplitToAllOutflowPeriods = onCall(
         console.log(`[assignSplitToAll] Using target period: ${targetPeriodId}`);
         matchingPeriods = await findMatchingOutflowPeriodsBySourcePeriod(db, outflowId, targetPeriodId);
       } else {
-        console.log(`[assignSplitToAll] Using transaction date: ${transaction.date.toDate().toISOString()}`);
-        matchingPeriods = await findMatchingOutflowPeriods(db, outflowId, transaction.date);
+        console.log(`[assignSplitToAll] Using transaction date: ${transaction.transactionDate.toDate().toISOString()}`);
+        matchingPeriods = await findMatchingOutflowPeriods(db, outflowId, transaction.transactionDate);
       }
       validatePeriodsFound(matchingPeriods);
 
@@ -179,13 +179,12 @@ export const assignSplitToAllOutflowPeriods = onCall(
         ...splits[splitIndex],
         // Clear budget assignment if requested
         budgetId: clearBudgetAssignment ? '' : splits[splitIndex].budgetId,
-        budgetName: clearBudgetAssignment ? '' : splits[splitIndex].budgetName,
         // Set outflow assignment
         outflowId: outflowId,
         // Payment classification
         paymentType: paymentType as PaymentType,
         // Payment date (matches transaction date)
-        paymentDate: transaction.date,
+        paymentDate: transaction.transactionDate,
         // Timestamp
         updatedAt: admin.firestore.Timestamp.now(),
       };
@@ -202,8 +201,8 @@ export const assignSplitToAllOutflowPeriods = onCall(
       // Step 8: Create TransactionSplitReference for outflow periods
       const splitRef: TransactionSplitReference = {
         transactionId: transaction.id!,
-        splitId: split.id,
-        transactionDate: transaction.date,
+        splitId: split.splitId,
+        transactionDate: transaction.transactionDate,
         amount: split.amount,
         description: transaction.description,
         paymentType: paymentType as PaymentType,

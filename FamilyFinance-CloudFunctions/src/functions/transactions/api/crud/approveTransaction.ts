@@ -63,14 +63,14 @@ export const approveTransaction = onRequest({
       }
 
       // Check group access (backward compatible with familyId)
-      if (transaction.familyId && !await checkFamilyAccess(user.id!, transaction.familyId)) {
+      if (transaction.groupId && !await checkFamilyAccess(user.id!, transaction.groupId)) {
         return response.status(403).json(
           createErrorResponse("access-denied", "Cannot access this transaction")
         );
       }
 
       // Check if transaction is pending
-      if (transaction.status !== TransactionStatus.PENDING) {
+      if (transaction.transactionStatus !== TransactionStatus.PENDING) {
         return response.status(400).json(
           createErrorResponse("invalid-status", "Transaction is not pending approval")
         );

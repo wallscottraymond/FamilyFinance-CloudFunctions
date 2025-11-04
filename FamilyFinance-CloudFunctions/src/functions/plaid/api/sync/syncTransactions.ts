@@ -479,13 +479,13 @@ async function processModifiedTransactions(
 
       // Step 6: Update existing transactions (not create new ones)
       for (const updatedTransaction of final) {
-        const plaidTxnId = updatedTransaction.metadata?.plaidTransactionId;
+        const plaidTxnId = updatedTransaction.transactionId;
         if (!plaidTxnId) continue;
 
         // Find the existing transaction document
         const existingQuery = await db.collection('transactions')
-          .where('metadata.plaidTransactionId', '==', plaidTxnId)
-          .where('userId', '==', userId)
+          .where('transactionId', '==', plaidTxnId)
+          .where('ownerId', '==', userId)
           .limit(1)
           .get();
 
@@ -494,17 +494,12 @@ async function processModifiedTransactions(
 
           // Update with all re-matched data
           await existingDoc.ref.update({
-            amount: updatedTransaction.amount,
-            date: updatedTransaction.date,
             description: updatedTransaction.description,
-            categories: updatedTransaction.categories,
+            plaidPrimaryCategory: updatedTransaction.plaidPrimaryCategory,
+            plaidDetailedCategory: updatedTransaction.plaidDetailedCategory,
             splits: updatedTransaction.splits, // This includes updated period IDs, budget IDs, outflow IDs
-            relationships: updatedTransaction.relationships,
-            metadata: {
-              ...updatedTransaction.metadata,
-              lastModified: Timestamp.now(),
-            },
             updatedAt: Timestamp.now(),
+            updatedBy: userId,
           });
 
           processedCount++;

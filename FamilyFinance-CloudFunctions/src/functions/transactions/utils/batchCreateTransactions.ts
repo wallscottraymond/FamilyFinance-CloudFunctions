@@ -46,8 +46,8 @@ export async function batchCreateTransactions(
 
       // Add transactions to batch
       for (const transaction of batchTransactions) {
-        // Use Plaid transaction ID as Firestore document ID
-        const transactionId = transaction.metadata?.plaidTransactionId || db.collection('_dummy').doc().id;
+        // Use transactionId field as Firestore document ID
+        const transactionId = transaction.transactionId;
         const docRef = db.collection('transactions').doc(transactionId);
 
         // Add createdAt and updatedAt timestamps

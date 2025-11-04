@@ -10,6 +10,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import {
   Transaction,
+  TransactionSplit,
   UserRole,
   TransactionStatus
 } from "../../../../types";
@@ -30,12 +31,6 @@ import {
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
 import { updateBudgetSpending } from "../../../../utils/budgetSpending";
-import {
-  buildAccessControl,
-  buildTransactionCategories,
-  buildMetadata,
-  buildRelationships
-} from "../../../../utils/documentStructure";
 import { matchTransactionSplitsToSourcePeriods } from "../../utils/matchTransactionSplitsToSourcePeriods";
 
 /**
@@ -114,14 +109,10 @@ export const createTransaction = onRequest({
         ? admin.firestore.Timestamp.fromDate(new Date(transactionData.date))
         : admin.firestore.Timestamp.now();
 
-      // Create default split for the transaction (period IDs will be populated below)
-      const defaultSplit = {
-        id: admin.firestore().collection('_dummy').doc().id,
+      // Create default split for the transaction (NEW FLAT STRUCTURE)
+      const defaultSplit: TransactionSplit = {
+        splitId: admin.firestore().collection('_dummy').doc().id,
         budgetId: transactionData.budgetId || 'unassigned',
-        budgetName: 'General',
-        categoryId: transactionData.category,
-        category: null,
-        categoryPrimary: null,
         amount: transactionData.amount,
         description: null,
         isDefault: true,
@@ -134,67 +125,71 @@ export const createTransaction = onRequest({
         // Assignment references (populated when assigned)
         outflowId: null,
 
+        // Category fields (NEW NAMING)
+        plaidPrimaryCategory: transactionData.category,
+        plaidDetailedCategory: transactionData.category,
+        internalPrimaryCategory: null,
+        internalDetailedCategory: null,
+
         // Enhanced status fields
         isIgnored: false,
         isRefund: false,
         isTaxDeductible: false,
         ignoredReason: null,
         refundReason: null,
-        taxDeductibleCategory: null,
-        note: null,
 
         // Payment tracking
         paymentDate: transactionDate,
 
+        // New array fields
+        rules: [],
+        tags: transactionData.tags || [],
+
         createdAt: admin.firestore.Timestamp.now(),
         updatedAt: admin.firestore.Timestamp.now(),
-        createdBy: user.id!,
       };
 
-      // Create transaction using hybrid structure
+      // Create transaction using NEW FLAT STRUCTURE
       const transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
-        // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
-        userId: user.id!,
-        groupIds,
-        accountId: undefined, // Not available in CreateTransactionRequest
-        amount: transactionData.amount,
-        date: transactionDate,
-        status: permissionCheck.requiresApproval ? TransactionStatus.PENDING : TransactionStatus.APPROVED,
-        isActive: true,
-
-        // === NESTED ACCESS CONTROL OBJECT ===
-        access: buildAccessControl(user.id!, user.id!, groupIds),
-
-        // === NESTED CATEGORIES OBJECT ===
-        categories: buildTransactionCategories(transactionData.category, {
-          tags: transactionData.tags || [],
-          budgetCategory: transactionData.budgetId
-        }),
-
-        // === NESTED METADATA OBJECT ===
-        metadata: buildMetadata(user.id!, 'manual', {
-          requiresApproval: permissionCheck.requiresApproval
-        }),
-
-        // === NESTED RELATIONSHIPS OBJECT ===
-        relationships: {
-          ...buildRelationships({
-            budgetId: transactionData.budgetId
-          }),
-          affectedBudgets: transactionData.budgetId ? [transactionData.budgetId] : [],
-          affectedBudgetPeriods: [], // Will be populated when budget period is assigned
-          primaryBudgetId: transactionData.budgetId,
-          primaryBudgetPeriodId: undefined // Will be assigned when budget period is determined
-        },
-
-        // === TRANSACTION-SPECIFIC FIELDS AT ROOT ===
+        // === ROOT-LEVEL QUERY FIELDS ===
+        transactionId: admin.firestore().collection('_dummy').doc().id, // Generate ID for manual transactions
+        ownerId: user.id!,
+        groupId: groupIds.length > 0 ? groupIds[0] : null,
+        transactionDate,
+        accountId: '', // Not available for manual transactions
+        createdBy: user.id!,
+        updatedBy: user.id!,
         currency: (family as any).settings.currency,
         description: transactionData.description,
+
+        // === CATEGORY FIELDS (flattened to root) ===
+        internalDetailedCategory: null,
+        internalPrimaryCategory: null,
+        plaidDetailedCategory: transactionData.category,
+        plaidPrimaryCategory: transactionData.category,
+
+        // === PLAID METADATA (flattened to root) ===
+        plaidItemId: '', // Not applicable for manual transactions
+        source: 'manual' as const,
+        transactionStatus: permissionCheck.requiresApproval ? TransactionStatus.PENDING : TransactionStatus.APPROVED,
+
+        // === TYPE AND IDENTIFIERS ===
         type: transactionData.type,
+        name: transactionData.description,
+        merchantName: null,
+
+        // === SPLITS ARRAY ===
         splits: [defaultSplit],
-        isSplit: false,
-        totalAllocated: transactionData.amount,
-        unallocated: 0,
+
+        // === INITIAL PLAID DATA (not applicable for manual transactions) ===
+        initialPlaidData: {
+          plaidAccountId: '',
+          plaidMerchantName: '',
+          plaidName: transactionData.description,
+          plaidTransactionId: '',
+          plaidPending: false,
+          source: 'plaid' as const, // Keep as plaid type for consistency
+        },
       };
 
       // Match transaction splits to source periods (app-wide)
@@ -208,7 +203,7 @@ export const createTransaction = onRequest({
         await updateBudgetSpending({
           newTransaction: createdTransaction,
           userId: user.id!,
-          familyId: user.familyId
+          groupId: createdTransaction.groupId
         });
       } catch (budgetError) {
         // Log error but don't fail transaction creation

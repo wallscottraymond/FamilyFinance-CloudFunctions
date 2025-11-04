@@ -158,7 +158,7 @@ export const getOutflowPeriodTransactions = onCall(
 
           for (const splitRef of matchingSplitRefs) {
             // Find the actual split in the transaction
-            const split = transaction.splits.find(s => s.id === splitRef.splitId);
+            const split = transaction.splits.find(s => s.splitId === splitRef.splitId);
 
             if (!split) {
               console.warn(`[getOutflowPeriodTransactions] Split ${splitRef.splitId} not found in transaction ${transactionId}, skipping`);
@@ -169,19 +169,19 @@ export const getOutflowPeriodTransactions = onCall(
             enrichedTransactions.push({
               transaction: {
                 id: transaction.id!,
-                amount: transaction.amount,
+                amount: split.amount, // Use split amount instead of transaction.amount
                 description: transaction.description,
-                date: transaction.date,
-                merchantName: transaction.metadata?.plaidMerchantName as string | undefined,
-                category: transaction.categories?.primary,
+                date: transaction.transactionDate,
+                merchantName: transaction.initialPlaidData?.plaidMerchantName as string | undefined,
+                category: split.plaidPrimaryCategory, // Use split's category
                 pending: false, // Assuming transactions are no longer pending if they're synced
                 accountId: transaction.accountId
               },
               split: {
-                id: split.id,
+                id: split.splitId,
                 amount: split.amount,
                 description: split.description ?? undefined,
-                categoryId: split.categoryId
+                categoryId: split.plaidPrimaryCategory
               },
               splitReference: splitRef
             });

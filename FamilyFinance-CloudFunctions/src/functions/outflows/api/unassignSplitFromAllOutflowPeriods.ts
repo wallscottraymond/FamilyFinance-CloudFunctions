@@ -80,13 +80,13 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
       const transaction = { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
 
       // Verify user owns the transaction
-      if (transaction.userId !== userId) {
+      if (transaction.ownerId !== userId) {
         throw new HttpsError('permission-denied', 'You can only unassign your own transaction splits');
       }
 
       // Step 2: Find the split in the transaction
       const splits = transaction.splits || [];
-      const splitIndex = splits.findIndex(s => s.id === splitId);
+      const splitIndex = splits.findIndex(s => s.splitId === splitId);
 
       if (splitIndex === -1) {
         throw new HttpsError('not-found', `Split ${splitId} not found in transaction ${transactionId}`);

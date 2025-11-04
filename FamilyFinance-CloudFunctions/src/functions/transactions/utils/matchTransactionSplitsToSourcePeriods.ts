@@ -45,7 +45,7 @@ export async function matchTransactionSplitsToSourcePeriods(
     // Get all unique transaction dates
     const uniqueDates = new Set<number>();
     transactions.forEach(txn => {
-      uniqueDates.add(txn.date.toMillis());
+      uniqueDates.add(txn.transactionDate.toMillis());
     });
 
     console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Found ${uniqueDates.size} unique transaction dates`);
@@ -77,7 +77,7 @@ export async function matchTransactionSplitsToSourcePeriods(
     // Process each transaction
     let matchedCount = 0;
     transactions.forEach(transaction => {
-      const txnDate = transaction.date.toMillis();
+      const txnDate = transaction.transactionDate.toMillis();
       console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Processing transaction with date: ${new Date(txnDate).toISOString()} (${txnDate})`);
 
       // Find matching periods for this transaction date
@@ -109,12 +109,6 @@ export async function matchTransactionSplitsToSourcePeriods(
       console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Updated ${transaction.splits.length} splits with periods: monthly=${monthlyPeriod?.id}, weekly=${weeklyPeriod?.id}, biWeekly=${biWeeklyPeriod?.id}`);
 
       transaction.splits = updatedSplits;
-
-      // Update affectedBudgetPeriods in relationships (for tracking)
-      const periodIds = [monthlyPeriod?.id, weeklyPeriod?.id, biWeeklyPeriod?.id].filter(Boolean) as string[];
-      if (transaction.relationships) {
-        transaction.relationships.affectedBudgetPeriods = periodIds;
-      }
 
       if (matchingPeriods.length > 0) {
         matchedCount++;

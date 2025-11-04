@@ -40,14 +40,14 @@ export async function matchCategoriesToTransactions(
     for (const transaction of transactions) {
       try {
         // Only enhance if currently OTHER_EXPENSE or unassigned
-        if (transaction.categories?.primary !== TransactionCategory.OTHER_EXPENSE) {
-          console.log(`  ⏭️ Skipping transaction - already has category ${transaction.categories?.primary}`);
+        if (transaction.plaidPrimaryCategory !== TransactionCategory.OTHER_EXPENSE) {
+          console.log(`  ⏭️ Skipping transaction - already has category ${transaction.plaidPrimaryCategory}`);
           continue;
         }
 
-        // Extract merchant and transaction name from metadata
-        const merchantName = transaction.metadata?.plaidMerchantName;
-        const transactionName = transaction.metadata?.plaidName;
+        // Extract merchant and transaction name from root-level fields
+        const merchantName = transaction.merchantName;
+        const transactionName = transaction.name;
 
         let newCategory: TransactionCategory | null = null;
 
@@ -69,19 +69,18 @@ export async function matchCategoriesToTransactions(
 
         // Update transaction in memory if new category found
         if (newCategory) {
-          // Update the primary category
-          transaction.categories.primary = newCategory;
+          // Update the primary category at root level
+          transaction.plaidPrimaryCategory = newCategory;
+          transaction.plaidDetailedCategory = newCategory; // Also update detailed
 
-          // Update metadata to track the enhancement (using type assertion for custom fields)
-          if (transaction.metadata) {
-            (transaction.metadata as any).categoryAlignedAt = Timestamp.now();
-            (transaction.metadata as any).categoryAlignedBy = 'matchCategoriesToTransactions';
-          }
+          // Update timestamp
+          transaction.updatedAt = Timestamp.now();
 
           // Also update the category in all splits
           transaction.splits = transaction.splits.map(split => ({
             ...split,
-            categoryId: newCategory!,
+            plaidPrimaryCategory: newCategory!,
+            plaidDetailedCategory: newCategory!,
             updatedAt: Timestamp.now()
           }));
 

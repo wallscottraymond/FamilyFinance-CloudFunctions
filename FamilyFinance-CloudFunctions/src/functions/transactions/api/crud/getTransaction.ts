@@ -59,7 +59,7 @@ export const getTransaction = onRequest({
       }
 
       // Check if user can access this transaction
-      if (transaction.familyId && !await checkFamilyAccess(user.id!, transaction.familyId)) {
+      if (transaction.groupId && !await checkFamilyAccess(user.id!, transaction.groupId)) {
         return response.status(403).json(
           createErrorResponse("access-denied", "Cannot access this transaction")
         );

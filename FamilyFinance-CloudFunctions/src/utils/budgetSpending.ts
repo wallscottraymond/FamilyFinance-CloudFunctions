@@ -17,7 +17,7 @@ interface UpdateBudgetSpendingParams {
   oldTransaction?: Transaction;
   newTransaction?: Transaction;
   userId: string;
-  familyId?: string;
+  groupId?: string | null;
 }
 
 interface BudgetSpendingResult {
@@ -75,7 +75,7 @@ export async function updateBudgetSpending(
 
     // Get transaction date (use new transaction if available, otherwise old)
     const transaction = newTransaction || oldTransaction;
-    const transactionDate = transaction?.date;
+    const transactionDate = transaction?.transactionDate;
 
     if (!transactionDate) {
       console.warn('⚠️ No transaction date available, skipping budget updates');
@@ -128,8 +128,8 @@ function getAffectedBudgets(transaction: Transaction): Map<string, number> {
   const budgetSpending = new Map<string, number>();
 
   // Only count approved expense transactions
-  if (transaction.status !== TransactionStatus.APPROVED) {
-    console.log('💰 Transaction not approved, skipping:', transaction.status);
+  if (transaction.transactionStatus !== TransactionStatus.APPROVED) {
+    console.log('💰 Transaction not approved, skipping:', transaction.transactionStatus);
     return budgetSpending;
   }
 
@@ -149,7 +149,7 @@ function getAffectedBudgets(transaction: Transaction): Map<string, number> {
 
       console.log('💰 Split found:', {
         budgetId,
-        budgetName: split.budgetName,
+        // budgetName removed - lookup from budgetId if needed,
         splitAmount: amount,
         totalForBudget: current + amount
       });
@@ -406,7 +406,7 @@ export async function recalculateBudgetSpendingOnCreate(
 
       // Check if any split's category matches budget categories
       const matchingSplits = (transaction.splits || []).filter(split =>
-        budget.categoryIds.includes(split.categoryId)
+        budget.categoryIds.includes(split.plaidPrimaryCategory)
       );
 
       if (matchingSplits.length === 0) {
@@ -418,7 +418,7 @@ export async function recalculateBudgetSpendingOnCreate(
       totalSpending += transactionSpending;
       result.transactionsProcessed++;
 
-      const transactionDate = transaction.date as admin.firestore.Timestamp;
+      const transactionDate = transaction.transactionDate as admin.firestore.Timestamp;
       const transactionMs = transactionDate.toMillis();
 
       console.log(`🔄 Processing transaction ${transaction.id}:`, {

@@ -60,14 +60,14 @@ export const deleteTransaction = onRequest({
       }
 
       // Check permissions
-      if (existingTransaction.userId !== user.id && user.role !== UserRole.ADMIN) {
+      if (existingTransaction.ownerId !== user.id && user.role !== UserRole.ADMIN) {
         return response.status(403).json(
           createErrorResponse("permission-denied", "Cannot delete this transaction")
         );
       }
 
-      // Check group access (backward compatible with familyId)
-      if (existingTransaction.familyId && !await checkFamilyAccess(user.id!, existingTransaction.familyId)) {
+      // Check group access (backward compatible with groupId)
+      if (existingTransaction.groupId && !await checkFamilyAccess(user.id!, existingTransaction.groupId)) {
         return response.status(403).json(
           createErrorResponse("access-denied", "Cannot access this transaction")
         );
@@ -79,7 +79,7 @@ export const deleteTransaction = onRequest({
           oldTransaction: existingTransaction,
           newTransaction: undefined, // Indicates deletion
           userId: user.id!,
-          familyId: existingTransaction.familyId
+          groupId: existingTransaction.groupId
         });
       } catch (budgetError) {
         // Log error but don't fail transaction deletion
