@@ -42,7 +42,7 @@ export const onOutflowCreated = onDocumentCreated({
     }
 
     console.log(`[onOutflowCreated] Creating outflow periods for outflow: ${outflowId}`);
-    console.log(`[onOutflowCreated] Outflow details: ${outflowData.description}, Amount: ${outflowData.averageAmount.amount}, Frequency: ${outflowData.frequency}`);
+    console.log(`[onOutflowCreated] Outflow details: ${outflowData.description}, Amount: ${outflowData.averageAmount}, Frequency: ${outflowData.frequency}`);
 
     const db = admin.firestore();
 

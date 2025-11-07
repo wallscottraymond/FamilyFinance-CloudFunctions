@@ -223,13 +223,16 @@ export const removeAllUserOutflows = onCall({
 
     console.log(`Starting outflow cleanup for user ${user.uid}`);
 
-    // Delete outflows
+    // Delete outflows (using ownerId for flat structure)
     try {
+      console.log(`[removeAllUserOutflows] Querying outflows with ownerId=${user.uid}`);
       const outflows = await queryDocuments('outflows', {
-        where: [{ field: 'userId', operator: '==', value: user.uid }]
+        where: [{ field: 'ownerId', operator: '==', value: user.uid }]
       });
+      console.log(`[removeAllUserOutflows] Found ${outflows.length} outflows to delete`);
 
       for (const outflow of outflows) {
+        console.log(`[removeAllUserOutflows] Deleting outflow ${outflow.id}`);
         await deleteDocument('outflows', outflow.id!);
         totalDeleted++;
       }
@@ -240,13 +243,16 @@ export const removeAllUserOutflows = onCall({
       console.error(msg);
     }
 
-    // Delete outflow periods
+    // Delete outflow periods (using ownerId for flat structure)
     try {
+      console.log(`[removeAllUserOutflows] Querying outflow_periods with ownerId=${user.uid}`);
       const outflowPeriods = await queryDocuments('outflow_periods', {
-        where: [{ field: 'userId', operator: '==', value: user.uid }]
+        where: [{ field: 'ownerId', operator: '==', value: user.uid }]
       });
+      console.log(`[removeAllUserOutflows] Found ${outflowPeriods.length} outflow_periods to delete`);
 
       for (const period of outflowPeriods) {
+        console.log(`[removeAllUserOutflows] Deleting outflow_period ${period.id}`);
         await deleteDocument('outflow_periods', period.id!);
         totalDeleted++;
       }
@@ -367,35 +373,48 @@ export const removeAllUserTransactions = onCall({
 
     try {
       // Get all transactions for the user in batches (Firestore limit)
-      let hasMore = true;
+      // Query by BOTH ownerId (new flat structure) AND userId (legacy)
+      // Track deleted IDs to avoid duplicates if a transaction has both fields
+      const deletedIds = new Set<string>();
       let batchCount = 0;
 
-      while (hasMore) {
-        const transactions = await queryDocuments('transactions', {
-          where: [{ field: 'userId', operator: '==', value: user.uid }],
-          limit: 100 // Process in batches to avoid timeouts
-        });
+      // Query by ownerId (flat structure) OR userId (legacy)
+      const queryFields = ['ownerId', 'userId'];
 
-        if (transactions.length === 0) {
-          hasMore = false;
-          break;
-        }
+      for (const field of queryFields) {
+        let hasMore = true;
 
-        for (const transaction of transactions) {
-          await deleteDocument('transactions', transaction.id!);
-          totalDeleted++;
-        }
+        while (hasMore) {
+          const transactions = await queryDocuments('transactions', {
+            where: [{ field, operator: '==', value: user.uid }],
+            limit: 100 // Process in batches to avoid timeouts
+          });
 
-        batchCount++;
-        console.log(`Processed batch ${batchCount}, deleted ${transactions.length} transactions`);
+          if (transactions.length === 0) {
+            hasMore = false;
+            break;
+          }
 
-        // If we got fewer than the limit, we're done
-        if (transactions.length < 100) {
-          hasMore = false;
+          for (const transaction of transactions) {
+            // Skip if already deleted (transaction might match both ownerId and userId)
+            if (!deletedIds.has(transaction.id!)) {
+              await deleteDocument('transactions', transaction.id!);
+              deletedIds.add(transaction.id!);
+              totalDeleted++;
+            }
+          }
+
+          batchCount++;
+          console.log(`Processed ${field} batch ${batchCount}, deleted ${transactions.length} transactions (${deletedIds.size} unique total)`);
+
+          // If we got fewer than the limit, we're done
+          if (transactions.length < 100) {
+            hasMore = false;
+          }
         }
       }
 
-      console.log(`Deleted ${totalDeleted} total transactions`);
+      console.log(`Deleted ${totalDeleted} total unique transactions`);
     } catch (error) {
       const msg = `Error deleting transactions: ${error instanceof Error ? error.message : 'Unknown error'}`;
       errors.push(msg);
@@ -442,7 +461,7 @@ export const removeAllUserData = onCall({
     // Collection cleanup order (important for referential integrity)
     const collections = [
       'plaid_transactions',
-      'plaid_accounts', 
+      'plaid_accounts',
       'plaid_items',
       'accounts',
       'transactions',
@@ -457,31 +476,50 @@ export const removeAllUserData = onCall({
     for (const collection of collections) {
       try {
         console.log(`Cleaning ${collection}...`);
-        
-        let hasMore = true;
-        let batchCount = 0;
 
-        while (hasMore) {
-          const items = await queryDocuments(collection, {
-            where: [{ field: 'userId', operator: '==', value: user.uid }],
-            limit: 100
-          });
+        // For flat structure collections, query by BOTH ownerId (new) AND userId (legacy)
+        // Track deleted IDs to avoid duplicates
+        const deletedIds = new Set<string>();
+        const flatStructureCollections = ['transactions', 'outflows', 'outflow_periods'];
+        const queryFields = flatStructureCollections.includes(collection)
+          ? ['ownerId', 'userId']
+          : ['userId'];
 
-          if (items.length === 0) {
-            hasMore = false;
-            break;
-          }
+        for (const field of queryFields) {
+          console.log(`[removeAllUserData] Querying ${collection} with ${field}=${user.uid}`);
+          let hasMore = true;
+          let batchCount = 0;
 
-          for (const item of items) {
-            await deleteDocument(collection, item.id!);
-            totalDeleted++;
-          }
+          while (hasMore) {
+            const items = await queryDocuments(collection, {
+              where: [{ field, operator: '==', value: user.uid }],
+              limit: 100
+            });
+            console.log(`[removeAllUserData] Found ${items.length} ${collection} documents with ${field}=${user.uid}`);
 
-          batchCount++;
-          console.log(`${collection}: processed batch ${batchCount}, deleted ${items.length} items`);
+            if (items.length === 0) {
+              hasMore = false;
+              break;
+            }
 
-          if (items.length < 100) {
-            hasMore = false;
+            for (const item of items) {
+              // Skip if already deleted (for transactions that match both fields)
+              if (!deletedIds.has(item.id!)) {
+                console.log(`[removeAllUserData] Deleting ${collection} document ${item.id}`);
+                await deleteDocument(collection, item.id!);
+                deletedIds.add(item.id!);
+                totalDeleted++;
+              } else {
+                console.log(`[removeAllUserData] Skipping ${collection} document ${item.id} (already deleted)`);
+              }
+            }
+
+            batchCount++;
+            console.log(`${collection} (${field}): processed batch ${batchCount}, deleted ${items.length} items (${deletedIds.size} unique total)`);
+
+            if (items.length < 100) {
+              hasMore = false;
+            }
           }
         }
       } catch (error) {

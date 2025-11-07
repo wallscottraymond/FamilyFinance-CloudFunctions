@@ -14,6 +14,7 @@ export * from "./functions/categories"; // Categories management functions
 export * from "./functions/admin";
 export * from "./functions/plaid"; // Plaid integration functions
 export * from "./functions/outflows"; // Outflow management functions
+export * from "./functions/inflows"; // Inflow management and period generation
 
 // Health check function (v2)
 export const healthCheck = onRequest({

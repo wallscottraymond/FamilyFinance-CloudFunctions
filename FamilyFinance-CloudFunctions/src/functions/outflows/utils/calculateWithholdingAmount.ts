@@ -98,7 +98,8 @@ function calculateMonthlyWithholding(
  * ```
  */
 export function calculatePaymentCycle(outflow: RecurringOutflow): PaymentCycleInfo {
-  const billAmount = Math.abs(outflow.averageAmount.amount); // Ensure positive
+  // Flat structure: averageAmount is a direct number
+  const billAmount = Math.abs(outflow.averageAmount); // Ensure positive
 
   // Calculate cycle days based on frequency
   let cycleDays: number;

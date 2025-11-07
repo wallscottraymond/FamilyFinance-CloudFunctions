@@ -5,4 +5,5 @@
  */
 
 export * from './onOutflowCreated';
+export * from './onOutflowUpdated';
 export * from './onOutflowPeriodCreate';

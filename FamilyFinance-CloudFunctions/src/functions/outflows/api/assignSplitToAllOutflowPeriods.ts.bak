@@ -43,6 +43,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { authenticateRequest, UserRole } from '../../../utils/auth';
 import { PaymentType, TransactionSplitReference, Transaction, OutflowPeriod, TransactionSplit, RecurringOutflow } from '../../../types';
 import * as admin from 'firebase-admin';
+import { calculateOutflowPeriodStatus } from '../utils/calculateOutflowPeriodStatus';
 import { findMatchingOutflowPeriods, findMatchingOutflowPeriodsBySourcePeriod, validatePeriodsFound } from '../utils/findMatchingOutflowPeriods';
 
 /**
@@ -124,7 +125,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
       const transaction = { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
 
       // Verify user owns the transaction
-      if (transaction.ownerId !== userId) {
+      if (transaction.userId !== userId) {
         throw new HttpsError('permission-denied', 'You can only assign your own transaction splits');
       }
 
@@ -145,7 +146,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       // Step 3: Find the split in the transaction
       const splits = transaction.splits || [];
-      const splitIndex = splits.findIndex(s => s.splitId === splitId);
+      const splitIndex = splits.findIndex(s => s.id === splitId);
 
       if (splitIndex === -1) {
         throw new HttpsError('not-found', `Split ${splitId} not found in transaction ${transactionId}`);
@@ -166,8 +167,8 @@ export const assignSplitToAllOutflowPeriods = onCall(
         console.log(`[assignSplitToAll] Using target period: ${targetPeriodId}`);
         matchingPeriods = await findMatchingOutflowPeriodsBySourcePeriod(db, outflowId, targetPeriodId);
       } else {
-        console.log(`[assignSplitToAll] Using transaction date: ${transaction.transactionDate.toDate().toISOString()}`);
-        matchingPeriods = await findMatchingOutflowPeriods(db, outflowId, transaction.transactionDate);
+        console.log(`[assignSplitToAll] Using transaction date: ${transaction.date.toDate().toISOString()}`);
+        matchingPeriods = await findMatchingOutflowPeriods(db, outflowId, transaction.date);
       }
       validatePeriodsFound(matchingPeriods);
 
@@ -178,12 +179,13 @@ export const assignSplitToAllOutflowPeriods = onCall(
         ...splits[splitIndex],
         // Clear budget assignment if requested
         budgetId: clearBudgetAssignment ? '' : splits[splitIndex].budgetId,
+        budgetName: clearBudgetAssignment ? '' : splits[splitIndex].budgetName,
         // Set outflow assignment
         outflowId: outflowId,
         // Payment classification
         paymentType: paymentType as PaymentType,
         // Payment date (matches transaction date)
-        paymentDate: transaction.transactionDate,
+        paymentDate: transaction.date,
         // Timestamp
         updatedAt: admin.firestore.Timestamp.now(),
       };
@@ -200,8 +202,8 @@ export const assignSplitToAllOutflowPeriods = onCall(
       // Step 8: Create TransactionSplitReference for outflow periods
       const splitRef: TransactionSplitReference = {
         transactionId: transaction.id!,
-        splitId: split.splitId,
-        transactionDate: transaction.transactionDate,
+        splitId: split.id,
+        transactionDate: transaction.date,
         amount: split.amount,
         description: transaction.description,
         paymentType: paymentType as PaymentType,
@@ -289,30 +291,89 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       console.log(`[assignSplitToAll] Added split reference to ${matchingPeriods.foundCount} outflow periods`);
 
-      // Step 11: Retrieve period documents for response
+      // Step 11: Recalculate status using cached period data (no additional reads needed!)
+      const statusBatch = db.batch();
+
       let monthlyPeriod: OutflowPeriod | undefined;
       let weeklyPeriod: OutflowPeriod | undefined;
       let biWeeklyPeriod: OutflowPeriod | undefined;
 
       if (matchingPeriods.monthlyPeriodId && cachedPeriods.monthly) {
+        const monthlyRef = db.collection('outflow_periods').doc(matchingPeriods.monthlyPeriodId);
         monthlyPeriod = cachedPeriods.monthly;
-        // Status is calculated on read, no need to store it
-        console.log(`[assignSplitToAll] Monthly period updated`);
+
+        // Update transactionSplits in memory to include the new split
+        const updatedSplits = [...(monthlyPeriod.transactionSplits || []), splitRef];
+
+        const newStatus = calculateOutflowPeriodStatus(
+          monthlyPeriod.isDuePeriod,
+          monthlyPeriod.dueDate,
+          monthlyPeriod.expectedDueDate,
+          monthlyPeriod.amountDue,
+          updatedSplits // Use updated splits for status calculation
+        );
+
+        if (newStatus !== monthlyPeriod.status) {
+          statusBatch.update(monthlyRef, {
+            status: newStatus,
+            updatedAt: admin.firestore.Timestamp.now()
+          });
+          monthlyPeriod.status = newStatus;
+          console.log(`[assignSplitToAll] Monthly period status: ${newStatus}`);
+        }
       }
 
       if (matchingPeriods.weeklyPeriodId && cachedPeriods.weekly) {
+        const weeklyRef = db.collection('outflow_periods').doc(matchingPeriods.weeklyPeriodId);
         weeklyPeriod = cachedPeriods.weekly;
-        // Status is calculated on read, no need to store it
-        console.log(`[assignSplitToAll] Weekly period updated`);
+
+        // Update transactionSplits in memory to include the new split
+        const updatedSplits = [...(weeklyPeriod.transactionSplits || []), splitRef];
+
+        const newStatus = calculateOutflowPeriodStatus(
+          weeklyPeriod.isDuePeriod,
+          weeklyPeriod.dueDate,
+          weeklyPeriod.expectedDueDate,
+          weeklyPeriod.amountDue,
+          updatedSplits // Use updated splits for status calculation
+        );
+
+        if (newStatus !== weeklyPeriod.status) {
+          statusBatch.update(weeklyRef, {
+            status: newStatus,
+            updatedAt: admin.firestore.Timestamp.now()
+          });
+          weeklyPeriod.status = newStatus;
+          console.log(`[assignSplitToAll] Weekly period status: ${newStatus}`);
+        }
       }
 
       if (matchingPeriods.biWeeklyPeriodId && cachedPeriods.biWeekly) {
+        const biWeeklyRef = db.collection('outflow_periods').doc(matchingPeriods.biWeeklyPeriodId);
         biWeeklyPeriod = cachedPeriods.biWeekly;
-        // Status is calculated on read, no need to store it
-        console.log(`[assignSplitToAll] Bi-weekly period updated`);
+
+        // Update transactionSplits in memory to include the new split
+        const updatedSplits = [...(biWeeklyPeriod.transactionSplits || []), splitRef];
+
+        const newStatus = calculateOutflowPeriodStatus(
+          biWeeklyPeriod.isDuePeriod,
+          biWeeklyPeriod.dueDate,
+          biWeeklyPeriod.expectedDueDate,
+          biWeeklyPeriod.amountDue,
+          updatedSplits // Use updated splits for status calculation
+        );
+
+        if (newStatus !== biWeeklyPeriod.status) {
+          statusBatch.update(biWeeklyRef, {
+            status: newStatus,
+            updatedAt: admin.firestore.Timestamp.now()
+          });
+          biWeeklyPeriod.status = newStatus;
+          console.log(`[assignSplitToAll] Bi-weekly period status: ${newStatus}`);
+        }
       }
 
-      // No status batch needed anymore - status is calculated on read
+      await statusBatch.commit();
 
       console.log(`[assignSplitToAll] Successfully assigned split to ${matchingPeriods.foundCount} periods`);
 

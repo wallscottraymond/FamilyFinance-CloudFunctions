@@ -1,18 +1,21 @@
 /**
- * Format Recurring Inflows Utility
+ * Format Recurring Inflows Utility - FLAT STRUCTURE
  *
  * Pure Plaid → Internal format mapping for recurring inflow (income) streams.
  * This is Step 1 in the recurring inflow pipeline.
  *
  * Takes raw Plaid inflow stream data and converts it to our internal
- * inflow structure with ALL required fields from Plaid API.
+ * FLAT inflow structure with ALL required fields from Plaid API.
+ *
+ * UPDATED: Now produces FLAT structure with all fields at root level.
  */
 
 import { Timestamp } from 'firebase-admin/firestore';
 import { TransactionStream } from 'plaid';
+import { Inflow } from '../../../types';
 
 /**
- * Format Plaid inflow streams to internal Inflow documents
+ * Format Plaid inflow streams to internal Inflow documents (FLAT STRUCTURE)
  *
  * Pure mapping function - no business logic, just structure conversion.
  * Captures ALL fields from Plaid's recurring transactions API response.
@@ -21,42 +24,44 @@ import { TransactionStream } from 'plaid';
  * @param itemId - Plaid item ID
  * @param userId - User ID
  * @param familyId - Family ID (optional)
- * @returns Array of formatted inflow documents ready for transformation
+ * @returns Array of formatted flat inflow documents ready for Firestore
  */
 export async function formatRecurringInflows(
   inflowStreams: TransactionStream[],
   itemId: string,
   userId: string,
   familyId?: string
-): Promise<any[]> {
-  console.log(`[formatRecurringInflows] Formatting ${inflowStreams.length} inflow streams`);
+): Promise<Partial<Inflow>[]> {
+  console.log(`[formatRecurringInflows] Formatting ${inflowStreams.length} inflow streams (FLAT STRUCTURE)`);
+
+  const now = Timestamp.now();
 
   return inflowStreams.map(stream => ({
-    // === IDENTITY & OWNERSHIP (Query-Critical) ===
-    userId,
+    // === DOCUMENT IDENTITY ===
+    id: stream.stream_id, // Plaid stream_id as Firestore document ID
+
+    // === OWNERSHIP & ACCESS (Query-Critical) ===
+    ownerId: userId, // Using ownerId instead of userId for consistency
+    createdBy: userId,
+    updatedBy: userId,
     groupId: familyId || null,
-    accessibleBy: [userId],
-    streamId: stream.stream_id,
-    itemId: itemId,
+
+    // === PLAID IDENTIFIERS ===
+    plaidItemId: itemId,
     accountId: stream.account_id,
 
-    // === STATUS & CONTROL (Query-Critical) ===
-    isActive: stream.is_active,
-    status: stream.status as any,
-    isUserModified: stream.is_user_modified || false,
-    isHidden: false,
-
-    // === DESCRIPTIVE INFO ===
-    description: stream.description,
-    merchantName: stream.merchant_name || null,
-
-    // === AMOUNTS (Flattened for efficient queries) ===
-    averageAmount: Math.abs(stream.average_amount.amount || 0),
+    // === FINANCIAL DATA ===
     lastAmount: Math.abs(stream.last_amount.amount || 0),
+    averageAmount: Math.abs(stream.average_amount.amount || 0),
     currency: stream.average_amount.iso_currency_code || 'USD',
     unofficialCurrency: (stream.average_amount as any).unofficial_currency_code || null,
 
-    // === DATES & FREQUENCY (Query-Critical) ===
+    // === DESCRIPTIVE INFO ===
+    description: stream.description || null,
+    merchantName: stream.merchant_name || null,
+    userCustomName: null, // User hasn't set a custom name yet
+
+    // === TEMPORAL DATA ===
     frequency: stream.frequency as any,
     firstDate: Timestamp.fromDate(new Date(stream.first_date)),
     lastDate: Timestamp.fromDate(new Date(stream.last_date)),
@@ -64,32 +69,35 @@ export async function formatRecurringInflows(
       ? Timestamp.fromDate(new Date(stream.predicted_next_date))
       : null,
 
-    // === CLASSIFICATION ===
-    incomeType: 'other' as const,
+    // === CATEGORIZATION (Flat fields from Plaid) ===
+    plaidPrimaryCategory: stream.personal_finance_category?.primary || stream.category?.[0] || 'INCOME',
+    plaidDetailedCategory: stream.personal_finance_category?.detailed || stream.category?.[1] || '',
+    plaidCategoryId: (stream as any).category_id || null,
+    internalPrimaryCategory: null, // User hasn't overridden yet
+    internalDetailedCategory: null, // User hasn't overridden yet
+
+    // === INCOME CLASSIFICATION ===
+    incomeType: stream.personal_finance_category?.detailed === 'INCOME_WAGES' ? 'salary' : 'other',
     isRegularSalary: stream.personal_finance_category?.detailed === 'INCOME_WAGES',
 
-    // === NESTED CATEGORIES (Descriptive metadata) ===
-    categories: {
-      primary: stream.personal_finance_category?.primary || stream.category?.[0] || 'INCOME',
-      detailed: stream.personal_finance_category?.detailed || stream.category?.[1],
-      tags: [],
-      plaidCategories: stream.category || [],
-      plaidCategoryId: (stream as any).category_id || null
-    },
+    // === STATUS & CONTROL ===
+    source: 'plaid' as const,
+    isActive: stream.is_active,
+    isHidden: false, // Default to visible
+    isUserModified: stream.is_user_modified || false,
+    plaidStatus: stream.status as any,
+    plaidConfidenceLevel: stream.personal_finance_category?.confidence_level || null,
 
-    // === NESTED RELATIONSHIPS (Foreign keys & links) ===
-    relationships: {
-      plaidItemId: itemId,
-      plaidAccountId: stream.account_id,
-      transactionIds: stream.transaction_ids || []
-    },
+    // === TRANSACTION REFERENCES ===
+    transactionIds: stream.transaction_ids || [],
 
-    // === NESTED METADATA (Sync & audit trail) ===
-    metadata: {
-      source: 'plaid' as const,
-      createdBy: userId,
-      lastSyncedAt: Timestamp.now(),
-      plaidConfidenceLevel: stream.personal_finance_category?.confidence_level || null
-    }
+    // === USER INTERACTION ===
+    tags: [],
+    rules: [],
+
+    // === AUDIT TRAIL ===
+    createdAt: now,
+    updatedAt: now,
+    lastSyncedAt: now
   }));
 }

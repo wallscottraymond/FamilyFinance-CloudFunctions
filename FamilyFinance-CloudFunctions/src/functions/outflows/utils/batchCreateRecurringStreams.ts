@@ -9,11 +9,12 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../../../index';
 
 /**
- * Batch create or update inflow streams
+ * Batch create or update inflow streams - FLAT STRUCTURE
  *
  * Checks if streams already exist and updates them, otherwise creates new ones.
+ * Uses Plaid stream_id (stored in inflow.id) as the Firestore document ID.
  *
- * @param inflows - Array of inflow documents to create/update
+ * @param inflows - Array of FLAT inflow documents to create/update
  * @param userId - User ID for ownership verification
  * @returns Count of created and updated inflows
  */
@@ -21,7 +22,7 @@ export async function batchCreateInflowStreams(
   inflows: any[],
   userId: string
 ): Promise<{ created: number; updated: number; errors: string[] }> {
-  console.log(`📦 [batchCreateInflowStreams] Processing ${inflows.length} inflow streams`);
+  console.log(`📦 [batchCreateInflowStreams] Processing ${inflows.length} FLAT inflow streams`);
 
   const result = {
     created: 0,
@@ -37,68 +38,81 @@ export async function batchCreateInflowStreams(
   try {
     for (const inflow of inflows) {
       try {
-        // Check if stream already exists
-        const existingQuery = await db.collection('inflows')
-          .where('streamId', '==', inflow.streamId)
-          .where('userId', '==', userId)
-          .limit(1)
-          .get();
+        // Use stream_id (now in inflow.id) as the Firestore document ID
+        const streamId = inflow.id;
+        if (!streamId) {
+          result.errors.push(`Inflow missing required 'id' field (stream_id)`);
+          console.error(`❌ Inflow missing required 'id' field`);
+          continue;
+        }
 
-        if (!existingQuery.empty) {
-          // Update existing stream
-          const existingDoc = existingQuery.docs[0];
-          await existingDoc.ref.update({
+        const docRef = db.collection('inflows').doc(streamId);
+        const docSnapshot = await docRef.get();
+
+        if (docSnapshot.exists) {
+          // Update existing stream (FLAT structure - no nested objects)
+          await docRef.update({
             // Descriptive fields
             description: inflow.description,
             merchantName: inflow.merchantName,
+            userCustomName: inflow.userCustomName,
 
-            // Amounts (now flattened)
+            // Financial data (flattened)
             averageAmount: inflow.averageAmount,
             lastAmount: inflow.lastAmount,
             currency: inflow.currency,
             unofficialCurrency: inflow.unofficialCurrency,
 
-            // Dates & frequency
+            // Temporal data
             frequency: inflow.frequency,
             lastDate: inflow.lastDate,
             predictedNextDate: inflow.predictedNextDate,
 
-            // Status & control
-            status: inflow.status,
-            isActive: inflow.isActive,
-            isUserModified: inflow.isUserModified,
+            // Categorization (flattened)
+            plaidPrimaryCategory: inflow.plaidPrimaryCategory,
+            plaidDetailedCategory: inflow.plaidDetailedCategory,
+            plaidCategoryId: inflow.plaidCategoryId,
+            internalPrimaryCategory: inflow.internalPrimaryCategory,
+            internalDetailedCategory: inflow.internalDetailedCategory,
 
-            // Classification
+            // Income classification
             incomeType: inflow.incomeType,
             isRegularSalary: inflow.isRegularSalary,
 
-            // Nested objects
-            categories: inflow.categories,
-            relationships: inflow.relationships,
+            // Status & control (flattened)
+            isActive: inflow.isActive,
+            isUserModified: inflow.isUserModified,
+            plaidStatus: inflow.plaidStatus,
+            plaidConfidenceLevel: inflow.plaidConfidenceLevel,
 
-            // Metadata update
-            'metadata.lastSyncedAt': Timestamp.now(),
-            'metadata.plaidConfidenceLevel': inflow.metadata.plaidConfidenceLevel,
-            updatedAt: Timestamp.now()
+            // Transaction references
+            transactionIds: inflow.transactionIds,
+
+            // User interaction
+            tags: inflow.tags,
+            rules: inflow.rules,
+
+            // Audit trail
+            updatedBy: userId,
+            updatedAt: Timestamp.now(),
+            lastSyncedAt: Timestamp.now()
           });
 
           result.updated++;
-          console.log(`✅ Updated inflow stream: ${inflow.streamId}`);
+          console.log(`✅ Updated FLAT inflow stream: ${streamId}`);
         } else {
-          // Create new stream
-          const docRef = db.collection('inflows').doc();
+          // Create new stream with stream_id as document ID (FLAT structure)
           await docRef.set({
             ...inflow,
-            id: docRef.id,
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now()
           });
 
           result.created++;
-          console.log(`✅ Created inflow stream: ${inflow.streamId}`);
+          console.log(`✅ Created FLAT inflow stream: ${streamId}`);
         }
       } catch (error) {
-        const errorMsg = `Failed to process inflow stream ${inflow.streamId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to process inflow stream ${inflow.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         result.errors.push(errorMsg);
         console.error(errorMsg);
       }
@@ -114,11 +128,12 @@ export async function batchCreateInflowStreams(
 }
 
 /**
- * Batch create or update outflow streams
+ * Batch create or update outflow streams - FLAT STRUCTURE
  *
  * Checks if streams already exist and updates them, otherwise creates new ones.
+ * Uses Plaid stream_id (stored in outflow.id) as the Firestore document ID.
  *
- * @param outflows - Array of outflow documents to create/update
+ * @param outflows - Array of FLAT outflow documents to create/update
  * @param userId - User ID for ownership verification
  * @returns Count of created and updated outflows
  */
@@ -126,7 +141,7 @@ export async function batchCreateOutflowStreams(
   outflows: any[],
   userId: string
 ): Promise<{ created: number; updated: number; errors: string[] }> {
-  console.log(`📦 [batchCreateOutflowStreams] Processing ${outflows.length} outflow streams`);
+  console.log(`📦 [batchCreateOutflowStreams] Processing ${outflows.length} FLAT outflow streams`);
 
   const result = {
     created: 0,
@@ -142,68 +157,77 @@ export async function batchCreateOutflowStreams(
   try {
     for (const outflow of outflows) {
       try {
-        // Check if stream already exists
-        const existingQuery = await db.collection('outflows')
-          .where('streamId', '==', outflow.streamId)
-          .where('userId', '==', userId)
-          .limit(1)
-          .get();
+        // Use stream_id (now in outflow.id) as the Firestore document ID
+        const streamId = outflow.id;
+        if (!streamId) {
+          result.errors.push(`Outflow missing required 'id' field (stream_id)`);
+          console.error(`❌ Outflow missing required 'id' field`);
+          continue;
+        }
 
-        if (!existingQuery.empty) {
-          // Update existing stream
-          const existingDoc = existingQuery.docs[0];
-          await existingDoc.ref.update({
+        const docRef = db.collection('outflows').doc(streamId);
+        const docSnapshot = await docRef.get();
+
+        if (docSnapshot.exists) {
+          // Update existing stream (FLAT structure - no nested objects)
+          await docRef.update({
             // Descriptive fields
             description: outflow.description,
             merchantName: outflow.merchantName,
+            userCustomName: outflow.userCustomName,
 
-            // Amounts (now flattened)
+            // Financial data (flattened)
             averageAmount: outflow.averageAmount,
             lastAmount: outflow.lastAmount,
             currency: outflow.currency,
-            unofficialCurrency: outflow.unofficialCurrency,
 
-            // Dates & frequency
+            // Temporal data
             frequency: outflow.frequency,
             lastDate: outflow.lastDate,
             predictedNextDate: outflow.predictedNextDate,
 
-            // Status & control
-            status: outflow.status,
-            isActive: outflow.isActive,
-            isUserModified: outflow.isUserModified,
+            // Categorization (flattened)
+            plaidPrimaryCategory: outflow.plaidPrimaryCategory,
+            plaidDetailedCategory: outflow.plaidDetailedCategory,
+            internalPrimaryCategory: outflow.internalPrimaryCategory,
+            internalDetailedCategory: outflow.internalDetailedCategory,
+            type: outflow.type,
 
-            // Classification
+            // Legacy fields
             expenseType: outflow.expenseType,
             isEssential: outflow.isEssential,
 
-            // Nested objects
-            categories: outflow.categories,
-            relationships: outflow.relationships,
+            // Status & control (flattened)
+            isActive: outflow.isActive,
+            isUserModified: outflow.isUserModified,
+            plaidStatus: outflow.plaidStatus,
 
-            // Metadata update
-            'metadata.lastSyncedAt': Timestamp.now(),
-            'metadata.plaidConfidenceLevel': outflow.metadata.plaidConfidenceLevel,
+            // Transaction references
+            transactionIds: outflow.transactionIds,
+
+            // User interaction
+            tags: outflow.tags,
+
+            // Audit trail
+            updatedBy: userId,
             updatedAt: Timestamp.now()
           });
 
           result.updated++;
-          console.log(`✅ Updated outflow stream: ${outflow.streamId}`);
+          console.log(`✅ Updated FLAT outflow stream: ${streamId}`);
         } else {
-          // Create new stream
-          const docRef = db.collection('outflows').doc();
+          // Create new stream with stream_id as document ID (FLAT structure)
           await docRef.set({
             ...outflow,
-            id: docRef.id,
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now()
           });
 
           result.created++;
-          console.log(`✅ Created outflow stream: ${outflow.streamId}`);
+          console.log(`✅ Created FLAT outflow stream: ${streamId}`);
         }
       } catch (error) {
-        const errorMsg = `Failed to process outflow stream ${outflow.streamId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to process outflow stream ${outflow.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         result.errors.push(errorMsg);
         console.error(errorMsg);
       }

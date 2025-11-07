@@ -1401,9 +1401,9 @@ export interface BaseRecurringTransaction extends BaseDocument, ResourceOwnershi
   description: string;            // Recurring transaction description
   merchantName?: string;          // Merchant name if available
 
-  // Amount information
-  averageAmount: PlaidRecurringAmount; // Average amount data
-  lastAmount: PlaidRecurringAmount; // Most recent amount data
+  // Amount information (FLAT STRUCTURE)
+  averageAmount: number;          // Average amount (flat structure)
+  lastAmount: number;             // Most recent amount (flat structure)
 
   // Frequency and timing
   frequency: PlaidRecurringFrequency; // How often this recurs
@@ -1554,6 +1554,76 @@ export enum OutflowPeriodStatus {
   OVERDUE = 'overdue'           // Past due, unpaid
 }
 
+// =======================
+// OUTFLOW TYPES (FLAT STRUCTURE)
+// =======================
+
+/**
+ * Outflow (Recurring Expense Stream) - FLAT STRUCTURE
+ *
+ * Represents a recurring expense detected by Plaid or manually created by users.
+ * This is the NEW flat structure - all fields at root level for efficient queries.
+ *
+ * Document ID: Plaid stream_id (for Plaid-sourced) or auto-generated (for manual)
+ */
+export interface Outflow extends BaseDocument {
+  // === DOCUMENT IDENTITY ===
+  id: string;                          // Plaid stream_id (also Firestore document ID)
+  createdAt: Timestamp;                // Document creation timestamp (inherited from BaseDocument)
+  updatedAt: Timestamp;                // Document update timestamp (inherited from BaseDocument)
+
+  // === OWNERSHIP & ACCESS (Query-Critical) ===
+  ownerId: string;                     // userId of creator (renamed from userId for consistency with transactions)
+  createdBy: string;                   // userId of creator (audit trail)
+  updatedBy: string;                   // userId of last updater (audit trail)
+  groupId: string | null;              // Family/group association (null = private)
+
+  // === PLAID IDENTIFIERS ===
+  plaidItemId: string;                 // Plaid item ID reference
+  accountId: string;                   // Plaid account ID reference
+
+  // === FINANCIAL DATA ===
+  lastAmount: number;                  // Last amount paid (from Plaid, absolute value)
+  averageAmount: number;               // Average amount (from Plaid, absolute value)
+  currency: string;                    // ISO currency code (e.g., "USD")
+
+  // === DESCRIPTIVE INFO ===
+  description: string | null;          // Description from Plaid (or user-entered)
+  merchantName: string | null;         // Merchant name from Plaid
+  userCustomName: string | null;       // User-defined custom display name override
+
+  // === TEMPORAL DATA ===
+  frequency: string;                   // From Plaid: WEEKLY, MONTHLY, ANNUALLY, etc.
+  firstDate: Timestamp;                // First occurrence date (from Plaid)
+  lastDate: Timestamp;                 // Last occurrence date (from Plaid)
+  predictedNextDate: Timestamp | null; // Predicted next occurrence (from Plaid)
+
+  // === CATEGORIZATION ===
+  plaidPrimaryCategory: string;        // Plaid primary category (e.g., "FOOD_AND_DRINK")
+  plaidDetailedCategory: string;       // Plaid detailed category (e.g., "FOOD_AND_DRINK_RESTAURANTS")
+  internalPrimaryCategory: string | null;   // User override primary category
+  internalDetailedCategory: string | null;  // User override detailed category
+  type: string;                        // Transaction type from Plaid (e.g., "special", "unresolved")
+
+  // === LEGACY FIELDS (maintained for backward compatibility) ===
+  expenseType: string;                 // LEGACY: 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other'
+  isEssential: boolean;                // LEGACY: Essential expense flag (derived from categories)
+
+  // === STATUS & CONTROL ===
+  source: string;                      // 'plaid' (from Plaid) or 'user' (manually created)
+  isActive: boolean;                   // Active status (from Plaid or user-controlled)
+  isHidden: boolean;                   // User visibility control (false = visible)
+  isUserModified: boolean;             // Has been modified by user (from Plaid field)
+  plaidStatus: string;                 // Status from Plaid (e.g., "ACTIVE", "INACTIVE")
+
+  // === TRANSACTION REFERENCES ===
+  transactionIds: string[];            // Array of Plaid transaction IDs that compose this stream
+
+  // === USER INTERACTION ===
+  tags: string[];                      // User-defined tags for organization
+  rules: any[];                        // User-defined or system rules (empty array for future use)
+}
+
 // Transaction Split Reference - Links outflow periods to transaction splits for payment tracking
 export interface TransactionSplitReference {
   transactionId: string; // Reference to transactions collection (Plaid transaction ID, now used as document ID)
@@ -1569,76 +1639,116 @@ export interface TransactionSplitReference {
   matchedBy: string; // 'system' for auto-match, or userId for manual assignment
 }
 
-// Outflow Periods - Maps outflows to source periods with withholding calculations
-// NOTE: Outflow periods INHERIT ownership from parent outflow (no separate ownership)
-export interface OutflowPeriod extends BaseDocument, ResourceOwnership {
-  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
-  // INHERITED FROM PARENT OUTFLOW - Must match parent for query efficiency
-  userId: string;                 // INHERITED: Family Finance user ID (REQUIRED for existing queries)
-  groupId: string | null;         // INHERITED: Group this outflow belongs to (REQUIRED for existing queries)
-  accessibleBy: string[];         // INHERITED: Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+/**
+ * Outflow Period - FLAT STRUCTURE (Fully Aligned with Firestore Schema)
+ *
+ * Represents an outflow occurrence within a specific period.
+ * Supports multiple occurrences (e.g., weekly bill occurring 4x in monthly period).
+ *
+ * All fields are at the root level for simplified security rules and efficient queries.
+ *
+ * Migration Strategy: Fresh start only - new outflow_periods use flat structure,
+ * existing outflow_periods with nested structure remain unchanged.
+ */
+export interface OutflowPeriod extends BaseDocument {
+  // === IDENTITY ===
+  id: string;                              // Format: {outflowId}_{sourcePeriodId}
+  outflowId: string;                       // Reference to parent outflow
+  sourcePeriodId: string;                  // Reference to source_periods collection
 
-  // Period-specific query fields
-  outflowId: string;              // Reference to outflows collection document (REQUIRED for filtering)
-  periodId: string;               // Reference to source_periods.id (REQUIRED for filtering)
-  sourcePeriodId: string;         // Direct reference to source_periods.id for mapping (REQUIRED for filtering)
-  periodType: PeriodType;         // "weekly" | "monthly" | "bi_monthly" (REQUIRED for filtering)
-  isActive: boolean;              // Whether this outflow period is active (REQUIRED for filtering)
-  status: string;                 // Payment status (e.g., "pending", "paid", "overdue") (REQUIRED for filtering)
-  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
-  periodStartDate: Timestamp;     // UTC timestamp - period start (REQUIRED for range queries)
-  periodEndDate: Timestamp;       // UTC timestamp - period end (REQUIRED for range queries)
+  // === OWNERSHIP & ACCESS (Query-Critical) ===
+  ownerId: string;                         // User ID of owner
+  createdBy: string;                       // User ID of creator
+  updatedBy: string;                       // User ID of last updater
+  groupId: string | null;                  // Family/group association
 
-  // === NESTED ACCESS CONTROL OBJECT ===
-  // INHERITED FROM PARENT with period-specific overrides
-  access: AccessControl;          // Access control and sharing fields (inherited from parent outflow)
+  // === PLAID IDENTIFIERS ===
+  accountId: string;                       // Plaid account ID (comes from plaid)
+  plaidItemId: string;                     // Plaid item ID
 
-  // === NESTED CATEGORIES OBJECT ===
-  // INHERITED FROM PARENT with denormalized fields
-  categories: Categories & {      // Outflow period categorization (inherited from parent outflow)
-    // Outflow-specific denormalized fields from parent
-    outflowExpenseType?: string;  // Expense type from outflow (denormalized)
-  };
+  // === FINANCIAL TRACKING ===
+  actualAmount: number | null;             // Actual amount charged (null until transaction attached)
+  amountWithheld: number;                  // Amount to withhold for this period (expectedAmount / days in period)
+  averageAmount: number;                   // Average amount received from Plaid
+  expectedAmount: number;                  // Total expected amount for period (same as totalAmountDue)
+  amountPerOccurrence: number;             // Single bill amount (e.g., $10 weekly)
+  totalAmountDue: number;                  // Total for period (occurrences × amount)
+  totalAmountPaid: number;                 // Sum of paid occurrences
+  totalAmountUnpaid: number;               // Calculated: due - paid
 
-  // === NESTED METADATA OBJECT ===
-  // INHERITED FROM PARENT with period-specific fields
-  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
-    // Period-specific metadata
-    inheritedFrom: string;        // Parent outflow ID (shows inheritance)
-    lastCalculated: Timestamp;    // When amounts were last calculated
+  // === TIMESTAMPS ===
+  createdAt: Timestamp;                    // When document was created
+  updatedAt: Timestamp;                    // Last update timestamp
+  lastCalculated: Timestamp;               // Last calculation timestamp
 
-    // Denormalized from parent outflow for performance
-    outflowDescription: string;   // Description from outflow
-    outflowMerchantName?: string; // Merchant name from outflow
-    outflowIsEssential?: boolean; // Whether this is an essential expense
-  };
+  // === PAYMENT CYCLE INFO ===
+  currency: string;                        // ISO currency code (comes from plaid)
+  cycleDays: number;                       // Number of days between payments
+  cycleStartDate: Timestamp;               // Current cycle start
+  cycleEndDate: Timestamp;                 // Current cycle end
+  dailyWithholdingRate: number;            // Daily withholding rate
 
-  // === NESTED RELATIONSHIPS OBJECT ===
-  relationships: Relationships & { // Document relationships (extends base Relationships)
-    // Period-specific relationship fields
-    parentId: string;             // Reference to parent outflow (same as outflowId)
-    parentType: string;           // "outflow" (indicates parent document type)
-    transactionSplitIds: string[]; // IDs of transaction splits applied to this period
-  };
+  // === OUTFLOW METADATA (Denormalized) ===
+  description: string;                     // Bill description
+  frequency: string;                       // "WEEKLY" | "BIWEEKLY" | "MONTHLY" | etc.
 
-  // === OUTFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
-  // Payment cycle information
-  cycleStartDate: Timestamp;      // Last payment date (or calculated start)
-  cycleEndDate: Timestamp;        // Next payment date
-  cycleDays: number;              // Days in the payment cycle
+  // === PAYMENT STATUS ===
+  isPaid: boolean;                         // Legacy: same as isFullyPaid
+  isFullyPaid: boolean;                    // All occurrences paid
+  isPartiallyPaid: boolean;                // Some but not all paid
+  isDuePeriod: boolean;                    // True if ANY occurrence due this period
 
-  // Financial calculations
-  billAmount: number;             // Full bill amount for this cycle
-  dailyWithholdingRate: number;   // billAmount ÷ cycleDays
-  amountWithheld: number;         // dailyRate × daysInPeriod (how much to withhold this period)
-  amountDue: number;              // billAmount if due date falls in this period, else 0
+  // === CATEGORIZATION (Flat Fields) ===
+  internalDetailedCategory: string | null; // User override detailed category
+  internalPrimaryCategory: string | null;  // User override primary category
+  plaidPrimaryCategory: string;            // Plaid primary category
+  plaidDetailedCategory: string;           // Plaid detailed category
 
-  // Payment status and tracking
-  isDuePeriod: boolean;           // True if the due date falls within this period
-  dueDate?: Timestamp;            // Actual due date if isDuePeriod is true
-  expectedDueDate: Timestamp;     // Next expected due date relative to this period (may be in future)
-  expectedDrawDate: Timestamp;    // Expected draw date (adjusts for weekends - Saturday/Sunday → Monday)
-  transactionSplits: TransactionSplitReference[]; // Array of transaction splits that have been applied to this bill payment
+  // === STATUS & CONTROL ===
+  isActive: boolean;                       // Active status
+  isHidden: boolean;                       // User visibility control
+
+  // === MERCHANT INFO ===
+  merchant: string | null;                 // Merchant/payee name
+  payee: string | null;                    // Payee (alias for merchant)
+
+  // === PERIOD CONTEXT ===
+  periodStartDate: Timestamp;              // Period start (UTC)
+  periodEndDate: Timestamp;                // Period end (UTC)
+  periodType: PeriodType;                  // "weekly" | "monthly" | "bi_monthly"
+
+  // === PLAID PREDICTION ===
+  predictedNextDate: Timestamp | null;     // Plaid's predicted next date
+
+  // === USER INTERACTION ===
+  rules: any[];                            // User or system rules
+  tags: string[];                          // User-defined tags
+  type: string;                            // Outflow type/classification
+  note: string | null;                     // User notes for this period
+  userCustomName: string | null;           // User's custom name override
+
+  // === SOURCE ===
+  source: string;                          // "plaid" or "user"
+
+  // === TRANSACTION TRACKING ===
+  transactionIds: string[];                // All matched transaction IDs (flat array)
+
+  // === MULTI-OCCURRENCE TRACKING (Additional Fields for Multi-Occurrence System) ===
+  numberOfOccurrencesInPeriod: number;     // How many times bill occurs in this period
+  numberOfOccurrencesPaid: number;         // How many occurrences have been paid
+  numberOfOccurrencesUnpaid: number;       // Calculated: total - paid
+  occurrenceDueDates: Timestamp[];         // Array of all due dates in period
+  occurrencePaidFlags: boolean[];          // Parallel array: which occurrences paid
+  occurrenceTransactionIds: (string | null)[]; // Parallel array: transaction IDs
+
+  // === PROGRESS METRICS (Additional Fields) ===
+  paymentProgressPercentage: number;       // (paid / total) × 100 (unit %)
+  dollarProgressPercentage: number;        // ($ paid / $ due) × 100
+
+  // === DUE DATE TRACKING (Additional Fields) ===
+  firstDueDateInPeriod: Timestamp | null;  // First due date in period
+  lastDueDateInPeriod: Timestamp | null;   // Last due date in period
+  nextUnpaidDueDate: Timestamp | null;     // Next unpaid due date
 }
 
 // =======================
@@ -1664,74 +1774,192 @@ export interface PeriodManagementConfig {
 }
 
 // =======================
+// INFLOW TYPES
+// =======================
+
+/**
+ * Inflow (Recurring Income Stream) - FLAT STRUCTURE
+ *
+ * Represents a recurring income detected by Plaid or manually created by users.
+ * This is the NEW flat structure - all fields at root level for efficient queries.
+ *
+ * Migration Strategy: Fresh start only - new inflows use flat structure,
+ * existing inflows with nested structure remain unchanged.
+ */
+export interface Inflow extends BaseDocument {
+  // === DOCUMENT IDENTITY ===
+  id: string;                          // Plaid stream_id (also Firestore document ID)
+
+  // === OWNERSHIP & ACCESS (Query-Critical) ===
+  ownerId: string;                     // userId of creator
+  createdBy: string;                   // userId of creator
+  updatedBy: string;                   // userId of last updater
+  groupId: string | null;              // Family/group association
+
+  // === PLAID IDENTIFIERS ===
+  plaidItemId: string;                 // Plaid item ID
+  accountId: string;                   // Plaid account ID
+
+  // === FINANCIAL DATA ===
+  lastAmount: number;                  // Last amount received
+  averageAmount: number;               // Average amount
+  currency: string;                    // ISO currency code
+  unofficialCurrency: string | null;   // Unofficial currency code (if any)
+
+  // === DESCRIPTIVE INFO ===
+  description: string | null;          // Description from Plaid
+  merchantName: string | null;         // Payer name from Plaid
+  userCustomName: string | null;       // User custom name override
+
+  // === TEMPORAL DATA ===
+  frequency: string;                   // WEEKLY, BI_WEEKLY, MONTHLY, etc.
+  firstDate: Timestamp;                // First occurrence
+  lastDate: Timestamp;                 // Last occurrence
+  predictedNextDate: Timestamp | null; // Predicted next
+
+  // === CATEGORIZATION ===
+  plaidPrimaryCategory: string;        // Plaid primary category
+  plaidDetailedCategory: string;       // Plaid detailed category
+  plaidCategoryId: string | null;      // Plaid category ID
+  internalPrimaryCategory: string | null;   // User override primary
+  internalDetailedCategory: string | null;  // User override detailed
+
+  // === INCOME CLASSIFICATION ===
+  incomeType: string;                  // 'salary', 'wage', 'investment', 'other'
+  isRegularSalary: boolean;            // Whether this is regular salary/wage
+
+  // === STATUS & CONTROL ===
+  source: string;                      // 'plaid' or 'user'
+  isActive: boolean;                   // Active status
+  isHidden: boolean;                   // User visibility control
+  isUserModified: boolean;             // Modified by user
+  plaidStatus: string;                 // Status from Plaid
+  plaidConfidenceLevel: string | null; // Plaid confidence level
+
+  // === TRANSACTION REFERENCES ===
+  transactionIds: string[];            // Array of transaction IDs
+
+  // === USER INTERACTION ===
+  tags: string[];                      // User-defined tags
+  rules: any[];                        // User or system rules
+
+  // === AUDIT TRAIL ===
+  lastSyncedAt: Timestamp;             // Last sync time with Plaid
+}
+
+// =======================
 // INFLOW PERIODS TYPES
 // =======================
 
 // Inflow Periods - Maps inflows to source periods with earning calculations
 // NOTE: Inflow periods INHERIT ownership from parent inflow (no separate ownership)
-export interface InflowPeriod extends BaseDocument, ResourceOwnership {
-  // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
-  // INHERITED FROM PARENT INFLOW - Must match parent for query efficiency
-  userId: string;                 // INHERITED: Family Finance user ID (REQUIRED for existing queries)
-  groupId: string | null;         // INHERITED: Group this inflow belongs to (REQUIRED for existing queries)
-  accessibleBy: string[];         // INHERITED: Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+/**
+ * Inflow Period - FLAT STRUCTURE (Aligned with OutflowPeriod Schema)
+ *
+ * Represents an income stream occurrence within a specific period.
+ * Supports multiple occurrences (e.g., weekly income occurring 4x in monthly period).
+ *
+ * All fields are at the root level for simplified security rules and efficient queries.
+ */
+export interface InflowPeriod extends BaseDocument {
+  // === IDENTITY ===
+  id: string;
+  inflowId: string;
+  sourcePeriodId: string;
 
-  // Period-specific query fields
-  inflowId: string;               // Reference to inflows collection document (REQUIRED for filtering)
-  periodId: string;               // Reference to source_periods.id (REQUIRED for filtering)
-  sourcePeriodId: string;         // Direct reference to source_periods.id for mapping (REQUIRED for filtering)
-  periodType: PeriodType;         // "weekly" | "monthly" | "bi_monthly" (REQUIRED for filtering)
-  isActive: boolean;              // Whether this inflow period is active (REQUIRED for filtering)
-  createdAt: Timestamp;           // Creation timestamp (REQUIRED for sorting, inherited from BaseDocument)
-  periodStartDate: Timestamp;     // UTC timestamp - period start (REQUIRED for range queries)
-  periodEndDate: Timestamp;       // UTC timestamp - period end (REQUIRED for range queries)
+  // === OWNERSHIP & ACCESS (Query-Critical) ===
+  ownerId: string;
+  createdBy: string;
+  updatedBy: string;
+  groupId: string | null;
 
-  // === NESTED ACCESS CONTROL OBJECT ===
-  // INHERITED FROM PARENT with period-specific overrides
-  access: AccessControl;          // Access control and sharing fields (inherited from parent inflow)
+  // === PLAID IDENTIFIERS ===
+  accountId: string;                          // Plaid account ID (comes from plaid)
+  plaidItemId: string;                        // Plaid item ID
 
-  // === NESTED CATEGORIES OBJECT ===
-  // INHERITED FROM PARENT with denormalized fields
-  categories: Categories & {      // Inflow period categorization (inherited from parent inflow)
-    // Inflow-specific denormalized fields from parent
-    inflowIncomeType?: string;    // Income type from inflow (denormalized)
-  };
+  // === FINANCIAL TRACKING ===
+  actualAmount: number | null;                // Actual amount received (null until transaction attached)
+  amountWithheld: number;                     // Amount to withhold for this period
+  averageAmount: number;                      // Average amount received from Plaid
+  expectedAmount: number;                     // Total expected amount for period
+  amountPerOccurrence: number;                // Single income amount (e.g., $500 bi-weekly)
+  totalAmountDue: number;                     // Total for period (occurrences × amount)
+  totalAmountPaid: number;                    // Sum of received occurrences
+  totalAmountUnpaid: number;                  // Calculated: due - received
 
-  // === NESTED METADATA OBJECT ===
-  // INHERITED FROM PARENT with period-specific fields
-  metadata: Metadata & {          // Audit trail and metadata (extends base Metadata)
-    // Period-specific metadata
-    inheritedFrom: string;        // Parent inflow ID (shows inheritance)
-    lastCalculated: Timestamp;    // When amounts were last calculated
+  // === TIMESTAMPS ===
+  createdAt: Timestamp;                       // When document was created
+  updatedAt: Timestamp;                       // Last update timestamp
+  lastCalculated: Timestamp;                  // Last calculation timestamp
 
-    // Denormalized from parent inflow for performance
-    inflowDescription: string;    // Description from inflow
-    inflowMerchantName?: string;  // Merchant name from inflow
-    inflowIsRegularSalary?: boolean; // Whether this is regular salary income
-  };
+  // === PAYMENT CYCLE INFO ===
+  currency: string;                           // ISO currency code (comes from plaid)
+  cycleDays: number;                          // Number of days between payments
+  cycleStartDate: Timestamp;                  // Current cycle start
+  cycleEndDate: Timestamp;                    // Current cycle end
+  dailyWithholdingRate: number;               // Daily withholding rate
 
-  // === NESTED RELATIONSHIPS OBJECT ===
-  relationships: Relationships & { // Document relationships (extends base Relationships)
-    // Period-specific relationship fields
-    parentId: string;             // Reference to parent inflow (same as inflowId)
-    parentType: string;           // "inflow" (indicates parent document type)
-  };
+  // === INFLOW METADATA (Denormalized) ===
+  description: string;                        // Income description
+  frequency: string;                          // "WEEKLY" | "BIWEEKLY" | "MONTHLY" | etc.
 
-  // === INFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
-  // Payment cycle information
-  cycleStartDate: Timestamp;      // Last payment date (or calculated start)
-  cycleEndDate: Timestamp;        // Next payment date
-  cycleDays: number;              // Days in the payment cycle
+  // === PAYMENT STATUS ===
+  isPaid: boolean;                            // Legacy: same as isFullyPaid
+  isFullyPaid: boolean;                       // All occurrences received
+  isPartiallyPaid: boolean;                   // Some but not all received
+  isReceiptPeriod: boolean;                   // True if ANY occurrence due this period
 
-  // Financial calculations
-  incomeAmount: number;           // Full income amount for this cycle
-  dailyEarningRate: number;       // incomeAmount ÷ cycleDays
-  amountEarned: number;           // dailyRate × daysInPeriod (how much earned this period)
-  amountReceived: number;         // incomeAmount if receipt date falls in this period, else 0
+  // === CATEGORIZATION (Flat Fields) ===
+  internalDetailedCategory: string | null;    // User override detailed category
+  internalPrimaryCategory: string | null;     // User override primary category
+  plaidPrimaryCategory: string;               // Plaid primary category
+  plaidDetailedCategory: string;              // Plaid detailed category
 
-  // Payment status and tracking
-  isReceiptPeriod: boolean;       // True if the receipt date falls within this period
-  receiptDate?: Timestamp;        // Actual receipt date if isReceiptPeriod is true
+  // === STATUS & CONTROL ===
+  isActive: boolean;                          // Active status
+  isHidden: boolean;                          // User visibility control
+
+  // === MERCHANT INFO ===
+  merchant: string | null;                    // Merchant/payer name
+  payee: string | null;                       // Payer (alias for merchant)
+
+  // === PERIOD CONTEXT ===
+  periodStartDate: Timestamp;                 // Period start (UTC)
+  periodEndDate: Timestamp;                   // Period end (UTC)
+  periodType: PeriodType;                     // "weekly" | "monthly" | "bi_monthly"
+
+  // === PLAID PREDICTION ===
+  predictedNextDate: Timestamp | null;        // Plaid's predicted next date
+
+  // === USER INTERACTION ===
+  rules: any[];                               // User or system rules
+  tags: string[];                             // User-defined tags
+  type: string;                               // Inflow type/classification
+  note: string | null;                        // User notes for this period
+  userCustomName: string | null;              // User's custom name override
+
+  // === SOURCE ===
+  source: string;                             // "plaid" or "user"
+
+  // === TRANSACTION TRACKING ===
+  transactionIds: string[];                   // All matched transaction IDs (flat array)
+
+  // === MULTI-OCCURRENCE TRACKING ===
+  numberOfOccurrencesInPeriod: number;        // How many times income occurs in this period
+  numberOfOccurrencesPaid: number;            // How many occurrences have been received
+  numberOfOccurrencesUnpaid: number;          // Calculated: total - received
+  occurrenceDueDates: Timestamp[];            // Array of all expected dates in period
+  occurrencePaidFlags: boolean[];             // Parallel array: which occurrences received
+  occurrenceTransactionIds: (string | null)[]; // Parallel array: transaction IDs
+
+  // === PROGRESS METRICS ===
+  paymentProgressPercentage: number;          // (received / total) × 100 (unit %)
+  dollarProgressPercentage: number;           // ($ received / $ due) × 100
+
+  // === DUE DATE TRACKING ===
+  firstDueDateInPeriod: Timestamp | null;     // First expected date in period
+  lastDueDateInPeriod: Timestamp | null;      // Last expected date in period
+  nextUnpaidDueDate: Timestamp | null;        // Next unreceived date
 }
 
 // =======================

@@ -1,15 +1,15 @@
 /**
- * Outflow Period Creation Utilities
+ * Outflow Period Creation Utilities - FLAT STRUCTURE
  *
  * Provides utilities for creating and managing outflow_periods based on
  * recurring outflows and source periods.
  *
+ * UPDATED: Complete flat structure with multi-occurrence tracking.
  * This is the single source of truth for outflow period generation.
  */
 
 import * as admin from 'firebase-admin';
 import {
-  RecurringOutflow,
   OutflowPeriod,
   SourcePeriod
 } from '../../../types';
@@ -17,14 +17,7 @@ import {
   calculatePaymentCycle,
   calculateWithholdingAmount
 } from './calculateWithholdingAmount';
-import { predictFutureBillDueDate } from './predictFutureBillDueDate';
-import { checkIsDuePeriod } from './checkIsDuePeriod';
-import { calculateOutflowPeriodStatus } from './calculateOutflowPeriodStatus';
-import {
-  inheritAccessControl,
-  inheritCategories,
-  inheritMetadata
-} from '../../../utils/documentStructure';
+import { calculateAllOccurrencesInPeriod } from './calculateAllOccurrencesInPeriod';
 
 /**
  * Result of creating outflow periods
@@ -37,12 +30,12 @@ export interface CreateOutflowPeriodsResult {
 /**
  * Calculate the date range for outflow period generation
  *
- * @param outflow - The recurring outflow
+ * @param outflow - The recurring outflow (supports both flat and nested structure)
  * @param monthsForward - Number of months to generate forward from now (default: 15)
  * @returns Object with startDate and endDate
  */
 export function calculatePeriodGenerationRange(
-  outflow: RecurringOutflow,
+  outflow: any,
   monthsForward: number = 15
 ): { startDate: Date; endDate: Date } {
   // Start from firstDate to capture historical periods
@@ -56,9 +49,6 @@ export function calculatePeriodGenerationRange(
   return { startDate, endDate };
 }
 
-// Note: Payment cycle and withholding calculations are now in calculateWithholdingAmount.ts
-// This keeps period creation focused on orchestration, not calculation logic
-
 /**
  * Helper function to calculate days in a period
  */
@@ -70,11 +60,17 @@ function getDaysInPeriod(startDate: admin.firestore.Timestamp, endDate: admin.fi
 }
 
 /**
- * Create outflow periods from source periods for a given outflow
+ * Create outflow periods from source periods for a given outflow - FLAT STRUCTURE
+ *
+ * UPDATED: Complete flat structure with multi-occurrence tracking.
+ * - All fields at root level (no nested access, categories, metadata, relationships objects)
+ * - Uses calculateAllOccurrencesInPeriod to handle variable occurrences (4 vs 5 Mondays)
+ * - Tracks individual occurrence due dates, payment status, and transaction IDs
+ * - Supports both unit tracking (2/4 paid) and dollar tracking ($20/$40)
  *
  * @param db - Firestore instance
  * @param outflowId - The outflow document ID
- * @param outflow - The recurring outflow data
+ * @param outflow - The recurring outflow data (flat structure)
  * @param startDate - Start date for period generation
  * @param endDate - End date for period generation
  * @returns Result with count and IDs of created periods
@@ -82,13 +78,20 @@ function getDaysInPeriod(startDate: admin.firestore.Timestamp, endDate: admin.fi
 export async function createOutflowPeriodsFromSource(
   db: admin.firestore.Firestore,
   outflowId: string,
-  outflow: RecurringOutflow,
+  outflow: any, // Accept flat outflow structure
   startDate: Date,
   endDate: Date
 ): Promise<CreateOutflowPeriodsResult> {
   const now = admin.firestore.Timestamp.now();
 
-  console.log(`[createOutflowPeriodsFromSource] Generating periods from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+  console.log(`[createOutflowPeriodsFromSource] Generating FLAT outflow periods from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+  // Extract fields from flat structure
+  const ownerId = outflow.ownerId;
+  const createdBy = outflow.createdBy;
+  const groupId = outflow.groupId || null;
+  const description = outflow.description || null;
+  const merchantName = outflow.merchantName || null;
 
   // Get all source periods that overlap with our time range
   const sourcePeriodsQuery = db.collection('source_periods')
@@ -106,8 +109,7 @@ export async function createOutflowPeriodsFromSource(
 
   // Calculate payment cycle information
   const cycleInfo = calculatePaymentCycle(outflow);
-  const avgDailyRate = cycleInfo.billAmount / cycleInfo.cycleDays;
-  console.log(`[createOutflowPeriodsFromSource] Payment cycle: ${cycleInfo.cycleDays} days, Avg Rate: $${avgDailyRate.toFixed(2)}/day`);
+  console.log(`[createOutflowPeriodsFromSource] Payment cycle: ${cycleInfo.cycleDays} days, Bill: $${cycleInfo.billAmount.toFixed(2)}`);
 
   // Create outflow_periods for each source period
   const outflowPeriods: OutflowPeriod[] = [];
@@ -116,129 +118,160 @@ export async function createOutflowPeriodsFromSource(
   for (const doc of sourcePeriodsSnapshot.docs) {
     const sourcePeriod = { id: doc.id, ...doc.data() } as SourcePeriod;
 
+    // Calculate ALL occurrences in this period (handles variable 4 vs 5 Mondays)
+    const occurrences = calculateAllOccurrencesInPeriod(outflow, sourcePeriod);
+
     // Calculate withholding amounts for this period
     const periodCalc = calculateWithholdingAmount(sourcePeriod, cycleInfo, outflow);
 
-    // Predict next expected due date and draw date for this period
-    const expectedDates = predictFutureBillDueDate(outflow, sourcePeriod);
+    // Calculate financial totals based on occurrences
+    const amountPerOccurrence = cycleInfo.billAmount;
+    const totalAmountDue = amountPerOccurrence * occurrences.numberOfOccurrences;
+    const totalAmountPaid = 0; // At creation, nothing is paid yet
+    const totalAmountUnpaid = totalAmountDue;
 
-    // Check if the expected due date falls within this period
-    const isDuePeriodByExpectedDate = checkIsDuePeriod(
-      expectedDates.expectedDueDate,
-      sourcePeriod.startDate,
-      sourcePeriod.endDate
-    );
+    // Initialize occurrence tracking arrays (all unpaid at creation)
+    const occurrencePaidFlags = new Array(occurrences.numberOfOccurrences).fill(false);
+    const occurrenceTransactionIds = new Array(occurrences.numberOfOccurrences).fill(null);
 
-    // Use the expected due date check for isDuePeriod and amountDue
-    const isDuePeriod = isDuePeriodByExpectedDate;
-    const amountDue = isDuePeriod ? cycleInfo.billAmount : 0;
-    const dueDate = isDuePeriod ? expectedDates.expectedDueDate : undefined;
+    // Calculate progress metrics
+    const paymentProgressPercentage = 0; // No payments yet
+    const dollarProgressPercentage = 0; // No payments yet
 
-    // Determine bill status using utility function
-    // Note: At creation time, transactionSplits is empty. Status will be recalculated after auto-matching.
-    const billStatus = calculateOutflowPeriodStatus(
-      isDuePeriod,
-      dueDate,
-      expectedDates.expectedDueDate,
-      amountDue,
-      [] // Empty array at creation - will be populated by auto-matching
-    );
+    // Determine payment status
+    const isFullyPaid = false;
+    const isPartiallyPaid = false;
 
-    if (isDuePeriod) {
+    // Determine first and last due dates
+    const firstDueDateInPeriod = occurrences.numberOfOccurrences > 0 ? occurrences.occurrenceDueDates[0] : null;
+    const lastDueDateInPeriod = occurrences.numberOfOccurrences > 0
+      ? occurrences.occurrenceDueDates[occurrences.numberOfOccurrences - 1]
+      : null;
+    const nextUnpaidDueDate = firstDueDateInPeriod; // First due date is next unpaid
+
+    // No need to calculate status/days - these are computed on read
+
+    if (occurrences.numberOfOccurrences > 0) {
       console.log(
-        `[createOutflowPeriodsFromSource] ${outflow.description} - DUE in ${sourcePeriod.id}: ` +
-        `$${amountDue.toFixed(2)} on ${expectedDates.expectedDueDate.toDate().toISOString().split('T')[0]}`
+        `[createOutflowPeriodsFromSource] ${description} - ${occurrences.numberOfOccurrences} occurrence(s) in ${sourcePeriod.id}: ` +
+        `$${totalAmountDue.toFixed(2)} total (${occurrences.occurrenceDueDates.map(d => d.toDate().toISOString().split('T')[0]).join(', ')})`
       );
     }
 
     const periodId = `${outflowId}_${sourcePeriod.id}`;
 
-    // Step 1: Build complete outflow period structure with defaults
+    // Build FLAT outflow period structure
     const outflowPeriodDoc: OutflowPeriod = {
+      // === IDENTITY ===
       id: periodId,
       outflowId: outflowId,
-      periodId: sourcePeriod.id!,
       sourcePeriodId: sourcePeriod.id!,
 
-      // === QUERY-CRITICAL FIELDS AT ROOT (defaults) ===
-      userId: outflow.userId,
-      groupId: outflow.groupId || null,
-      isActive: true,
-      createdAt: now,
+      // === OWNERSHIP & ACCESS (Query-Critical) ===
+      ownerId: ownerId,
+      createdBy: createdBy,
+      updatedBy: createdBy,
+      groupId: groupId,
 
-      // === NESTED ACCESS CONTROL OBJECT (defaults) ===
-      access: inheritAccessControl(outflow.access, outflow.userId),
+      // === PLAID IDENTIFIERS ===
+      accountId: outflow.accountId,
+      plaidItemId: outflow.plaidItemId,
 
-      // === NESTED CATEGORIES OBJECT (inherited from parent) ===
-      categories: inheritCategories(outflow.categories),
-
-      // === NESTED METADATA OBJECT (inherited + period-specific) ===
-      metadata: {
-        ...inheritMetadata(outflow.metadata, {
-          inheritedFrom: outflowId!
-        }),
-        lastCalculated: now,
-        outflowDescription: outflow.description,
-        outflowMerchantName: outflow.merchantName,
-        outflowIsEssential: outflow.isEssential
-      } as any,
-
-      // === NESTED RELATIONSHIPS OBJECT ===
-      relationships: {
-        parentId: outflowId,
-        parentType: 'outflow',
-        linkedIds: [sourcePeriod.id!],
-        relatedDocs: [
-          { type: 'source_period', id: sourcePeriod.id! }
-        ],
-        transactionSplitIds: []
-      },
-
-      // === OUTFLOW PERIOD-SPECIFIC FIELDS AT ROOT ===
-      // Period context (denormalized for performance)
-      periodType: sourcePeriod.type,
-      periodStartDate: sourcePeriod.startDate,
-      periodEndDate: sourcePeriod.endDate,
-
-      // Payment cycle information
-      cycleStartDate: cycleInfo.cycleStartDate,
-      cycleEndDate: cycleInfo.cycleEndDate,
-      cycleDays: cycleInfo.cycleDays,
-
-      // Financial calculations
-      billAmount: cycleInfo.billAmount,
-      dailyWithholdingRate: periodCalc.amountWithheld / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate),
+      // === FINANCIAL TRACKING ===
+      actualAmount: null, // Null until transaction attached
       amountWithheld: periodCalc.amountWithheld,
-      amountDue: amountDue,
+      averageAmount: cycleInfo.billAmount, // Use bill amount as average
+      expectedAmount: totalAmountDue,
+      amountPerOccurrence: amountPerOccurrence,
+      totalAmountDue: totalAmountDue,
+      totalAmountPaid: totalAmountPaid,
+      totalAmountUnpaid: totalAmountUnpaid,
 
-      // Payment status - based on expected due date
-      isDuePeriod: isDuePeriod,
-      dueDate: dueDate,
-      expectedDueDate: expectedDates.expectedDueDate,
-      expectedDrawDate: expectedDates.expectedDrawDate,
-      status: billStatus,
-      transactionSplits: [],
-
-      // System fields
+      // === TIMESTAMPS ===
+      createdAt: now,
       updatedAt: now,
       lastCalculated: now,
+
+      // === PAYMENT CYCLE INFO ===
+      currency: 'USD', // Default to USD, update from Plaid data if available
+      cycleDays: cycleInfo.cycleDays,
+      cycleStartDate: admin.firestore.Timestamp.fromDate(new Date()), // Placeholder
+      cycleEndDate: admin.firestore.Timestamp.fromDate(new Date()), // Placeholder
+      dailyWithholdingRate: periodCalc.amountWithheld / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate),
+
+      // === OUTFLOW METADATA (Denormalized) ===
+      description: description,
+      frequency: outflow.frequency,
+
+      // === PAYMENT STATUS ===
+      isPaid: isFullyPaid, // Legacy: same as isFullyPaid
+      isFullyPaid: isFullyPaid,
+      isPartiallyPaid: isPartiallyPaid,
+      isDuePeriod: occurrences.numberOfOccurrences > 0,
+
+      // === CATEGORIZATION ===
+      internalDetailedCategory: outflow.internalDetailedCategory || null,
+      internalPrimaryCategory: outflow.internalPrimaryCategory || null,
+      plaidPrimaryCategory: outflow.plaidPrimaryCategory || 'GENERAL_SERVICES',
+      plaidDetailedCategory: outflow.plaidDetailedCategory || '',
+
+      // === STATUS & CONTROL ===
+      isActive: true,
+      isHidden: false,
+
+      // === MERCHANT INFO ===
+      merchant: merchantName,
+      payee: merchantName,
+
+      // === PERIOD CONTEXT ===
+      periodStartDate: sourcePeriod.startDate,
+      periodEndDate: sourcePeriod.endDate,
+      periodType: sourcePeriod.type,
+
+      // === PLAID PREDICTION ===
+      predictedNextDate: outflow.predictedNextDate || null,
+
+      // === USER INTERACTION ===
+      rules: [],
+      tags: outflow.tags || [],
+      type: outflow.type || 'expense',
+      note: null,
+      userCustomName: null,
+
+      // === SOURCE ===
+      source: outflow.source || 'plaid',
+
+      // === TRANSACTION TRACKING ===
+      transactionIds: [],
+
+      // === MULTI-OCCURRENCE TRACKING ===
+      numberOfOccurrencesInPeriod: occurrences.numberOfOccurrences,
+      numberOfOccurrencesPaid: 0,
+      numberOfOccurrencesUnpaid: occurrences.numberOfOccurrences,
+      occurrenceDueDates: occurrences.occurrenceDueDates,
+      occurrencePaidFlags: occurrencePaidFlags,
+      occurrenceTransactionIds: occurrenceTransactionIds,
+
+      // === PROGRESS METRICS ===
+      paymentProgressPercentage: paymentProgressPercentage,
+      dollarProgressPercentage: dollarProgressPercentage,
+
+      // === DUE DATE TRACKING ===
+      firstDueDateInPeriod: firstDueDateInPeriod,
+      lastDueDateInPeriod: lastDueDateInPeriod,
+      nextUnpaidDueDate: nextUnpaidDueDate
     } as any;
 
     outflowPeriods.push(outflowPeriodDoc);
     periodIds.push(periodId);
   }
 
-  console.log('Document created:', {
-    userId: outflow.userId,
-    groupId: outflow.groupId || null
-  });
-
-  console.log(`[createOutflowPeriodsFromSource] Creating ${outflowPeriods.length} outflow periods`);
+  console.log(`[createOutflowPeriodsFromSource] Creating ${outflowPeriods.length} FLAT outflow periods`);
 
   // Batch create all outflow_periods
   await batchCreateOutflowPeriods(db, outflowPeriods);
 
-  console.log(`[createOutflowPeriodsFromSource] Successfully created ${outflowPeriods.length} outflow periods`);
+  console.log(`[createOutflowPeriodsFromSource] Successfully created ${outflowPeriods.length} FLAT outflow periods`);
 
   return {
     periodsCreated: outflowPeriods.length,

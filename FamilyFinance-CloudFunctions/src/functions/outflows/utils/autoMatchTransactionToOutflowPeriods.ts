@@ -423,11 +423,14 @@ async function updateTransactionSplitWithAllOutflowPeriods(
                          matchingPeriods.weeklyPeriod?.id ||
                          matchingPeriods.biWeeklyPeriod?.id;
 
+  // Extract description based on structure (flat or nested)
+  const outflowDescription = outflow.description || (outflow as any).metadata?.outflowDescription || '';
+
   splits[splitIndex] = {
     ...splits[splitIndex],
     // Outflow assignment
     outflowId: outflow.id!,
-    outflowDescription: outflow.description,
+    outflowDescription: outflowDescription,
     // Primary period reference
     outflowPeriodId: primaryPeriodId,
     // ALL THREE period type references

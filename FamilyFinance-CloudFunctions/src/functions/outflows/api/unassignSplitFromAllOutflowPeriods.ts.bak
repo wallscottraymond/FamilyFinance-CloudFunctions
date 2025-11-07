@@ -19,6 +19,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { authenticateRequest, UserRole } from '../../../utils/auth';
 import { Transaction, OutflowPeriod } from '../../../types';
 import * as admin from 'firebase-admin';
+import { calculateOutflowPeriodStatus } from '../utils/calculateOutflowPeriodStatus';
 
 /**
  * Request to unassign a split from all outflow periods
@@ -79,13 +80,13 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
       const transaction = { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
 
       // Verify user owns the transaction
-      if (transaction.ownerId !== userId) {
+      if (transaction.userId !== userId) {
         throw new HttpsError('permission-denied', 'You can only unassign your own transaction splits');
       }
 
       // Step 2: Find the split in the transaction
       const splits = transaction.splits || [];
-      const splitIndex = splits.findIndex(s => s.splitId === splitId);
+      const splitIndex = splits.findIndex(s => s.id === splitId);
 
       if (splitIndex === -1) {
         throw new HttpsError('not-found', `Split ${splitId} not found in transaction ${transactionId}`);
@@ -116,9 +117,9 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
       const outflowPeriodIds: string[] = [];
       for (const sourcePeriodId of sourcePeriodIds) {
         const periodsQuery = await db.collection('outflow_periods')
-          .where('ownerId', '==', userId)
+          .where('userId', '==', userId)
           .where('outflowId', '==', outflowId)
-          .where('sourcePeriodId', '==', sourcePeriodId)
+          .where('periodId', '==', sourcePeriodId)
           .get();
 
         periodsQuery.forEach(doc => {
@@ -148,16 +149,63 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
 
       console.log(`[unassignSplitFromAll] Cleared outflow assignment from split`);
 
-      // Step 6: Fetch period documents for response
+      // Step 6: Batch remove split reference from ALL outflow periods
+      const removeBatch = db.batch();
+
+      for (const periodId of outflowPeriodIds) {
+        const periodRef = db.collection('outflow_periods').doc(periodId);
+        const periodDoc = await periodRef.get();
+
+        if (periodDoc.exists) {
+          const period = periodDoc.data();
+          const transactionSplits = period?.transactionSplits || [];
+
+          // Filter out this split reference
+          const updatedSplits = transactionSplits.filter(
+            (ref: any) => !(ref.transactionId === transactionId && ref.splitId === splitId)
+          );
+
+          removeBatch.update(periodRef, {
+            transactionSplits: updatedSplits,
+            updatedAt: admin.firestore.Timestamp.now()
+          });
+        }
+      }
+
+      await removeBatch.commit();
+
+      console.log(`[unassignSplitFromAll] Removed split reference from ${outflowPeriodIds.length} periods`);
+
+      // Step 7: Recalculate status for all updated periods
+      const statusBatch = db.batch();
+
       let monthlyPeriod: OutflowPeriod | undefined;
       let weeklyPeriod: OutflowPeriod | undefined;
       let biWeeklyPeriod: OutflowPeriod | undefined;
 
       for (const periodId of outflowPeriodIds) {
-        const periodDoc = await db.collection('outflow_periods').doc(periodId).get();
+        const periodRef = db.collection('outflow_periods').doc(periodId);
+        const periodDoc = await periodRef.get();
 
         if (periodDoc.exists) {
           const period = { id: periodDoc.id, ...periodDoc.data() } as OutflowPeriod;
+
+          const newStatus = calculateOutflowPeriodStatus(
+            period.isDuePeriod,
+            period.dueDate,
+            period.expectedDueDate,
+            period.amountDue,
+            period.transactionSplits || []
+          );
+
+          if (newStatus !== period.status) {
+            statusBatch.update(periodRef, {
+              status: newStatus,
+              updatedAt: admin.firestore.Timestamp.now()
+            });
+            period.status = newStatus;
+            console.log(`[unassignSplitFromAll] Period ${periodId} status: ${newStatus}`);
+          }
 
           // Store period for response based on type
           if (period.periodType === 'monthly') {
@@ -169,6 +217,8 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
           }
         }
       }
+
+      await statusBatch.commit();
 
       console.log(`[unassignSplitFromAll] Successfully unassigned split from ${outflowPeriodIds.length} periods`);
 

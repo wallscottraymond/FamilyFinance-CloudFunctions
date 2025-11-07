@@ -613,7 +613,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -631,7 +631,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -649,7 +649,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -667,7 +667,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -685,7 +685,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -699,7 +699,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -735,7 +735,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -1651,20 +1651,6 @@
       ]
     },
     {
-      "collectionGroup": "outflow_periods",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "outflowId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isFullyPaid",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "outflows",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2121,7 +2107,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]

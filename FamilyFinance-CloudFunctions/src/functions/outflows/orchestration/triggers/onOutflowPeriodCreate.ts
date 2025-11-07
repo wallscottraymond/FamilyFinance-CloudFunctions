@@ -32,7 +32,7 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     }
 
     console.log(`[onOutflowPeriodCreate] Processing new outflow period: ${outflowPeriodId}`);
-    console.log(`[onOutflowPeriodCreate] Period details: ${outflowPeriodData.metadata.outflowDescription}, Period: ${outflowPeriodData.periodId}, Amount: $${outflowPeriodData.amountWithheld}`);
+    console.log(`[onOutflowPeriodCreate] Period details: ${outflowPeriodData.description}, Source Period: ${outflowPeriodData.sourcePeriodId}, Amount: $${outflowPeriodData.amountWithheld}`);
 
     // Database instance for future utility function calls
     const db = admin.firestore();

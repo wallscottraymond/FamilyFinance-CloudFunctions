@@ -9,14 +9,18 @@
  * - getTransaction: Retrieve single transaction by ID
  * - updateTransaction: Update existing transactions
  * - deleteTransaction: Remove transactions with budget cleanup
- * - getUserTransactions: Query user-specific transactions
- * - getFamilyTransactions: Query all family transactions
  * - approveTransaction: Approve or reject pending transactions
- * - onInflowCreated: Automatic inflow period generation trigger
+ * - onTransactionCreate: Automatic budget spending update on creation
+ * - onTransactionUpdate: Automatic budget spending recalculation on update
+ * - onTransactionDelete: Automatic budget spending reversal on deletion
+ *
+ * Note: Query operations (getUserTransactions, getFamilyTransactions) have been removed.
+ * Mobile app uses direct Firestore access for better performance and real-time updates.
+ * Note: onInflowCreated has been moved to the inflows module.
  *
  * Architecture:
  * - api/crud: CRUD operations (Create, Read, Update, Delete, Approve)
- * - api/queries: Query operations (User and Family transaction lists)
+ * - api/queries: [Deprecated - Mobile app uses direct Firestore access]
  * - orchestration/triggers: Firestore triggers (Inflow period generation)
  * - utils: Shared utilities (placeholder for future transaction helpers)
  * - config: Configuration constants (placeholder)
@@ -34,13 +38,15 @@ export { deleteTransaction } from "./api/crud/deleteTransaction";
 export { approveTransaction } from "./api/crud/approveTransaction";
 
 // Query Operations
-export { getUserTransactions } from "./api/queries/getUserTransactions";
-export { getFamilyTransactions } from "./api/queries/getFamilyTransactions";
+// Note: getUserTransactions and getFamilyTransactions have been removed
+// Mobile app uses direct Firestore access for transaction queries
 
 // ===== Orchestration Functions =====
 
 // Triggers
-export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";
+export { onTransactionCreate } from "./orchestration/triggers/onTransactionCreate";
+export { onTransactionUpdate } from "./orchestration/triggers/onTransactionUpdate";
+export { onTransactionDelete } from "./orchestration/triggers/onTransactionDelete";
 
 /**
  * Function Overview:
@@ -75,21 +81,24 @@ export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";
  * - Memory: 256MiB, Timeout: 30s
  * - Location: api/crud/approveTransaction.ts
  *
- * getUserTransactions:
- * - Purpose: Query transactions for a specific user
- * - Authentication: Requires VIEWER role
- * - Memory: 256MiB, Timeout: 30s
- * - Location: api/queries/getUserTransactions.ts
+ * Note: getUserTransactions and getFamilyTransactions have been removed.
+ * Mobile app uses direct Firestore access for better performance and real-time updates.
  *
- * getFamilyTransactions:
- * - Purpose: Query all transactions for a family
- * - Authentication: Requires EDITOR role
- * - Memory: 256MiB, Timeout: 30s
- * - Location: api/queries/getFamilyTransactions.ts
+ * onTransactionCreate:
+ * - Purpose: Update budget spending when new transaction is created
+ * - Triggers: When document created in transactions collection
+ * - Memory: 256MiB, Timeout: 60s
+ * - Location: orchestration/triggers/onTransactionCreate.ts
  *
- * onInflowCreated:
- * - Purpose: Automatically generate inflow_periods when inflow is created
- * - Triggers: When document created in inflows collection
- * - Memory: 512MiB, Timeout: 60s
- * - Location: orchestration/triggers/onInflowCreated.ts
+ * onTransactionUpdate:
+ * - Purpose: Recalculate budget spending when transaction is modified
+ * - Triggers: When document updated in transactions collection
+ * - Memory: 256MiB, Timeout: 60s
+ * - Location: orchestration/triggers/onTransactionUpdate.ts
+ *
+ * onTransactionDelete:
+ * - Purpose: Reverse budget spending when transaction is deleted
+ * - Triggers: When document deleted from transactions collection
+ * - Memory: 256MiB, Timeout: 60s
+ * - Location: orchestration/triggers/onTransactionDelete.ts
  */

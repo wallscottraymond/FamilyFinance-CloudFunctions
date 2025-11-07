@@ -519,7 +519,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -541,7 +541,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -577,7 +577,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -595,7 +595,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -609,11 +609,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -623,7 +623,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -631,7 +631,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -641,7 +641,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -649,7 +649,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -659,7 +659,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -667,7 +667,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -677,7 +677,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -685,7 +685,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -699,7 +699,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -713,7 +713,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         }
       ]
@@ -731,11 +731,11 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]
@@ -745,7 +745,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -763,7 +763,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -777,7 +777,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -799,7 +799,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -817,7 +817,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -867,7 +867,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -917,7 +917,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -939,7 +939,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -957,7 +957,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1007,7 +1007,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1029,7 +1029,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1047,7 +1047,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1065,7 +1065,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1115,7 +1115,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1159,7 +1159,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         }
       ]
@@ -1173,7 +1173,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1187,7 +1187,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1205,7 +1205,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1249,7 +1249,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         }
       ]
@@ -1263,7 +1263,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1277,7 +1277,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1295,7 +1295,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1313,7 +1313,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1331,7 +1331,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1349,7 +1349,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1371,7 +1371,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1399,7 +1399,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1421,7 +1421,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1439,7 +1439,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1457,7 +1457,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1475,7 +1475,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1493,7 +1493,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1511,7 +1511,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1551,7 +1551,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1565,7 +1565,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1583,7 +1583,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1601,7 +1601,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1651,20 +1651,6 @@
       ]
     },
     {
-      "collectionGroup": "outflow_periods",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "outflowId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isFullyPaid",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "outflows",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1673,7 +1659,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
@@ -1691,7 +1677,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         }
       ]
@@ -2121,7 +2107,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "transactionDate",
+          "fieldPath": "dateTransacted",
           "order": "DESCENDING"
         }
       ]

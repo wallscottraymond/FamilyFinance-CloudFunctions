@@ -95,7 +95,7 @@ export async function matchTransactionSplitsToSourcePeriods(
       // Extract period IDs by type
       const monthlyPeriod = matchingPeriods.find(p => p.type === 'monthly');
       const weeklyPeriod = matchingPeriods.find(p => p.type === 'weekly');
-      const biWeeklyPeriod = matchingPeriods.find(p => p.type === 'bi_weekly');
+      const biWeeklyPeriod = matchingPeriods.find(p => p.type === 'bi_monthly'); // Fixed: was 'bi_weekly', should be 'bi_monthly'
 
       // Update all splits in the transaction with period IDs
       const updatedSplits = transaction.splits.map(split => ({

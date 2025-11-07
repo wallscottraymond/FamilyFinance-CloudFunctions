@@ -104,25 +104,25 @@ export const getOutflowPeriodTransactions = onCall(
       const outflowPeriod = { id: periodDoc.id, ...periodDoc.data() } as OutflowPeriod;
 
       // Verify user owns the outflow period (or is in the same family)
-      if (outflowPeriod.ownerId !== userId) {
+      if (outflowPeriod.userId !== userId) {
         // TODO: Check family membership when family feature is implemented
         throw new HttpsError('permission-denied', 'You can only view your own outflow periods');
       }
 
-      // Step 2: Get transaction IDs from period
-      const transactionIds = outflowPeriod.transactionIds || [];
+      // Step 2: Get transaction split references
+      const transactionSplits = outflowPeriod.transactionSplits || [];
 
-      if (transactionIds.length === 0) {
+      if (transactionSplits.length === 0) {
         console.log(`[getOutflowPeriodTransactions] No transactions assigned to period ${outflowPeriodId}`);
         return {
           success: true,
           outflowPeriod: {
             id: outflowPeriod.id!,
-            outflowDescription: outflowPeriod.description,
-            amountDue: outflowPeriod.totalAmountUnpaid,
-            status: 'pending', // Status should be calculated on read
+            outflowDescription: outflowPeriod.metadata.outflowDescription,
+            amountDue: outflowPeriod.amountDue,
+            status: outflowPeriod.status,
             isDuePeriod: outflowPeriod.isDuePeriod,
-            dueDate: outflowPeriod.firstDueDateInPeriod || undefined
+            dueDate: outflowPeriod.dueDate
           },
           transactions: [],
           summary: {
@@ -140,6 +140,7 @@ export const getOutflowPeriodTransactions = onCall(
 
       // Step 3: Fetch full transaction documents
       const enrichedTransactions: OutflowPeriodTransaction[] = [];
+      const transactionIds = [...new Set(transactionSplits.map(ref => ref.transactionId))];
 
       for (const transactionId of transactionIds) {
         try {
@@ -152,39 +153,37 @@ export const getOutflowPeriodTransactions = onCall(
 
           const transaction = { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
 
-          // Get all splits from this transaction that are assigned to this outflow
-          const matchingSplits = transaction.splits.filter(s => s.outflowId === outflowPeriod.outflowId);
+          // Get all splits from this transaction that are assigned to this period
+          const matchingSplitRefs = transactionSplits.filter(ref => ref.transactionId === transactionId);
 
-          for (const split of matchingSplits) {
+          for (const splitRef of matchingSplitRefs) {
+            // Find the actual split in the transaction
+            const split = transaction.splits.find(s => s.id === splitRef.splitId);
+
+            if (!split) {
+              console.warn(`[getOutflowPeriodTransactions] Split ${splitRef.splitId} not found in transaction ${transactionId}, skipping`);
+              continue;
+            }
+
             // Create enriched transaction object
             enrichedTransactions.push({
               transaction: {
                 id: transaction.id!,
-                amount: split.amount, // Use split amount
+                amount: transaction.amount,
                 description: transaction.description,
-                date: transaction.transactionDate,
-                merchantName: transaction.initialPlaidData?.plaidMerchantName as string | undefined,
-                category: split.plaidPrimaryCategory, // Use split's category
-                pending: false,
+                date: transaction.date,
+                merchantName: transaction.metadata?.plaidMerchantName as string | undefined,
+                category: transaction.categories?.primary,
+                pending: false, // Assuming transactions are no longer pending if they're synced
                 accountId: transaction.accountId
               },
               split: {
-                id: split.splitId,
+                id: split.id,
                 amount: split.amount,
                 description: split.description ?? undefined,
-                categoryId: split.plaidPrimaryCategory
+                categoryId: split.categoryId
               },
-              splitReference: {
-                transactionId: transaction.id!,
-                splitId: split.splitId,
-                transactionDate: transaction.transactionDate,
-                amount: split.amount,
-                description: transaction.description,
-                paymentType: split.paymentType || PaymentType.REGULAR,
-                isAutoMatched: false,
-                matchedAt: admin.firestore.Timestamp.now(),
-                matchedBy: userId
-              }
+              splitReference: splitRef
             });
           }
         } catch (error) {
@@ -233,11 +232,11 @@ export const getOutflowPeriodTransactions = onCall(
         success: true,
         outflowPeriod: {
           id: outflowPeriod.id!,
-          outflowDescription: outflowPeriod.description,
-          amountDue: outflowPeriod.totalAmountUnpaid,
-          status: 'pending', // Status should be calculated on read
+          outflowDescription: outflowPeriod.metadata.outflowDescription,
+          amountDue: outflowPeriod.amountDue,
+          status: outflowPeriod.status,
           isDuePeriod: outflowPeriod.isDuePeriod,
-          dueDate: outflowPeriod.firstDueDateInPeriod || undefined
+          dueDate: outflowPeriod.dueDate
         },
         transactions: enrichedTransactions,
         summary,

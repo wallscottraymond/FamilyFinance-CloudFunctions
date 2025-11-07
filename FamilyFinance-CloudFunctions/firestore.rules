@@ -518,11 +518,13 @@ service cloud.firestore {
     // =======================
     // INFLOW COLLECTION RULES - ROOT LEVEL
     // =======================
-    
-    match /inflow/{inflowId} {
+
+    match /inflows/{inflowId} {
       // Group-based access: Users can read their own inflow streams or group-shared streams
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
       // Falls back to familyId for legacy inflow streams
-      allow read: if isOwner(resource.data.userId) ||
+      allow read: if isOwner(resource.data.ownerId) ||
+                     isOwner(resource.data.userId) ||
                      canAccessGroup(resource.data.groupIds) ||
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
 
@@ -530,7 +532,8 @@ service cloud.firestore {
       allow create: if false;
 
       // Users can update limited fields on their own inflow streams (user notes, tags, category overrides, visibility)
-      allow update: if isOwner(resource.data.userId) &&
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
+      allow update: if (isOwner(resource.data.ownerId) || isOwner(resource.data.userId)) &&
                        isValidRecurringIncomeUpdate();
 
       // Only admins can delete inflow streams (for cleanup)
@@ -543,8 +546,10 @@ service cloud.firestore {
 
     match /outflows/{outflowId} {
       // Group-based access: Users can read their own outflow streams or group-shared streams
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
       // Falls back to familyId for legacy outflow streams
-      allow read: if isOwner(resource.data.userId) ||
+      allow read: if isOwner(resource.data.ownerId) ||
+                     isOwner(resource.data.userId) ||
                      canAccessGroup(resource.data.groupIds) ||
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
 
@@ -552,7 +557,8 @@ service cloud.firestore {
       allow create: if false;
 
       // Users can update limited fields on their own outflow streams (user notes, tags, category overrides, visibility)
-      allow update: if isOwner(resource.data.userId) &&
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
+      allow update: if (isOwner(resource.data.ownerId) || isOwner(resource.data.userId)) &&
                        isValidRecurringOutflowUpdate();
 
       // Only admins can delete outflow streams (for cleanup)
@@ -568,13 +574,13 @@ service cloud.firestore {
       // Falls back to familyId for legacy periods
       // Handle case where collection/documents don't exist yet
       allow read: if resource == null ||
-                     isOwner(resource.data.userId) ||
+                     isOwner(resource.data.ownerId) ||
                      canAccessGroup(resource.data.groupIds) ||
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
 
       // SECURE: Only allow users to list their own outflow periods or group/family outflow periods
       allow list: if isAuthenticated() &&
-                     (isOwner(resource.data.userId) ||
+                     (isOwner(resource.data.ownerId) ||
                       canAccessGroup(resource.data.groupIds) ||
                       (resource.data.familyId != null && inSameFamily(resource.data.familyId)));
 
@@ -583,7 +589,7 @@ service cloud.firestore {
 
       // Users can update limited fields on their own outflow periods (user modifications, notes)
       // Allow user to modify amounts if they're the owner
-      allow update: if isOwner(resource.data.userId) &&
+      allow update: if isOwner(resource.data.ownerId) &&
                        isValidOutflowPeriodUpdate();
 
       // Only admins can delete outflow periods (for cleanup)
@@ -695,9 +701,14 @@ service cloud.firestore {
       let data = request.resource.data;
       let resource_data = resource.data;
       // Only allow updates to user-modifiable fields for outflow streams
+      // Supports both FLAT and NESTED structure fields for backward compatibility
       let allowedFields = [
-        'userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt',
-        'expenseType', 'isEssential', 'merchantCategory', 'isCancellable', 'reminderDays'
+        // Legacy nested structure fields
+        'userCategory', 'userNotes', 'merchantCategory', 'isCancellable', 'reminderDays',
+        // Flat structure fields
+        'userCustomName', 'internalPrimaryCategory', 'internalDetailedCategory',
+        // Common fields
+        'tags', 'isHidden', 'expenseType', 'isEssential', 'updatedAt', 'updatedBy'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields);
@@ -707,11 +718,20 @@ service cloud.firestore {
     function isValidOutflowPeriodUpdate() {
       let data = request.resource.data;
       let resource_data = resource.data;
-      // Only allow updates to user-modifiable fields for outflow periods
-      // Including transactionSplits for payment tracking and status for recalculation
+      // Allow updates to user-modifiable fields AND multi-occurrence tracking fields
+      // Multi-occurrence fields are updated by onOutflowUpdated trigger when transactionIds changes
       let allowedFields = [
+        // User-modifiable fields
         'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt',
-        'transactionSplits', 'status', 'updatedAt'
+        'transactionSplits', 'status', 'updatedAt',
+        // Multi-occurrence tracking fields (updated by Cloud Functions)
+        'occurrencePaidFlags', 'occurrenceTransactionIds',
+        'numberOfOccurrencesPaid', 'numberOfOccurrencesUnpaid',
+        'totalAmountPaid', 'totalAmountUnpaid',
+        'paymentProgressPercentage', 'dollarProgressPercentage',
+        'isFullyPaid', 'isPartiallyPaid', 'isPaid',
+        'nextUnpaidDueDate', 'amountDue',
+        'lastCalculated', 'lastSyncedAt'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
 
@@ -721,39 +741,45 @@ service cloud.firestore {
 
       // Validate status if it's being updated
       let statusValid = !changedFields.hasAny(['status']) ||
-                       (data.status is string && data.status in ['pending', 'due_soon', 'partial', 'paid', 'paid_early', 'overdue']);
+                       (data.status is string && data.status in ['pending', 'due_soon', 'partial', 'partially_paid', 'paid', 'paid_early', 'overdue']);
+
+      // Validate occurrence tracking arrays if they're being updated
+      let occurrenceArraysValid = !changedFields.hasAny(['occurrencePaidFlags', 'occurrenceTransactionIds']) ||
+                                 (data.occurrencePaidFlags is list &&
+                                  data.occurrenceTransactionIds is list &&
+                                  data.occurrencePaidFlags.size() == data.occurrenceTransactionIds.size() &&
+                                  data.occurrencePaidFlags.size() == data.numberOfOccurrencesInPeriod);
 
       return changedFields.hasOnly(allowedFields) &&
              splitsValid &&
              statusValid &&
+             occurrenceArraysValid &&
              // Ensure core immutable fields don't change
              data.outflowId == resource_data.outflowId &&
              data.periodId == resource_data.periodId &&
-             data.userId == resource_data.userId &&
-             data.billAmount == resource_data.billAmount &&
-             data.dailyWithholdingRate == resource_data.dailyWithholdingRate;
+             data.userId == resource_data.userId;
     }
 
     // Validate transaction split references array for outflow periods
     function isValidTransactionSplitReferences(splitRefs) {
       return splitRefs is list &&
              splitRefs.size() <= 50 && // Reasonable limit for payment history
-             splitRefs.all(ref, isValidTransactionSplitReference(ref));
+             splitRefs.all(splitRef, isValidTransactionSplitReference(splitRef));
     }
 
     // Validate individual transaction split reference
-    function isValidTransactionSplitReference(ref) {
-      return ref is map &&
-             ref.keys().hasAll(['transactionId', 'splitId', 'transactionDate', 'amount', 'description', 'paymentType', 'isAutoMatched', 'matchedAt', 'matchedBy']) &&
-             ref.transactionId is string && ref.transactionId.size() > 0 &&
-             ref.splitId is string && ref.splitId.size() > 0 &&
-             ref.transactionDate is timestamp &&
-             ref.amount is number && ref.amount > 0 &&
-             ref.description is string &&
-             ref.paymentType is string && ref.paymentType in ['regular', 'catch_up', 'advance', 'extra_principal'] &&
-             ref.isAutoMatched is bool &&
-             ref.matchedAt is timestamp &&
-             ref.matchedBy is string && ref.matchedBy.size() > 0;
+    function isValidTransactionSplitReference(splitRef) {
+      return splitRef is map &&
+             splitRef.keys().hasAll(['transactionId', 'splitId', 'transactionDate', 'amount', 'description', 'paymentType', 'isAutoMatched', 'matchedAt', 'matchedBy']) &&
+             splitRef.transactionId is string && splitRef.transactionId.size() > 0 &&
+             splitRef.splitId is string && splitRef.splitId.size() > 0 &&
+             splitRef.transactionDate is timestamp &&
+             splitRef.amount is number && splitRef.amount > 0 &&
+             splitRef.description is string &&
+             splitRef.paymentType is string && splitRef.paymentType in ['regular', 'catch_up', 'advance', 'extra_principal'] &&
+             splitRef.isAutoMatched is bool &&
+             splitRef.matchedAt is timestamp &&
+             splitRef.matchedBy is string && splitRef.matchedBy.size() > 0;
     }
     
     // Validation function for inflow period updates
@@ -867,37 +893,37 @@ service cloud.firestore {
       return splits is list &&
              splits.size() >= 1 && // Must have at least one split
              splits.size() <= 20 && // Reasonable limit
-             splits.all(split, isValidTransactionSplit(split)) &&
+             splits.all(splitItem, isValidTransactionSplit(splitItem)) &&
              isValidSplitAmounts(splits, transactionAmount);
     }
-    
+
     // Validate individual transaction split with enhanced status fields - NEW FLAT STRUCTURE
-    function isValidTransactionSplit(split) {
-      return split is map &&
+    function isValidTransactionSplit(splitItem) {
+      return splitItem is map &&
              // Core required fields - NEW NAMING
-             split.keys().hasAll(['splitId', 'plaidPrimaryCategory', 'amount', 'isDefault', 'createdAt', 'updatedAt']) &&
-             split.splitId is string && split.splitId.size() > 0 &&
-             split.plaidPrimaryCategory is string &&
-             split.amount is number && split.amount > 0 &&
-             split.isDefault is bool &&
-             split.createdAt is timestamp &&
-             split.updatedAt is timestamp &&
+             splitItem.keys().hasAll(['splitId', 'plaidPrimaryCategory', 'amount', 'isDefault', 'createdAt', 'updatedAt']) &&
+             splitItem.splitId is string && splitItem.splitId.size() > 0 &&
+             splitItem.plaidPrimaryCategory is string &&
+             splitItem.amount is number && splitItem.amount > 0 &&
+             splitItem.isDefault is bool &&
+             splitItem.createdAt is timestamp &&
+             splitItem.updatedAt is timestamp &&
 
              // Budget assignment fields (optional for unassigned splits)
-             (!split.keys().hasAny(['budgetId']) || (split.budgetId is string && split.budgetId.size() > 0)) &&
+             (!splitItem.keys().hasAny(['budgetId']) || (splitItem.budgetId is string && splitItem.budgetId.size() > 0)) &&
 
              // Period ID fields
-             (!split.keys().hasAny(['monthlyPeriodId']) || (split.monthlyPeriodId == null || split.monthlyPeriodId is string)) &&
-             (!split.keys().hasAny(['weeklyPeriodId']) || (split.weeklyPeriodId == null || split.weeklyPeriodId is string)) &&
-             (!split.keys().hasAny(['biWeeklyPeriodId']) || (split.biWeeklyPeriodId == null || split.biWeeklyPeriodId is string)) &&
+             (!splitItem.keys().hasAny(['monthlyPeriodId']) || (splitItem.monthlyPeriodId == null || splitItem.monthlyPeriodId is string)) &&
+             (!splitItem.keys().hasAny(['weeklyPeriodId']) || (splitItem.weeklyPeriodId == null || splitItem.weeklyPeriodId is string)) &&
+             (!splitItem.keys().hasAny(['biWeeklyPeriodId']) || (splitItem.biWeeklyPeriodId == null || splitItem.biWeeklyPeriodId is string)) &&
 
              // Status fields validation
-             isValidSplitStatusFields(split) &&
+             isValidSplitStatusFields(splitItem) &&
 
              // Optional fields validation
-             (!split.keys().hasAny(['description']) || split.description is string) &&
-             (!split.keys().hasAny(['tags']) || split.tags is list) &&
-             (!split.keys().hasAny(['rules']) || split.rules is list);
+             (!splitItem.keys().hasAny(['description']) || splitItem.description is string) &&
+             (!splitItem.keys().hasAny(['tags']) || splitItem.tags is list) &&
+             (!splitItem.keys().hasAny(['rules']) || splitItem.rules is list);
     }
 
     // Enhanced validation for split status fields
@@ -942,11 +968,9 @@ service cloud.firestore {
     
     // Validate that split amounts don't exceed transaction amount
     function isValidSplitAmounts(splits, transactionAmount) {
-      // Calculate total of split amounts
-      let totalSplitAmount = 0;
       // Use a simple iteration approach since complex aggregation in .all() is tricky
-      return splits.size() > 0 && 
-             splits.all(split, split.amount > 0 && split.amount <= transactionAmount * 1.1); // Allow 10% tolerance for floating point
+      return splits.size() > 0 &&
+             splits.all(splitItem, splitItem.amount > 0 && splitItem.amount <= transactionAmount * 1.1); // Allow 10% tolerance for floating point
     }
     
     // Validate budget period updates
@@ -986,19 +1010,19 @@ service cloud.firestore {
     function isValidChecklistItems(checklistItems) {
       return checklistItems is list &&
              checklistItems.size() <= 20 && // Reasonable limit
-             checklistItems.all(item, isValidChecklistItem(item));
+             checklistItems.all(checklistItem, isValidChecklistItem(checklistItem));
     }
-    
+
     // Validate individual checklist item
-    function isValidChecklistItem(item) {
-      return item is map &&
-             item.keys().hasAll(['id', 'name', 'transactionSplit', 'expectedAmount', 'actualAmount', 'isChecked']) &&
-             item.id is string && item.id.size() > 0 &&
-             item.name is string && item.name.size() > 0 && item.name.size() <= 100 &&
-             item.transactionSplit is string &&
-             item.expectedAmount is number && item.expectedAmount >= 0 &&
-             item.actualAmount is number && item.actualAmount >= 0 &&
-             item.isChecked is bool;
+    function isValidChecklistItem(checklistItem) {
+      return checklistItem is map &&
+             checklistItem.keys().hasAll(['id', 'name', 'transactionSplit', 'expectedAmount', 'actualAmount', 'isChecked']) &&
+             checklistItem.id is string && checklistItem.id.size() > 0 &&
+             checklistItem.name is string && checklistItem.name.size() > 0 && checklistItem.name.size() <= 100 &&
+             checklistItem.transactionSplit is string &&
+             checklistItem.expectedAmount is number && checklistItem.expectedAmount >= 0 &&
+             checklistItem.actualAmount is number && checklistItem.actualAmount >= 0 &&
+             checklistItem.isChecked is bool;
     }
     
     // =======================
