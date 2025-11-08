@@ -15,7 +15,17 @@
     "lint:fix": "eslint --ext .js,.ts . --fix",
     "test": "jest",
     "test:watch": "jest --watch",
-    "dev": "concurrently \"npm run build:watch\" \"firebase emulators:start --only functions\""
+    "dev": "concurrently \"npm run build:watch\" \"firebase emulators:start --only functions\"",
+    "emulator": "firebase emulators:start --import=./emulator-data --export-on-exit",
+    "emulator:clean": "rm -rf ./emulator-data && firebase emulators:start",
+    "emulator:export": "firebase emulators:export ./emulator-data",
+    "dev:use": "firebase use dev",
+    "dev:deploy": "firebase use dev && firebase deploy",
+    "dev:deploy:functions": "firebase use dev && firebase deploy --only functions",
+    "dev:deploy:rules": "firebase use dev && firebase deploy --only firestore:rules",
+    "prod:use": "firebase use default",
+    "prod:deploy": "firebase use default && firebase deploy",
+    "prod:deploy:functions": "firebase use default && firebase deploy --only functions"
   },
   "engines": {
     "node": "20"
