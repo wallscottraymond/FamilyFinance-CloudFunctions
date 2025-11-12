@@ -16,7 +16,7 @@
  * - March 2025: 5 Wednesdays (5, 12, 19, 26, and partial week to April 2)
  */
 
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../types';
 
 /**
@@ -24,8 +24,8 @@ import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../.
  */
 export interface PeriodOccurrences {
   numberOfOccurrences: number;
-  occurrenceDueDates: admin.firestore.Timestamp[];
-  occurrenceDrawDates: admin.firestore.Timestamp[];
+  occurrenceDueDates: Timestamp[];
+  occurrenceDrawDates: Timestamp[];
 }
 
 /**
@@ -197,14 +197,14 @@ export function calculateAllOccurrencesInPeriod(
   console.log(`[calculateAllOccurrencesInPeriod] First occurrence in period: ${firstOccurrence.toISOString().split('T')[0]}`);
 
   // Step 3: Iterate forward from first occurrence, collecting all dates within period
-  const dueDates: admin.firestore.Timestamp[] = [];
-  const drawDates: admin.firestore.Timestamp[] = [];
+  const dueDates: Timestamp[] = [];
+  const drawDates: Timestamp[] = [];
   let currentOccurrence = new Date(firstOccurrence);
 
   while (currentOccurrence <= periodEnd) {
     // Add this occurrence
-    const dueDate = admin.firestore.Timestamp.fromDate(currentOccurrence);
-    const drawDate = admin.firestore.Timestamp.fromDate(adjustForWeekend(currentOccurrence));
+    const dueDate = Timestamp.fromDate(currentOccurrence);
+    const drawDate = Timestamp.fromDate(adjustForWeekend(currentOccurrence));
 
     dueDates.push(dueDate);
     drawDates.push(drawDate);

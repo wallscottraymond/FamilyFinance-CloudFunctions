@@ -9,6 +9,7 @@
  */
 
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../types';
 
 /**
@@ -18,8 +19,8 @@ export interface PaymentCycleInfo {
   billAmount: number;
   cycleDays: number;
   frequency: PlaidRecurringFrequency;
-  cycleStartDate: admin.firestore.Timestamp;
-  cycleEndDate: admin.firestore.Timestamp;
+  cycleStartDate: Timestamp;
+  cycleEndDate: Timestamp;
 }
 
 /**
@@ -126,7 +127,7 @@ export function calculatePaymentCycle(outflow: RecurringOutflow): PaymentCycleIn
 
   // Use the outflow's lastDate as cycle end, calculate cycle start
   const cycleEndDate = outflow.lastDate;
-  const cycleStartDate = admin.firestore.Timestamp.fromDate(
+  const cycleStartDate = Timestamp.fromDate(
     new Date(cycleEndDate.toDate().getTime() - (cycleDays * 24 * 60 * 60 * 1000))
   );
 
