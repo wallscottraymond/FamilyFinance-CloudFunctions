@@ -11,15 +11,15 @@
  * - Week of Feb 1-7: Shows Feb 15
  */
 
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../types';
 
 /**
  * Result of predicting future bill due date
  */
 export interface PredictedBillDates {
-  expectedDueDate: admin.firestore.Timestamp;
-  expectedDrawDate: admin.firestore.Timestamp;
+  expectedDueDate: Timestamp;
+  expectedDrawDate: Timestamp;
 }
 
 /**
@@ -139,7 +139,7 @@ export function predictFutureBillDueDate(
   );
 
   return {
-    expectedDueDate: admin.firestore.Timestamp.fromDate(nextDueDate),
-    expectedDrawDate: admin.firestore.Timestamp.fromDate(expectedDrawDate)
+    expectedDueDate: Timestamp.fromDate(nextDueDate),
+    expectedDrawDate: Timestamp.fromDate(expectedDrawDate)
   };
 }

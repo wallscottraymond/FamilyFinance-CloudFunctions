@@ -10,7 +10,7 @@
  * status calculation based on real payment data.
  */
 
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { TransactionSplitReference, OutflowPeriodStatus, PaymentType } from '../../../types';
 
 /**
@@ -33,12 +33,12 @@ import { TransactionSplitReference, OutflowPeriodStatus, PaymentType } from '../
  */
 export function calculateOutflowPeriodStatus(
   isDuePeriod: boolean,
-  dueDate: admin.firestore.Timestamp | undefined,
-  expectedDueDate: admin.firestore.Timestamp,
+  dueDate: Timestamp | undefined,
+  expectedDueDate: Timestamp,
   amountDue: number,
   transactionSplits: TransactionSplitReference[]
 ): string {
-  const now = admin.firestore.Timestamp.now();
+  const now = Timestamp.now();
 
   // Calculate total payments from transaction splits
   // Exclude extra_principal payments from the total, as they're above and beyond the required amount

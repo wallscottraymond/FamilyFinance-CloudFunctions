@@ -8,7 +8,7 @@
  * This utility is called during outflow period creation to set the isDuePeriod flag.
  */
 
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 
 /**
  * Check if the expected due date falls within the period boundaries
@@ -35,9 +35,9 @@ import * as admin from 'firebase-admin';
  * ```
  */
 export function checkIsDuePeriod(
-  expectedDueDate: admin.firestore.Timestamp,
-  periodStartDate: admin.firestore.Timestamp,
-  periodEndDate: admin.firestore.Timestamp
+  expectedDueDate: Timestamp,
+  periodStartDate: Timestamp,
+  periodEndDate: Timestamp
 ): boolean {
   const dueDate = expectedDueDate.toDate();
   const periodStart = periodStartDate.toDate();

@@ -8,7 +8,7 @@
  * For now, it returns a default "pending" status for all newly created periods.
  */
 
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 
 /**
  * Update the bill status for an outflow period
@@ -38,8 +38,8 @@ import * as admin from 'firebase-admin';
  */
 export function updateBillStatus(
   isDuePeriod: boolean,
-  dueDate: admin.firestore.Timestamp | undefined,
-  expectedDueDate: admin.firestore.Timestamp
+  dueDate: Timestamp | undefined,
+  expectedDueDate: Timestamp
 ): string {
   // Default status for all bills
   // TODO: Expand this logic to check for:

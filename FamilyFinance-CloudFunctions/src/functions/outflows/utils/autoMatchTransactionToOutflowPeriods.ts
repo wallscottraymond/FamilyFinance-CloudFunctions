@@ -16,6 +16,7 @@
  */
 
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import {
   RecurringOutflow,
   Transaction,
@@ -254,7 +255,7 @@ async function matchTransactionToOutflowPeriods(
       description: transaction.description,
       paymentType,
       isAutoMatched: true,
-      matchedAt: admin.firestore.Timestamp.now(),
+      matchedAt: Timestamp.now(),
       matchedBy: 'system'
     };
 
@@ -304,7 +305,7 @@ async function matchTransactionToOutflowPeriods(
  * This ensures consistency across all period views when auto-matching transactions.
  */
 function findAllMatchingOutflowPeriods(
-  transactionDate: admin.firestore.Timestamp,
+  transactionDate: Timestamp,
   outflowPeriods: OutflowPeriod[]
 ): {
   monthlyPeriod: OutflowPeriod | null;
@@ -349,11 +350,11 @@ function findAllMatchingOutflowPeriods(
  */
 function determinePaymentType(
   splitAmount: number,
-  transactionDate: admin.firestore.Timestamp,
+  transactionDate: Timestamp,
   outflowPeriod: OutflowPeriod
 ): PaymentType {
   const txnMs = transactionDate.toMillis();
-  const now = admin.firestore.Timestamp.now().toMillis();
+  const now = Timestamp.now().toMillis();
 
   // Check if this is an extra principal payment (amount exceeds bill amount)
   if (splitAmount > outflowPeriod.billAmount * 1.1) { // 10% tolerance for rounding
@@ -399,7 +400,7 @@ async function updateTransactionSplitWithAllOutflowPeriods(
   },
   outflow: RecurringOutflow,
   paymentType: PaymentType,
-  paymentDate: admin.firestore.Timestamp
+  paymentDate: Timestamp
 ): Promise<void> {
   const transactionRef = db.collection('transactions').doc(transactionId);
 
@@ -440,13 +441,13 @@ async function updateTransactionSplitWithAllOutflowPeriods(
     // Payment tracking
     paymentType,
     paymentDate, // Payment date matches transaction date
-    updatedAt: admin.firestore.Timestamp.now()
+    updatedAt: Timestamp.now()
   };
 
   // Update the transaction
   await transactionRef.update({
     splits,
-    updatedAt: admin.firestore.Timestamp.now()
+    updatedAt: Timestamp.now()
   });
 }
 
@@ -463,7 +464,7 @@ async function addSplitReferenceToOutflowPeriod(
   // Use arrayUnion to add the split reference
   await periodRef.update({
     transactionSplits: admin.firestore.FieldValue.arrayUnion(splitRef),
-    updatedAt: admin.firestore.Timestamp.now()
+    updatedAt: Timestamp.now()
   });
 }
 
@@ -503,7 +504,7 @@ export async function recalculateOutflowPeriodStatuses(
       if (newStatus !== period.status) {
         await periodRef.update({
           status: newStatus,
-          updatedAt: admin.firestore.Timestamp.now()
+          updatedAt: Timestamp.now()
         });
         updated++;
         console.log(`[recalculateStatus] Updated period ${periodId} status: ${period.status} → ${newStatus}`);
