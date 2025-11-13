@@ -23,6 +23,7 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import {
   InflowPeriod,
   SourcePeriod,
@@ -69,7 +70,7 @@ export const onInflowCreated = onDocumentCreated({
     console.log(`Inflow details: ${description}, Amount: ${inflowData.averageAmount || inflowData.averageAmount?.amount}, Frequency: ${inflowData.frequency}`);
 
     const db = admin.firestore();
-    const now = admin.firestore.Timestamp.now();
+    const now = Timestamp.now();
     
     // Calculate time range for period generation (3 months forward like budget periods)
     const startDate = new Date();
@@ -80,8 +81,8 @@ export const onInflowCreated = onDocumentCreated({
     
     // Get all source periods that overlap with our time range
     const sourcePeriodsQuery = db.collection('source_periods')
-      .where('startDate', '>=', admin.firestore.Timestamp.fromDate(startDate))
-      .where('startDate', '<=', admin.firestore.Timestamp.fromDate(endDate));
+      .where('startDate', '>=', Timestamp.fromDate(startDate))
+      .where('startDate', '<=', Timestamp.fromDate(endDate));
     
     const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
     
@@ -300,7 +301,7 @@ function calculatePaymentCycle(inflow: any) {
   
   // Use the inflow's lastDate as cycle end, calculate cycle start
   const cycleEndDate = inflow.lastDate;
-  const cycleStartDate = admin.firestore.Timestamp.fromDate(
+  const cycleStartDate = Timestamp.fromDate(
     new Date(cycleEndDate.toDate().getTime() - (cycleDays * 24 * 60 * 60 * 1000))
   );
   
@@ -335,7 +336,7 @@ function calculatePeriodAmounts(
   // Check if receipt date falls within this period
   const isReceiptPeriod = cycleEnd >= periodStart && cycleEnd <= periodEnd;
   const amountReceived = isReceiptPeriod ? cycleInfo.incomeAmount : 0;
-  const receiptDate = isReceiptPeriod ? admin.firestore.Timestamp.fromDate(cycleEnd) : undefined;
+  const receiptDate = isReceiptPeriod ? Timestamp.fromDate(cycleEnd) : undefined;
   
   return {
     amountEarned: Math.round(amountEarned * 100) / 100, // Round to 2 decimal places
@@ -382,7 +383,7 @@ function calculateAllOccurrencesInPeriod(
 
   // For now, simple implementation - calculate based on frequency
   let numberOfOccurrences = 0;
-  const occurrenceDueDates: admin.firestore.Timestamp[] = [];
+  const occurrenceDueDates: Timestamp[] = [];
 
   // Calculate occurrences based on cycle days
   const cycleDays = cycleInfo.cycleDays;
@@ -395,7 +396,7 @@ function calculateAllOccurrencesInPeriod(
   for (let i = 0; i < numberOfOccurrences; i++) {
     const occurrenceDate = new Date(periodStart);
     occurrenceDate.setDate(occurrenceDate.getDate() + (i * cycleDays));
-    occurrenceDueDates.push(admin.firestore.Timestamp.fromDate(occurrenceDate));
+    occurrenceDueDates.push(Timestamp.fromDate(occurrenceDate));
   }
 
   return {
@@ -407,7 +408,7 @@ function calculateAllOccurrencesInPeriod(
 /**
  * Helper function to calculate days in a period
  */
-function getDaysInPeriod(startDate: admin.firestore.Timestamp, endDate: admin.firestore.Timestamp): number {
+function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
   const start = startDate.toDate();
   const end = endDate.toDate();
   const diffMs = end.getTime() - start.getTime();
