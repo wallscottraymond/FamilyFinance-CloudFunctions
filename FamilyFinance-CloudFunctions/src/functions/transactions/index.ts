@@ -48,6 +48,14 @@ export { onTransactionCreate } from "./orchestration/triggers/onTransactionCreat
 export { onTransactionUpdate } from "./orchestration/triggers/onTransactionUpdate";
 export { onTransactionDelete } from "./orchestration/triggers/onTransactionDelete";
 
+// ===== Development/Testing Functions =====
+// These functions are for local development only - they seed test data
+
+export { createTestTransactions } from "./dev/createTestTransactions";
+
+// ===== Admin Functions =====
+// (Legacy admin functions can be placed here)
+
 /**
  * Function Overview:
  *
