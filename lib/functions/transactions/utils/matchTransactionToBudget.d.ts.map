@@ -1,0 +1,1 @@
+{"version":3,"file":"matchTransactionToBudget.d.ts","sourceRoot":"","sources":["../../../../src/functions/transactions/utils/matchTransactionToBudget.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAKH;;;;;;GAMG;AACH,wBAAsB,wBAAwB,CAC5C,MAAM,EAAE,MAAM,EACd,eAAe,EAAE,IAAI,GACpB,OAAO,CAAC;IACT,QAAQ,EAAE,MAAM,GAAG,SAAS,CAAC;IAC7B,UAAU,EAAE,MAAM,CAAC;CACpB,CAAC,CAqED"}
