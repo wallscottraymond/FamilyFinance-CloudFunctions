@@ -6,6 +6,7 @@ import { GroupMembership } from "./groups";
 export * from "./users";
 export * from "./groups";
 export * from "./sharing";
+export * from "./outflowSummaries";
 
 // Base interface for all documents
 export interface BaseDocument {

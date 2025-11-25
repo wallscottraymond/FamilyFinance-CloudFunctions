@@ -63,7 +63,15 @@ service cloud.firestore {
       return userGroupIds != null &&
              userGroupIds.hasAny(documentGroupIds);
     }
-    
+
+    // Check if user belongs to group extracted from summary ID
+    // Summary ID format: {groupId}_{periodType} (e.g., "group_xyz789_monthly")
+    function userBelongsToGroupFromSummaryId(summaryId) {
+      let groupId = summaryId.split('_')[0];
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupIds.hasAny([groupId]);
+    }
+
     // Check if user can access another user (same family or admin)
     function canAccessUser(targetUserId) {
       return isOwner(targetUserId) || 
@@ -598,6 +606,32 @@ service cloud.firestore {
 
       // Only admins can delete outflow periods (for cleanup)
       allow delete: if isAdmin();
+    }
+
+    // =======================
+    // OUTFLOW SUMMARIES COLLECTION RULES - USER LEVEL
+    // =======================
+
+    match /outflowSummaries/{summaryId} {
+      // Read: User's own summary (summaryId format: userId_periodType)
+      allow read: if isAuthenticated() &&
+                     summaryId.matches('^' + request.auth.uid + '_.*');
+
+      // Write: Cloud Functions only
+      allow create, update, delete: if false;
+    }
+
+    // =======================
+    // GROUP OUTFLOW SUMMARIES COLLECTION RULES - GROUP LEVEL
+    // =======================
+
+    match /groupOutflowSummaries/{summaryId} {
+      // Read: Group summary if user belongs to group
+      allow read: if isAuthenticated() &&
+                     userBelongsToGroupFromSummaryId(summaryId);
+
+      // Write: Cloud Functions only
+      allow create, update, delete: if false;
     }
 
     // =======================
