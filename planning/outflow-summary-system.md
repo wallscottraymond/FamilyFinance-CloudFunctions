@@ -1,77 +1,91 @@
-# Period Summary System Implementation Plan
+# Outflow Summary System Implementation Plan
 
-**Plan Name:** Period Summary System for Dashboard Optimization
+**Plan Name:** Outflow Period Summary System for Dashboard Optimization
 **Date:** November 24, 2025
 **Status:** Planning - Pending Review
+**Priority:** Phase 1 of 3 (Outflows → Budgets → Inflows)
 
 ---
 
 ## Overview
 
-Implement a comprehensive Period Summary System to optimize dashboard loading by aggregating period data into summary documents, reducing reads from 100+ documents to 1 per resource type.
+Implement an Outflow-specific Period Summary System to optimize dashboard loading by aggregating outflow period data into summary documents, reducing reads from 100+ documents to 1 per period type.
+
+This is the **first phase** of the complete Period Summary System. Once outflows are working smoothly, the same pattern will be applied to budgets and inflows.
 
 ## Requirements Summary
 
-- **Scope**: All three period types (outflows, budgets, inflows)
+- **Scope**: Outflows only (recurring bills and expenses)
 - **Frequencies**: Monthly, weekly, bi-weekly
 - **Owners**: Both user-level and group-level summaries
 - **Time Window**: 1 year backward + 1 year forward (24 months)
-- **Update Strategy**: Real-time triggers on period changes
-- **Document Pattern**: `{type}Summaries/{ownerId|groupId}_{periodType}`
+- **Update Strategy**: Real-time triggers on outflow_period changes
+- **Document Pattern**: `outflowSummaries/{ownerId|groupId}_{periodType}`
 
 ## Data Size Estimates
 
 - Monthly (24 periods): ~3.4 KB per summary
 - Weekly (104 periods): ~14.6 KB per summary
 - Bi-weekly (52 periods): ~7.3 KB per summary
-- Total per user (9 summaries): ~135 KB
-- **Performance**: 99% reduction in read operations
+- Total per user (3 outflow summaries): ~25 KB
+- **Performance**: 99% reduction in read operations for outflow data
 
 ## Architecture
 
 ### Document Structure
 
-**Collections:**
+**Collection:**
 - `outflowSummaries/`
-- `budgetSummaries/`
-- `inflowSummaries/`
 
 **Document ID Pattern:**
 - User summaries: `{userId}_{periodType}` (e.g., `user_abc123_monthly`)
 - Group summaries: `{groupId}_{periodType}` (e.g., `group_xyz789_monthly`)
 
-**Summary Document Schema:**
+**Outflow Summary Document Schema:**
 ```typescript
-{
+interface OutflowPeriodSummary {
+  // Identity
   ownerId: string;              // User ID or Group ID
-  ownerType: 'user' | 'group';  // Type of owner
-  periodType: 'MONTHLY' | 'weekly' | 'BI_MONTHLY';
-  resourceType: 'outflow' | 'budget' | 'inflow';
+  ownerType: 'user' | 'group';
+  periodType: 'MONTHLY' | 'WEEKLY' | 'BI_MONTHLY';
+  resourceType: 'outflow';      // Always 'outflow'
+
+  // Time Window
   windowStart: Timestamp;       // Start of 2-year window
   windowEnd: Timestamp;         // End of 2-year window
 
-  periods: PeriodEntry[];       // Array of period summaries
+  // Summary Data
+  periods: OutflowPeriodEntry[];  // Array of period summaries
 
   // Metadata
-  totalItemCount: number;       // Total outflows/budgets/inflows
+  totalItemCount: number;       // Total active outflows being tracked
   lastRecalculated: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 ```
 
-**PeriodEntry Schema:**
+**Outflow Period Entry Schema:**
 ```typescript
-{
+interface OutflowPeriodEntry {
   // Period Identity
-  periodId: string;             // e.g., "2025M01"
+  periodId: string;                  // e.g., "2025M01"
   periodStartDate: Timestamp;
   periodEndDate: Timestamp;
 
-  // Amount Totals
-  totalAmountDue: number;
-  totalAmountPaid: number;
-  totalAmountUnpaid: number;
+  // Amount Totals (flat structure)
+  totalAmountDue: number;            // Total expected for this period
+  totalAmountPaid: number;           // Total actually paid
+  totalAmountUnpaid: number;         // Remaining balance
+  totalAmountWithheld: number;       // Total amount being withheld for bills
+  averageAmount: number;             // Average outflow amount for this period
+
+  // Due Status
+  isDuePeriod: boolean;              // Is this period currently due
+  duePeriodCount: number;            // How many outflows are due this period
+
+  // Merchant Information
+  merchantBreakdown: MerchantSummary[];  // Top merchants for this period
 
   // Status Breakdown
   statusCounts: {
@@ -80,14 +94,20 @@ Implement a comprehensive Period Summary System to optimize dashboard loading by
     DUE_SOON: number;
     PENDING: number;
     PARTIAL: number;
-    // ... other statuses
+    NOT_DUE: number;
   };
 
   // Progress Metrics
-  paymentProgressPercentage: number;
-  fullyPaidCount: number;
-  unpaidCount: number;
-  itemCount: number;            // Items with periods in this time range
+  paymentProgressPercentage: number; // (paid / due) × 100
+  fullyPaidCount: number;            // Outflows fully paid
+  unpaidCount: number;               // Outflows not paid
+  itemCount: number;                 // Total outflows with periods in this range
+}
+
+interface MerchantSummary {
+  merchant: string;                  // Merchant name
+  count: number;                     // Number of outflows to this merchant
+  totalAmount: number;               // Total amount for this merchant
 }
 ```
 
@@ -95,7 +115,7 @@ Implement a comprehensive Period Summary System to optimize dashboard loading by
 
 ### Phase 1: Type Definitions & Infrastructure
 
-**New File:** `/src/types/periodSummaries.ts`
+**New File:** `/src/types/outflowSummaries.ts`
 
 Following existing type patterns from `/src/types/index.ts`:
 
@@ -104,9 +124,18 @@ import { Timestamp } from "firebase-admin/firestore";
 import { PeriodType } from "./index";
 
 /**
- * Single period's aggregated summary data
+ * Merchant summary for a period
  */
-export interface PeriodEntry {
+export interface MerchantSummary {
+  merchant: string;              // Merchant/vendor name
+  count: number;                 // Number of outflows to this merchant
+  totalAmount: number;           // Total amount for this merchant
+}
+
+/**
+ * Single outflow period's aggregated summary data
+ */
+export interface OutflowPeriodEntry {
   // Period Identity
   periodId: string;                  // e.g., "2025M01"
   periodStartDate: Timestamp;
@@ -116,9 +145,18 @@ export interface PeriodEntry {
   totalAmountDue: number;
   totalAmountPaid: number;
   totalAmountUnpaid: number;
+  totalAmountWithheld: number;       // NEW: Total withheld for bills
+  averageAmount: number;             // NEW: Average outflow amount
+
+  // Due Status (NEW)
+  isDuePeriod: boolean;              // Is this period currently due
+  duePeriodCount: number;            // Count of outflows due this period
+
+  // Merchant Information (NEW)
+  merchantBreakdown: MerchantSummary[];  // Top merchants for period
 
   // Status Breakdown
-  statusCounts: StatusCounts;
+  statusCounts: OutflowStatusCounts;
 
   // Progress Metrics
   paymentProgressPercentage: number; // (paid / due) × 100
@@ -127,60 +165,44 @@ export interface PeriodEntry {
   itemCount: number;                 // Items with periods in this range
 }
 
-export interface StatusCounts {
+export interface OutflowStatusCounts {
   PAID?: number;
   OVERDUE?: number;
   DUE_SOON?: number;
   PENDING?: number;
   PARTIAL?: number;
-  PAID_EARLY?: number;
   NOT_DUE?: number;
 }
 
 /**
- * Base summary document structure (generic)
+ * Outflow period summary document structure
  */
-export interface BasePeriodSummary {
+export interface OutflowPeriodSummary {
   // Identity
   ownerId: string;                   // User ID or Group ID
   ownerType: 'user' | 'group';
   periodType: PeriodType;            // MONTHLY, WEEKLY, BI_MONTHLY
-  resourceType: 'outflow' | 'budget' | 'inflow';
+  resourceType: 'outflow';
 
   // Time Window
   windowStart: Timestamp;            // Start of 2-year window
   windowEnd: Timestamp;              // End of 2-year window
 
   // Summary Data
-  periods: PeriodEntry[];            // Array of period summaries
+  periods: OutflowPeriodEntry[];     // Array of period summaries
 
   // Metadata
-  totalItemCount: number;            // Total resources being tracked
+  totalItemCount: number;            // Total active outflows
   lastRecalculated: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-}
-
-/**
- * Resource-specific summary types
- */
-export interface OutflowPeriodSummary extends BasePeriodSummary {
-  resourceType: 'outflow';
-}
-
-export interface BudgetPeriodSummary extends BasePeriodSummary {
-  resourceType: 'budget';
-}
-
-export interface InflowPeriodSummary extends BasePeriodSummary {
-  resourceType: 'inflow';
 }
 ```
 
 **Modify:** `/src/types/index.ts`
 ```typescript
 // Add to exports
-export * from "./periodSummaries";
+export * from "./outflowSummaries";
 ```
 
 **Modify:** `/firestore.rules`
@@ -188,8 +210,8 @@ export * from "./periodSummaries";
 Following existing security rule patterns:
 
 ```javascript
-// Period Summary Collections
-match /{resourceType}Summaries/{summaryId} {
+// Outflow Summary Collections
+match /outflowSummaries/{summaryId} {
   // Read: User's own summary
   allow read: if isAuthenticated() &&
                  summaryId.matches('^' + request.auth.uid + '_.*');
@@ -203,7 +225,7 @@ match /{resourceType}Summaries/{summaryId} {
   allow create, update, delete: if false;
 }
 
-// Helper function
+// Helper function (if not already defined)
 function userBelongsToGroup(groupId) {
   let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
   return groupId in userDoc.data.groupIds;
@@ -230,51 +252,33 @@ Add to existing indexes array:
     { "fieldPath": "periodType", "order": "ASCENDING" },
     { "fieldPath": "periodStartDate", "order": "ASCENDING" }
   ]
-},
-{
-  "collectionGroup": "budget_periods",
-  "fields": [
-    { "fieldPath": "userId", "order": "ASCENDING" },
-    { "fieldPath": "periodType", "order": "ASCENDING" },
-    { "fieldPath": "startDate", "order": "ASCENDING" }
-  ]
-},
-{
-  "collectionGroup": "budget_periods",
-  "fields": [
-    { "fieldPath": "groupId", "order": "ASCENDING" },
-    { "fieldPath": "periodType", "order": "ASCENDING" },
-    { "fieldPath": "startDate", "order": "ASCENDING" }
-  ]
 }
-// Repeat similar patterns for inflow_periods
 ```
 
 ### Phase 2: Core Utilities
 
-**New File:** `/src/functions/shared/utils/calculatePeriodSummary.ts`
+**New File:** `/src/functions/outflows/utils/calculateOutflowPeriodSummary.ts`
 
 Following patterns from `/src/functions/budgets/utils/budgetSpending.ts`:
 
 ```typescript
 import * as admin from 'firebase-admin';
-import { PeriodEntry, StatusCounts } from '../../../types/periodSummaries';
+import { OutflowPeriodEntry, OutflowStatusCounts, MerchantSummary } from '../../../types/outflowSummaries';
 import { PeriodType } from '../../../types';
 
 const db = admin.firestore();
 const Timestamp = admin.firestore.Timestamp;
 
 /**
- * Calculate period summary for a specific resource type and owner
+ * Calculate outflow period summary for a specific owner
  * Pattern matches budgetSpending.ts aggregation approach
  */
-export async function calculatePeriodSummary(
-  resourceType: 'outflow' | 'budget' | 'inflow',
+export async function calculateOutflowPeriodSummary(
   ownerId: string,
   ownerType: 'user' | 'group',
   periodType: PeriodType
-): Promise<PeriodEntry[]> {
-  console.log(`📊 Calculating ${resourceType} period summary:`, {
+): Promise<OutflowPeriodEntry[]> {
+  console.log(`📊 Calculating outflow period summary:`, {
     ownerId,
     ownerType,
     periodType
@@ -292,11 +296,10 @@ export async function calculatePeriodSummary(
 
   console.log(`📊 Window: ${windowStart.toISOString()} to ${windowEnd.toISOString()}`);
 
-  // Query all periods in window
-  const collectionName = `${resourceType}_periods`;
+  // Query all outflow periods in window
   const ownerField = ownerType === 'user' ? 'userId' : 'groupId';
 
-  const periodsQuery = db.collection(collectionName)
+  const periodsQuery = db.collection('outflow_periods')
     .where(ownerField, '==', ownerId)
     .where('periodType', '==', periodType)
     .where('periodStartDate', '>=', windowStartTs)
@@ -305,13 +308,13 @@ export async function calculatePeriodSummary(
 
   const periodsSnapshot = await periodsQuery.get();
 
-  console.log(`📊 Found ${periodsSnapshot.size} periods in window`);
+  console.log(`📊 Found ${periodsSnapshot.size} outflow periods in window`);
 
   if (periodsSnapshot.empty) {
     return [];
   }
 
-  // Group periods by sourcePeriodId (or periodId for budgets)
+  // Group periods by sourcePeriodId
   const periodGroups = new Map<string, any[]>();
 
   periodsSnapshot.forEach(doc => {
@@ -328,10 +331,10 @@ export async function calculatePeriodSummary(
   console.log(`📊 Grouped into ${periodGroups.size} unique periods`);
 
   // Calculate entry for each period
-  const periodEntries: PeriodEntry[] = [];
+  const periodEntries: OutflowPeriodEntry[] = [];
 
   for (const [periodId, periodDocs] of periodGroups) {
-    const entry = calculatePeriodEntry(periodDocs, resourceType);
+    const entry = calculateOutflowPeriodEntry(periodDocs);
     periodEntries.push(entry);
   }
 
@@ -340,42 +343,41 @@ export async function calculatePeriodSummary(
     a.periodStartDate.toMillis() - b.periodStartDate.toMillis()
   );
 
-  console.log(`✅ Calculated ${periodEntries.length} period entries`);
+  console.log(`✅ Calculated ${periodEntries.length} outflow period entries`);
 
   return periodEntries;
 }
 
 /**
- * Calculate single period entry from multiple period documents
- * Aggregates amounts and statuses across all items in the period
+ * Calculate single outflow period entry from multiple period documents
+ * Aggregates amounts, statuses, merchants across all outflows in the period
  */
-function calculatePeriodEntry(
-  periodDocs: any[],
-  resourceType: 'outflow' | 'budget' | 'inflow'
-): PeriodEntry {
+function calculateOutflowPeriodEntry(
+  periodDocs: any[]
+): OutflowPeriodEntry {
   const firstDoc = periodDocs[0];
   const periodId = firstDoc.sourcePeriodId || firstDoc.periodId;
+  const now = new Date();
 
   // Initialize aggregates
   let totalAmountDue = 0;
   let totalAmountPaid = 0;
+  let totalAmountWithheld = 0;
   let fullyPaidCount = 0;
   let unpaidCount = 0;
-  const statusCounts: StatusCounts = {};
+  let duePeriodCount = 0;
+  const statusCounts: OutflowStatusCounts = {};
+  const merchantTotals = new Map<string, { count: number; total: number }>();
+  const amounts: number[] = [];
 
   // Aggregate across all period documents
   for (const doc of periodDocs) {
-    // Amounts (field names vary by resource type)
-    if (resourceType === 'outflow') {
-      totalAmountDue += doc.totalAmountDue || doc.amountDue || 0;
-      totalAmountPaid += doc.totalAmountPaid || 0;
-    } else if (resourceType === 'budget') {
-      totalAmountDue += doc.allocatedAmount || doc.modifiedAmount || 0;
-      totalAmountPaid += doc.spent || 0;
-    } else if (resourceType === 'inflow') {
-      totalAmountDue += doc.amountEarned || 0;
-      totalAmountPaid += doc.amountReceived || 0;
-    }
+    // Amounts
+    const amountDue = doc.totalAmountDue || doc.amountDue || 0;
+    totalAmountDue += amountDue;
+    totalAmountPaid += doc.totalAmountPaid || 0;
+    totalAmountWithheld += doc.amountWithheld || 0;
+    amounts.push(amountDue);
 
     // Status counts
     const status = doc.status;
@@ -384,25 +386,52 @@ function calculatePeriodEntry(
     }
 
     // Paid vs unpaid tracking
-    if (resourceType === 'outflow') {
-      if (doc.isFullyPaid || doc.isPaid) {
-        fullyPaidCount++;
-      } else {
-        unpaidCount++;
-      }
-    } else if (resourceType === 'budget') {
-      if (doc.spent >= doc.allocatedAmount) {
-        fullyPaidCount++; // Over budget counts as "paid"
-      } else {
-        unpaidCount++;
-      }
+    if (doc.isFullyPaid || doc.isPaid) {
+      fullyPaidCount++;
+    } else {
+      unpaidCount++;
     }
+
+    // Due period tracking
+    if (doc.isDuePeriod) {
+      duePeriodCount++;
+    }
+
+    // Merchant aggregation
+    const merchant = doc.merchant || doc.merchantName || 'Unknown';
+    if (!merchantTotals.has(merchant)) {
+      merchantTotals.set(merchant, { count: 0, total: 0 });
+    }
+    const merchantData = merchantTotals.get(merchant)!;
+    merchantData.count++;
+    merchantData.total += amountDue;
   }
 
+  // Calculate derived values
   const totalAmountUnpaid = totalAmountDue - totalAmountPaid;
   const paymentProgressPercentage = totalAmountDue > 0
     ? Math.round((totalAmountPaid / totalAmountDue) * 100)
     : 0;
+
+  // Calculate average amount
+  const averageAmount = amounts.length > 0
+    ? amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length
+    : 0;
+
+  // Determine if this is a due period
+  const isDuePeriod = duePeriodCount > 0 ||
+                      (firstDoc.periodStartDate.toMillis() <= now.getTime() &&
+                       firstDoc.periodEndDate.toMillis() >= now.getTime());
+
+  // Build merchant breakdown (top 5 merchants)
+  const merchantBreakdown: MerchantSummary[] = Array.from(merchantTotals.entries())
+    .map(([merchant, data]) => ({
+      merchant,
+      count: data.count,
+      totalAmount: data.total
+    }))
+    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .slice(0, 5);
 
   return {
     periodId,
@@ -411,6 +440,11 @@ function calculatePeriodEntry(
     totalAmountDue,
     totalAmountPaid,
     totalAmountUnpaid,
+    totalAmountWithheld,
+    averageAmount,
+    isDuePeriod,
+    duePeriodCount,
+    merchantBreakdown,
     statusCounts,
     paymentProgressPercentage,
     fullyPaidCount,
@@ -420,10 +454,10 @@ function calculatePeriodEntry(
 }
 ```
 
-**New File:** `/src/functions/shared/utils/updatePeriodSummary.ts`
+**New File:** `/src/functions/outflows/utils/updateOutflowPeriodSummary.ts`
 
-**Key Function:** `updatePeriodSummary()`
-- **Input**: resourceType, periodChange (old and new period data)
+**Key Function:** `updateOutflowPeriodSummary()`
+- **Input**: periodChange (old and new outflow_period data)
 - **Process**:
   1. Extract ownerId, periodType, periodId from period
   2. Determine if user summary and/or group summary need updates
@@ -442,62 +476,57 @@ function calculatePeriodEntry(
 
 ### Phase 3: Trigger Implementation
 
-**Pattern**: 3 triggers per resource type × 3 operations = 9 triggers per resource
-
-**Outflow Triggers:**
-
 **New File:** `/src/functions/outflows/orchestration/triggers/onOutflowPeriodSummary.ts`
+
 ```typescript
-export const onOutflowPeriodCreated = onDocumentCreated(
-  'outflow_periods/{periodId}',
-  async (event) => {
-    await updatePeriodSummary('outflow', null, event.data);
-  }
-);
+import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
+import { updateOutflowPeriodSummary } from '../../utils/updateOutflowPeriodSummary';
 
-export const onOutflowPeriodUpdated = onDocumentUpdated(
-  'outflow_periods/{periodId}',
-  async (event) => {
-    await updatePeriodSummary('outflow', event.data.before, event.data.after);
-  }
-);
+export const onOutflowPeriodCreatedSummary = onDocumentCreated({
+  document: 'outflow_periods/{periodId}',
+  region: 'us-central1',
+  memory: '256MiB',
+  timeoutSeconds: 30,
+}, async (event) => {
+  await updateOutflowPeriodSummary(null, event.data);
+});
 
-export const onOutflowPeriodDeleted = onDocumentDeleted(
-  'outflow_periods/{periodId}',
-  async (event) => {
-    await updatePeriodSummary('outflow', event.data, null);
-  }
-);
+export const onOutflowPeriodUpdatedSummary = onDocumentUpdated({
+  document: 'outflow_periods/{periodId}',
+  region: 'us-central1',
+  memory: '256MiB',
+  timeoutSeconds: 30,
+}, async (event) => {
+  await updateOutflowPeriodSummary(event.data.before, event.data.after);
+});
+
+export const onOutflowPeriodDeletedSummary = onDocumentDeleted({
+  document: 'outflow_periods/{periodId}',
+  region: 'us-central1',
+  memory: '256MiB',
+  timeoutSeconds: 30,
+}, async (event) => {
+  await updateOutflowPeriodSummary(event.data, null);
+});
 ```
 
-**Budget Triggers:**
-**New File:** `/src/functions/budgets/orchestration/triggers/onBudgetPeriodSummary.ts`
-- Same pattern for `budget_periods` collection
-
-**Inflow Triggers:**
-**New File:** `/src/functions/inflows/orchestration/triggers/onInflowPeriodSummary.ts`
-- Same pattern for `inflow_periods` collection
-
-**Modify Trigger Index Files:**
-- `/src/functions/outflows/orchestration/triggers/index.ts` - Export new triggers
-- `/src/functions/budgets/orchestration/triggers/index.ts` - Export new triggers
-- `/src/functions/inflows/orchestration/triggers/index.ts` - Export new triggers
+**Modify:** `/src/functions/outflows/orchestration/triggers/index.ts`
+- Export new triggers
 
 ### Phase 4: Callable Functions
 
-**New File:** `/src/functions/shared/api/recalculatePeriodSummary.ts`
+**New File:** `/src/functions/outflows/api/recalculateOutflowSummary.ts`
 
-**Function:** `recalculatePeriodSummary` (Callable)
+**Function:** `recalculateOutflowSummary` (Callable)
 - **Purpose**: Manual recalculation for backfill/debugging
 - **Parameters**:
-  - `resourceType`: 'outflow' | 'budget' | 'inflow'
   - `ownerId`: User ID or Group ID
   - `ownerType`: 'user' | 'group'
   - `periodType`: 'MONTHLY' | 'WEEKLY' | 'BI_MONTHLY'
 - **Authorization**: Users can only recalculate their own summaries
 - **Process**:
   1. Validate authorization
-  2. Call `calculatePeriodSummary()` to get fresh data
+  2. Call `calculateOutflowPeriodSummary()` to get fresh data
   3. Create or update summary document
   4. Return success with summary stats
 - **Use Cases**:
@@ -521,29 +550,27 @@ export const onOutflowPeriodDeleted = onDocumentDeleted(
 2. Deploy callable function
 3. Test with single user's data
 
-**Step 3: Deploy Triggers (Incrementally)**
-1. Deploy outflow triggers first
-2. Monitor for 24 hours
-3. Deploy budget triggers
-4. Monitor for 24 hours
-5. Deploy inflow triggers
+**Step 3: Deploy Triggers**
+1. Deploy outflow period triggers
+2. Monitor for 24-48 hours
+3. Verify summaries update correctly
 
 **Step 4: Backfill Existing Data**
-1. Create admin script to call `recalculatePeriodSummary` for all users
+1. Create admin script to call `recalculateOutflowSummary` for all users
 2. Process in batches (100 users at a time)
 3. Monitor Firestore usage and function execution
 4. Validate sample summaries manually
 
-**Step 5: Frontend Integration (Future)**
-1. Update mobile app to query summaries instead of periods
+**Step 5: Frontend Integration**
+1. Update mobile app to query outflow summaries instead of periods
 2. Display aggregated metrics in dashboard
 3. Load full periods only when tiles clicked
 
 ## Security Rules
 
 ```javascript
-// Summary collections: Read-only for users, write-only for Cloud Functions
-match /{resourceType}Summaries/{summaryId} {
+// Outflow summary collections: Read-only for users, write-only for Cloud Functions
+match /outflowSummaries/{summaryId} {
   // Read: User's own summary
   allow read: if isAuthenticated() &&
                  summaryId.matches('^' + request.auth.uid + '_.*');
@@ -584,8 +611,7 @@ function userBelongsToGroup(groupId) {
         { "fieldPath": "periodType", "order": "ASCENDING" },
         { "fieldPath": "periodStartDate", "order": "ASCENDING" }
       ]
-    },
-    // Repeat for budget_periods and inflow_periods
+    }
   ]
 }
 ```
@@ -594,13 +620,17 @@ function userBelongsToGroup(groupId) {
 
 ### Unit Tests
 
-**Test File:** `/src/functions/shared/utils/__tests__/calculatePeriodSummary.test.ts`
-- Test period entry aggregation with multiple periods
+**Test File:** `/src/functions/outflows/utils/__tests__/calculateOutflowPeriodSummary.test.ts`
+- Test period entry aggregation with multiple outflow periods
 - Test status counting accuracy
 - Test progress percentage calculations
+- Test merchant aggregation (top 5)
+- Test isDuePeriod detection
+- Test amountWithheld totaling
+- Test averageAmount calculation
 - Test empty period handling
 
-**Test File:** `/src/functions/shared/utils/__tests__/updatePeriodSummary.test.ts`
+**Test File:** `/src/functions/outflows/utils/__tests__/updateOutflowPeriodSummary.test.ts`
 - Test incremental updates on onCreate
 - Test incremental updates on onUpdate
 - Test period removal on onDelete
@@ -609,24 +639,27 @@ function userBelongsToGroup(groupId) {
 ### Integration Tests
 - Create outflow_period → verify summary updates within seconds
 - Update period status → verify entry recalculation
-- Delete period → verify entry removal or recalculation
+- Delete outflow period → verify entry removal or recalculation
+- Update merchant → verify merchantBreakdown updates
 
 ### Manual Testing Checklist
 1. Create new outflow with periods → summary auto-created
 2. Mark period as paid → summary updates status counts
 3. Delete outflow period → summary reflects change
 4. Share outflow with group → group summary created
-5. Verify summary document sizes under limits
+5. Verify merchant breakdown shows correct top merchants
+6. Verify isDuePeriod flag is accurate for current date
+7. Verify document sizes under limits
 
 ## Performance Considerations
 
 **Before (Current System):**
-- Dashboard load: Query 100+ period documents
+- Dashboard load: Query 100+ outflow_period documents
 - Network: ~100 reads × 1 KB = ~100 KB
 - Cost: 100 reads per dashboard load
 
 **After (With Summaries):**
-- Dashboard load: Query 1 summary document
+- Dashboard load: Query 1 outflow summary document
 - Network: 1 read × 15 KB = ~15 KB
 - Cost: 1 read per dashboard load
 - **Savings: 99% reduction in reads**
@@ -637,43 +670,47 @@ function userBelongsToGroup(groupId) {
 - Incremental updates minimize computation
 
 **Scalability:**
-- Maximum 104 periods (weekly) × ~140 bytes = ~15 KB
+- Maximum 104 periods (weekly) × ~180 bytes = ~19 KB
 - Well under 1 MB Firestore document limit
-- Supports up to 100 items per user without issues
+- Supports up to 100 outflows per user without issues
+- Merchant breakdown limited to top 5 to control size
 
 ## Files Summary
 
-### New Files (11 total)
-1. `/src/types/periodSummaries.ts` - Type definitions
-2. `/src/functions/shared/utils/calculatePeriodSummary.ts` - Full calculation
-3. `/src/functions/shared/utils/updatePeriodSummary.ts` - Incremental updates
-4. `/src/functions/shared/api/recalculatePeriodSummary.ts` - Callable function
-5. `/src/functions/outflows/orchestration/triggers/onOutflowPeriodSummary.ts` - Outflow triggers
-6. `/src/functions/budgets/orchestration/triggers/onBudgetPeriodSummary.ts` - Budget triggers
-7. `/src/functions/inflows/orchestration/triggers/onInflowPeriodSummary.ts` - Inflow triggers
-8-10. Test files for utilities
-11. Migration script (admin)
+### New Files (7 total)
+1. `/src/types/outflowSummaries.ts` - Type definitions
+2. `/src/functions/outflows/utils/calculateOutflowPeriodSummary.ts` - Full calculation
+3. `/src/functions/outflows/utils/updateOutflowPeriodSummary.ts` - Incremental updates
+4. `/src/functions/outflows/api/recalculateOutflowSummary.ts` - Callable function
+5. `/src/functions/outflows/orchestration/triggers/onOutflowPeriodSummary.ts` - Triggers
+6. `/src/functions/outflows/utils/__tests__/calculateOutflowPeriodSummary.test.ts` - Unit tests
+7. `/src/functions/outflows/utils/__tests__/updateOutflowPeriodSummary.test.ts` - Unit tests
 
-### Modified Files (5 total)
+### Modified Files (4 total)
 1. `/src/types/index.ts` - Export new types
 2. `/src/index.ts` - Export callable function
-3. `/firestore.rules` - Add summary collection rules
+3. `/firestore.rules` - Add outflowSummaries collection rules
 4. `/firestore.indexes.json` - Add composite indexes
-5. Trigger index files - Export new triggers
+5. `/src/functions/outflows/orchestration/triggers/index.ts` - Export new triggers
 
 ## Success Criteria
 
-1. Summary documents created automatically for all new periods
+1. Outflow summary documents created automatically for all new periods
 2. Summaries update in real-time (<5 seconds) when periods change
 3. Dashboard loads with 1 read instead of 100+
 4. Document sizes remain under 20 KB (well under 1 MB limit)
 5. Group summaries aggregate correctly across all members
-6. All existing period data backfilled successfully
+6. Merchant breakdown shows top 5 merchants accurately
+7. isDuePeriod flag accurately reflects current period status
+8. amountWithheld totals correctly across all periods
+9. averageAmount calculates correctly
+10. All existing outflow period data backfilled successfully
 
 ## Risk Mitigation
 
 **Risk**: Firestore document size limit exceeded
-- **Mitigation**: Current calculations show max 15 KB (well under 1 MB)
+- **Mitigation**: Current calculations show max 19 KB (well under 1 MB)
+- **Mitigation**: Merchant breakdown limited to top 5
 - **Monitoring**: Track document sizes in production
 
 **Risk**: Trigger failures causing inconsistent summaries
@@ -684,14 +721,24 @@ function userBelongsToGroup(groupId) {
 - **Mitigation**: Incremental updates only affect single period entry
 - **Optimization**: Batch multiple changes if needed
 
-**Risk**: Group summary calculation complexity
-- **Mitigation**: Same pattern as user summaries, just different ownerId
-- **Testing**: Comprehensive integration tests
+**Risk**: Merchant aggregation performance
+- **Mitigation**: Limited to top 5 merchants per period
+- **Optimization**: Use Map for efficient aggregation
+
+## Next Steps After Outflows
+
+Once the outflow summary system is:
+1. ✅ Deployed successfully
+2. ✅ Tested thoroughly
+3. ✅ Backfilled for existing users
+4. ✅ Running stable for 1 week
+
+Then proceed to **Phase 2: Budget Summary System** using the same pattern.
 
 ## Future Enhancements
 
 1. **Caching**: Add client-side caching of summary documents
-2. **Pagination**: If summaries grow large, split into multiple documents
-3. **Analytics**: Track summary usage and performance metrics
-4. **Rollup Summaries**: Yearly summaries aggregating monthly data
+2. **Analytics**: Track summary usage and performance metrics
+3. **Merchant Insights**: Expand merchant analytics beyond top 5
+4. **Trend Detection**: Identify spending patterns across periods
 5. **Historical Archives**: Move old period entries to archive collection
