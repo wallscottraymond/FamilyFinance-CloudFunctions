@@ -7,6 +7,7 @@ export * from "./users";
 export * from "./groups";
 export * from "./sharing";
 export * from "./outflowSummaries";
+export * from "./periodSummaries";
 
 // Base interface for all documents
 export interface BaseDocument {

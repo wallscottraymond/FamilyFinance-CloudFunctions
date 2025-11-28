@@ -7,5 +7,6 @@ export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdm
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 export { verifyAccessControl } from "./verifyAccessControl";
+export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
 export { removeAllUserAccounts, removeAllUserBudgets, removeAllUserOutflows, removeAllUserInflows, removeAllUserTransactions, removeAllUserData } from "./cleanupUserData";
 //# sourceMappingURL=index.d.ts.map

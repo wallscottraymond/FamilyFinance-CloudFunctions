@@ -14,3 +14,9 @@ export * from './autoMatchTransactionToOutflowPeriods';
 export * from './findMatchingOutflowPeriods';
 export * from './autoMatchSinglePeriod';
 export * from './runUpdateOutflowPeriods';
+
+// Summary Operations
+export * from './summaryOperations/recalculatePeriodGroup';
+export * from './summaryOperations/recalculateFullSummary';
+export * from './summaryOperations/updatePeriodNames';
+export * from './summaryOperations/batchUpdateSummary';

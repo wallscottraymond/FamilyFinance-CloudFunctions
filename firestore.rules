@@ -65,7 +65,7 @@ service cloud.firestore {
     }
 
     // Check if user belongs to group extracted from summary ID
-    // Summary ID format: {groupId}_{periodType} (e.g., "group_xyz789_monthly")
+    // Summary ID format: {groupId}_outflowsummary_{periodType} (e.g., "group_xyz789_outflowsummary_monthly")
     function userBelongsToGroupFromSummaryId(summaryId) {
       let groupId = summaryId.split('_')[0];
       return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -613,9 +613,9 @@ service cloud.firestore {
     // =======================
 
     match /outflowSummaries/{summaryId} {
-      // Read: User's own summary (summaryId format: userId_periodType)
+      // Read: User's own summary (summaryId format: userId_outflowsummary_periodType)
       allow read: if isAuthenticated() &&
-                     summaryId.matches('^' + request.auth.uid + '_.*');
+                     summaryId.matches('^' + request.auth.uid + '_outflowsummary_.*');
 
       // Write: Cloud Functions only
       allow create, update, delete: if false;
@@ -627,6 +627,34 @@ service cloud.firestore {
 
     match /groupOutflowSummaries/{summaryId} {
       // Read: Group summary if user belongs to group
+      allow read: if isAuthenticated() &&
+                     userBelongsToGroupFromSummaryId(summaryId);
+
+      // Write: Cloud Functions only
+      allow create, update, delete: if false;
+    }
+
+    // =======================
+    // USER SUMMARIES COLLECTION RULES - PERIOD-CENTRIC
+    // =======================
+
+    match /user_summaries/{summaryId} {
+      // Read: User's own summaries
+      // Format: userId_periodType_sourcePeriodId (e.g., user123_monthly_2025-M11)
+      allow read: if isAuthenticated() &&
+                     summaryId.matches('^' + request.auth.uid + '_.*');
+
+      // Write: Cloud Functions only
+      allow create, update, delete: if false;
+    }
+
+    // =======================
+    // GROUP SUMMARIES COLLECTION RULES - PERIOD-CENTRIC
+    // =======================
+
+    match /group_summaries/{summaryId} {
+      // Read: Group members only
+      // Format: groupId_periodType_sourcePeriodId (e.g., group456_monthly_2025-M11)
       allow read: if isAuthenticated() &&
                      userBelongsToGroupFromSummaryId(summaryId);
 

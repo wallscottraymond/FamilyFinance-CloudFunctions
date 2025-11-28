@@ -9,6 +9,7 @@ export * from "./functions/admin";
 export * from "./functions/plaid";
 export * from "./functions/outflows";
 export * from "./functions/inflows";
+export * from "./functions/summaries";
 export declare const healthCheck: import("firebase-functions/v2/https").HttpsFunction;
 declare const db: admin.firestore.Firestore;
 export { db };

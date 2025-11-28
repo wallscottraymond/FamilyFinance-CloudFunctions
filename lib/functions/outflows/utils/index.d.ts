@@ -13,4 +13,8 @@ export * from './autoMatchTransactionToOutflowPeriods';
 export * from './findMatchingOutflowPeriods';
 export * from './autoMatchSinglePeriod';
 export * from './runUpdateOutflowPeriods';
+export * from './summaryOperations/recalculatePeriodGroup';
+export * from './summaryOperations/recalculateFullSummary';
+export * from './summaryOperations/updatePeriodNames';
+export * from './summaryOperations/batchUpdateSummary';
 //# sourceMappingURL=index.d.ts.map

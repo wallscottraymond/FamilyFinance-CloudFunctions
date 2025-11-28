@@ -14,21 +14,14 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { Timestamp } from 'firebase-admin/firestore';
 import { TransactionStream } from 'plaid';
 import { formatRecurringInflows } from '../../inflows/utils/formatRecurringInflows';
 import { enhanceRecurringInflows } from '../../inflows/utils/enhanceRecurringInflows';
 import { formatRecurringOutflows } from '../utils/formatRecurringOutflows';
 import { enhanceRecurringOutflows } from '../utils/enhanceRecurringOutflows';
 import { batchCreateInflowStreams, batchCreateOutflowStreams } from '../utils/batchCreateRecurringStreams';
-
-// Initialize Firebase Admin if not already initialized
-if (getApps().length === 0) {
-  initializeApp();
-}
-
-const db = getFirestore();
+import { db } from '../../../index';
 
 /**
  * Simulated Plaid recurring transactions response
@@ -186,6 +179,46 @@ export const createTestOutflows = onCall({
       outflowPeriodsCreated: 0,
       errors: [] as string[]
     };
+
+    // Step 0: Clean up existing test data
+    console.log('🧹 STEP 0: Cleaning up existing test data...');
+
+    // Delete existing test outflows with these stream IDs
+    const testStreamIds = ['stream_coned_001', 'stream_costco_001', 'stream_payroll_001'];
+    for (const streamId of testStreamIds) {
+      try {
+        const outflowDoc = await db.collection('outflows').doc(streamId).get();
+        if (outflowDoc.exists) {
+          console.log(`  🗑️  Deleting existing outflow: ${streamId}`);
+          await outflowDoc.ref.delete();
+        }
+      } catch (error) {
+        console.log(`  ⚠️  Error deleting ${streamId}:`, error);
+      }
+    }
+
+    // Delete existing test inflows
+    const inflowDoc = await db.collection('inflows').doc('stream_payroll_001').get();
+    if (inflowDoc.exists) {
+      console.log(`  🗑️  Deleting existing inflow: stream_payroll_001`);
+      await inflowDoc.ref.delete();
+    }
+
+    // Delete existing outflow_periods for this user
+    const periodsSnapshot = await db.collection('outflow_periods')
+      .where('userId', '==', targetUserId)
+      .limit(100)
+      .get();
+
+    if (!periodsSnapshot.empty) {
+      console.log(`  🗑️  Deleting ${periodsSnapshot.size} existing outflow_periods`);
+      const batch = db.batch();
+      periodsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    console.log('  ✅ Cleanup complete');
+    console.log('');
 
     // Step 1: Create a test plaid_item (optional - for completeness)
     console.log('📝 STEP 1: Creating test plaid_item...');

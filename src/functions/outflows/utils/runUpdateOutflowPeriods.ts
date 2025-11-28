@@ -162,7 +162,6 @@ export async function runUpdateOutflowPeriods(
     // - userCustomName changes go to ALL periods
     // - averageAmount/transactionIds changes only go to unpaid periods
     const hasNameChange = changedFields.includes('userCustomName');
-    const hasAmountChange = changedFields.includes('averageAmount') || changedFields.includes('transactionIds');
 
     // If name changed, include all periods (paid periods will only get name updates)
     const periodsToUpdate = hasNameChange ? allPeriods : unpaidPeriods;

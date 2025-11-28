@@ -8,6 +8,7 @@ export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdm
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 export { verifyAccessControl } from "./verifyAccessControl";
+export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
 
 // Transaction splitting migration functions (DEPRECATED - stubbed out)
 // export {

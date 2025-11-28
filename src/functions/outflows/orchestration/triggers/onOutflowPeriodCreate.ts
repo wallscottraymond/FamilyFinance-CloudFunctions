@@ -12,6 +12,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { OutflowPeriod, Outflow } from '../../../../types';
 import { autoMatchSinglePeriod } from '../../utils/autoMatchSinglePeriod';
+import { batchUpdateSummary, getSummaryId } from '../../utils/summaryOperations/batchUpdateSummary';
 
 /**
  * Triggered when an outflow_period is created
@@ -95,6 +96,56 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
     console.log('');
 
+    // Step 3: Update outflow summaries
+    console.log('[onOutflowPeriodCreate] Step 3: Updating outflow summaries...');
+    try {
+      // Determine period type from source period ID
+      const periodType = determinePeriodType(outflowPeriodData.sourcePeriodId);
+
+      // Update user summary
+      const userSummaryId = getSummaryId(outflowPeriodData.ownerId, 'user', periodType);
+      console.log(`[onOutflowPeriodCreate] ✓ Updating user summary: ${userSummaryId}`);
+
+      await batchUpdateSummary({
+        summaryId: userSummaryId,
+        operations: [{
+          type: 'recalculate',
+          data: {
+            sourcePeriodId: outflowPeriodData.sourcePeriodId,
+            ownerId: outflowPeriodData.ownerId,
+            ownerType: 'user',
+            periodType
+          }
+        }]
+      });
+
+      console.log(`[onOutflowPeriodCreate] ✓ User summary updated successfully`);
+
+      // Update group summary if period belongs to a group
+      if (outflowPeriodData.groupId) {
+        const groupSummaryId = getSummaryId(outflowPeriodData.groupId, 'group', periodType);
+        console.log(`[onOutflowPeriodCreate] ✓ Updating group summary: ${groupSummaryId}`);
+
+        await batchUpdateSummary({
+          summaryId: groupSummaryId,
+          operations: [{
+            type: 'recalculate',
+            data: {
+              sourcePeriodId: outflowPeriodData.sourcePeriodId,
+              ownerId: outflowPeriodData.groupId,
+              ownerType: 'group',
+              periodType
+            }
+          }]
+        });
+
+        console.log(`[onOutflowPeriodCreate] ✓ Group summary updated successfully`);
+      }
+    } catch (summaryError) {
+      console.error('[onOutflowPeriodCreate] ⚠️  Summary update failed:', summaryError);
+      // Don't throw - summary failures shouldn't break the trigger
+    }
+
   } catch (error) {
     console.error('');
     console.error('[onOutflowPeriodCreate] ❌ ERROR:', error);
@@ -102,3 +153,21 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     // Don't throw - we don't want to break period creation if auto-matching fails
   }
 });
+
+/**
+ * Determine PeriodType from sourcePeriodId format
+ * Examples: 2025-M01 (monthly), 2025-BM01-1 (bi-monthly), 2025-W01 (weekly)
+ */
+function determinePeriodType(sourcePeriodId: string): import('../../../../types').PeriodType {
+  const { PeriodType } = require('../../../../types');
+
+  if (sourcePeriodId.includes('-M') && !sourcePeriodId.includes('-BM')) {
+    return PeriodType.MONTHLY;
+  } else if (sourcePeriodId.includes('-BM')) {
+    return PeriodType.BI_MONTHLY;
+  } else if (sourcePeriodId.includes('-W')) {
+    return PeriodType.WEEKLY;
+  }
+  // Default to monthly if unable to determine
+  return PeriodType.MONTHLY;
+}

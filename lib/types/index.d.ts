@@ -4,6 +4,8 @@ import { GroupMembership } from "./groups";
 export * from "./users";
 export * from "./groups";
 export * from "./sharing";
+export * from "./outflowSummaries";
+export * from "./periodSummaries";
 export interface BaseDocument {
     id?: string;
     createdAt: Timestamp;

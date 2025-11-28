@@ -17,12 +17,12 @@ export async function initializeOutflowSummaries(userId: string): Promise<void> 
   const windowEnd = new Date(now);
   windowEnd.setFullYear(now.getFullYear() + 1);
 
-  const periodTypes: PeriodType[] = ['MONTHLY', 'WEEKLY', 'BI_MONTHLY'];
+  const periodTypes: PeriodType[] = [PeriodType.MONTHLY, PeriodType.WEEKLY, PeriodType.BI_MONTHLY];
 
   const batch = db.batch();
 
   for (const periodType of periodTypes) {
-    const docId = `${userId}_${periodType.toLowerCase()}`;
+    const docId = `${userId}_outflowsummary_${periodType.toLowerCase()}`;
     const docRef = db.collection('outflowSummaries').doc(docId);
 
     // Check if document already exists
@@ -67,12 +67,12 @@ export async function initializeGroupOutflowSummaries(groupId: string): Promise<
   const windowEnd = new Date(now);
   windowEnd.setFullYear(now.getFullYear() + 1);
 
-  const periodTypes: PeriodType[] = ['MONTHLY', 'WEEKLY', 'BI_MONTHLY'];
+  const periodTypes: PeriodType[] = [PeriodType.MONTHLY, PeriodType.WEEKLY, PeriodType.BI_MONTHLY];
 
   const batch = db.batch();
 
   for (const periodType of periodTypes) {
-    const docId = `${groupId}_${periodType.toLowerCase()}`;
+    const docId = `${groupId}_outflowsummary_${periodType.toLowerCase()}`;
     const docRef = db.collection('groupOutflowSummaries').doc(docId);
 
     // Check if document already exists

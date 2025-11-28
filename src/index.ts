@@ -15,6 +15,7 @@ export * from "./functions/admin";
 export * from "./functions/plaid"; // Plaid integration functions
 export * from "./functions/outflows"; // Outflow management functions
 export * from "./functions/inflows"; // Inflow management and period generation
+export * from "./functions/summaries"; // Period-centric summary system (API + triggers)
 
 // Health check function (v2)
 export const healthCheck = onRequest({

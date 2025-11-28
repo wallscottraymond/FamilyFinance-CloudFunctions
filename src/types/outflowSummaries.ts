@@ -2,24 +2,17 @@ import { Timestamp } from "firebase-admin/firestore";
 import { PeriodType } from "./index";
 
 /**
- * Merchant summary for a period
- */
-export interface MerchantSummary {
-  merchant: string;              // Merchant/vendor name
-  count: number;                 // Number of outflows to this merchant
-  totalAmount: number;           // Total amount for this merchant
-}
-
-/**
  * Single outflow period's aggregated summary data
+ * NOTE: sourcePeriodId is the object key in parent structure (e.g., "2025-M11")
+ * NOTE: periodStartDate/periodEndDate removed - derivable from sourcePeriodId
  */
 export interface OutflowPeriodEntry {
   // Period Identity
-  periodId: string;                  // e.g., "2025M01" (sourcePeriodId)
+  periodId: string;                  // Unique outflow_period document ID
+  outflowId: string;                 // Parent outflow ID (for name updates)
   groupId: string;                   // Group ID for this period
-  name: string;                      // Denormalized from parent outflow (customName || merchantName)
-  periodStartDate: Timestamp;
-  periodEndDate: Timestamp;
+  merchant: string;                  // Merchant name (from outflow.merchantName)
+  userCustomName: string;            // User's custom name (from outflow.userCustomName)
 
   // Amount Totals (flat structure, NOT nested)
   totalAmountDue: number;
@@ -31,9 +24,6 @@ export interface OutflowPeriodEntry {
   // Due Status
   isDuePeriod: boolean;              // Is this period currently due
   duePeriodCount: number;            // Count of outflows due this period
-
-  // Merchant Information
-  merchantBreakdown: MerchantSummary[];  // Top 5 merchants for period
 
   // Status Breakdown
   statusCounts: OutflowStatusCounts;
@@ -56,6 +46,7 @@ export interface OutflowStatusCounts {
 
 /**
  * Outflow period summary document structure
+ * Periods are organized as nested object for O(1) lookup by period ID
  */
 export interface OutflowPeriodSummary {
   // Identity
@@ -68,8 +59,11 @@ export interface OutflowPeriodSummary {
   windowStart: Timestamp;            // Start of 2-year window
   windowEnd: Timestamp;              // End of 2-year window
 
-  // Summary Data (organized by sourcePeriodId)
-  periods: OutflowPeriodEntry[];     // Array of period summaries
+  // Summary Data (nested by sourcePeriodId for O(1) lookup)
+  // Example: { "2025-M11": [...entries], "2025-M12": [...entries] }
+  periods: {
+    [sourcePeriodId: string]: OutflowPeriodEntry[];
+  };
 
   // Metadata
   totalItemCount: number;            // Total active outflows

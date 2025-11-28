@@ -1,0 +1,1 @@
+{"version":3,"file":"calculateOutflowSummary.d.ts","sourceRoot":"","sources":["../../../../src/functions/summaries/utils/calculateOutflowSummary.ts"],"names":[],"mappings":"AAAA,OAAO,EACL,aAAa,EAEd,MAAM,gBAAgB,CAAC;AACxB,OAAO,EACL,kBAAkB,EAEnB,MAAM,gCAAgC,CAAC;AAExC;;;;;;;;;GASG;AACH,wBAAgB,uBAAuB,CACrC,cAAc,EAAE,aAAa,EAAE,EAC/B,cAAc,GAAE,OAAc,GAC7B,kBAAkB,CAkJpB"}
