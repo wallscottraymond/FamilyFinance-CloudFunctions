@@ -11,12 +11,13 @@ import {
 /**
  * Recalculate all outflow period entries for a specific sourcePeriodId
  *
- * This is the core aggregation function that:
+ * This function:
  * 1. Queries all outflow_periods with the given sourcePeriodId
- * 2. Groups them by outflowId (multiple periods can exist for same outflow)
+ * 2. Creates ONE OutflowPeriodEntry for EACH outflow_period
  * 3. Fetches parent outflow data for merchant/userCustomName
- * 4. Aggregates amounts, statuses, and metrics across all periods
- * 5. Returns array of OutflowPeriodEntry objects ready for batch write
+ * 4. Returns array of OutflowPeriodEntry objects ready for batch write
+ *
+ * NOTE: No aggregation! Each outflow_period maps to exactly one entry.
  *
  * @param params - Calculation parameters
  * @returns Array of OutflowPeriodEntry objects for the period group
@@ -53,45 +54,32 @@ export async function recalculatePeriodGroup(params: {
 
     console.log(`📊 Found ${periodsQuery.size} outflow periods for ${sourcePeriodId}`);
 
-    // Step 2: Group periods by outflowId
-    const periodsByOutflow = new Map<string, OutflowPeriod[]>();
-
-    periodsQuery.forEach(doc => {
-      const period = { id: doc.id, ...doc.data() } as OutflowPeriod;
-      const outflowId = period.outflowId;
-
-      if (!periodsByOutflow.has(outflowId)) {
-        periodsByOutflow.set(outflowId, []);
-      }
-      periodsByOutflow.get(outflowId)!.push(period);
-    });
-
-    console.log(`📦 Grouped into ${periodsByOutflow.size} unique outflows`);
-
-    // Step 3: Process each outflow group and build OutflowPeriodEntry
+    // Step 2: Create ONE entry per outflow_period (NO grouping!)
     const entries: OutflowPeriodEntry[] = [];
 
-    for (const [outflowId, periods] of periodsByOutflow.entries()) {
+    for (const periodDoc of periodsQuery.docs) {
       try {
+        const period = { id: periodDoc.id, ...periodDoc.data() } as OutflowPeriod;
+
         // Fetch parent outflow for merchant/userCustomName
-        const outflowDoc = await db.collection('outflows').doc(outflowId).get();
+        const outflowDoc = await db.collection('outflows').doc(period.outflowId).get();
 
         if (!outflowDoc.exists) {
-          console.warn(`⚠️ Outflow ${outflowId} not found, skipping periods`);
+          console.warn(`⚠️ Outflow ${period.outflowId} not found, skipping period ${period.id}`);
           continue;
         }
 
         const outflow = outflowDoc.data() as Outflow;
 
-        // Aggregate data across all periods for this outflow
-        const entry = aggregatePeriods(periods, outflow);
+        // Build entry directly from this ONE period
+        const entry = buildPeriodEntry(period, outflow);
         entries.push(entry);
 
-        console.log(`✅ Aggregated ${periods.length} periods for outflow: ${outflow.merchantName || outflow.description}`);
+        console.log(`✅ Created entry for period: ${outflow.merchantName || outflow.description}`);
 
       } catch (error) {
-        console.error(`❌ Error processing outflow ${outflowId}:`, error);
-        // Continue with other outflows even if one fails
+        console.error(`❌ Error processing period ${periodDoc.id}:`, error);
+        // Continue with other periods even if one fails
       }
     }
 
@@ -105,97 +93,54 @@ export async function recalculatePeriodGroup(params: {
 }
 
 /**
- * Aggregate multiple outflow periods into a single OutflowPeriodEntry
+ * Build OutflowPeriodEntry from a SINGLE outflow period
+ * No aggregation - each period is its own entry
  *
- * @param periods - Array of outflow periods for the same outflow
+ * @param period - Single outflow period document
  * @param outflow - Parent outflow document
- * @returns Aggregated OutflowPeriodEntry
+ * @returns OutflowPeriodEntry for this single period
  */
-function aggregatePeriods(
-  periods: OutflowPeriod[],
+function buildPeriodEntry(
+  period: OutflowPeriod,
   outflow: Outflow
 ): OutflowPeriodEntry {
-  // Use the first period as the base (they all have the same outflow)
-  const firstPeriod = periods[0];
-
-  // Initialize aggregation variables
-  let totalAmountDue = 0;
-  let totalAmountPaid = 0;
-  let totalAmountUnpaid = 0;
-  let totalAmountWithheld = 0;
-  let duePeriodCount = 0;
-  let fullyPaidCount = 0;
-  let unpaidCount = 0;
-  const statusCounts: OutflowStatusCounts = {};
-
-  // Aggregate across all periods
-  periods.forEach(period => {
-    totalAmountDue += period.totalAmountDue || 0;
-    totalAmountPaid += period.totalAmountPaid || 0;
-    totalAmountUnpaid += period.totalAmountUnpaid || 0;
-    totalAmountWithheld += period.amountWithheld || 0;
-
-    if (period.isDuePeriod) {
-      duePeriodCount++;
-    }
-
-    if (period.isFullyPaid) {
-      fullyPaidCount++;
-    }
-
-    if (!period.isFullyPaid && !period.isPartiallyPaid) {
-      unpaidCount++;
-    }
-
-    // Count statuses
-    const status = period.status || OutflowPeriodStatus.PENDING;
-    // Map enum value to uppercase key for OutflowStatusCounts
-    const statusKey = status.toUpperCase().replace('_', '_') as keyof OutflowStatusCounts;
-    statusCounts[statusKey] = (statusCounts[statusKey] || 0) + 1;
-  });
-
-  // Calculate average amount
-  const averageAmount = periods.length > 0
-    ? periods.reduce((sum, p) => sum + (p.averageAmount || 0), 0) / periods.length
-    : 0;
-
   // Calculate payment progress percentage
-  const paymentProgressPercentage = totalAmountDue > 0
-    ? Math.round((totalAmountPaid / totalAmountDue) * 100)
+  const paymentProgressPercentage = period.totalAmountDue > 0
+    ? Math.round((period.totalAmountPaid / period.totalAmountDue) * 100)
     : 0;
 
-  // Determine if this is a due period (any period is due)
-  const isDuePeriod = periods.some(p => p.isDuePeriod);
+  // Determine status counts from period status
+  const statusCounts: OutflowStatusCounts = {};
+  const status = period.status || OutflowPeriodStatus.PENDING;
+  const statusKey = status.toUpperCase().replace('_', '_') as keyof OutflowStatusCounts;
+  statusCounts[statusKey] = 1; // This entry represents ONE period
 
-  // Build the OutflowPeriodEntry
-  const entry: OutflowPeriodEntry = {
+  return {
     // Period Identity
-    periodId: firstPeriod.id,
+    periodId: period.id,
     outflowId: outflow.id,
-    groupId: firstPeriod.groupId || '',
+    groupId: period.groupId || '',
     merchant: outflow.merchantName || outflow.description || 'Unknown',
     userCustomName: outflow.userCustomName || outflow.merchantName || outflow.description || 'Unknown',
 
-    // Amount Totals
-    totalAmountDue,
-    totalAmountPaid,
-    totalAmountUnpaid,
-    totalAmountWithheld,
-    averageAmount,
+    // Amount Totals (directly from the ONE period)
+    totalAmountDue: period.totalAmountDue || 0,
+    totalAmountPaid: period.totalAmountPaid || 0,
+    totalAmountUnpaid: period.totalAmountUnpaid || 0,
+    totalAmountWithheld: period.amountWithheld || 0,
+    averageAmount: period.averageAmount || 0,
 
     // Due Status
-    isDuePeriod,
-    duePeriodCount,
+    isDuePeriod: period.isDuePeriod || false,
+    duePeriodCount: period.isDuePeriod ? 1 : 0,
 
     // Status Breakdown
     statusCounts,
 
     // Progress Metrics
     paymentProgressPercentage,
-    fullyPaidCount,
-    unpaidCount,
-    itemCount: periods.length
+    fullyPaidCount: period.isFullyPaid ? 1 : 0,
+    unpaidCount: (!period.isFullyPaid && !period.isPartiallyPaid) ? 1 : 0,
+    itemCount: 1  // This entry represents exactly ONE period
   };
-
-  return entry;
 }

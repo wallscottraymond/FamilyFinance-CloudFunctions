@@ -2,12 +2,13 @@ import { OutflowPeriodEntry, PeriodType } from "../../../../types";
 /**
  * Recalculate all outflow period entries for a specific sourcePeriodId
  *
- * This is the core aggregation function that:
+ * This function:
  * 1. Queries all outflow_periods with the given sourcePeriodId
- * 2. Groups them by outflowId (multiple periods can exist for same outflow)
+ * 2. Creates ONE OutflowPeriodEntry for EACH outflow_period
  * 3. Fetches parent outflow data for merchant/userCustomName
- * 4. Aggregates amounts, statuses, and metrics across all periods
- * 5. Returns array of OutflowPeriodEntry objects ready for batch write
+ * 4. Returns array of OutflowPeriodEntry objects ready for batch write
+ *
+ * NOTE: No aggregation! Each outflow_period maps to exactly one entry.
  *
  * @param params - Calculation parameters
  * @returns Array of OutflowPeriodEntry objects for the period group

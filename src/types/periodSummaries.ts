@@ -274,17 +274,14 @@ export interface UserPeriodSummary {
   month?: number;                  // 1-12 for monthly/bi-monthly
   weekNumber?: number;             // 1-52 for weekly
 
-  // === AGGREGATED RESOURCE DATA ===
-  outflows: OutflowSummaryData;
-  budgets: BudgetSummaryData;
-  inflows: InflowSummaryData;
-  goals: GoalSummaryData;
+  // === RESOURCE ENTRIES (Arrays for frontend calculation) ===
+  outflows: OutflowEntry[];        // Array of individual outflow entries
+  budgets: BudgetEntry[];          // Array of individual budget entries
+  inflows: InflowEntry[];          // Array of individual inflow entries
+  goals: GoalEntry[];              // Array of individual goal entries
 
-  // === CROSS-RESOURCE METRICS ===
-  totalIncome: number;             // Sum of all inflows
-  totalExpenses: number;           // Sum of all outflows + budgets
-  netCashFlow: number;             // totalIncome - totalExpenses
-  savingsRate: number;             // (income - expenses) / income
+  // NOTE: Cross-resource metrics (totalIncome, totalExpenses, netCashFlow, savingsRate)
+  // are calculated on-the-fly in the frontend for better performance
 
   // === METADATA ===
   lastRecalculated: Timestamp;

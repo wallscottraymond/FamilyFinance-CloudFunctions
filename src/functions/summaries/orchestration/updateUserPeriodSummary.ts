@@ -58,17 +58,11 @@ export async function updateUserPeriodSummary(
       );
 
       await summaryRef.update({
-        // Update all resource summaries
+        // Update all resource entry arrays
         outflows: summary.outflows,
         budgets: summary.budgets,
         inflows: summary.inflows,
         goals: summary.goals,
-
-        // Update cross-resource metrics
-        totalIncome: summary.totalIncome,
-        totalExpenses: summary.totalExpenses,
-        netCashFlow: summary.netCashFlow,
-        savingsRate: summary.savingsRate,
 
         // Update metadata
         lastRecalculated: Timestamp.now(),
@@ -97,9 +91,12 @@ export async function updateUserPeriodSummary(
       `[updateUserPeriodSummary] Completed in ${duration}ms for summary: ${summaryId}`,
       {
         action: existingSummary.exists ? "updated" : "created",
-        totalIncome: summary.totalIncome,
-        totalExpenses: summary.totalExpenses,
-        netCashFlow: summary.netCashFlow,
+        resourceCounts: {
+          outflows: summary.outflows.length,
+          budgets: summary.budgets.length,
+          inflows: summary.inflows.length,
+          goals: summary.goals.length
+        }
       }
     );
 

@@ -1,10 +1,10 @@
 import { BudgetPeriodDocument } from "../../../types";
-import { BudgetSummaryData } from "../../../types/periodSummaries";
+import { BudgetEntry } from "../../../types/periodSummaries";
 /**
- * Calculates budget summary data from budget periods
+ * Calculates budget entries from budget periods
  *
- * Aggregates all budget periods for a given period into a summary object
- * containing totals, counts, and optional detailed entries.
+ * Converts budget periods into an array of budget entries for frontend display.
+ * Frontend calculates aggregated totals on-the-fly for better performance.
  *
  * NOTE: Currently, spentAmount is set to 0 as a placeholder.
  * In a future enhancement, this should be calculated by:
@@ -12,9 +12,8 @@ import { BudgetSummaryData } from "../../../types/periodSummaries";
  * 2. Summing transaction amounts that fall within the period
  * 3. Calculating actual spending against allocated amounts
  *
- * @param budgetPeriods - Array of budget periods to aggregate
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns BudgetSummaryData object
+ * @param budgetPeriods - Array of budget periods to convert
+ * @returns Array of BudgetEntry objects
  */
-export declare function calculateBudgetSummary(budgetPeriods: BudgetPeriodDocument[], includeEntries?: boolean): BudgetSummaryData;
+export declare function calculateBudgetSummary(budgetPeriods: BudgetPeriodDocument[]): BudgetEntry[];
 //# sourceMappingURL=calculateBudgetSummary.d.ts.map

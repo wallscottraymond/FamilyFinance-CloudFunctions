@@ -1,14 +1,13 @@
 import { InflowPeriod } from "../../../types";
-import { InflowSummaryData } from "../../../types/periodSummaries";
+import { InflowEntry } from "../../../types/periodSummaries";
 /**
- * Calculates inflow summary data from inflow periods
+ * Calculates inflow entries from inflow periods
  *
- * Aggregates all inflow periods for a given period into a summary object
- * containing totals, counts, and optional detailed entries.
+ * Converts inflow periods into an array of inflow entries for frontend display.
+ * Frontend calculates aggregated totals on-the-fly for better performance.
  *
- * @param inflowPeriods - Array of inflow periods to aggregate
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns InflowSummaryData object
+ * @param inflowPeriods - Array of inflow periods to convert
+ * @returns Array of InflowEntry objects
  */
-export declare function calculateInflowSummary(inflowPeriods: InflowPeriod[], includeEntries?: boolean): InflowSummaryData;
+export declare function calculateInflowSummary(inflowPeriods: InflowPeriod[]): InflowEntry[];
 //# sourceMappingURL=calculateInflowSummary.d.ts.map

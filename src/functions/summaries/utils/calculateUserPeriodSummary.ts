@@ -53,24 +53,14 @@ export async function calculateUserPeriodSummary(
     inflowPeriods: inflowPeriods.length,
   });
 
-  // Step 3: Calculate summaries for each resource type
-  const outflows = calculateOutflowSummary(outflowPeriods, includeEntries);
-  const budgets = calculateBudgetSummary(budgetPeriods, includeEntries);
-  const inflows = calculateInflowSummary(inflowPeriods, includeEntries);
-  const goals = calculateGoalSummary(includeEntries); // Stub for now
+  // Step 3: Convert resource periods to entry arrays
+  const outflows = calculateOutflowSummary(outflowPeriods);
+  const budgets = calculateBudgetSummary(budgetPeriods);
+  const inflows = calculateInflowSummary(inflowPeriods);
+  const goals = calculateGoalSummary(); // Stub for now
 
-  // Step 4: Calculate cross-resource metrics
-  const totalIncome = inflows.totalReceivedIncome;
-
-  // Total expenses = outflows paid + budgets spent
-  const totalExpenses = outflows.totalAmountPaid + budgets.totalSpent;
-
-  // Net cash flow = income - expenses
-  const netCashFlow = totalIncome - totalExpenses;
-
-  // Savings rate = (income - expenses) / income
-  // Avoid division by zero
-  const savingsRate = totalIncome > 0 ? netCashFlow / totalIncome : 0;
+  // NOTE: Cross-resource metrics (totalIncome, totalExpenses, netCashFlow, savingsRate)
+  // are calculated on-the-fly in the frontend from the arrays above
 
   // Step 5: Build the complete UserPeriodSummary
   const now = Timestamp.now();
@@ -92,17 +82,11 @@ export async function calculateUserPeriodSummary(
     month: sourcePeriod.metadata.month,
     weekNumber: sourcePeriod.metadata.weekNumber,
 
-    // === AGGREGATED RESOURCE DATA ===
+    // === RESOURCE ENTRIES (Arrays) ===
     outflows,
     budgets,
     inflows,
     goals,
-
-    // === CROSS-RESOURCE METRICS ===
-    totalIncome,
-    totalExpenses,
-    netCashFlow,
-    savingsRate,
 
     // === METADATA ===
     lastRecalculated: now,
@@ -114,15 +98,11 @@ export async function calculateUserPeriodSummary(
 
   console.log(`[calculateUserPeriodSummary] Summary calculated in ${duration}ms:`, {
     summaryId,
-    totalIncome,
-    totalExpenses,
-    netCashFlow,
-    savingsRate: `${(savingsRate * 100).toFixed(1)}%`,
     resourceCounts: {
-      outflows: outflows.totalCount,
-      budgets: budgets.totalCount,
-      inflows: inflows.totalCount,
-      goals: goals.totalCount,
+      outflows: outflows.length,
+      budgets: budgets.length,
+      inflows: inflows.length,
+      goals: goals.length,
     },
   });
 

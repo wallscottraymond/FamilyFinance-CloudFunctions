@@ -3,167 +3,58 @@ import {
   OutflowPeriodStatus,
 } from "../../../types";
 import {
-  OutflowSummaryData,
   OutflowEntry,
 } from "../../../types/periodSummaries";
 
 /**
- * Calculates outflow summary data from outflow periods
+ * Calculates outflow entries from outflow periods
  *
- * Aggregates all outflow periods for a given period into a summary object
- * containing totals, counts, status breakdowns, and optional detailed entries.
+ * Converts outflow periods into an array of outflow entries for frontend display.
+ * Frontend calculates aggregated totals on-the-fly for better performance.
  *
- * @param outflowPeriods - Array of outflow periods to aggregate
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns OutflowSummaryData object
+ * @param outflowPeriods - Array of outflow periods to convert
+ * @returns Array of OutflowEntry objects
  */
 export function calculateOutflowSummary(
-  outflowPeriods: OutflowPeriod[],
-  includeEntries: boolean = true // ALWAYS include entries for tile rendering
-): OutflowSummaryData {
+  outflowPeriods: OutflowPeriod[]
+): OutflowEntry[] {
   console.log(
-    `[calculateOutflowSummary] Calculating summary for ${outflowPeriods.length} outflow periods`
+    `[calculateOutflowSummary] Converting ${outflowPeriods.length} outflow periods to entries`
   );
 
-  // Initialize totals
-  let totalAmountDue = 0;
-  let totalAmountPaid = 0;
-  let totalAmountWithheld = 0;
+  // Build entries array directly (one entry per period)
+  const entries: OutflowEntry[] = outflowPeriods.map(outflowPeriod => ({
+    // === IDENTITY ===
+    outflowId: outflowPeriod.outflowId,
+    outflowPeriodId: outflowPeriod.id,
+    description: outflowPeriod.description || "Unknown",
+    merchant: outflowPeriod.merchant || "Unknown",
+    userCustomName: outflowPeriod.userCustomName || undefined,
 
-  // Initialize counts
-  let totalCount = 0;
-  let duePeriodCount = 0;
-  let fullyPaidCount = 0;
-  let unpaidCount = 0;
+    // === AMOUNTS ===
+    totalAmountDue: outflowPeriod.totalAmountDue || 0,
+    totalAmountPaid: outflowPeriod.totalAmountPaid || 0,
+    totalAmountUnpaid: outflowPeriod.totalAmountUnpaid || 0,
+    totalAmountWithheld: outflowPeriod.amountWithheld || 0,
+    averageAmount: outflowPeriod.averageAmount || 0,
 
-  // Initialize status counts
-  const statusCounts: {
-    PAID?: number;
-    OVERDUE?: number;
-    DUE_SOON?: number;
-    PENDING?: number;
-    PARTIAL?: number;
-    NOT_DUE?: number;
-  } = {};
+    // === STATUS ===
+    isDuePeriod: outflowPeriod.isDuePeriod,
+    duePeriodCount: outflowPeriod.isDuePeriod ? 1 : 0,
+    dueDate: outflowPeriod.dueDate || outflowPeriod.predictedNextDate || undefined,
+    status: outflowPeriod.status || OutflowPeriodStatus.PENDING,
 
-  // Initialize entries array if requested
-  const entries: OutflowEntry[] = [];
+    // === PROGRESS METRICS ===
+    paymentProgressPercentage: outflowPeriod.paymentProgressPercentage || 0,
+    fullyPaidCount: outflowPeriod.numberOfOccurrencesPaid || 0,
+    unpaidCount: outflowPeriod.numberOfOccurrencesUnpaid || 0,
+    itemCount: outflowPeriod.numberOfOccurrencesInPeriod || 1,
 
-  // Process each outflow period
-  for (const outflowPeriod of outflowPeriods) {
-    // Accumulate totals
-    totalAmountDue += outflowPeriod.totalAmountDue || 0;
-    totalAmountPaid += outflowPeriod.totalAmountPaid || 0;
-    totalAmountWithheld += outflowPeriod.amountWithheld || 0;
+    // === GROUPING ===
+    groupId: outflowPeriod.groupId || "",
+  }));
 
-    // Increment counts
-    totalCount++;
+  console.log(`[calculateOutflowSummary] Converted ${entries.length} entries`);
 
-    if (outflowPeriod.isDuePeriod) {
-      duePeriodCount++;
-    }
-
-    if (outflowPeriod.isFullyPaid) {
-      fullyPaidCount++;
-    }
-
-    if (outflowPeriod.totalAmountUnpaid > 0) {
-      unpaidCount++;
-    }
-
-    // Count status
-    const status = outflowPeriod.status;
-    if (status) {
-      // Normalize status to match summary format
-      let summaryStatus: keyof typeof statusCounts;
-
-      switch (status) {
-        case OutflowPeriodStatus.PAID:
-        case OutflowPeriodStatus.PAID_EARLY:
-          summaryStatus = "PAID";
-          break;
-        case OutflowPeriodStatus.OVERDUE:
-          summaryStatus = "OVERDUE";
-          break;
-        case OutflowPeriodStatus.DUE_SOON:
-          summaryStatus = "DUE_SOON";
-          break;
-        case OutflowPeriodStatus.PENDING:
-          summaryStatus = "PENDING";
-          break;
-        case OutflowPeriodStatus.PARTIAL:
-          summaryStatus = "PARTIAL";
-          break;
-        default:
-          summaryStatus = "NOT_DUE";
-      }
-
-      statusCounts[summaryStatus] = (statusCounts[summaryStatus] || 0) + 1;
-    }
-
-    // Build detailed entry if requested (now always true)
-    if (includeEntries) {
-      const entry: OutflowEntry = {
-        // === IDENTITY ===
-        outflowId: outflowPeriod.outflowId,
-        outflowPeriodId: outflowPeriod.id,
-        description: outflowPeriod.description || "Unknown",
-        merchant: outflowPeriod.merchant || "Unknown",
-        userCustomName: outflowPeriod.userCustomName || undefined,
-
-        // === AMOUNTS ===
-        totalAmountDue: outflowPeriod.totalAmountDue || 0,
-        totalAmountPaid: outflowPeriod.totalAmountPaid || 0,
-        totalAmountUnpaid: outflowPeriod.totalAmountUnpaid || 0,
-        totalAmountWithheld: outflowPeriod.amountWithheld || 0,
-        averageAmount: outflowPeriod.averageAmount || 0,
-
-        // === STATUS ===
-        isDuePeriod: outflowPeriod.isDuePeriod,
-        duePeriodCount: outflowPeriod.isDuePeriod ? 1 : 0,
-        dueDate: outflowPeriod.dueDate || outflowPeriod.predictedNextDate || undefined,
-        status: outflowPeriod.status || OutflowPeriodStatus.PENDING,
-
-        // === PROGRESS METRICS ===
-        paymentProgressPercentage: outflowPeriod.paymentProgressPercentage || 0,
-        fullyPaidCount: outflowPeriod.numberOfOccurrencesPaid || 0,
-        unpaidCount: outflowPeriod.numberOfOccurrencesUnpaid || 0,
-        itemCount: outflowPeriod.numberOfOccurrencesInPeriod || 1,
-
-        // === GROUPING ===
-        groupId: outflowPeriod.groupId || "",
-      };
-      entries.push(entry);
-    }
-  }
-
-  const summary: OutflowSummaryData = {
-    totalAmountDue,
-    totalAmountPaid,
-    totalAmountWithheld,
-    totalCount,
-    duePeriodCount,
-    fullyPaidCount,
-    unpaidCount,
-    statusCounts,
-  };
-
-  // Add entries if requested
-  if (includeEntries) {
-    summary.entries = entries;
-  }
-
-  console.log(`[calculateOutflowSummary] Summary calculated:`, {
-    totalAmountDue,
-    totalAmountPaid,
-    totalAmountWithheld,
-    totalCount,
-    duePeriodCount,
-    fullyPaidCount,
-    unpaidCount,
-    statusCounts,
-    entriesCount: entries.length,
-  });
-
-  return summary;
+  return entries;
 }

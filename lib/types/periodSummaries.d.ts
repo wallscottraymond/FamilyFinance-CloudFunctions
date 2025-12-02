@@ -184,14 +184,10 @@ export interface UserPeriodSummary {
     year: number;
     month?: number;
     weekNumber?: number;
-    outflows: OutflowSummaryData;
-    budgets: BudgetSummaryData;
-    inflows: InflowSummaryData;
-    goals: GoalSummaryData;
-    totalIncome: number;
-    totalExpenses: number;
-    netCashFlow: number;
-    savingsRate: number;
+    outflows: OutflowEntry[];
+    budgets: BudgetEntry[];
+    inflows: InflowEntry[];
+    goals: GoalEntry[];
     lastRecalculated: Timestamp;
     createdAt: Timestamp;
     updatedAt: Timestamp;

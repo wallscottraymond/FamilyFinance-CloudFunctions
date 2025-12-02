@@ -1,14 +1,13 @@
 import { BudgetPeriodDocument } from "../../../types";
 import {
-  BudgetSummaryData,
   BudgetEntry,
 } from "../../../types/periodSummaries";
 
 /**
- * Calculates budget summary data from budget periods
+ * Calculates budget entries from budget periods
  *
- * Aggregates all budget periods for a given period into a summary object
- * containing totals, counts, and optional detailed entries.
+ * Converts budget periods into an array of budget entries for frontend display.
+ * Frontend calculates aggregated totals on-the-fly for better performance.
  *
  * NOTE: Currently, spentAmount is set to 0 as a placeholder.
  * In a future enhancement, this should be calculated by:
@@ -16,33 +15,18 @@ import {
  * 2. Summing transaction amounts that fall within the period
  * 3. Calculating actual spending against allocated amounts
  *
- * @param budgetPeriods - Array of budget periods to aggregate
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns BudgetSummaryData object
+ * @param budgetPeriods - Array of budget periods to convert
+ * @returns Array of BudgetEntry objects
  */
 export function calculateBudgetSummary(
-  budgetPeriods: BudgetPeriodDocument[],
-  includeEntries: boolean = true // ALWAYS include entries for tile rendering
-): BudgetSummaryData {
+  budgetPeriods: BudgetPeriodDocument[]
+): BudgetEntry[] {
   console.log(
-    `[calculateBudgetSummary] Calculating summary for ${budgetPeriods.length} budget periods`
+    `[calculateBudgetSummary] Converting ${budgetPeriods.length} budget periods to entries`
   );
 
-  // Initialize totals
-  let totalAllocated = 0;
-  let totalSpent = 0; // TODO: Calculate from linked transactions
-  let totalRemaining = 0;
-
-  // Initialize counts
-  let totalCount = 0;
-  let overBudgetCount = 0;
-  let underBudgetCount = 0;
-
-  // Initialize entries array if requested
-  const entries: BudgetEntry[] = [];
-
-  // Process each budget period
-  for (const budgetPeriod of budgetPeriods) {
+  // Build entries array directly (one entry per period)
+  const entries: BudgetEntry[] = budgetPeriods.map(budgetPeriod => {
     // Use modified amount if available, otherwise use allocated amount
     const allocatedAmount =
       budgetPeriod.modifiedAmount || budgetPeriod.allocatedAmount;
@@ -53,99 +37,58 @@ export function calculateBudgetSummary(
 
     const remainingAmount = allocatedAmount - spentAmount;
 
-    // Accumulate totals
-    totalAllocated += allocatedAmount;
-    totalSpent += spentAmount;
-    totalRemaining += remainingAmount;
+    // Calculate checklist completion
+    const checklistItemsCount = budgetPeriod.checklistItems?.length || 0;
+    const checklistItemsCompleted =
+      budgetPeriod.checklistItems?.filter((item) => item.isChecked).length ||
+      0;
+    const checklistProgressPercentage =
+      checklistItemsCount > 0
+        ? Math.round((checklistItemsCompleted / checklistItemsCount) * 100)
+        : 0;
 
-    // Increment counts
-    totalCount++;
+    // Calculate progress percentage
+    const progressPercentage =
+      allocatedAmount > 0
+        ? Math.round((spentAmount / allocatedAmount) * 100)
+        : 0;
 
-    // Check if over or under budget
-    if (spentAmount > allocatedAmount) {
-      overBudgetCount++;
-    } else if (spentAmount < allocatedAmount) {
-      underBudgetCount++;
-    }
+    // Check if over budget
+    const isOverBudget = spentAmount > allocatedAmount;
+    const overageAmount = isOverBudget ? spentAmount - allocatedAmount : undefined;
 
-    // Build detailed entry if requested (now always true)
-    if (includeEntries) {
-      // Calculate checklist completion
-      const checklistItemsCount = budgetPeriod.checklistItems?.length || 0;
-      const checklistItemsCompleted =
-        budgetPeriod.checklistItems?.filter((item) => item.isChecked).length ||
-        0;
-      const checklistProgressPercentage =
-        checklistItemsCount > 0
-          ? Math.round((checklistItemsCompleted / checklistItemsCount) * 100)
-          : 0;
+    return {
+      // === IDENTITY ===
+      budgetId: budgetPeriod.budgetId,
+      budgetPeriodId: budgetPeriod.id || "",
+      budgetName: budgetPeriod.budgetName || "Unnamed Budget",
+      categoryId: "uncategorized", // TODO: Fetch from parent budget document
 
-      // Calculate progress percentage
-      const progressPercentage =
-        allocatedAmount > 0
-          ? Math.round((spentAmount / allocatedAmount) * 100)
-          : 0;
+      // === AMOUNTS ===
+      totalAllocated: allocatedAmount,
+      totalSpent: spentAmount,
+      totalRemaining: remainingAmount,
+      averageBudget: allocatedAmount, // TODO: Fetch from parent budget for true average
 
-      // Check if over budget
-      const isOverBudget = spentAmount > allocatedAmount;
-      const overageAmount = isOverBudget ? spentAmount - allocatedAmount : undefined;
+      // === PROGRESS METRICS ===
+      progressPercentage,
+      checklistItemsCount:
+        checklistItemsCount > 0 ? checklistItemsCount : undefined,
+      checklistItemsCompleted:
+        checklistItemsCount > 0 ? checklistItemsCompleted : undefined,
+      checklistProgressPercentage:
+        checklistItemsCount > 0 ? checklistProgressPercentage : undefined,
 
-      const entry: BudgetEntry = {
-        // === IDENTITY ===
-        budgetId: budgetPeriod.budgetId,
-        budgetPeriodId: budgetPeriod.id || "",
-        budgetName: budgetPeriod.budgetName || "Unnamed Budget",
-        categoryId: "uncategorized", // TODO: Fetch from parent budget document
+      // === STATUS ===
+      isOverBudget,
+      overageAmount,
 
-        // === AMOUNTS ===
-        totalAllocated: allocatedAmount,
-        totalSpent: spentAmount,
-        totalRemaining: remainingAmount,
-        averageBudget: allocatedAmount, // TODO: Fetch from parent budget for true average
-
-        // === PROGRESS METRICS ===
-        progressPercentage,
-        checklistItemsCount:
-          checklistItemsCount > 0 ? checklistItemsCount : undefined,
-        checklistItemsCompleted:
-          checklistItemsCount > 0 ? checklistItemsCompleted : undefined,
-        checklistProgressPercentage:
-          checklistItemsCount > 0 ? checklistProgressPercentage : undefined,
-
-        // === STATUS ===
-        isOverBudget,
-        overageAmount,
-
-        // === GROUPING ===
-        groupId: budgetPeriod.groupIds?.[0] || "", // First group ID or empty string
-      };
-      entries.push(entry);
-    }
-  }
-
-  const summary: BudgetSummaryData = {
-    totalAllocated,
-    totalSpent,
-    totalRemaining,
-    totalCount,
-    overBudgetCount,
-    underBudgetCount,
-  };
-
-  // Add entries if requested
-  if (includeEntries) {
-    summary.entries = entries;
-  }
-
-  console.log(`[calculateBudgetSummary] Summary calculated:`, {
-    totalAllocated,
-    totalSpent,
-    totalRemaining,
-    totalCount,
-    overBudgetCount,
-    underBudgetCount,
-    entriesCount: entries.length,
+      // === GROUPING ===
+      groupId: budgetPeriod.groupIds?.[0] || "", // First group ID or empty string
+    };
   });
 
-  return summary;
+  console.log(`[calculateBudgetSummary] Converted ${entries.length} entries`);
+
+  return entries;
 }

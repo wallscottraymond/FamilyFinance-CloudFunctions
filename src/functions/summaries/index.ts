@@ -17,6 +17,6 @@ export * from "./api/getUserPeriodSummary";
 export * from "./api/recalculateUserPeriodSummary";
 
 // Export Firestore triggers
-export * from "./triggers/outflowPeriodSummaryTriggers";
+// NOTE: Outflow period triggers moved to /outflows/outflow_periods/triggers/
 export * from "./triggers/budgetPeriodSummaryTriggers";
 export * from "./triggers/inflowPeriodSummaryTriggers";

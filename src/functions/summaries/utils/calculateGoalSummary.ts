@@ -1,41 +1,22 @@
-import { GoalSummaryData } from "../../../types/periodSummaries";
+import { GoalEntry } from "../../../types/periodSummaries";
 
 /**
- * Calculates goal summary data (PLACEHOLDER/STUB)
+ * Calculates goal entries (PLACEHOLDER/STUB)
  *
  * Goals are not yet implemented in the system. This function returns
- * an empty summary object with all values set to 0.
+ * an empty array.
  *
  * When goals are implemented, this function should:
  * 1. Accept an array of goal_periods
- * 2. Calculate totals (targetAmount, savedAmount, remainingAmount)
- * 3. Count goals (total, onTrack, behind, completed)
- * 4. Optionally build detailed entries
+ * 2. Convert each goal_period into a GoalEntry
+ * 3. Return array of GoalEntry objects
  *
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns GoalSummaryData object with zero values
+ * @returns Empty array of GoalEntry objects
  */
-export function calculateGoalSummary(
-  includeEntries: boolean = false
-): GoalSummaryData {
+export function calculateGoalSummary(): GoalEntry[] {
   console.log(
-    `[calculateGoalSummary] Returning empty stub (goals not yet implemented)`
+    `[calculateGoalSummary] Returning empty array (goals not yet implemented)`
   );
 
-  const summary: GoalSummaryData = {
-    totalTargetAmount: 0,
-    totalSavedAmount: 0,
-    totalRemainingAmount: 0,
-    totalCount: 0,
-    onTrackCount: 0,
-    behindCount: 0,
-    completedCount: 0,
-  };
-
-  // Add empty entries array if requested
-  if (includeEntries) {
-    summary.entries = [];
-  }
-
-  return summary;
+  return [];
 }

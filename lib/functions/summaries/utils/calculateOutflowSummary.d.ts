@@ -1,14 +1,13 @@
 import { OutflowPeriod } from "../../../types";
-import { OutflowSummaryData } from "../../../types/periodSummaries";
+import { OutflowEntry } from "../../../types/periodSummaries";
 /**
- * Calculates outflow summary data from outflow periods
+ * Calculates outflow entries from outflow periods
  *
- * Aggregates all outflow periods for a given period into a summary object
- * containing totals, counts, status breakdowns, and optional detailed entries.
+ * Converts outflow periods into an array of outflow entries for frontend display.
+ * Frontend calculates aggregated totals on-the-fly for better performance.
  *
- * @param outflowPeriods - Array of outflow periods to aggregate
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns OutflowSummaryData object
+ * @param outflowPeriods - Array of outflow periods to convert
+ * @returns Array of OutflowEntry objects
  */
-export declare function calculateOutflowSummary(outflowPeriods: OutflowPeriod[], includeEntries?: boolean): OutflowSummaryData;
+export declare function calculateOutflowSummary(outflowPeriods: OutflowPeriod[]): OutflowEntry[];
 //# sourceMappingURL=calculateOutflowSummary.d.ts.map

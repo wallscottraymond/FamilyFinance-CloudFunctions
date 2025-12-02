@@ -1,149 +1,84 @@
 import { InflowPeriod } from "../../../types";
 import {
-  InflowSummaryData,
   InflowEntry,
 } from "../../../types/periodSummaries";
 
 /**
- * Calculates inflow summary data from inflow periods
+ * Calculates inflow entries from inflow periods
  *
- * Aggregates all inflow periods for a given period into a summary object
- * containing totals, counts, and optional detailed entries.
+ * Converts inflow periods into an array of inflow entries for frontend display.
+ * Frontend calculates aggregated totals on-the-fly for better performance.
  *
- * @param inflowPeriods - Array of inflow periods to aggregate
- * @param includeEntries - Whether to include detailed entries (default: false)
- * @returns InflowSummaryData object
+ * @param inflowPeriods - Array of inflow periods to convert
+ * @returns Array of InflowEntry objects
  */
 export function calculateInflowSummary(
-  inflowPeriods: InflowPeriod[],
-  includeEntries: boolean = true // ALWAYS include entries for tile rendering
-): InflowSummaryData {
+  inflowPeriods: InflowPeriod[]
+): InflowEntry[] {
   console.log(
-    `[calculateInflowSummary] Calculating summary for ${inflowPeriods.length} inflow periods`
+    `[calculateInflowSummary] Converting ${inflowPeriods.length} inflow periods to entries`
   );
 
-  // Initialize totals
-  let totalExpectedIncome = 0;
-  let totalReceivedIncome = 0;
-  let totalPendingIncome = 0;
-
-  // Initialize counts
-  let totalCount = 0;
-  let receiptPeriodCount = 0;
-  let fullyReceivedCount = 0;
-  let pendingCount = 0;
-
-  // Initialize entries array if requested
-  const entries: InflowEntry[] = [];
-
-  // Process each inflow period
-  for (const inflowPeriod of inflowPeriods) {
+  // Build entries array directly (one entry per period)
+  const entries: InflowEntry[] = inflowPeriods.map(inflowPeriod => {
     // Calculate amounts
     const expectedAmount = inflowPeriod.totalAmountDue || 0;
     const receivedAmount = inflowPeriod.totalAmountPaid || 0;
     const pendingAmount = expectedAmount - receivedAmount;
 
-    // Accumulate totals
-    totalExpectedIncome += expectedAmount;
-    totalReceivedIncome += receivedAmount;
-    totalPendingIncome += pendingAmount;
+    // Determine if this is regular salary based on Plaid category
+    const plaidCategory = inflowPeriod.plaidDetailedCategory?.toUpperCase() || "";
+    const isRegularSalary =
+      plaidCategory.includes("WAGES") || plaidCategory.includes("SALARY");
 
-    // Increment counts
-    totalCount++;
-
-    if (inflowPeriod.isReceiptPeriod) {
-      receiptPeriodCount++;
+    // Determine income type based on Plaid category
+    let incomeType = "other";
+    if (plaidCategory.includes("WAGES") || plaidCategory.includes("SALARY")) {
+      incomeType = "salary";
+    } else if (plaidCategory.includes("FREELANCE") || plaidCategory.includes("CONTRACT")) {
+      incomeType = "freelance";
+    } else if (plaidCategory.includes("INVESTMENT") || plaidCategory.includes("DIVIDEND")) {
+      incomeType = "investment";
     }
 
-    if (inflowPeriod.isFullyPaid) {
-      fullyReceivedCount++;
-    }
+    // Calculate receipt progress percentage
+    const receiptProgressPercentage =
+      expectedAmount > 0
+        ? Math.round((receivedAmount / expectedAmount) * 100)
+        : 0;
 
-    if (pendingAmount > 0) {
-      pendingCount++;
-    }
+    return {
+      // === IDENTITY ===
+      inflowId: inflowPeriod.inflowId,
+      inflowPeriodId: inflowPeriod.id,
+      description: inflowPeriod.description || "Unknown",
+      source: inflowPeriod.merchant || inflowPeriod.source || "Unknown",
 
-    // Build detailed entry if requested (now always true)
-    if (includeEntries) {
-      // Determine if this is regular salary based on Plaid category
-      const plaidCategory = inflowPeriod.plaidDetailedCategory?.toUpperCase() || "";
-      const isRegularSalary =
-        plaidCategory.includes("WAGES") || plaidCategory.includes("SALARY");
+      // === AMOUNTS ===
+      totalExpected: expectedAmount,
+      totalReceived: receivedAmount,
+      totalPending: pendingAmount,
+      averageAmount: inflowPeriod.averageAmount || 0,
 
-      // Determine income type based on Plaid category
-      let incomeType = "other";
-      if (plaidCategory.includes("WAGES") || plaidCategory.includes("SALARY")) {
-        incomeType = "salary";
-      } else if (plaidCategory.includes("FREELANCE") || plaidCategory.includes("CONTRACT")) {
-        incomeType = "freelance";
-      } else if (plaidCategory.includes("INVESTMENT") || plaidCategory.includes("DIVIDEND")) {
-        incomeType = "investment";
-      }
+      // === STATUS ===
+      isReceiptPeriod: inflowPeriod.isReceiptPeriod,
+      expectedDate: inflowPeriod.predictedNextDate || undefined,
+      isRegularSalary,
 
-      // Calculate receipt progress percentage
-      const receiptProgressPercentage =
-        expectedAmount > 0
-          ? Math.round((receivedAmount / expectedAmount) * 100)
-          : 0;
+      // === PROGRESS METRICS ===
+      receiptProgressPercentage,
+      isFullyReceived: inflowPeriod.isFullyPaid || false,
+      isPending: pendingAmount > 0,
 
-      const entry: InflowEntry = {
-        // === IDENTITY ===
-        inflowId: inflowPeriod.inflowId,
-        inflowPeriodId: inflowPeriod.id,
-        description: inflowPeriod.description || "Unknown",
-        source: inflowPeriod.merchant || inflowPeriod.source || "Unknown",
+      // === GROUPING ===
+      groupId: inflowPeriod.groupId || "",
 
-        // === AMOUNTS ===
-        totalExpected: expectedAmount,
-        totalReceived: receivedAmount,
-        totalPending: pendingAmount,
-        averageAmount: inflowPeriod.averageAmount || 0,
-
-        // === STATUS ===
-        isReceiptPeriod: inflowPeriod.isReceiptPeriod,
-        expectedDate: inflowPeriod.predictedNextDate || undefined,
-        isRegularSalary,
-
-        // === PROGRESS METRICS ===
-        receiptProgressPercentage,
-        isFullyReceived: inflowPeriod.isFullyPaid || false,
-        isPending: pendingAmount > 0,
-
-        // === GROUPING ===
-        groupId: inflowPeriod.groupId || "",
-
-        // === INCOME TYPE ===
-        incomeType,
-      };
-      entries.push(entry);
-    }
-  }
-
-  const summary: InflowSummaryData = {
-    totalExpectedIncome,
-    totalReceivedIncome,
-    totalPendingIncome,
-    totalCount,
-    receiptPeriodCount,
-    fullyReceivedCount,
-    pendingCount,
-  };
-
-  // Add entries if requested
-  if (includeEntries) {
-    summary.entries = entries;
-  }
-
-  console.log(`[calculateInflowSummary] Summary calculated:`, {
-    totalExpectedIncome,
-    totalReceivedIncome,
-    totalPendingIncome,
-    totalCount,
-    receiptPeriodCount,
-    fullyReceivedCount,
-    pendingCount,
-    entriesCount: entries.length,
+      // === INCOME TYPE ===
+      incomeType,
+    };
   });
 
-  return summary;
+  console.log(`[calculateInflowSummary] Converted ${entries.length} entries`);
+
+  return entries;
 }
