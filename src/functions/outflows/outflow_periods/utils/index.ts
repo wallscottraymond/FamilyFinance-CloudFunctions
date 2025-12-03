@@ -1,9 +1,21 @@
 /**
- * Placeholder index file for outflow_periods/utils
+ * Outflow Periods Utility Functions Module
  *
- * This file will eventually re-export all functions from this directory.
- * Currently empty as files haven't been moved yet.
+ * Exports utilities for outflow period creation and management
  */
 
-// TODO: Add exports when files are moved to this directory
-export {};
+// Period creation utilities
+export * from './calculatePeriodGenerationRange';
+export * from './getDaysInPeriod';
+export * from './batchCreateOutflowPeriods';
+
+// Period calculation utilities
+export * from './checkIsDuePeriod';
+export * from './calculateWithholdingAmount';
+export * from './calculateOutflowPeriodStatus';
+export * from './calculateAllOccurrencesInPeriod';
+
+// Period matching and assignment utilities
+export * from './autoMatchTransactionToOutflowPeriods';
+export * from './autoMatchSinglePeriod';
+export * from './findMatchingOutflowPeriods';

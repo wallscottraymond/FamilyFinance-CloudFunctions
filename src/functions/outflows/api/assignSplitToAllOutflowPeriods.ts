@@ -43,7 +43,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { authenticateRequest, UserRole } from '../../../utils/auth';
 import { PaymentType, TransactionSplitReference, Transaction, OutflowPeriod, TransactionSplit, RecurringOutflow } from '../../../types';
 import * as admin from 'firebase-admin';
-import { findMatchingOutflowPeriods, findMatchingOutflowPeriodsBySourcePeriod, validatePeriodsFound } from '../utils/findMatchingOutflowPeriods';
+import { findMatchingOutflowPeriods, findMatchingOutflowPeriodsBySourcePeriod, validatePeriodsFound } from '../outflow_periods/utils/findMatchingOutflowPeriods';
 
 /**
  * Request to assign a split to all outflow periods

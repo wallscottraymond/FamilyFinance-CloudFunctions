@@ -18,7 +18,7 @@ import {
 import {
   CreateRecurringOutflowRequest,
   CreateRecurringOutflowResponse
-} from '../../types';
+} from '../types';
 
 // Initialize Firestore
 const db = getFirestore();

@@ -1,8 +1,9 @@
 /**
- * Placeholder index file for outflow_main/utils
+ * Outflow Main Utility Functions Module
  *
- * This file will eventually re-export all functions from this directory.
- * Currently empty as files haven't been moved yet.
+ * Exports utilities for recurring outflow (main) document creation and management
  */
-export {};
+export * from './formatRecurringOutflows';
+export * from './enhanceRecurringOutflows';
+export * from './batchCreateRecurringStreams';
 //# sourceMappingURL=index.d.ts.map

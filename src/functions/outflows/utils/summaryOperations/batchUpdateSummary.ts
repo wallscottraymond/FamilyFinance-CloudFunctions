@@ -3,7 +3,6 @@ import { Timestamp } from "firebase-admin/firestore";
 import { PeriodType, OutflowPeriodEntry, OutflowPeriodSummary } from "../../../../types";
 import { recalculatePeriodGroup } from "./recalculatePeriodGroup";
 import { updatePeriodNames } from "./updatePeriodNames";
-import { buildSummaryId } from "./recalculateFullSummary";
 
 /**
  * Operation types supported by batch update
@@ -182,5 +181,6 @@ export function getSummaryId(
   ownerType: 'user' | 'group',
   periodType: PeriodType
 ): string {
-  return buildSummaryId(ownerId, ownerType, periodType);
+  const typeStr = periodType.toLowerCase();
+  return `${ownerId}_outflowsummary_${typeStr}`;
 }

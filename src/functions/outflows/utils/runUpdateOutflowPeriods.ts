@@ -13,7 +13,7 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { Outflow, OutflowPeriod } from '../../../types';
-import { autoMatchSinglePeriod } from './autoMatchSinglePeriod';
+import { autoMatchSinglePeriod } from '../outflow_periods/utils/autoMatchSinglePeriod';
 
 export interface OutflowUpdateResult {
   success: boolean;

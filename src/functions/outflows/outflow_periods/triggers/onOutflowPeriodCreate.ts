@@ -11,7 +11,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { OutflowPeriod, Outflow } from '../../../../types';
-import { autoMatchSinglePeriod } from '../../utils/autoMatchSinglePeriod';
+import { autoMatchSinglePeriod } from '../utils/autoMatchSinglePeriod';
 import { createOutflowPeriodSummary } from '../../outflow_summaries/crud/createOutflowPeriodSummary';
 
 /**

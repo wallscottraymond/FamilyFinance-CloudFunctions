@@ -7,7 +7,7 @@
  * Once created, the existing infrastructure will automatically generate
  * outflow_periods documents for this recurring bill.
  */
-import { CreateRecurringOutflowRequest, CreateRecurringOutflowResponse } from '../../types';
+import { CreateRecurringOutflowRequest, CreateRecurringOutflowResponse } from '../types';
 /**
  * Create Manual Outflow Cloud Function
  */

@@ -13,7 +13,7 @@ import { RecurringOutflow } from '../../../../types';
 import {
   createOutflowPeriodsFromSource,
   calculatePeriodGenerationRange
-} from '../../utils/outflowPeriods';
+} from '../../outflow_periods/crud/createOutflowPeriods';
 import { batchUpdateUserPeriodSummariesFromOutflowPeriods } from '../../../summaries/utils/batchUpdateUserPeriodSummaries';
 
 /**

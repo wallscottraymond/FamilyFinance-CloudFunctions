@@ -7,14 +7,15 @@
 // Public API functions
 export * from './api';
 
-// Configuration
-export * from './config';
+// Background orchestration (triggers)
+// NOTE: Trigger files are organized by module in their respective directories
+export * from './outflow_main/triggers/onOutflowCreated';
+export * from './outflow_main/triggers/onOutflowUpdated';
+export * from './outflow_periods/triggers/onOutflowPeriodCreate';
 
-// Background orchestration (triggers, scheduled jobs)
-export * from './orchestration';
-
-// Type definitions
-export * from './types';
+// Type definitions from module-specific locations
+export * from './outflow_main/types';
+export * from './outflow_periods/types';
 
 // Utility functions
 export * from './utils';
@@ -23,4 +24,4 @@ export * from './utils';
 export * from './admin';
 
 // Dev testing functions (emulator + production)
-export * from './dev';
+export * from './outflow_main/dev/simulatePlaidRecurring';

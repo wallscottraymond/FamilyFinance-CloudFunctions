@@ -16,7 +16,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { RecurringOutflow } from '../../../types';
-import { createOutflowPeriodsFromSource } from '../utils/outflowPeriods';
+import { createOutflowPeriodsFromSource } from '../outflow_periods/crud/createOutflowPeriods';
 
 export const extendOutflowPeriods = onRequest({
   region: 'us-central1',

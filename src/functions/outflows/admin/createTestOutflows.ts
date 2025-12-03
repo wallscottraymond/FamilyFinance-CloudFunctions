@@ -18,9 +18,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { TransactionStream } from 'plaid';
 import { formatRecurringInflows } from '../../inflows/utils/formatRecurringInflows';
 import { enhanceRecurringInflows } from '../../inflows/utils/enhanceRecurringInflows';
-import { formatRecurringOutflows } from '../utils/formatRecurringOutflows';
-import { enhanceRecurringOutflows } from '../utils/enhanceRecurringOutflows';
-import { batchCreateInflowStreams, batchCreateOutflowStreams } from '../utils/batchCreateRecurringStreams';
+import { formatRecurringOutflows, enhanceRecurringOutflows, batchCreateInflowStreams, batchCreateOutflowStreams } from '../outflow_main/utils';
 import { db } from '../../../index';
 
 /**

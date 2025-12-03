@@ -22,9 +22,7 @@ import { db } from '../../../../index';
 import { Timestamp } from 'firebase-admin/firestore';
 import { formatRecurringInflows } from '../../../inflows/utils/formatRecurringInflows';
 import { enhanceRecurringInflows } from '../../../inflows/utils/enhanceRecurringInflows';
-import { formatRecurringOutflows } from '../../../outflows/utils/formatRecurringOutflows';
-import { enhanceRecurringOutflows } from '../../../outflows/utils/enhanceRecurringOutflows';
-import { batchCreateInflowStreams, batchCreateOutflowStreams } from '../../../outflows/utils/batchCreateRecurringStreams';
+import { formatRecurringOutflows, enhanceRecurringOutflows, batchCreateInflowStreams, batchCreateOutflowStreams } from '../../../outflows/outflow_main/utils';
 
 // Define secrets
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
