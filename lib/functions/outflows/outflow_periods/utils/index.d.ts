@@ -13,4 +13,7 @@ export * from './calculateAllOccurrencesInPeriod';
 export * from './autoMatchTransactionToOutflowPeriods';
 export * from './autoMatchSinglePeriod';
 export * from './findMatchingOutflowPeriods';
+export * from './runUpdateOutflowPeriods';
+export * from './predictFutureBillDueDate';
+export * from './updateBillStatus';
 //# sourceMappingURL=index.d.ts.map

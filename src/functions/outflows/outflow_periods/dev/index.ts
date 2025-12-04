@@ -1,9 +1,9 @@
 /**
- * Placeholder index file for outflow_periods/dev
+ * Outflow Periods Dev/Testing Functions Module
  *
- * This file will eventually re-export all functions from this directory.
- * Currently empty as files haven't been moved yet.
+ * Exports development and testing functions for outflow_periods
  */
 
-// TODO: Add exports when files are moved to this directory
-export {};
+export * from './extendOutflowPeriods';
+export * from './migrateTransactionSplits';
+export * from './debugTransactionMatching';

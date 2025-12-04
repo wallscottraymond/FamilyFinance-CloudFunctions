@@ -25,98 +25,429 @@
 
 ## Overview
 
-The Outflows System is a recurring bill management module that enables users to create, track, and monitor recurring expenses (bills) with automatic period-based withholding calculations. It supports both Plaid-synced recurring transactions and user-created bills, with automatic period generation and financial planning features.
+The Outflows System is a **recurring bill management module** that enables users to create, track, and monitor recurring expenses (bills) with automatic period-based withholding calculations. It supports both Plaid-synced recurring transactions and user-created bills, with automatic period generation and financial planning features.
 
-### Core Concept: Outflows as Recurring Bills
+### Core Concept: Three-Module Architecture
 
-**Outflows are recurring bills** that need regular tracking and planning:
-- Outflows define the **recurring expense** (amount, frequency, merchant)
-- Outflow periods are **withholding instances** created for each time period
-- **Users interact with outflow_periods** for daily financial planning
-- Outflows can come from **Plaid** (auto-detected) or **user-created** (manual)
+The Outflows System is organized into **three domain-specific modules**, each with clear responsibilities:
 
-**Example:**
-- Outflow: "Internet Bill" with $89.99/month from Comcast (Plaid-synced)
-- Outflow Periods: Daily withholding to save for the bill ($3/day)
-- User sees: How much to set aside each week/month for upcoming bills
+1. **`outflow_main`** - Recurring Bill Definitions
+   - Manages Plaid-detected and user-created recurring expenses
+   - Stores bill details (amount, frequency, merchant)
+   - Handles Plaid stream synchronization
+   - Triggers period generation
+
+2. **`outflow_periods`** - Withholding Instances
+   - Creates period-specific withholding allocations
+   - Calculates daily withholding rates
+   - Tracks payment status per period
+   - Primary user interaction point for financial planning
+
+3. **`outflow_summaries`** - Period-Centric Aggregations
+   - Aggregates outflow periods by source period
+   - Provides period-centric views for users
+   - Powers summary tiles and dashboards
+   - Maintains denormalized summary data
+
+---
 
 ## Architecture
 
-### Module Structure
+### Module Structure (Updated December 2025)
 
 ```
 outflows/
-├── api/                    # Public-facing Cloud Functions
-│   └── crud/              # Create, Read, Update, Delete operations
-├── config/                # Configuration constants (placeholder)
-├── orchestration/         # Background automation
-│   └── triggers/          # Firestore triggers
-├── types/                 # TypeScript type definitions (placeholder)
-├── utils/                 # Shared business logic (placeholder)
-└── admin/                 # Admin and testing functions
+├── index.ts                    # Main module exports
+├── CLAUDE.md                   # This documentation
+├── Restructure_Plan.md         # Migration history
+│
+├── outflow_main/               # MODULE 1: Recurring Bill Definitions
+│   ├── __tests__/              # Unit tests for outflow_main
+│   ├── admin/                  # Admin utilities
+│   ├── api/                    # Public API endpoints
+│   ├── crud/                   # Create/Read/Update/Delete operations
+│   │   └── createManualOutflow.ts
+│   ├── dev/                    # Development and testing functions
+│   │   ├── createTestOutflows.ts
+│   │   ├── debugOutflowPeriods.ts
+│   │   ├── simulatePlaidRecurring.ts
+│   │   └── testOutflowUpdate.ts
+│   ├── triggers/               # Firestore triggers
+│   │   ├── onOutflowCreated.ts
+│   │   └── onOutflowUpdated.ts
+│   ├── types/                  # Type definitions
+│   │   └── index.ts
+│   └── utils/                  # Outflow-specific utilities
+│       ├── formatRecurringOutflows.ts
+│       ├── enhanceRecurringOutflows.ts
+│       ├── batchCreateRecurringStreams.ts
+│       └── index.ts
+│
+├── outflow_periods/            # MODULE 2: Withholding Instances
+│   ├── __tests__/              # Unit tests for outflow_periods
+│   │   └── calculateOutflowPeriodStatus.test.ts
+│   ├── admin/                  # Admin utilities
+│   ├── api/                    # Public API endpoints
+│   │   ├── assignSplitToAllOutflowPeriods.ts
+│   │   ├── unassignSplitFromAllOutflowPeriods.ts
+│   │   ├── getOutflowPeriodTransactions.ts
+│   │   └── index.ts
+│   ├── crud/                   # CRUD operations
+│   │   ├── createOutflowPeriods.ts
+│   │   └── index.ts
+│   ├── dev/                    # Development functions
+│   │   ├── extendOutflowPeriods.ts
+│   │   ├── migrateTransactionSplits.ts
+│   │   ├── debugTransactionMatching.ts
+│   │   └── index.ts
+│   ├── triggers/               # Firestore triggers
+│   │   └── onOutflowPeriodCreate.ts
+│   ├── types/                  # Type definitions
+│   │   └── index.ts
+│   └── utils/                  # Period-specific utilities
+│       ├── calculatePeriodGenerationRange.ts
+│       ├── getDaysInPeriod.ts
+│       ├── batchCreateOutflowPeriods.ts
+│       ├── checkIsDuePeriod.ts
+│       ├── calculateWithholdingAmount.ts
+│       ├── calculateOutflowPeriodStatus.ts
+│       ├── calculateAllOccurrencesInPeriod.ts
+│       ├── autoMatchTransactionToOutflowPeriods.ts
+│       ├── autoMatchSinglePeriod.ts
+│       ├── findMatchingOutflowPeriods.ts
+│       ├── predictFutureBillDueDate.ts
+│       ├── runUpdateOutflowPeriods.ts
+│       ├── updateBillStatus.ts
+│       └── index.ts
+│
+└── outflow_summaries/          # MODULE 3: Period-Centric Aggregations
+    ├── __tests__/              # Unit tests for summaries
+    ├── admin/                  # Admin utilities
+    ├── api/                    # Public API endpoints
+    ├── crud/                   # CRUD operations
+    │   ├── updateOutflowPeriodSummary.ts
+    │   ├── deleteOutflowPeriodSummary.ts
+    │   └── index.ts
+    ├── dev/                    # Development functions
+    ├── triggers/               # Firestore triggers
+    ├── types/                  # Type definitions
+    └── utils/                  # Summary-specific utilities
+        ├── periodTypeHelpers.ts
+        ├── batchUpdateSummary.ts
+        ├── recalculatePeriodGroup.ts
+        ├── updatePeriodNames.ts
+        └── index.ts
 ```
 
 ### Key Concepts
 
-**Outflows (`outflows` collection):**
+#### Outflows (`outflows` collection)
 - **Recurring expense definition** (bill details, frequency, amount)
 - Two sources: **Plaid-synced** (auto-detected) or **User-created** (manual)
 - Define merchant, amount, frequency (weekly, monthly, etc.)
 - Track payment cycles and due dates
-- Can be **personal** (no familyId) or **shared** (with familyId)
+- Managed by **`outflow_main`** module
 
-**Outflow Periods (`outflow_periods` collection):**
+#### Outflow Periods (`outflow_periods` collection)
 - **Primary user interaction point** for financial planning
 - Time-based withholding allocations for each period
 - Calculate daily withholding rate based on bill frequency
 - Track amount to set aside vs amount due in each period
 - Support all period types: Monthly, Bi-Monthly, Weekly
 - Automatically generated when outflow is created
+- Managed by **`outflow_periods`** module
 
-**Source Periods (`source_periods` collection):**
+#### Outflow Summaries (`outflow_summary` collection)
+- **Period-centric aggregation** of outflow periods
+- Groups periods by source period ID (e.g., "2025-M01")
+- Powers dashboard tiles and summary views
+- Denormalized data for fast queries
+- Managed by **`outflow_summaries`** module
+
+#### Source Periods (`source_periods` collection)
 - Single source of truth for all period definitions
 - Pre-generated by admin functions
 - Ensures consistency across budgets, outflows, and inflows
+- Referenced by all three outflow modules
 
-**Personal vs Shared Outflows:**
-- **Personal Outflows:** Created by/for individual user, `familyId` is null or empty
-  - Only the creator can access and modify
-  - Outflow periods created for user's planning
-  - Used for individual bill tracking
-- **Shared Outflows:** Created for family/group, `familyId` is set (future feature)
-  - Multiple family members can see the bill
-  - Shared financial planning across household
-  - Currently being developed
+---
 
-### Outflow → Outflow Period Relationship
+## Module 1: Outflow Main
 
+### Purpose
+Manages recurring bill definitions from both Plaid and user-created sources.
+
+### Key Files
+
+#### CRUD Operations
+- **`crud/createManualOutflow.ts`** - Create user-defined recurring bills
+  - Callable Cloud Function
+  - Accepts bill details (name, amount, frequency, due day)
+  - Creates `outflows` document
+  - Triggers period generation via `onOutflowCreated`
+
+#### Triggers
+- **`triggers/onOutflowCreated.ts`** - Auto-generate periods when outflow is created
+  - Firestore trigger on `outflows` collection create
+  - Calls `createOutflowPeriodsFromSource()` to generate 3 months of periods
+  - Handles both Plaid-synced and user-created outflows
+  - Memory: 512MiB, Timeout: 60s
+
+- **`triggers/onOutflowUpdated.ts`** - Cascade updates to periods
+  - Firestore trigger on `outflows` collection update
+  - Detects changes to `averageAmount`, `userCustomName`, `transactionIds`
+  - Calls `runUpdateOutflowPeriods()` to sync changes
+  - Only updates unpaid periods (preserves payment history)
+
+#### Utilities
+- **`utils/formatRecurringOutflows.ts`** - Format Plaid streams to internal structure
+  - Step 1 of Plaid sync pipeline
+  - Pure data mapping from Plaid API response
+  - Flattens amount fields, normalizes dates
+
+- **`utils/enhanceRecurringOutflows.ts`** - Add business logic and enrichments
+  - Step 2 of Plaid sync pipeline
+  - Adds expense type detection (subscription, utility, loan, etc.)
+  - Determines if expense is essential
+  - Future: merchant name standardization, category mapping
+
+- **`utils/batchCreateRecurringStreams.ts`** - Upsert outflows to Firestore
+  - Step 3 of Plaid sync pipeline
+  - Smart upsert logic (create vs update)
+  - Preserves user modifications
+  - Updates transaction IDs array
+
+#### Dev/Testing Functions
+- **`dev/createTestOutflows.ts`** - Create sample outflows for testing
+  - HTTP request function
+  - Simulates Plaid recurring sync pipeline
+  - Creates realistic test data (Internet, Netflix, Gym)
+
+- **`dev/debugOutflowPeriods.ts`** - Debug outflow period calculations
+  - HTTP request function
+  - Returns diagnostic information
+  - Shows payment cycles, withholding amounts
+
+- **`dev/simulatePlaidRecurring.ts`** - Simulate Plaid recurring transaction sync
+  - HTTP request function
+  - Fetches mock Plaid recurring data
+  - Runs full format → enhance → batch create pipeline
+
+- **`dev/testOutflowUpdate.ts`** - Test outflow update trigger
+  - HTTP request function
+  - Simulates outflow updates
+  - Validates period cascading
+
+---
+
+## Module 2: Outflow Periods
+
+### Purpose
+Manages period-specific withholding allocations and payment tracking.
+
+### Key Files
+
+#### CRUD Operations
+- **`crud/createOutflowPeriods.ts`** - Generate outflow periods from source periods
+  - Main period creation logic
+  - Queries source_periods for date range
+  - Calculates withholding amounts per period
+  - Batch creates period documents
+  - Called by `onOutflowCreated` trigger
+
+#### API Functions
+- **`api/assignSplitToAllOutflowPeriods.ts`** - Assign transaction split to bill payment
+  - Callable Cloud Function
+  - Assigns split to ALL THREE period types (monthly, weekly, bi-weekly)
+  - Updates transaction split with period references
+  - Adds `TransactionSplitReference` to periods
+  - Recalculates payment status
+
+- **`api/unassignSplitFromAllOutflowPeriods.ts`** - Remove split assignment
+  - Callable Cloud Function
+  - Clears split from all period types
+  - Removes period references from split
+  - Restores budget assignment if needed
+
+- **`api/getOutflowPeriodTransactions.ts`** - Get transactions for a period
+  - Callable Cloud Function
+  - Read-only query
+  - Returns all assigned transaction splits
+
+#### Triggers
+- **`triggers/onOutflowPeriodCreate.ts`** - Handle period creation events
+  - Firestore trigger on `outflow_periods` collection create
+  - Future: Update summary documents
+  - Future: Send notifications for upcoming bills
+
+#### Utilities (Period Creation)
+- **`utils/calculatePeriodGenerationRange.ts`** - Calculate date range for period generation
+  - Determines start/end dates for period creation
+  - Default: 3 months forward from today
+  - Handles edge cases (leap years, month boundaries)
+
+- **`utils/getDaysInPeriod.ts`** - Calculate days in a period
+  - Simple date math utility
+  - Used for withholding calculations
+  - Handles partial periods
+
+- **`utils/batchCreateOutflowPeriods.ts`** - Batch write periods to Firestore
+  - Efficient batch operations (500 docs per batch)
+  - Constructs period documents
+  - Handles Firestore batch limits
+
+#### Utilities (Period Calculations)
+- **`utils/checkIsDuePeriod.ts`** - Determine if bill is due in period
+  - Compares due date to period date range
+  - Returns boolean + due date
+  - Critical for payment status
+
+- **`utils/calculateWithholdingAmount.ts`** - Calculate amount to withhold
+  - Formula: `dailyRate × daysInPeriod`
+  - Daily rate: `billAmount / cycleDays`
+  - Rounds to 2 decimal places
+
+- **`utils/calculateOutflowPeriodStatus.ts`** - Determine period payment status
+  - Returns: `pending`, `partial`, `paid`, `overdue`, `not_due`
+  - Compares payments to amount due
+  - Checks due dates for overdue detection
+
+- **`utils/calculateAllOccurrencesInPeriod.ts`** - Calculate bill occurrences
+  - For bills that occur multiple times per period
+  - Used in withholding calculations
+  - Handles edge cases (weekly bills in monthly periods)
+
+#### Utilities (Transaction Matching)
+- **`utils/autoMatchTransactionToOutflowPeriods.ts`** - Auto-match transactions to periods
+  - Matches historical Plaid transactions to outflow periods
+  - Called after outflow creation
+  - Determines payment type (regular, catch_up, advance)
+
+- **`utils/autoMatchSinglePeriod.ts`** - Match transactions to single period
+  - Helper for auto-matching
+  - Finds matching period based on date
+  - Assigns transaction split to period
+
+- **`utils/findMatchingOutflowPeriods.ts`** - Find periods by date or source period
+  - Queries for matching monthly, weekly, bi-weekly periods
+  - Two modes: by transaction date OR by target source period
+  - Returns all three period types
+
+#### Utilities (Period Updates)
+- **`utils/predictFutureBillDueDate.ts`** - Calculate next bill due date
+  - Projects forward from last date using frequency
+  - Adjusts for weekends (Saturday/Sunday → Monday)
+  - Used in period calculations
+
+- **`utils/runUpdateOutflowPeriods.ts`** - Cascade outflow changes to periods
+  - Called by `onOutflowUpdated` trigger
+  - Updates unpaid periods only (preserves payment history)
+  - Handles amount changes, name changes, transaction ID changes
+  - Batch operations for efficiency
+
+- **`utils/updateBillStatus.ts`** - Update bill status
+  - Placeholder/deprecated utility
+  - Future: More sophisticated status logic
+
+#### Dev/Testing Functions
+- **`dev/extendOutflowPeriods.ts`** - Generate additional periods forward in time
+  - HTTP request function
+  - Extends periods beyond 3-month default
+  - Useful for testing long-term scenarios
+
+- **`dev/migrateTransactionSplits.ts`** - Add transactionSplits field to periods
+  - HTTP request function
+  - Data migration utility
+  - Adds empty transactionSplits array to existing periods
+
+- **`dev/debugTransactionMatching.ts`** - Debug transaction matching logic
+  - HTTP request function
+  - Shows matched/unmatched transactions
+  - Validates auto-matching results
+
+---
+
+## Module 3: Outflow Summaries
+
+### Purpose
+Provides period-centric aggregation views for dashboard tiles and summary displays.
+
+### Key Concepts
+
+The summary system aggregates outflow periods by source period, creating denormalized summary documents that power fast queries for user dashboards.
+
+**Example Summary Structure:**
+```typescript
+{
+  id: "user123_outflowsummary_monthly",
+  ownerId: "user123",
+  ownerType: "user",
+  periodType: "MONTHLY",
+  resourceType: "outflow",
+  periods: {
+    "2025-M01": [
+      {
+        periodId: "period_123",
+        outflowId: "outflow_456",
+        merchant: "Comcast",
+        userCustomName: "Internet",
+        totalAmountDue: 89.99,
+        totalAmountPaid: 0,
+        isDuePeriod: true,
+        // ... more fields
+      }
+    ],
+    "2025-M02": [ /* February periods */ ]
+  }
+}
 ```
-Outflow (Recurring Bill)
-├── description: "Internet Bill"
-├── merchantName: "Comcast"
-├── averageAmount: $89.99
-├── frequency: "MONTHLY" (30 days)
-├── outflowSource: "plaid" OR "user"
-├── familyId: null (personal) OR "family_123" (shared)
-└── Creates → Outflow Periods (Withholding Instances)
-    ├── 2025-M01: $89.99 to withhold, due on Jan 31
-    ├── 2025-BM01-1: $44.99 to withhold (half month)
-    ├── 2025-BM01-2: $44.99 to withhold (half month)
-    ├── 2025-W01: $20.97 to withhold (7 days)
-    └── ... (all period types for 3 months)
-```
 
-**User Workflow:**
-1. **Setup Phase:** User creates outflow (manual) or Plaid detects it (auto)
-2. **Automatic Generation:** System creates 3 months of outflow_periods
-3. **Daily Planning:** User views periods to see withholding amounts
-   - Weekly view: "Set aside $20.97 this week for Internet"
-   - Monthly view: "Internet bill of $89.99 due Jan 31"
-   - Track progress toward upcoming bill payment
+### Key Files
+
+#### CRUD Operations
+- **`crud/updateOutflowPeriodSummary.ts`** - Update summary when period changes
+  - Called by centralized summary triggers
+  - Recalculates affected period group
+  - Updates both user and group summaries
+
+- **`crud/deleteOutflowPeriodSummary.ts`** - Update summary when period deleted
+  - Called by centralized summary triggers
+  - Removes period from summary
+  - Recalculates totals
+
+#### Utilities
+- **`utils/periodTypeHelpers.ts`** - Determine period type from source period ID
+  - Parses source period ID format
+  - Returns MONTHLY, WEEKLY, or BI_MONTHLY
+  - Example: "2025-M01" → MONTHLY, "2025-W01" → WEEKLY
+
+- **`utils/batchUpdateSummary.ts`** - Core orchestration for summary updates
+  - Coordinates multiple update operations
+  - Atomic Firestore writes
+  - Supports two operation types:
+    - `recalculate`: Recalculate period group from scratch
+    - `updateNames`: Update merchant/userCustomName fields
+  - Exports `getSummaryId()` helper for document ID generation
+
+- **`utils/recalculatePeriodGroup.ts`** - Recalculate all entries for a source period
+  - Queries all outflow_periods with given sourcePeriodId
+  - Creates ONE OutflowPeriodEntry per period (no aggregation)
+  - Fetches parent outflow data
+  - Returns array ready for batch write
+
+- **`utils/updatePeriodNames.ts`** - Update denormalized names across entries
+  - Updates merchant/userCustomName when parent outflow changes
+  - Pure function (no Firestore calls)
+  - Returns updated periods object
+
+---
 
 ## Data Models
 
 ### Outflow Document (Recurring Bill Definition)
+
+**Collection:** `outflows`
+**Managed by:** `outflow_main` module
 
 ```typescript
 interface RecurringOutflow {
@@ -185,13 +516,17 @@ interface RecurringOutflow {
 
 ### Outflow Period Document (Withholding Instance)
 
+**Collection:** `outflow_periods`
+**Managed by:** `outflow_periods` module
+
 ```typescript
 interface OutflowPeriod {
   id: string;                      // Format: "{outflowId}_{sourcePeriodId}"
   outflowId: string;               // Reference to parent outflow
   sourcePeriodId: string;          // Reference to source_periods (e.g., "2025-W01")
   userId: string;                  // Outflow owner
-  familyId: string | null;         // Family association (null for personal)
+  ownerId: string;                 // Same as userId (new RBAC field)
+  groupId: string | null;          // Group association (RBAC)
 
   // Period context (denormalized for performance)
   periodType: PeriodType;          // WEEKLY, BI_MONTHLY, MONTHLY
@@ -204,21 +539,37 @@ interface OutflowPeriod {
   cycleDays: number;               // Days in payment cycle
 
   // Financial calculations
-  billAmount: number;              // Full bill amount for this cycle
-  dailyWithholdingRate: number;    // Amount to withhold per day
+  averageAmount: number;           // Bill average amount
+  expectedAmount: number;          // Expected bill amount
+  totalAmountDue: number;          // Total amount due in this period
+  totalAmountPaid: number;         // Total amount paid
+  totalAmountUnpaid: number;       // Remaining unpaid
   amountWithheld: number;          // Amount to withhold in THIS period
-  amountDue: number;               // Amount due in THIS period (if due date falls here)
+  dailyWithholdingRate: number;    // Amount to withhold per day
+
+  // Occurrence tracking
+  occurrencesInPeriod: number;     // Number of bill occurrences
+  amountPerOccurrence: number;     // Amount per occurrence
 
   // Payment status
   isDuePeriod: boolean;            // Is bill due during this period?
   dueDate?: Timestamp;             // Actual due date (if isDuePeriod)
+  expectedDueDate?: Timestamp;     // Expected due date from prediction
+  status: OutflowPeriodStatus;     // pending, partial, paid, overdue, not_due
+  isFullyPaid: boolean;            // Whether fully paid
+  isPartiallyPaid: boolean;        // Whether partially paid
+  isPaid: boolean;                 // Legacy field (use isFullyPaid)
   isActive: boolean;               // Whether period is active
 
+  // Transaction assignments
+  transactionSplits: TransactionSplitReference[]; // Assigned payments
+
   // Metadata from outflow (denormalized for performance)
-  outflowDescription: string;      // Bill name
-  outflowMerchantName: string | null; // Merchant name
-  outflowExpenseType: OutflowExpenseType; // Expense type
-  outflowIsEssential: boolean;     // Is essential expense
+  description: string;             // Bill name
+  userCustomName?: string;         // User's custom name for bill
+  merchantName: string | null;     // Merchant name
+  expenseType: OutflowExpenseType; // Expense type
+  isEssential: boolean;            // Is essential expense
 
   // System fields
   createdAt: Timestamp;
@@ -227,251 +578,412 @@ interface OutflowPeriod {
 }
 ```
 
-## API Functions
+### Outflow Period Summary Document
 
-### CRUD Operations
+**Collection:** `outflow_summary`
+**Managed by:** `outflow_summaries` module
 
-#### `createRecurringOutflow` (Callable Function)
-**Location:** `api/crud/createRecurringOutflow.ts`
-**Auth:** User must be authenticated
-**Purpose:** Create a user-defined recurring outflow (manual bill)
-
-**Request:**
 ```typescript
-interface CreateRecurringOutflowRequest {
-  description: string;              // Bill name
-  merchantName?: string;            // Merchant/company name
-  amount: number;                   // Bill amount
-  frequency: 'weekly' | 'bi_weekly' | 'monthly' | 'quarterly' | 'yearly';
-  expenseType?: 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other';
-  isEssential?: boolean;            // Whether essential expense
-  dueDay?: number;                  // Day of month when due (monthly bills)
-  userNotes?: string;               // User notes
-  familyId?: string;                // Optional family association
+interface OutflowPeriodSummary {
+  id: string;                      // Format: "{ownerId}_outflowsummary_{periodType}"
+  ownerId: string;                 // User or group ID
+  ownerType: 'user' | 'group';     // Owner type
+  periodType: PeriodType;          // MONTHLY, WEEKLY, BI_MONTHLY
+  resourceType: 'outflow';         // Always 'outflow'
+
+  // Summary data grouped by source period
+  periods: {
+    [sourcePeriodId: string]: OutflowPeriodEntry[];
+  };
+
+  // Metadata
+  totalItemCount: number;          // Total entries across all periods
+  windowStart: Timestamp;          // Summary time window start
+  windowEnd: Timestamp;            // Summary time window end
+  lastRecalculated: Timestamp;     // Last full recalculation
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+interface OutflowPeriodEntry {
+  // Period Identity
+  periodId: string;                // Outflow period ID
+  outflowId: string;               // Parent outflow ID
+  groupId: string;                 // Group ID (RBAC)
+  merchant: string;                // Merchant name
+  userCustomName: string;          // User's custom name
+
+  // Amount Totals
+  totalAmountDue: number;          // Total due
+  totalAmountPaid: number;         // Total paid
+  totalAmountUnpaid: number;       // Total unpaid
+  totalAmountWithheld: number;     // Total withheld
+  averageAmount: number;           // Average amount
+
+  // Due Status
+  isDuePeriod: boolean;            // Is due in this period
+  duePeriodCount: number;          // Count of due periods (0 or 1)
+
+  // Status Breakdown
+  statusCounts: OutflowStatusCounts; // Count by status
+
+  // Progress Metrics
+  paymentProgressPercentage: number; // 0-100
+  fullyPaidCount: number;          // Count fully paid
+  unpaidCount: number;             // Count unpaid
+  itemCount: number;               // Always 1 (one entry per period)
 }
 ```
 
-**Response:**
+---
+
+## Common Workflows
+
+### Creating a User-Defined Bill
+
+**Module:** `outflow_main`
+
+1. **User creates recurring bill** via `createManualOutflow` function
+   ```typescript
+   import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
+
+   const functions = getFunctions();
+   const createOutflow = httpsCallable(functions, 'createManualOutflow');
+
+   const result = await createOutflow({
+     description: "Netflix Subscription",
+     merchantName: "Netflix",
+     amount: 15.99,
+     frequency: "monthly",
+     expenseType: "subscription",
+     isEssential: false,
+     dueDay: 15
+   });
+   ```
+
+2. **`onOutflowCreated` trigger fires** automatically
+   - Location: `outflow_main/triggers/onOutflowCreated.ts`
+   - Calculates payment cycle and daily withholding rate
+   - Calls `createOutflowPeriodsFromSource()`
+
+3. **Outflow period instances generated** from source_periods
+   - Location: `outflow_periods/crud/createOutflowPeriods.ts`
+   - 3 months of monthly, bi-monthly, and weekly instances created
+   - Batch written to `outflow_periods` collection
+
+4. **User can now view** withholding amounts in their budget
+   - See how much to set aside each week/month
+   - Track upcoming bill due dates
+
+### Plaid-Detected Recurring Transaction
+
+**Module:** `outflow_main`
+
+1. **Plaid detects recurring pattern** in user transactions
+2. **Plaid webhook** notifies system
+3. **Recurring outflow created** via `formatRecurringOutflows` → `enhanceRecurringOutflows` → `batchCreateRecurringStreams`
+4. **`onOutflowCreated` trigger fires** automatically
+5. **Outflow_periods generated** for planning
+6. **User sees new bill** in their outflows list
+
+### Assigning a Payment to a Bill
+
+**Module:** `outflow_periods`
+
+1. **User marks transaction as bill payment:**
+   - Opens transaction detail screen
+   - Selects "Assign to Bill"
+   - Chooses outflow from list
+
+2. **System assigns to all period types:**
+   ```typescript
+   const assignSplit = httpsCallable(functions, 'assignSplitToAllOutflowPeriods');
+
+   await assignSplit({
+     transactionId: "txn_123",
+     splitId: "split_456",
+     outflowId: "outflow_789",
+     paymentType: "regular",
+     clearBudgetAssignment: true
+   });
+   ```
+
+3. **Function finds matching periods:**
+   - Location: `outflow_periods/api/assignSplitToAllOutflowPeriods.ts`
+   - Uses `findMatchingOutflowPeriods()` to find monthly, weekly, bi-weekly periods
+   - Updates transaction split with all three period references
+   - Adds `TransactionSplitReference` to each period
+
+4. **Period status recalculated:**
+   - Location: `outflow_periods/utils/calculateOutflowPeriodStatus.ts`
+   - Compares payments to amount due
+   - Updates status (pending → paid)
+
+5. **User sees updated status:**
+   - Monthly view: "Internet Bill - Paid"
+   - Weekly view: "Internet Bill - Paid"
+   - All views stay in sync
+
+### Updating an Outflow
+
+**Module:** `outflow_main` + `outflow_periods`
+
+1. **User updates outflow** (e.g., changes custom name)
+2. **`onOutflowUpdated` trigger fires:**
+   - Location: `outflow_main/triggers/onOutflowUpdated.ts`
+   - Detects changed fields (averageAmount, userCustomName, transactionIds)
+
+3. **Periods updated automatically:**
+   - Location: `outflow_periods/utils/runUpdateOutflowPeriods.ts`
+   - Queries all unpaid periods for this outflow
+   - Updates amounts, names, or transaction assignments
+   - Batch writes changes
+
+4. **User sees updated data** in all views
+
+---
+
+## Payment Tracking System
+
+### Transaction Split Assignment
+
+The system supports assigning transaction splits to outflow periods for payment tracking. This enables users to link bank transactions to their recurring bills.
+
+**Key Feature:** **Multi-Period Assignment**
+- One transaction split can be assigned to ALL THREE period types simultaneously
+- Ensures consistency across monthly, weekly, and bi-weekly views
+- Bi-directional references (split ↔ period)
+
+### TransactionSplit Interface
+
 ```typescript
-interface CreateRecurringOutflowResponse {
-  success: boolean;
-  outflowId?: string;
-  message?: string;
+interface TransactionSplit {
+  id: string;
+
+  // Budget assignment
+  budgetId: string;
+  budgetName: string;
+
+  // Outflow assignment (all three period types)
+  outflowId?: string;                    // Parent outflow ID
+  outflowDescription?: string;           // Denormalized description
+  outflowPeriodId?: string;              // Primary period reference
+  outflowMonthlyPeriodId?: string;       // Monthly period ID
+  outflowWeeklyPeriodId?: string;        // Weekly period ID
+  outflowBiWeeklyPeriodId?: string;      // Bi-weekly period ID
+
+  // Payment tracking
+  paymentType?: PaymentType;             // regular, catch_up, advance, extra_principal
+  paymentDate?: Timestamp;               // Date payment was made
+
+  // Other fields
+  amount: number;
+  categoryId: string;
+  description?: string;
+  isDefault: boolean;
 }
 ```
 
-**What Happens:**
-1. User creates manual recurring bill
-2. Outflow document created in `outflows` collection
-3. `onOutflowCreated` trigger fires automatically
-4. 3 months of outflow_periods generated (monthly, bi-monthly, weekly)
-5. User can immediately see withholding amounts in their budget
+### TransactionSplitReference Interface
 
-**Example:**
+Stored in outflow_periods to track assigned payments:
+
 ```typescript
-import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
-
-const functions = getFunctions();
-
-const createBill = async () => {
-  const createOutflow = httpsCallable(functions, 'createRecurringOutflow');
-  const result = await createOutflow({
-    description: "Netflix Subscription",
-    merchantName: "Netflix",
-    amount: 15.99,
-    frequency: "monthly",
-    expenseType: "subscription",
-    isEssential: false,
-    dueDay: 15
-  });
-  return result.data;
-};
+interface TransactionSplitReference {
+  transactionId: string;           // Reference to transactions document
+  splitId: string;                 // Specific split within transaction
+  transactionDate: Timestamp;      // When transaction occurred
+  amount: number;                  // Split amount
+  description: string;             // Transaction description
+  paymentType: PaymentType;        // Payment classification
+  isAutoMatched: boolean;          // Was this auto-matched or manual?
+  matchedAt: Timestamp;            // When assignment occurred
+  matchedBy: string;               // User ID or 'system'
+}
 ```
 
-## Orchestration Functions
+### Payment Types
 
-### Triggers
+```typescript
+enum PaymentType {
+  REGULAR = 'regular',              // Normal on-time payment
+  CATCH_UP = 'catch_up',            // Payment for past-due bill
+  ADVANCE = 'advance',              // Payment made well before due date
+  EXTRA_PRINCIPAL = 'extra_principal' // Extra payment beyond required amount
+}
+```
 
-#### `onOutflowCreated` (Firestore Trigger)
-**Location:** `orchestration/triggers/onOutflowCreated.ts`
-**Triggered by:** Document creation in `outflows` collection
-**Purpose:** Automatically generate outflow_periods when outflow is created
-**Memory:** 512MiB, Timeout: 60s
+### Auto-Matching
+
+When an outflow is created (Plaid-detected), the system automatically matches historical transactions:
 
 **Process:**
-1. Outflow document created (Plaid or user)
-2. Trigger fires automatically
-3. Calculate payment cycle info (days, daily rate)
-4. Query source_periods for next 3 months
-5. For each source period:
-   - Calculate days in period
-   - Calculate withholding amount (daily rate × days)
-   - Check if bill is due in this period
-   - Create outflow_period document
-6. Batch create all outflow_periods
+1. `onOutflowCreated` trigger fires
+2. After creating periods, calls `autoMatchTransactionToOutflowPeriods()`
+3. Fetches all transactions in `outflow.transactionIds` array
+4. For each transaction:
+   - Finds matching outflow period based on date
+   - Determines payment type (regular, catch_up, advance)
+   - Assigns split to appropriate period
+   - Sets `paymentDate` to match transaction date
+5. Recalculates all period statuses
 
-**Payment Cycle Calculation:**
-```typescript
-// Example: Monthly bill of $90
-// Cycle: 30 days
-// Daily rate: $90 / 30 = $3/day
+**Location:** `outflow_periods/utils/autoMatchTransactionToOutflowPeriods.ts`
 
-// Weekly period (7 days):
-// amountWithheld = $3/day × 7 days = $21
-// isDuePeriod = false (due date not in this week)
-// amountDue = $0
+---
 
-// Monthly period (30 days) with due date:
-// amountWithheld = $3/day × 30 days = $90
-// isDuePeriod = true (due date falls in this month)
-// amountDue = $90
-```
+## Summary System
 
-**Withholding Calculation Examples:**
+### Overview
 
-**Example 1: Monthly bill viewed weekly**
-```typescript
-// Internet: $90/month (30-day cycle)
-// Daily rate: $90 / 30 = $3/day
-// Week 1 (7 days): withhold $21
-// Week 2 (7 days): withhold $21
-// Week 3 (7 days): withhold $21
-// Week 4 (7 days): withhold $21
-// Total: $84 (slight variance due to rounding)
-```
+The summary system provides fast, aggregated views of outflow periods grouped by source period. This powers dashboard tiles and summary displays without expensive real-time aggregations.
 
-**Example 2: Weekly bill viewed monthly**
-```typescript
-// Gym: $25/week (7-day cycle)
-// Daily rate: $25 / 7 = $3.57/day
-// Monthly period (30 days): withhold $107.10
-// Covers ~4.3 weeks of gym payments
-```
+### How It Works
 
-## Admin Functions
+1. **Outflow period created/updated/deleted**
+2. **Centralized trigger fires** (future: in `summaries/` module)
+3. **Calls appropriate CRUD function:**
+   - `updateOutflowPeriodSummary()` for creates/updates
+   - `deleteOutflowPeriodSummary()` for deletes
+4. **CRUD function calls `batchUpdateSummary()`:**
+   - Fetches current summary document
+   - Executes recalculate operation for affected source period
+   - Writes updated summary back to Firestore
+5. **Frontend queries summary collection:**
+   - Fast reads (no aggregation needed)
+   - Denormalized data ready for display
 
-### Testing and Debugging
-
-#### `createTestOutflows` (Admin Function)
-**Location:** `admin/createTestOutflows.ts`
-**Auth:** None (development only)
-**Purpose:** Create sample recurring outflows for testing
-
-**Usage:**
-```bash
-curl https://us-central1-{project}.cloudfunctions.net/createTestOutflows?userId=USER_ID
-```
-
-Creates sample outflows:
-- Internet Bill ($89.99/month from Comcast)
-- Netflix ($15.99/month)
-- Gym Membership ($25/week)
-
-#### `debugOutflowPeriods` (Admin Function)
-**Location:** `admin/debugOutflowPeriods.ts`
-**Auth:** None (development only)
-**Purpose:** Debug outflow period calculations and view detailed info
-
-**Usage:**
-```bash
-curl https://us-central1-{project}.cloudfunctions.net/debugOutflowPeriods?userId=USER_ID
-```
-
-Returns diagnostic information:
-- All user outflows with details
-- All outflow_periods with calculations
-- Payment cycle breakdowns
-- Withholding amounts by period type
-
-## Configuration
-
-Currently, configuration is handled inline within each function. Future enhancements will move these to `config/`:
+### Summary Document Structure
 
 ```typescript
-// Future: config/outflowConfig.ts
-
-const OUTFLOW_PERIOD_MONTHS = 3;      // Generate 3 months of periods
-const DEFAULT_REMINDER_DAYS = 3;      // Remind 3 days before due
-const MIN_WITHHOLDING_AMOUNT = 0.01;  // Minimum withholding per period
-
-// Frequency to cycle days mapping
-const FREQUENCY_CYCLE_DAYS = {
-  WEEKLY: 7,
-  BIWEEKLY: 14,
-  SEMI_MONTHLY: 15,
-  MONTHLY: 30,
-  ANNUALLY: 365,
-};
-```
-
-## Security Rules
-
-### Outflows Collection
-
-```javascript
-match /outflows/{outflowId} {
-  // Read access - Owner or family member
-  allow read: if isAuthenticated() && (
-    // Outflow owner
-    resource.data.userId == request.auth.uid ||
-    // Family member for shared outflows
-    (resource.data.familyId != null &&
-     resource.data.familyId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId)
-  );
-
-  // Create access - Cloud Functions only (Plaid sync or user creation via callable function)
-  allow create: if false;
-
-  // Update access - Owner or Admin
-  allow update: if isAuthenticated() && (
-    resource.data.userId == request.auth.uid ||
-    hasRole('admin')
-  ) && isValidOutflowUpdate();
-
-  // Delete access - Owner or Admin
-  allow delete: if isAuthenticated() && (
-    resource.data.userId == request.auth.uid ||
-    hasRole('admin')
-  );
-}
-
-function isValidOutflowUpdate() {
-  // Allow updates to user-modifiable fields only
-  let allowedFields = [
-    'userCategory', 'userNotes', 'tags', 'isHidden',
-    'isEssential', 'reminderDays', 'updatedAt'
-  ];
-
-  let changedFields = request.resource.data.diff(resource.data).affectedKeys();
-  return changedFields.hasOnly(allowedFields);
+{
+  id: "user123_outflowsummary_monthly",
+  ownerId: "user123",
+  ownerType: "user",
+  periodType: "MONTHLY",
+  periods: {
+    "2025-M01": [
+      { periodId: "...", merchant: "Comcast", totalAmountDue: 89.99, ... },
+      { periodId: "...", merchant: "Netflix", totalAmountDue: 15.99, ... }
+    ],
+    "2025-M02": [ ... ]
+  },
+  totalItemCount: 24,
+  lastRecalculated: Timestamp
 }
 ```
 
-### Outflow Periods Collection
+**Key Points:**
+- **One entry per outflow period** (no aggregation by merchant)
+- Groups entries by source period ID
+- Supports both user and group summaries
+- Separate documents for each period type (monthly, weekly, bi-monthly)
 
-```javascript
-match /outflow_periods/{periodId} {
-  // Read access - Owner or family member
-  allow read: if isAuthenticated() && (
-    resource.data.userId == request.auth.uid ||
-    (resource.data.familyId != null &&
-     resource.data.familyId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId)
-  );
+### Querying Summaries
 
-  // Create access - Cloud Functions only
-  allow create: if false;
+```typescript
+// Frontend query for monthly summary
+const summaryRef = doc(db, 'outflow_summary', `${userId}_outflowsummary_monthly`);
+const summarySnap = await getDoc(summaryRef);
 
-  // Update access - None (periods are read-only after creation)
-  allow update: if false;
-
-  // Delete access - Admin only
-  allow delete: if isAuthenticated() && hasRole('admin');
+if (summarySnap.exists()) {
+  const summary = summarySnap.data();
+  const january2025 = summary.periods['2025-M01'];
+  // Display january2025 entries in dashboard
 }
 ```
 
-## Firestore Indexes
+---
 
-### Required Composite Indexes
+## Development Guidelines
+
+### Adding New Features
+
+#### When to add to `outflow_main`:
+- Managing outflow definitions (create, update, delete)
+- Plaid stream synchronization
+- Outflow-level business logic
+- Triggers that affect outflow documents
+
+#### When to add to `outflow_periods`:
+- Period generation and calculations
+- Withholding logic
+- Payment tracking and status
+- Transaction split assignments
+- Period-level queries and operations
+
+#### When to add to `outflow_summaries`:
+- Aggregation logic
+- Summary document updates
+- Dashboard data preparation
+- Period-centric views
+
+### File Organization
+
+**CRUD Operations:**
+- Place in `{module}/crud/` directory
+- Export from `{module}/crud/index.ts`
+- Re-export from main `outflows/index.ts` if public API
+
+**Utilities:**
+- Place in `{module}/utils/` directory
+- Export from `{module}/utils/index.ts`
+- Keep utilities module-specific (avoid cross-module dependencies)
+
+**Triggers:**
+- Place in `{module}/triggers/` directory
+- Export from main `outflows/index.ts`
+- Follow naming convention: `on{Resource}{Action}`
+
+**Dev/Testing:**
+- Place in `{module}/dev/` directory
+- HTTP request functions for emulator testing
+- Export from `{module}/dev/index.ts`
+
+**Tests:**
+- Place in `{module}/__tests__/` directory
+- Name files: `{functionality}.test.ts`
+- Co-locate tests with the code they test
+
+### Best Practices
+
+1. **Module Independence:**
+   - Each module should be self-contained
+   - Minimize cross-module imports
+   - Use clear interfaces between modules
+
+2. **Utility Functions:**
+   - Keep utilities pure and testable
+   - Document inputs, outputs, and side effects
+   - Use TypeScript strictly (no `any` types)
+
+3. **Triggers:**
+   - Keep trigger functions lightweight
+   - Delegate heavy work to utility functions
+   - Handle errors gracefully (don't break parent operations)
+
+4. **Batch Operations:**
+   - Use Firestore batch writes for efficiency
+   - Respect 500 document limit per batch
+   - Log batch operations for debugging
+
+5. **Denormalization:**
+   - Denormalize data for performance
+   - Keep denormalized data in sync via triggers
+   - Document which fields are denormalized
+
+6. **Error Handling:**
+   - Always wrap async operations in try/catch
+   - Log errors with context
+   - Return meaningful error messages to clients
+
+---
+
+## Performance Considerations
+
+### Indexing
+
+**Required Composite Indexes:**
 
 ```json
 {
@@ -480,14 +992,6 @@ match /outflow_periods/{periodId} {
       "collectionGroup": "outflows",
       "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "isActive", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "outflows",
-      "fields": [
-        { "fieldPath": "familyId", "order": "ASCENDING" },
         { "fieldPath": "isActive", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
@@ -519,275 +1023,133 @@ match /outflow_periods/{periodId} {
 }
 ```
 
-## Frontend Integration
+### Query Optimization
 
-### React Native Example
+**Frontend Loading Strategy:**
+- **Summaries:** Query summary documents for dashboard displays
+- **Details:** Query individual periods for detail views
+- **Real-time:** Use Firestore listeners for live updates
+- **Pagination:** Limit queries to current + 1 future period
 
-```typescript
-import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
-import { getFirestore, collection, query, where, onSnapshot } from '@react-native-firebase/firestore';
+**Backend Batch Operations:**
+- Use batch writes for period generation (500 docs/batch)
+- Use transactions for atomic updates
+- Batch read operations when possible
 
-const functions = getFunctions();
-const db = getFirestore();
+### Denormalization Strategy
 
-// Create a user-defined recurring bill
-async function createUserBill(billData) {
-  try {
-    const createOutflow = httpsCallable(functions, 'createRecurringOutflow');
-    const result = await createOutflow({
-      ...billData,
-      // familyId omitted for personal bills
-    });
-    return result.data;
-  } catch (error) {
-    console.error('Error creating bill:', error);
-    throw error;
-  }
-}
+**Denormalized Fields in Periods:**
+- `description`, `userCustomName`, `merchantName` from outflow
+- `expenseType`, `isEssential` from outflow
+- Kept in sync via `onOutflowUpdated` trigger
 
-// Subscribe to user's outflows
-function subscribeToUserOutflows(userId, callback) {
-  const q = query(
-    collection(db, 'outflows'),
-    where('userId', '==', userId),
-    where('isActive', '==', true)
-  );
+**Benefits:**
+- Fast queries (no joins needed)
+- Period documents are self-contained
+- Frontend can display periods without fetching outflows
 
-  return onSnapshot(q, (snapshot) => {
-    const outflows = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    callback(outflows);
-  });
-}
+**Trade-offs:**
+- Storage cost (duplicated data)
+- Sync complexity (must update periods when outflow changes)
+- Eventual consistency (brief delay between outflow update and period sync)
 
-// Subscribe to outflow periods for a specific period type
-function subscribeToOutflowPeriods(userId, periodType, callback) {
-  const q = query(
-    collection(db, 'outflow_periods'),
-    where('userId', '==', userId),
-    where('periodType', '==', periodType),
-    where('isActive', '==', true)
-  );
+---
 
-  return onSnapshot(q, (snapshot) => {
-    const periods = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    callback(periods);
-  });
-}
+## Testing
 
-// Get current period's bills
-function getCurrentPeriodBills(outflowPeriods) {
-  const now = new Date();
-  return outflowPeriods.filter(period => {
-    const start = period.periodStartDate.toDate();
-    const end = period.periodEndDate.toDate();
-    return now >= start && now <= end;
-  });
-}
+### Unit Tests
 
-// Calculate total withholding for current period
-function calculateTotalWithholding(currentPeriodBills) {
-  return currentPeriodBills.reduce((total, bill) => {
-    return total + bill.amountWithheld;
-  }, 0);
-}
+**Test Files:**
+- `outflow_periods/__tests__/calculateOutflowPeriodStatus.test.ts`
 
-// Get upcoming bills (due in current period)
-function getUpcomingBills(currentPeriodBills) {
-  return currentPeriodBills.filter(bill => bill.isDuePeriod);
-}
+**Coverage:**
+- Status calculation logic (pending, partial, paid, overdue, not_due)
+- Edge cases (no payments, overpayment, exact payment)
+- Date comparisons (past due, future due)
 
-// Example: Bills screen showing current weekly bills
-function WeeklyBillsScreen() {
-  const [outflowPeriods, setOutflowPeriods] = useState([]);
-  const userId = auth().currentUser.uid;
+**Future Tests:**
+- Withholding calculations
+- Period generation
+- Auto-matching logic
+- Summary aggregations
 
-  useEffect(() => {
-    const unsubscribe = subscribeToOutflowPeriods(userId, 'WEEKLY', setOutflowPeriods);
-    return () => unsubscribe();
-  }, [userId]);
+### Dev Testing Functions
 
-  const currentPeriodBills = getCurrentPeriodBills(outflowPeriods);
-  const totalWithholding = calculateTotalWithholding(currentPeriodBills);
-  const upcomingBills = getUpcomingBills(currentPeriodBills);
+**`createTestOutflows`:**
+- Simulates Plaid recurring sync
+- Creates realistic test data
+- Useful for frontend development
 
-  return (
-    <View>
-      <Text>This Week's Bill Planning</Text>
-      <Text>Total to set aside: ${totalWithholding.toFixed(2)}</Text>
+**`debugOutflowPeriods`:**
+- Returns diagnostic information
+- Shows calculation details
+- Useful for troubleshooting
 
-      <Text>Bills to pay this week:</Text>
-      {upcomingBills.map(bill => (
-        <View key={bill.id}>
-          <Text>{bill.outflowDescription}</Text>
-          <Text>Due: {bill.dueDate?.toDate().toLocaleDateString()}</Text>
-          <Text>Amount: ${bill.amountDue.toFixed(2)}</Text>
-        </View>
-      ))}
+**`extendOutflowPeriods`:**
+- Generates additional future periods
+- Tests long-term scenarios
+- Useful for year-end testing
 
-      <Text>Bills to save for:</Text>
-      {currentPeriodBills.filter(b => !b.isDuePeriod).map(bill => (
-        <View key={bill.id}>
-          <Text>{bill.outflowDescription}</Text>
-          <Text>Set aside: ${bill.amountWithheld.toFixed(2)}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-```
+### Emulator Testing
 
-## Common Workflows
-
-### Creating a User-Defined Bill
-
-1. **User creates recurring bill** via `createRecurringOutflow` function
-   - Defines name, amount, frequency, due day
-   - One-time setup action
-2. **`onOutflowCreated` trigger fires** automatically
-   - Calculates payment cycle and daily withholding rate
-3. **Outflow period instances generated** from source_periods
-   - 3 months of monthly, bi-monthly, and weekly instances created
-4. **User can now view** withholding amounts in their budget
-   - See how much to set aside each week/month
-   - Track upcoming bill due dates
-
-### Daily Bill Planning
-
-1. **User opens bills screen** → Views current outflow_periods
-2. **System shows withholding amounts** for selected period type
-3. **User sees upcoming bills** with due dates in current period
-4. **User plans finances** based on withholding recommendations
-5. **Real-time listeners** update when new bills added
-
-### Plaid-Detected Recurring Transaction
-
-1. **Plaid detects recurring pattern** in user transactions
-2. **Plaid webhook** notifies system
-3. **Recurring outflow created** in `outflows` collection
-4. **`onOutflowCreated` trigger fires** automatically
-5. **Outflow_periods generated** for planning
-6. **User sees new bill** in their outflows list
-
-## Performance Considerations
-
-### Optimization Strategies
-
-**Period Generation:**
-- Batch writes (500 documents per batch)
-- Generate only 3 months ahead to minimize writes
-- Efficient date range queries on indexed fields
-
-**Withholding Calculations:**
-- Daily rate calculated once per outflow
-- Simple multiplication for period amounts
-- Denormalized outflow data avoids joins
-
-**Real-time Updates:**
-- Firestore listeners for live data
-- Client-side calculations reduce function calls
-- Minimal document size for fast queries
-
-### Scaling Limits
-
-**Outflow Periods per Outflow:**
-- Typical: ~20 periods per outflow (3 months × all types)
-- Maximum: Depends on period generation strategy
-- Cleanup: Archive old periods after 6 months (future)
-
-**Performance:**
-- Period creation: O(n) where n = source periods (3 months)
-- Batch size: 500 documents per write
-- Query efficiency: Indexed by userId, periodType, dates
-
-## Error Handling
-
-### Common Errors
-
-**"No source periods found in date range"**
-- **Cause:** Admin hasn't generated source_periods for timeframe
-- **Solution:** Run `generateSourcePeriods` admin function
-- **Prevention:** Generate periods 1+ year in advance
-
-**"User must be authenticated"**
-- **Cause:** Missing or invalid auth token
-- **Solution:** Ensure user is logged in
-- **Prevention:** Check auth state before function calls
-
-**"Invalid frequency"**
-- **Cause:** Unsupported frequency value
-- **Solution:** Use valid frequency (weekly, bi_weekly, monthly, quarterly, yearly)
-
-### Debugging Tips
-
-**Outflow periods not showing:**
 ```bash
-# Check if source_periods exist
-firebase firestore:get source_periods
+# Start emulators
+firebase emulators:start
 
-# Check outflow document
-firebase firestore:get outflows/{outflowId}
+# Test outflow creation
+curl -X POST http://localhost:5001/{project}/us-central1/createManualOutflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Test Bill",
+    "amount": 100,
+    "frequency": "monthly"
+  }'
 
-# View trigger logs
-firebase functions:log --only onOutflowCreated
+# Test period generation
+curl http://localhost:5001/{project}/us-central1/debugOutflowPeriods?userId=testUser
+
+# Test Plaid sync simulation
+curl http://localhost:5001/{project}/us-central1/simulatePlaidRecurring?userId=testUser
 ```
 
-**Incorrect withholding calculations:**
-```bash
-# Use debug function
-curl https://us-central1-{project}.cloudfunctions.net/debugOutflowPeriods?userId=USER_ID
+---
 
-# Check payment cycle calculation
-# Verify daily rate: billAmount / cycleDays
-# Verify period amount: dailyRate × daysInPeriod
+## Migration Notes
+
+### Restructure (December 2025)
+
+The outflows module was restructured from a flat utility-based organization to a three-module domain-based architecture:
+
+**Before:**
+```
+outflows/
+├── api/
+├── orchestration/
+├── utils/
+└── admin/
 ```
 
-## Development Guidelines
+**After:**
+```
+outflows/
+├── outflow_main/       # Recurring bill definitions
+├── outflow_periods/    # Withholding instances
+└── outflow_summaries/  # Period-centric aggregations
+```
 
-### Adding New Outflow Features
+**Migration Actions:**
+1. ✅ Moved all utilities to module-specific locations
+2. ✅ Renamed `outflowPeriods.ts` → `createOutflowPeriods.ts`
+3. ✅ Extracted helper functions to `outflow_periods/utils/`
+4. ✅ Moved summary operations to `outflow_summaries/utils/`
+5. ✅ Created `__tests__/` directories in all modules
+6. ✅ Removed empty `/utils/`, `/orchestration/`, `/types/`, `/config/`, `/dev/` directories
+7. ✅ Updated all import paths
+8. ✅ Updated index files for clean exports
 
-1. **Update types** in `/src/types/index.ts` (core types) or `types/` (outflow-specific)
-2. **Determine feature location:**
-   - User-facing: `api/crud/` or `api/queries/`
-   - Background automation: `orchestration/triggers/` or `orchestration/scheduled/`
-   - Admin/testing: `admin/`
-   - Shared logic: `utils/`
-   - Configuration: `config/`
-3. **Update security rules** in `firestore.rules`
-4. **Add indexes** in `firestore.indexes.json` if needed
-5. **Update this documentation** with new features
-6. **Test thoroughly** in emulator
+**See:** `Restructure_Plan.md` for detailed migration history
 
-### Best Practices
-
-**Outflow Creation:**
-- Validate frequency and amount
-- Set sensible defaults (reminderDays: 3, isEssential: false)
-- Include comprehensive error messages
-- Support both Plaid and user sources
-
-**Period Generation:**
-- Trust source_periods as single source of truth
-- Use batch operations for bulk creates
-- Calculate withholding based on actual period days
-- Log detailed calculation steps for debugging
-
-**Withholding Calculations:**
-- Always use dailyRate × daysInPeriod for accuracy
-- Round to 2 decimal places for currency
-- Handle edge cases (leap years, varying month lengths)
-- Denormalize outflow data in periods for performance
-
-**User Experience:**
-- Make withholding amounts easy to understand
-- Clearly show due dates and amounts due
-- Separate "bills to pay" from "bills to save for"
-- Provide financial planning insights
+---
 
 ## Future Enhancements
 
@@ -805,11 +1167,11 @@ curl https://us-central1-{project}.cloudfunctions.net/debugOutflowPeriods?userId
 - Identify cancellable subscriptions
 - Budget optimization suggestions
 
-**Family Collaboration:**
+**Group Collaboration:**
 - Shared household bills
 - Split bill responsibilities
-- Family bill dashboard
-- Payment tracking across family members
+- Group bill dashboard
+- Payment tracking across group members
 
 **Advanced Analytics:**
 - Bill spending trends over time
@@ -817,444 +1179,51 @@ curl https://us-central1-{project}.cloudfunctions.net/debugOutflowPeriods?userId
 - Essential vs non-essential analysis
 - Year-over-year comparisons
 
-**Utilities:**
-- `utils/outflowPeriods.ts` - Period calculation utilities
-- `utils/outflowSpending.ts` - Payment tracking
-- `utils/calculateWithholding.ts` - Withholding strategies
-
-**Configuration:**
-- `config/outflowConfig.ts` - Central configuration
-- Configurable period generation length
-- Reminder customization
-- Withholding strategy options
-
-## Transaction Split Assignment to Outflows
-
-### Multi-Period Assignment Architecture
-
-The system supports assigning transaction splits to outflow periods across ALL THREE period types (monthly, weekly, bi-weekly) simultaneously. This ensures consistency across different period views.
-
-**Key Concepts:**
-- **Bi-directional References:** Transaction splits store outflow period IDs; outflow periods store transaction split references
-- **Multi-Period Assignment:** One transaction split can be assigned to all three period types at once
-- **Payment Date Tracking:** Each split includes `paymentDate` matching the transaction date
-- **Advance Payment Support:** Users can manually specify target periods for advance payments
-
-### Transaction Split Interface
-
-```typescript
-interface TransactionSplit {
-  id: string;
-
-  // Budget assignment
-  budgetId: string;
-  budgetName: string;
-
-  // Outflow assignment (all three period types)
-  outflowId?: string;                    // Parent outflow ID
-  outflowDescription?: string;           // Denormalized outflow description
-  outflowPeriodId?: string;              // Primary period reference (monthly preferred)
-  outflowMonthlyPeriodId?: string;       // Monthly period ID
-  outflowWeeklyPeriodId?: string;        // Weekly period ID
-  outflowBiWeeklyPeriodId?: string;      // Bi-weekly period ID
-
-  // Payment tracking
-  paymentType?: PaymentType;             // regular, catch_up, advance, extra_principal
-  paymentDate?: Timestamp;               // Date when payment was made (matches transaction.date)
-
-  // Other fields...
-  amount: number;
-  categoryId: string;
-  description?: string;
-  isDefault: boolean;
-
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  createdBy: string;
-}
-```
-
-### TransactionSplitReference Interface
-
-Stored in outflow_periods to track assigned payments:
-
-```typescript
-interface TransactionSplitReference {
-  transactionId: string;           // Reference to transactions document
-  splitId: string;                 // Specific split within transaction
-  transactionDate: Timestamp;      // When transaction occurred
-  amount: number;                  // Split amount
-  description: string;             // Transaction description
-  paymentType: PaymentType;        // Payment classification
-  isAutoMatched: boolean;          // Was this auto-matched or manual?
-  matchedAt: Timestamp;            // When assignment occurred
-  matchedBy: string;               // User ID or 'system'
-}
-```
-
-### API Functions for Split Assignment
-
-> **Migration Note (October 2025):** Single-period assignment functions (`assignSplitToOutflowPeriod` and `unassignSplitFromOutflowPeriod`) have been removed as redundant. These functions only updated ONE period type, while the multi-period versions below correctly update ALL THREE period types (monthly, weekly, bi-weekly) simultaneously. The multi-period approach is the ONLY supported method for assigning splits to outflows, ensuring consistency across all period views.
-
-#### `assignSplitToAllOutflowPeriods` (Callable Function)
-**Location:** `api/assignSplitToAllOutflowPeriods.ts`
-**Auth:** EDITOR role required
-**Purpose:** Assign a transaction split to ALL three outflow period types simultaneously
-
-**Request:**
-```typescript
-interface AssignSplitToAllOutflowPeriodsRequest {
-  transactionId: string;              // Transaction containing the split
-  splitId: string;                    // Specific split to assign
-  outflowId: string;                  // Parent outflow ID (not period ID!)
-  paymentType?: PaymentType;          // regular, catch_up, advance, extra_principal
-  clearBudgetAssignment?: boolean;    // Clear budget fields when moving to outflow
-  targetPeriodId?: string;            // Optional: Specific period for advance payments
-}
-```
-
-**Response:**
-```typescript
-interface AssignSplitToAllOutflowPeriodsResponse {
-  success: boolean;
-  split?: TransactionSplit;           // Updated split with all period references
-  monthlyPeriod?: OutflowPeriod;      // Monthly period (if found)
-  weeklyPeriod?: OutflowPeriod;       // Weekly period (if found)
-  biWeeklyPeriod?: OutflowPeriod;     // Bi-weekly period (if found)
-  periodsUpdated: number;             // Count of periods updated
-  message?: string;
-}
-```
-
-**What Happens:**
-1. Validates transaction, split, and outflow ownership
-2. Finds all three matching outflow periods:
-   - **Without targetPeriodId:** Matches based on transaction date
-   - **With targetPeriodId:** Matches based on source period overlap (for advance payments)
-3. Updates transaction split with ALL period references:
-   - Sets `outflowId`, `outflowDescription`
-   - Sets `outflowPeriodId` (primary reference)
-   - Sets `outflowMonthlyPeriodId`, `outflowWeeklyPeriodId`, `outflowBiWeeklyPeriodId`
-   - Sets `paymentType` and `paymentDate`
-   - Optionally clears `budgetId` and `budgetName`
-4. Adds `TransactionSplitReference` to all three outflow periods
-5. Recalculates status for all updated periods
-
-**Example Usage:**
-```typescript
-// Regular payment (auto-detect periods from transaction date)
-const result = await assignSplitToAllOutflowPeriods({
-  transactionId: "txn_123",
-  splitId: "split_456",
-  outflowId: "outflow_789",
-  paymentType: "regular",
-  clearBudgetAssignment: true
-});
-
-// Advance payment (manually specify target period)
-const result = await assignSplitToAllOutflowPeriods({
-  transactionId: "txn_123",
-  splitId: "split_456",
-  outflowId: "outflow_789",
-  paymentType: "advance",
-  targetPeriodId: "2025-M10",  // October 2025 monthly period
-  clearBudgetAssignment: true
-});
-```
-
-#### `unassignSplitFromAllOutflowPeriods` (Callable Function)
-**Location:** `api/unassignSplitFromAllOutflowPeriods.ts`
-**Auth:** EDITOR role required
-**Purpose:** Remove a transaction split assignment from ALL outflow periods
-
-**Request:**
-```typescript
-interface UnassignSplitFromAllOutflowPeriodsRequest {
-  transactionId: string;
-  splitId: string;
-  restoreBudgetAssignment?: boolean;  // Restore original budget assignment
-}
-```
-
-**Response:**
-```typescript
-interface UnassignSplitFromAllOutflowPeriodsResponse {
-  success: boolean;
-  split?: TransactionSplit;
-  periodsUpdated: number;
-  message?: string;
-}
-```
-
-**What Happens:**
-1. Retrieves transaction and validates ownership
-2. Finds split and extracts all three period IDs
-3. Clears outflow assignment from split:
-   - Removes `outflowId`, `outflowDescription`
-   - Removes all period ID references
-   - Removes `paymentType` and `paymentDate`
-   - Optionally restores `budgetId` and `budgetName`
-4. Removes `TransactionSplitReference` from all three outflow periods
-5. Recalculates status for all affected periods
-
-### Utility Functions
-
-#### `findMatchingOutflowPeriods`
-**Location:** `utils/findMatchingOutflowPeriods.ts`
-**Purpose:** Find all three period types based on transaction date
-
-```typescript
-interface MatchingOutflowPeriodsResult {
-  monthlyPeriodId: string | null;
-  weeklyPeriodId: string | null;
-  biWeeklyPeriodId: string | null;
-  foundCount: number;
-}
-
-async function findMatchingOutflowPeriods(
-  db: Firestore,
-  outflowId: string,
-  transactionDate: Timestamp
-): Promise<MatchingOutflowPeriodsResult>
-```
-
-**Logic:**
-- Queries `outflow_periods` where transaction date falls within period range
-- Separates results by `periodType` (MONTHLY, WEEKLY, BI_MONTHLY)
-- Returns all three period IDs (or null if not found)
-- Logs warning if fewer than 3 periods found
-
-#### `findMatchingOutflowPeriodsBySourcePeriod`
-**Location:** `utils/findMatchingOutflowPeriods.ts`
-**Purpose:** Find all three period types based on a target source period
-
-```typescript
-async function findMatchingOutflowPeriodsBySourcePeriod(
-  db: Firestore,
-  outflowId: string,
-  targetPeriodId: string
-): Promise<MatchingOutflowPeriodsResult>
-```
-
-**Logic:**
-1. Fetches source period to get date range
-2. Queries `outflow_periods` where period overlaps with source period range
-3. Prefers exact matches (where `sourcePeriodId === targetPeriodId`)
-4. Returns all three period types that overlap with target period
-
-**Use Case:** Advance payments where user pays multiple periods ahead
-- User pays $300 for 3 months rent
-- Creates 3 separate splits from one transaction
-- Each split assigned to different monthly period using `targetPeriodId`
-
-#### `validatePeriodsFound`
-**Location:** `utils/findMatchingOutflowPeriods.ts`
-**Purpose:** Validate at least one period was found
-
-```typescript
-function validatePeriodsFound(result: MatchingOutflowPeriodsResult): void {
-  if (result.foundCount === 0) {
-    throw new Error('No matching outflow periods found...');
-  }
-}
-```
-
-#### `calculateOutflowPeriodStatus`
-**Location:** `utils/calculateOutflowPeriodStatus.ts`
-**Purpose:** Calculate period status based on payments and due dates
-
-```typescript
-type OutflowPeriodStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'not_due';
-
-function calculateOutflowPeriodStatus(
-  isDuePeriod: boolean,
-  dueDate: Timestamp | undefined,
-  expectedDueDate: Timestamp | undefined,
-  amountDue: number,
-  transactionSplits: TransactionSplitReference[]
-): OutflowPeriodStatus
-```
-
-**Status Logic:**
-- **not_due:** Not a due period (no payment expected)
-- **pending:** Due period with no payments
-- **partial:** Due period with some payment (< amount due)
-- **paid:** Due period with full payment (≥ amount due)
-- **overdue:** Past due date with insufficient payment
-
-### Payment Types
-
-```typescript
-enum PaymentType {
-  REGULAR = 'regular',              // Normal on-time payment
-  CATCH_UP = 'catch_up',            // Payment for past-due bill
-  ADVANCE = 'advance',              // Payment made well before due date
-  EXTRA_PRINCIPAL = 'extra_principal' // Extra payment beyond required amount
-}
-```
-
-**Auto-Detection Logic (in auto-match):**
-- **EXTRA_PRINCIPAL:** Amount > bill amount × 1.1 (10% tolerance)
-- **CATCH_UP:** Payment before due date, but due date has passed
-- **ADVANCE:** Payment > 7 days before due date
-- **REGULAR:** All other payments
-
-### Payment Date Tracking
-
-**All transaction splits include `paymentDate` field:**
-- Set when split is created (matches `transaction.date`)
-- Preserved when split is assigned to outflows
-- Ensures consistent payment tracking across all operations
-
-**Updated in all split creation points:**
-1. `formatTransactions.ts` - Plaid transaction import
-2. `migrateTransactionsToSplits.ts` - Migration of existing transactions
-3. `assignSplitToAllOutflowPeriods.ts` - Manual outflow assignment
-4. `autoMatchTransactionToOutflowPeriods.ts` - Auto-matching historical transactions
-
-### Common Workflows
-
-#### Assigning a Payment to a Bill
-
-1. **User marks transaction as bill payment:**
-   - Opens transaction detail screen
-   - Selects "Assign to Bill"
-   - Chooses outflow from list
-   - Selects payment type
-
-2. **System assigns to all period types:**
-   - Calls `assignSplitToAllOutflowPeriods`
-   - Finds matching monthly, weekly, bi-weekly periods
-   - Updates transaction split with all references
-   - Adds payment to all three outflow periods
-   - Recalculates status (pending → paid)
-
-3. **User sees updated status:**
-   - Monthly view: "Internet Bill - Paid"
-   - Weekly view: "Internet Bill - Paid"
-   - Bi-weekly view: "Internet Bill - Paid"
-   - All views stay in sync
-
-#### Paying Multiple Periods in Advance
-
-1. **User pays 3 months rent ($3,000):**
-   - Transaction imported from bank
-   - Total amount: $3,000
-
-2. **User creates 3 splits:**
-   - Split 1: $1,000 for October 2025
-   - Split 2: $1,000 for November 2025
-   - Split 3: $1,000 for December 2025
-
-3. **Assigns each split to target period:**
-   ```typescript
-   // October rent
-   await assignSplitToAllOutflowPeriods({
-     transactionId: "txn_123",
-     splitId: "split_1",
-     outflowId: "rent_outflow",
-     paymentType: "advance",
-     targetPeriodId: "2025-M10"  // October source period
-   });
-
-   // November rent
-   await assignSplitToAllOutflowPeriods({
-     transactionId: "txn_123",
-     splitId: "split_2",
-     outflowId: "rent_outflow",
-     paymentType: "advance",
-     targetPeriodId: "2025-M11"  // November source period
-   });
-
-   // December rent
-   await assignSplitToAllOutflowPeriods({
-     transactionId: "txn_123",
-     splitId: "split_3",
-     outflowId: "rent_outflow",
-     paymentType: "advance",
-     targetPeriodId: "2025-M12"  // December source period
-   });
-   ```
-
-4. **System updates all periods:**
-   - Each split assigned to its target monthly period
-   - Also assigned to overlapping weekly/bi-weekly periods
-   - All three months show as paid in advance
-
-#### Unassigning an Incorrect Payment
-
-1. **User realizes mistake:**
-   - Assigned wrong transaction to bill
-   - Opens transaction detail
-
-2. **User removes assignment:**
-   - Taps "Unassign from Bill"
-   - Confirms action
-
-3. **System clears assignment:**
-   - Calls `unassignSplitFromAllOutflowPeriods`
-   - Removes split from all three period types
-   - Restores original budget assignment
-   - Recalculates period status (paid → pending)
-
-### Auto-Matching Historical Transactions
-
-When an outflow is created (Plaid-detected), the system automatically matches historical transactions:
-
-**Process:**
-1. `onOutflowCreated` trigger fires
-2. After creating periods, calls `orchestrateAutoMatchingWorkflow`
-3. Fetches all transactions in `outflow.transactionIds` array
-4. For each transaction:
-   - Finds matching outflow period based on date
-   - Determines payment type (regular, catch_up, advance)
-   - Assigns split to appropriate period
-   - Sets `paymentDate` to match transaction date
-5. Recalculates all period statuses
-
-**Auto-Match Configuration:**
-- Only matches unassigned splits
-- Skips splits already assigned to budgets or other outflows
-- Marks as `isAutoMatched: true` in `TransactionSplitReference`
-- Logs all matches for debugging
-
-### Performance Considerations
-
-**Multi-Period Assignment:**
-- Uses batch operations for atomic updates
-- Maximum 3 periods updated per assignment (one per type)
-- Efficient queries using indexed fields
-
-**Status Recalculation:**
-- Only recalculates affected periods
-- Uses denormalized data to avoid joins
-- Simple aggregation of split amounts
-
-**Payment Tracking:**
-- `paymentDate` stored directly on splits (no additional queries)
-- Consistent across all operations
-- Enables historical payment analysis
+**Summary Enhancements:**
+- Real-time summary updates via triggers
+- Configurable aggregation levels (by merchant, by category)
+- Historical summaries (archive old periods)
+- Performance monitoring and optimization
+
+---
 
 ## Notes for AI Assistants
 
-- **Outflows are recurring bills** - they define the expense pattern
-- **Outflow periods are withholding instances** - users interact with these
-- **Always generate 3 months of periods** when outflow is created
-- **Personal outflows have familyId: null** - not empty string like budgets
-- **Withholding calculation:** dailyRate × daysInPeriod
-- **Payment cycle:** Determines daily rate (billAmount / cycleDays)
-- **Two sources:** Plaid-synced (auto) or user-created (manual)
-- **Check source_periods exist** before generating outflow_periods
-- **Use batch operations** for bulk period creation
-- **Denormalize outflow data** in periods for performance
-- **Log comprehensively** for debugging calculations
-- **Test security rules** thoroughly
-- **Document breaking changes** and migration strategies
-- **Focus on individual users first** - family features come later
-- **Match budgets structure** for consistency across modules
-- **CRITICAL: Multi-period assignment** - Always assign splits to ALL THREE period types (monthly, weekly, bi-weekly)
-- **CRITICAL: Payment date tracking** - Always set `paymentDate` field on splits to match `transaction.date`
-- **Bi-directional references** - Splits store period IDs, periods store split references
-- **Advance payment support** - Use `targetPeriodId` to manually specify periods for advance payments
-- **Payment type auto-detection** - System determines payment type based on amount and timing
-- **Status recalculation** - Always recalculate period status after assignment/unassignment changes
+### Module Organization
+- **outflow_main** = Recurring bill definitions (Plaid + user-created)
+- **outflow_periods** = Withholding instances (period calculations)
+- **outflow_summaries** = Period-centric aggregations (dashboard views)
+
+### Key Principles
+- ✅ Each module is self-contained with its own utilities, types, tests
+- ✅ No shared `/utils/` directory - utilities belong to specific modules
+- ✅ Triggers live in the module that owns the collection they watch
+- ✅ Public APIs exported from module-specific locations
+- ✅ Dev/testing functions in `{module}/dev/` directories
+
+### When Adding New Code
+1. **Determine which module** the code belongs to
+2. **Choose appropriate subdirectory** (crud, api, utils, triggers, dev)
+3. **Follow existing file naming conventions**
+4. **Update module's index.ts** to export new functionality
+5. **Add tests** in module's `__tests__/` directory
+6. **Update this documentation** if adding new concepts
+
+### Critical Paths
+- Outflow creation: `outflow_main/crud/` → `outflow_main/triggers/onOutflowCreated` → `outflow_periods/crud/createOutflowPeriods`
+- Period updates: `outflow_main/triggers/onOutflowUpdated` → `outflow_periods/utils/runUpdateOutflowPeriods`
+- Payment assignment: `outflow_periods/api/assignSplitToAllOutflowPeriods` → `outflow_periods/utils/findMatchingOutflowPeriods`
+- Summary updates: `outflow_summaries/crud/updateOutflowPeriodSummary` → `outflow_summaries/utils/batchUpdateSummary` → `outflow_summaries/utils/recalculatePeriodGroup`
+
+### Common Pitfalls
+- ❌ Don't create shared utilities in `/utils/` - use module-specific utils
+- ❌ Don't import across modules excessively - keep modules independent
+- ❌ Don't forget to update index files when adding new functions
+- ❌ Don't skip tests - especially for calculation logic
+- ❌ Don't use `any` types - TypeScript strict mode is enforced
+
+### Reference Documents
+- Main architecture: `/CLAUDE.md`
+- RBAC implementation: `/RBAC_IMPLEMENTATION_STATUS.md`
+- Restructure history: `/Restructure_Plan.md`
+- Type definitions: `/src/types/index.ts`

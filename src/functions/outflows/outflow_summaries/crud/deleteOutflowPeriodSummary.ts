@@ -10,7 +10,7 @@
  */
 
 import { OutflowPeriod } from '../../../../types';
-import { batchUpdateSummary, getSummaryId } from '../../utils/summaryOperations/batchUpdateSummary';
+import { batchUpdateSummary, getSummaryId } from '../utils/batchUpdateSummary';
 import { determinePeriodType } from '../utils/periodTypeHelpers';
 
 /**

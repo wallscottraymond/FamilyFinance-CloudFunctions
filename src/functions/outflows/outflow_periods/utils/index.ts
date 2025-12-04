@@ -19,3 +19,8 @@ export * from './calculateAllOccurrencesInPeriod';
 export * from './autoMatchTransactionToOutflowPeriods';
 export * from './autoMatchSinglePeriod';
 export * from './findMatchingOutflowPeriods';
+
+// Period update and prediction utilities
+export * from './runUpdateOutflowPeriods';
+export * from './predictFutureBillDueDate';
+export * from './updateBillStatus';

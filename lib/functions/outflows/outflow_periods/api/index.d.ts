@@ -1,8 +1,9 @@
 /**
- * Placeholder index file for outflow_periods/api
+ * Outflow Periods API Functions Module
  *
- * This file will eventually re-export all functions from this directory.
- * Currently empty as files haven't been moved yet.
+ * Exports all public-facing API functions for outflow periods
  */
-export {};
+export * from './assignSplitToAllOutflowPeriods';
+export * from './unassignSplitFromAllOutflowPeriods';
+export * from './getOutflowPeriodTransactions';
 //# sourceMappingURL=index.d.ts.map

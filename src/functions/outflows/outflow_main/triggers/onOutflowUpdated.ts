@@ -18,7 +18,7 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Outflow } from '../../../../types';
-import { runUpdateOutflowPeriods } from '../../utils/runUpdateOutflowPeriods';
+import { runUpdateOutflowPeriods } from '../../outflow_periods/utils/runUpdateOutflowPeriods';
 
 /**
  * Triggered when an outflow is updated
