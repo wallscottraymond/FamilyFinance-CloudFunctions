@@ -8,6 +8,7 @@ export * from './outflow_periods/api';
 export * from './outflow_main/triggers/onOutflowCreated';
 export * from './outflow_main/triggers/onOutflowUpdated';
 export * from './outflow_periods/triggers/onOutflowPeriodCreate';
+export * from './outflow_periods/triggers/onOutflowPeriodUpdate';
 export * from './outflow_main/types';
 export * from './outflow_periods/types';
 export * from './outflow_main/dev';

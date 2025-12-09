@@ -7,6 +7,7 @@ import {
   PeriodType,
   OutflowPeriodStatus
 } from "../../../../types";
+import { calculateEnhancedOutflowPeriodStatus } from "../../outflow_periods/utils/calculateOutflowPeriodStatus";
 
 /**
  * Recalculate all outflow period entries for a specific sourcePeriodId
@@ -109,6 +110,18 @@ function buildPeriodEntry(
     ? Math.round((period.totalAmountPaid / period.totalAmountDue) * 100)
     : 0;
 
+  // Calculate enhanced status with occurrence tracking
+  const enhancedStatus = calculateEnhancedOutflowPeriodStatus(
+    period.isDuePeriod || false,
+    period.dueDate,
+    period.expectedDueDate || period.dueDate || period.periodStartDate,
+    period.totalAmountDue || 0,
+    period.transactionSplits || [],
+    period.numberOfOccurrencesInPeriod || 0,
+    period.numberOfOccurrencesPaid || 0,
+    period.frequency || 'MONTHLY'
+  );
+
   // Determine status counts from period status
   const statusCounts: OutflowStatusCounts = {};
   const status = period.status || OutflowPeriodStatus.PENDING;
@@ -141,6 +154,14 @@ function buildPeriodEntry(
     paymentProgressPercentage,
     fullyPaidCount: period.isFullyPaid ? 1 : 0,
     unpaidCount: (!period.isFullyPaid && !period.isPartiallyPaid) ? 1 : 0,
-    itemCount: 1  // This entry represents exactly ONE period
+    itemCount: 1,  // This entry represents exactly ONE period
+
+    // Occurrence Tracking (from enhanced status calculation)
+    hasOccurrenceTracking: enhancedStatus.hasOccurrenceTracking,
+    numberOfOccurrences: enhancedStatus.numberOfOccurrences,
+    numberOfOccurrencesPaid: enhancedStatus.numberOfOccurrencesPaid,
+    numberOfOccurrencesUnpaid: enhancedStatus.numberOfOccurrencesUnpaid,
+    occurrencePaymentPercentage: enhancedStatus.occurrencePaymentPercentage,
+    occurrenceStatusText: enhancedStatus.occurrenceStatusText
   };
 }

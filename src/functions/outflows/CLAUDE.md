@@ -977,6 +977,59 @@ if (summarySnap.exists()) {
    - Log errors with context
    - Return meaningful error messages to clients
 
+### Testing Methodology: Test-First Verification
+
+**IMPORTANT:** When making changes to critical logic (calculations, algorithms, data transformations), always use **Test-First Verification** before implementation:
+
+#### Approach:
+
+1. **Write Comprehensive Unit Tests First**
+   - Create test file in `{module}/__tests__/` directory
+   - Cover all scenarios using a test matrix approach
+   - Include edge cases and boundary conditions
+   - Test all combinations of inputs (frequencies, period types, etc.)
+
+2. **Run Tests to Verify Current Behavior**
+   ```bash
+   npm test -- {testFileName}.test.ts
+   ```
+
+3. **Present Results in Table Format**
+   - Create a clear matrix showing expected vs actual results
+   - Identify any discrepancies between expected and actual behavior
+   - Verify if issues are in code or test expectations
+
+4. **Fix Issues Before Implementation**
+   - If tests reveal bugs, fix the underlying logic
+   - If tests have wrong expectations, update the tests
+   - Ensure 100% test pass rate before proceeding
+
+#### Example Test Matrix:
+
+| Input Frequency | Period Type | Expected | Actual | Status |
+|----------------|-------------|----------|--------|--------|
+| WEEKLY | WEEKLY | 1 | ✓ 1 | ✅ PASS |
+| WEEKLY | MONTHLY | 4-5 | ✓ 5 | ✅ PASS |
+| BIWEEKLY | MONTHLY | 2-3 | ✓ 3 | ✅ PASS |
+
+#### Benefits:
+
+- ✅ **Verify foundation before building** - Ensure base logic works correctly
+- ✅ **Catch regressions early** - Tests prevent breaking existing functionality
+- ✅ **Document expected behavior** - Tests serve as living documentation
+- ✅ **Enable confident refactoring** - Change code knowing tests will catch issues
+- ✅ **Clear communication** - Table format shows what works and what doesn't
+
+#### When to Use:
+
+- Before implementing new features that depend on existing logic
+- When refactoring critical calculation functions
+- When debugging complex algorithms
+- When validating edge cases and boundary conditions
+- Before starting multi-phase implementation plans
+
+**Example:** Phase 0 of the occurrence tracking implementation verified `calculateAllOccurrencesInPeriod()` with 18 comprehensive tests covering all frequency/period combinations before proceeding to Phase 1 (matching logic).
+
 ---
 
 ## Performance Considerations

@@ -19,6 +19,7 @@ export * from './calculateAllOccurrencesInPeriod';
 export * from './autoMatchTransactionToOutflowPeriods';
 export * from './autoMatchSinglePeriod';
 export * from './findMatchingOutflowPeriods';
+export * from './matchAllTransactionsToOccurrences';
 
 // Period update and prediction utilities
 export * from './runUpdateOutflowPeriods';

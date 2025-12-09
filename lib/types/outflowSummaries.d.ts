@@ -23,6 +23,12 @@ export interface OutflowPeriodEntry {
     fullyPaidCount: number;
     unpaidCount: number;
     itemCount: number;
+    hasOccurrenceTracking: boolean;
+    numberOfOccurrences: number;
+    numberOfOccurrencesPaid: number;
+    numberOfOccurrencesUnpaid: number;
+    occurrencePaymentPercentage: number;
+    occurrenceStatusText: string | null;
 }
 export interface OutflowStatusCounts {
     PAID?: number;
@@ -50,5 +56,8 @@ export interface OutflowPeriodSummary {
     lastRecalculated: Timestamp;
     createdAt: Timestamp;
     updatedAt: Timestamp;
+    totalPaidOccurrences: number;
+    totalUnpaidOccurrences: number;
+    totalOccurrences: number;
 }
 //# sourceMappingURL=outflowSummaries.d.ts.map

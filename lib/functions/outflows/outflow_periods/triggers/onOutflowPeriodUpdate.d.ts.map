@@ -1,1 +1,1 @@
-{"version":3,"file":"onOutflowPeriodUpdate.d.ts","sourceRoot":"","sources":["../../../../../src/functions/outflows/outflow_periods/triggers/onOutflowPeriodUpdate.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAMH;;;GAGG;AACH,eAAO,MAAM,qBAAqB;;GA8ChC,CAAC"}
+{"version":3,"file":"onOutflowPeriodUpdate.d.ts","sourceRoot":"","sources":["../../../../../src/functions/outflows/outflow_periods/triggers/onOutflowPeriodUpdate.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAQH;;;GAGG;AACH,eAAO,MAAM,qBAAqB;;GAsFhC,CAAC"}

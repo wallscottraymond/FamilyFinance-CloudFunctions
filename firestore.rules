@@ -622,6 +622,19 @@ service cloud.firestore {
     }
 
     // =======================
+    // OUTFLOW SUMMARY COLLECTION RULES (singular)
+    // =======================
+
+    match /outflow_summary/{summaryId} {
+      // Read: User's own summary (summaryId format: userId_outflowsummary_periodType)
+      allow read: if isAuthenticated() &&
+                     summaryId.matches('^' + request.auth.uid + '_outflowsummary_.*');
+
+      // Write: Cloud Functions only
+      allow create, update, delete: if false;
+    }
+
+    // =======================
     // GROUP OUTFLOW SUMMARIES COLLECTION RULES - GROUP LEVEL
     // =======================
 

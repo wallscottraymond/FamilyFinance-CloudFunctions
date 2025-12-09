@@ -12,6 +12,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { OutflowPeriod, Outflow } from '../../../../types';
 import { autoMatchSinglePeriod } from '../utils/autoMatchSinglePeriod';
+import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactionsToOccurrences';
 import { createOutflowPeriodSummary } from '../../outflow_summaries/crud/createOutflowPeriodSummary';
 
 /**
@@ -94,6 +95,29 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     }
 
     console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
+    console.log('');
+
+    // Step 2.5: Match transactions to occurrence indices (if multi-occurrence period)
+    console.log('[onOutflowPeriodCreate] Step 2.5: Matching transactions to occurrence indices...');
+    try {
+      // Re-fetch the period to get updated transactionSplits from auto-matching
+      const updatedPeriodSnap = await db.collection('outflow_periods').doc(outflowPeriodId).get();
+      if (updatedPeriodSnap.exists) {
+        const updatedPeriodData = { id: updatedPeriodSnap.id, ...updatedPeriodSnap.data() } as OutflowPeriod;
+
+        // Only run occurrence matching if this period has multiple occurrences
+        if (updatedPeriodData.occurrenceDueDates && updatedPeriodData.occurrenceDueDates.length > 0) {
+          console.log(`[onOutflowPeriodCreate] Period has ${updatedPeriodData.occurrenceDueDates.length} occurrences, running occurrence matching...`);
+          await matchAllTransactionsToOccurrences(db, outflowPeriodId, updatedPeriodData);
+          console.log('[onOutflowPeriodCreate] ✓ Occurrence matching complete');
+        } else {
+          console.log('[onOutflowPeriodCreate] Period has no occurrences to track, skipping occurrence matching');
+        }
+      }
+    } catch (occurrenceError) {
+      console.error('[onOutflowPeriodCreate] ⚠️  Occurrence matching failed:', occurrenceError);
+      // Don't throw - occurrence matching failures shouldn't break period creation
+    }
     console.log('');
 
     // Step 3: Update outflow summaries (FINAL STEP - non-critical)

@@ -13,6 +13,7 @@ export * from './outflow_periods/api';
 export * from './outflow_main/triggers/onOutflowCreated';
 export * from './outflow_main/triggers/onOutflowUpdated';
 export * from './outflow_periods/triggers/onOutflowPeriodCreate';
+export * from './outflow_periods/triggers/onOutflowPeriodUpdate';
 
 // Type definitions from module-specific locations
 export * from './outflow_main/types';

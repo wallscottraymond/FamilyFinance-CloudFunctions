@@ -14,6 +14,7 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { Outflow, OutflowPeriod } from '../../../../types';
 import { autoMatchSinglePeriod } from './autoMatchSinglePeriod';
+import { matchAllTransactionsToOccurrences } from './matchAllTransactionsToOccurrences';
 
 export interface OutflowUpdateResult {
   success: boolean;
@@ -226,6 +227,24 @@ export async function runUpdateOutflowPeriods(
               outflowAfter
             );
             console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: matched ${matchResult.transactionsMatched} transactions`);
+
+            // After auto-matching, run occurrence matching if period has occurrences
+            if (period.occurrenceDueDates && period.occurrenceDueDates.length > 0) {
+              console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: running occurrence matching for ${period.occurrenceDueDates.length} occurrences...`);
+              try {
+                // Re-fetch period to get updated transactionSplits from auto-matching
+                const updatedPeriodSnap = await db.collection('outflow_periods').doc(periodDoc.id).get();
+                if (updatedPeriodSnap.exists) {
+                  const updatedPeriodData = { id: updatedPeriodSnap.id, ...updatedPeriodSnap.data() } as OutflowPeriod;
+                  await matchAllTransactionsToOccurrences(db, periodDoc.id, updatedPeriodData);
+                  console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: ✓ occurrence matching complete`);
+                }
+              } catch (occurrenceError: any) {
+                console.error(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: ⚠️  occurrence matching failed:`, occurrenceError);
+                result.errors.push(`Occurrence matching error for period ${periodDoc.id}: ${occurrenceError.message}`);
+              }
+            }
+
             // autoMatchSinglePeriod updates the period directly, so we skip batch update for this period
             updatedCount++;
             continue;

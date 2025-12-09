@@ -33,6 +33,14 @@ export interface OutflowPeriodEntry {
   fullyPaidCount: number;
   unpaidCount: number;
   itemCount: number;                 // Items with periods in this range
+
+  // Occurrence Tracking (for multi-occurrence periods like weekly bills in monthly periods)
+  hasOccurrenceTracking: boolean;        // Whether this period tracks occurrences
+  numberOfOccurrences: number;           // Total occurrences (0 if no tracking)
+  numberOfOccurrencesPaid: number;       // Paid occurrences (0 if no tracking)
+  numberOfOccurrencesUnpaid: number;     // Unpaid occurrences (0 if no tracking)
+  occurrencePaymentPercentage: number;   // Percentage of occurrences paid (0-100)
+  occurrenceStatusText: string | null;   // Human-readable: "2 of 4 weeks paid"
 }
 
 export interface OutflowStatusCounts {
@@ -70,4 +78,9 @@ export interface OutflowPeriodSummary {
   lastRecalculated: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // Aggregate Occurrence Tracking (sum across all periods)
+  totalPaidOccurrences: number;      // Total paid occurrences across all periods
+  totalUnpaidOccurrences: number;    // Total unpaid occurrences across all periods
+  totalOccurrences: number;          // Total occurrences across all periods
 }
