@@ -23,7 +23,7 @@
 
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { OutflowPeriod } from '../../../../types';
+import { OutflowPeriod, OutflowOccurrence } from '../../../../types';
 
 /**
  * Match all transaction splits in a period to specific occurrence indices
@@ -60,6 +60,37 @@ export async function matchAllTransactionsToOccurrences(
     const updatedPaidFlags = new Array(periodData.occurrenceDueDates.length).fill(false);
     const updatedTransactionIds = new Array(periodData.occurrenceDueDates.length).fill(null);
 
+    // Step 2a: Initialize or clone occurrence objects (NEW)
+    const updatedOccurrences: OutflowOccurrence[] = periodData.occurrences
+      ? JSON.parse(JSON.stringify(periodData.occurrences)) // Deep clone
+      : periodData.occurrenceDueDates.map((dueDate, index) => ({
+          id: `${periodId}_occ_${index}`,
+          dueDate: dueDate,
+          isPaid: false,
+          transactionId: null,
+          transactionSplitId: null,
+          paymentDate: null,
+          amountDue: periodData.amountPerOccurrence || 0,
+          amountPaid: 0,
+          paymentType: null,
+          isAutoMatched: false,
+          matchedAt: null,
+          matchedBy: null,
+        }));
+
+    // Reset all occurrences to unpaid before matching
+    updatedOccurrences.forEach(occ => {
+      occ.isPaid = false;
+      occ.transactionId = null;
+      occ.transactionSplitId = null;
+      occ.paymentDate = null;
+      occ.amountPaid = 0;
+      occ.paymentType = null;
+      occ.isAutoMatched = false;
+      occ.matchedAt = null;
+      occ.matchedBy = null;
+    });
+
     // Step 3: Match each transaction split to an occurrence index
     for (const split of splits) {
       const occurrenceIndex = findMatchingOccurrenceIndex(
@@ -68,12 +99,28 @@ export async function matchAllTransactionsToOccurrences(
       );
 
       if (occurrenceIndex !== null) {
+        // Update parallel arrays (legacy)
         updatedPaidFlags[occurrenceIndex] = true;
         updatedTransactionIds[occurrenceIndex] = split.transactionId;
 
+        // Update occurrence object (NEW)
+        updatedOccurrences[occurrenceIndex] = {
+          ...updatedOccurrences[occurrenceIndex],
+          isPaid: true,
+          transactionId: split.transactionId,
+          transactionSplitId: split.splitId,
+          paymentDate: split.transactionDate,
+          amountPaid: split.amount,
+          paymentType: split.paymentType || 'regular',
+          isAutoMatched: split.isAutoMatched || false,
+          matchedAt: split.matchedAt || Timestamp.now(),
+          matchedBy: split.matchedBy || 'system',
+        };
+
         console.log(
           `[matchAllTransactionsToOccurrences] Matched transaction ${split.transactionId} ` +
-          `to occurrence ${occurrenceIndex + 1} (due ${periodData.occurrenceDueDates[occurrenceIndex].toDate().toISOString().split('T')[0]})`
+          `to occurrence ${occurrenceIndex + 1} (ID: ${updatedOccurrences[occurrenceIndex].id}, ` +
+          `due ${periodData.occurrenceDueDates[occurrenceIndex].toDate().toISOString().split('T')[0]})`
         );
       } else {
         console.warn(
@@ -98,12 +145,17 @@ export async function matchAllTransactionsToOccurrences(
       return;
     }
 
-    // Step 6: Update period document
+    // Step 6: Update period document with BOTH patterns
     await db.collection('outflow_periods').doc(periodId).update({
+      // NEW: Occurrence objects
+      occurrences: updatedOccurrences,
+
+      // LEGACY: Parallel arrays
       occurrencePaidFlags: updatedPaidFlags,
       occurrenceTransactionIds: updatedTransactionIds,
       numberOfOccurrencesPaid: paidCount,
       numberOfOccurrencesUnpaid: unpaidCount,
+
       updatedAt: admin.firestore.Timestamp.now()
     });
 

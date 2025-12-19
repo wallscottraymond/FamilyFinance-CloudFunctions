@@ -13,6 +13,7 @@
  */
 export * from "./api/getUserPeriodSummary";
 export * from "./api/recalculateUserPeriodSummary";
+export * from "./triggers/outflowPeriodSummaryTriggers";
 export * from "./triggers/budgetPeriodSummaryTriggers";
 export * from "./triggers/inflowPeriodSummaryTriggers";
 //# sourceMappingURL=index.d.ts.map

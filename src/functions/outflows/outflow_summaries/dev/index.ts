@@ -1,9 +1,5 @@
 /**
- * Placeholder index file for outflow_summaries/dev
- *
- * This file will eventually re-export all functions from this directory.
- * Currently empty as files haven't been moved yet.
+ * Outflow Summaries - Development and Testing Functions
  */
 
-// TODO: Add exports when files are moved to this directory
-export {};
+export { regenerateAllOutflowSummaries } from './regenerateAllSummaries';

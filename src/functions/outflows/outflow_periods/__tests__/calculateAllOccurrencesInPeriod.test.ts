@@ -25,14 +25,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
   const createTestOutflow = (
     frequency: PlaidRecurringFrequency,
     description: string,
-    referenceDate: Date
+    referenceDate: Date,
+    averageAmount: number = 100.00  // Default amount
   ): RecurringOutflow => {
     return {
       description,
       frequency,
       firstDate: Timestamp.fromDate(referenceDate),
       lastDate: Timestamp.fromDate(referenceDate),
-      predictedNextDate: Timestamp.fromDate(referenceDate)
+      predictedNextDate: Timestamp.fromDate(referenceDate),
+      averageAmount
     } as RecurringOutflow;
   };
 
@@ -65,9 +67,28 @@ describe('calculateAllOccurrencesInPeriod', () => {
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
 
+      // Legacy parallel arrays
       expect(result.numberOfOccurrences).toBe(1);
       expect(result.occurrenceDueDates).toHaveLength(1);
       expect(result.occurrenceDrawDates).toHaveLength(1);
+
+      // NEW: Occurrence objects
+      expect(result.occurrences).toBeDefined();
+      expect(result.occurrences).toHaveLength(1);
+      expect(result.occurrences[0]).toMatchObject({
+        id: expect.stringContaining('2025-W01_occ_0'),
+        dueDate: result.occurrenceDueDates[0],
+        isPaid: false,
+        transactionId: null,
+        transactionSplitId: null,
+        paymentDate: null,
+        amountDue: 100.00,  // Default amount from helper
+        amountPaid: 0,
+        paymentType: null,
+        isAutoMatched: false,
+        matchedAt: null,
+        matchedBy: null,
+      });
     });
 
     it('should calculate ~8 occurrences for weekly bill in bi-monthly period', () => {
@@ -298,8 +319,13 @@ describe('calculateAllOccurrencesInPeriod', () => {
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
 
+      // Legacy parallel arrays
       expect(result.occurrenceDueDates.length).toBe(result.numberOfOccurrences);
       expect(result.occurrenceDrawDates.length).toBe(result.numberOfOccurrences);
+
+      // NEW: Occurrence objects array
+      expect(result.occurrences.length).toBe(result.numberOfOccurrences);
+      expect(result.occurrences.length).toBe(result.occurrenceDueDates.length);
     });
 
     it('should have all due dates within period range', () => {
@@ -419,6 +445,104 @@ describe('calculateAllOccurrencesInPeriod', () => {
         // Should NOT be Saturday (6) or Sunday (0)
         expect(dayOfWeek).not.toBe(0);
         expect(dayOfWeek).not.toBe(6);
+      });
+    });
+  });
+
+  describe('Occurrence objects structure (NEW)', () => {
+    it('should create properly structured occurrence objects for all occurrences', () => {
+      const outflow = createTestOutflow(
+        PlaidRecurringFrequency.WEEKLY,
+        'Weekly Test',
+        new Date('2025-01-01')
+      );
+      (outflow as any).averageAmount = 10.00; // Add amount to outflow
+
+      const period = createTestPeriod(
+        '2025-M01',
+        new Date('2025-01-01'),
+        new Date('2025-01-31')
+      );
+
+      const result = calculateAllOccurrencesInPeriod(outflow, period);
+
+      // Should have 4 or 5 occurrences for weekly bill in January
+      expect(result.occurrences.length).toBeGreaterThanOrEqual(4);
+      expect(result.occurrences.length).toBeLessThanOrEqual(5);
+
+      // Verify EACH occurrence has correct structure
+      result.occurrences.forEach((occ, index) => {
+        // ID format: "{periodId}_occ_{index}"
+        expect(occ.id).toBe(`${period.id}_occ_${index}`);
+
+        // Due date should match parallel array
+        expect(occ.dueDate).toBe(result.occurrenceDueDates[index]);
+
+        // Initial unpaid state
+        expect(occ.isPaid).toBe(false);
+        expect(occ.transactionId).toBeNull();
+        expect(occ.transactionSplitId).toBeNull();
+        expect(occ.paymentDate).toBeNull();
+        expect(occ.amountDue).toBe(10.00);
+        expect(occ.amountPaid).toBe(0);
+        expect(occ.paymentType).toBeNull();
+        expect(occ.isAutoMatched).toBe(false);
+        expect(occ.matchedAt).toBeNull();
+        expect(occ.matchedBy).toBeNull();
+
+        // Optional fields
+        expect(occ.notes).toBeUndefined();
+        expect(occ.tags).toBeUndefined();
+      });
+    });
+
+    it('should handle occurrence objects for monthly bill (single occurrence)', () => {
+      const outflow = createTestOutflow(
+        PlaidRecurringFrequency.MONTHLY,
+        'Monthly Rent',
+        new Date('2025-01-15')
+      );
+      (outflow as any).averageAmount = 1500.00;
+
+      const period = createTestPeriod(
+        '2025-M01',
+        new Date('2025-01-01'),
+        new Date('2025-01-31')
+      );
+
+      const result = calculateAllOccurrencesInPeriod(outflow, period);
+
+      expect(result.occurrences).toHaveLength(1);
+      expect(result.occurrences[0]).toMatchObject({
+        id: '2025-M01_occ_0',
+        isPaid: false,
+        amountDue: 1500.00,
+        amountPaid: 0,
+      });
+    });
+
+    it('should create unique IDs for each occurrence', () => {
+      const outflow = createTestOutflow(
+        PlaidRecurringFrequency.WEEKLY,
+        'Weekly Test',
+        new Date('2025-01-01')
+      );
+      const period = createTestPeriod(
+        '2025-M01',
+        new Date('2025-01-01'),
+        new Date('2025-01-31')
+      );
+
+      const result = calculateAllOccurrencesInPeriod(outflow, period);
+
+      // All IDs should be unique
+      const ids = result.occurrences.map(occ => occ.id);
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(ids.length);
+
+      // IDs should follow pattern
+      ids.forEach((id, index) => {
+        expect(id).toBe(`${period.id}_occ_${index}`);
       });
     });
   });

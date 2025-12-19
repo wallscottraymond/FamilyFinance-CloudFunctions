@@ -48,7 +48,7 @@ export function calculateOutflowSummary(
     paymentProgressPercentage: outflowPeriod.paymentProgressPercentage || 0,
     fullyPaidCount: outflowPeriod.numberOfOccurrencesPaid || 0,
     unpaidCount: outflowPeriod.numberOfOccurrencesUnpaid || 0,
-    itemCount: outflowPeriod.numberOfOccurrencesInPeriod || 1,
+    itemCount: outflowPeriod.numberOfOccurrencesInPeriod || 1, // ALWAYS at least 1 if period exists
 
     // === GROUPING ===
     groupId: outflowPeriod.groupId || "",

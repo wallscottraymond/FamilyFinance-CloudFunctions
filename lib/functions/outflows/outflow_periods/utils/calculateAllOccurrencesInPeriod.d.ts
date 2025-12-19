@@ -16,13 +16,19 @@
  * - March 2025: 5 Wednesdays (5, 12, 19, 26, and partial week to April 2)
  */
 import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod } from '../../../../types';
+import { RecurringOutflow, SourcePeriod, OutflowOccurrence } from '../../../../types';
 /**
  * Result of calculating all occurrences in a period
+ *
+ * UPDATED: Now returns occurrence objects in addition to parallel arrays
+ * for backward compatibility during migration
  */
 export interface PeriodOccurrences {
     numberOfOccurrences: number;
+    occurrences: OutflowOccurrence[];
+    /** @deprecated Use occurrences array instead */
     occurrenceDueDates: Timestamp[];
+    /** @deprecated Use occurrences array instead */
     occurrenceDrawDates: Timestamp[];
 }
 /**

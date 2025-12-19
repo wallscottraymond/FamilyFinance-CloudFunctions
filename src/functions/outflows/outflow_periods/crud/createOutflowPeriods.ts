@@ -219,10 +219,6 @@ export async function createOutflowPeriodsFromSource(
     const totalAmountPaid = 0; // At creation, nothing is paid yet
     const totalAmountUnpaid = totalAmountDue;
 
-    // Initialize occurrence tracking arrays (all unpaid at creation)
-    const occurrencePaidFlags = new Array(occurrences.numberOfOccurrences).fill(false);
-    const occurrenceTransactionIds = new Array(occurrences.numberOfOccurrences).fill(null);
-
     // Calculate progress metrics
     const paymentProgressPercentage = 0; // No payments yet
     const dollarProgressPercentage = 0; // No payments yet
@@ -337,9 +333,7 @@ export async function createOutflowPeriodsFromSource(
       numberOfOccurrencesInPeriod: occurrences.numberOfOccurrences,
       numberOfOccurrencesPaid: 0,
       numberOfOccurrencesUnpaid: occurrences.numberOfOccurrences,
-      occurrenceDueDates: occurrences.occurrenceDueDates,
-      occurrencePaidFlags: occurrencePaidFlags,
-      occurrenceTransactionIds: occurrenceTransactionIds,
+      occurrences: occurrences.occurrences, // NEW: Single occurrence object array
 
       // === PROGRESS METRICS ===
       paymentProgressPercentage: paymentProgressPercentage,

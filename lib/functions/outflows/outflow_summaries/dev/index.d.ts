@@ -1,8 +1,5 @@
 /**
- * Placeholder index file for outflow_summaries/dev
- *
- * This file will eventually re-export all functions from this directory.
- * Currently empty as files haven't been moved yet.
+ * Outflow Summaries - Development and Testing Functions
  */
-export {};
+export { regenerateAllOutflowSummaries } from './regenerateAllSummaries';
 //# sourceMappingURL=index.d.ts.map

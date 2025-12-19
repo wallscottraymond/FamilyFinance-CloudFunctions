@@ -13,4 +13,5 @@ export * from './outflow_main/types';
 export * from './outflow_periods/types';
 export * from './outflow_main/dev';
 export * from './outflow_periods/dev';
+export * from './outflow_summaries/dev';
 //# sourceMappingURL=index.d.ts.map

@@ -1,5 +1,5 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { updateUserPeriodSummary } from "./updateUserPeriodSummary";
+import { calculateUserPeriodSummary } from "../utils/calculateUserPeriodSummary";
 import { SourcePeriod, PeriodType } from "../../../types";
 
 const db = getFirestore();
@@ -42,8 +42,9 @@ export async function preCreateUserPeriodSummaries(
       { type: PeriodType.MONTHLY, name: "monthly" },
     ];
 
-    const allSummaryPromises: Promise<string>[] = [];
-    const summaryStats: Record<string, { total: number; success: number; errors: number }> = {};
+    // Create a single Firestore batch for all summaries
+    const batch = db.batch();
+    let summaryCount = 0;
 
     for (const { type, name } of periodTypes) {
       console.log(
@@ -62,7 +63,6 @@ export async function preCreateUserPeriodSummaries(
         console.warn(
           `[preCreateUserPeriodSummaries] No current ${name} period found in source_periods`
         );
-        summaryStats[name] = { total: 0, success: 0, errors: 0 };
         continue;
       }
 
@@ -90,61 +90,42 @@ export async function preCreateUserPeriodSummaries(
         `[preCreateUserPeriodSummaries] Found ${periodsQuery.size} ${name} periods in range ${minIndex}-${maxIndex}`
       );
 
-      summaryStats[name] = { total: periodsQuery.size, success: 0, errors: 0 };
-
-      // Step 3: Create summaries for each period using actual document IDs
+      // Step 3: Add each summary to the batch
       for (const periodDoc of periodsQuery.docs) {
         const sourcePeriodId = periodDoc.id; // Use document ID (e.g., "2025M02")
 
-        // Create summary (without detailed entries for initial creation)
-        const summaryPromise = updateUserPeriodSummary(
+        // Calculate summary data (no Firestore writes)
+        const summary = await calculateUserPeriodSummary(
           userId,
           name, // Period type as string
           sourcePeriodId, // Use document ID (no hyphen)
-          false // Don't include detailed entries
-        )
-          .then((summaryId) => {
-            summaryStats[name].success++;
-            return summaryId;
-          })
-          .catch((error) => {
-            // Log error but don't fail the entire operation
-            console.error(
-              `[preCreateUserPeriodSummaries] Error creating ${name} summary for ${sourcePeriodId}:`,
-              error
-            );
-            summaryStats[name].errors++;
-            return `error-${sourcePeriodId}`;
-          });
+          false // Don't include detailed entries for initial creation
+        );
 
-        allSummaryPromises.push(summaryPromise);
+        const summaryId = summary.id;
+        const summaryRef = db.collection("user_summaries").doc(summaryId);
+
+        // Add to batch (will create new document)
+        batch.set(summaryRef, summary);
+        summaryCount++;
+
+        console.log(`[preCreateUserPeriodSummaries] Queued summary: ${summaryId}`);
       }
     }
 
-    // Wait for all summaries to be created
-    await Promise.all(allSummaryPromises);
+    // Commit entire batch at once
+    console.log(
+      `[preCreateUserPeriodSummaries] Committing batch with ${summaryCount} summaries`
+    );
+    await batch.commit();
 
     const duration = Date.now() - startTime;
 
-    const totalSummaries = Object.values(summaryStats).reduce((sum, stat) => sum + stat.total, 0);
-    const totalSuccess = Object.values(summaryStats).reduce((sum, stat) => sum + stat.success, 0);
-    const totalErrors = Object.values(summaryStats).reduce((sum, stat) => sum + stat.errors, 0);
-
     console.log(
-      `[preCreateUserPeriodSummaries] Completed in ${duration}ms for user: ${userId}`,
-      {
-        totalSummaries,
-        successful: totalSuccess,
-        errors: totalErrors,
-        breakdown: summaryStats,
-      }
+      `[preCreateUserPeriodSummaries] ✓ Successfully created ${summaryCount} summaries in ${duration}ms`,
+      { userId, summaryCount }
     );
 
-    if (totalErrors > 0) {
-      console.warn(
-        `[preCreateUserPeriodSummaries] ${totalErrors} summaries failed to create, but operation completed`
-      );
-    }
   } catch (error) {
     console.error(
       `[preCreateUserPeriodSummaries] Fatal error pre-creating summaries for user ${userId}:`,

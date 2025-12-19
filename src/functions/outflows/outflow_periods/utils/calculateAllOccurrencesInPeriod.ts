@@ -17,14 +17,24 @@
  */
 
 import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../../types';
+import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency, OutflowOccurrence } from '../../../../types';
 
 /**
  * Result of calculating all occurrences in a period
+ *
+ * UPDATED: Now returns occurrence objects in addition to parallel arrays
+ * for backward compatibility during migration
  */
 export interface PeriodOccurrences {
   numberOfOccurrences: number;
+
+  // NEW: Occurrence object array (preferred)
+  occurrences: OutflowOccurrence[];
+
+  // LEGACY: Parallel arrays (kept for backward compatibility)
+  /** @deprecated Use occurrences array instead */
   occurrenceDueDates: Timestamp[];
+  /** @deprecated Use occurrences array instead */
   occurrenceDrawDates: Timestamp[];
 }
 
@@ -199,28 +209,51 @@ export function calculateAllOccurrencesInPeriod(
   // Step 3: Iterate forward from first occurrence, collecting all dates within period
   const dueDates: Timestamp[] = [];
   const drawDates: Timestamp[] = [];
+  const occurrences: OutflowOccurrence[] = [];
   let currentOccurrence = new Date(firstOccurrence);
+  let occurrenceIndex = 0;
 
   while (currentOccurrence <= periodEnd) {
-    // Add this occurrence
+    // Create timestamps for this occurrence
     const dueDate = Timestamp.fromDate(currentOccurrence);
     const drawDate = Timestamp.fromDate(adjustForWeekend(currentOccurrence));
 
+    // Add to parallel arrays (legacy)
     dueDates.push(dueDate);
     drawDates.push(drawDate);
 
+    // Create occurrence object (new pattern)
+    const occurrence: OutflowOccurrence = {
+      id: `${sourcePeriod.id}_occ_${occurrenceIndex}`,
+      dueDate: dueDate,
+      isPaid: false,
+      transactionId: null,
+      transactionSplitId: null,
+      paymentDate: null,
+      amountDue: outflow.averageAmount,
+      amountPaid: 0,
+      paymentType: null,
+      isAutoMatched: false,
+      matchedAt: null,
+      matchedBy: null,
+    };
+    occurrences.push(occurrence);
+
     console.log(
-      `[calculateAllOccurrencesInPeriod] Occurrence #${dueDates.length}: ` +
+      `[calculateAllOccurrencesInPeriod] Occurrence #${occurrenceIndex + 1}: ` +
+      `ID=${occurrence.id}, ` +
       `Due ${currentOccurrence.toISOString().split('T')[0]}, ` +
       `Draw ${adjustForWeekend(currentOccurrence).toISOString().split('T')[0]}`
     );
 
     // Move to next occurrence
     currentOccurrence = addFrequencyInterval(currentOccurrence, outflow.frequency);
+    occurrenceIndex++;
   }
 
   const result = {
     numberOfOccurrences: dueDates.length,
+    occurrences: occurrences,
     occurrenceDueDates: dueDates,
     occurrenceDrawDates: drawDates
   };

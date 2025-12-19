@@ -22,3 +22,4 @@ export * from './outflow_periods/types';
 // Dev testing functions (emulator + production)
 export * from './outflow_main/dev';
 export * from './outflow_periods/dev';
+export * from './outflow_summaries/dev';

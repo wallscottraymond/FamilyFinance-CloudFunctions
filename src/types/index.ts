@@ -1662,6 +1662,38 @@ export interface TransactionSplitReference {
 }
 
 /**
+ * Outflow Occurrence - Individual occurrence within an outflow period
+ *
+ * Represents a single occurrence of a recurring bill within a period.
+ * This replaces the parallel arrays pattern (occurrenceDueDates, occurrencePaidFlags, occurrenceTransactionIds)
+ * with a self-contained object pattern similar to TransactionSplit.
+ *
+ * Benefits:
+ * - Self-contained (impossible to desynchronize)
+ * - Type-safe
+ * - Easy to extend with new metadata
+ * - Supports partial payments, notes, and rich payment tracking
+ *
+ * Example: A weekly $10 bill in a monthly period has 4 OutflowOccurrence objects
+ */
+export interface OutflowOccurrence {
+  id: string;                          // Unique ID: "{periodId}_occ_{index}"
+  dueDate: Timestamp;                  // When this occurrence is due
+  isPaid: boolean;                     // Payment status
+  transactionId: string | null;        // Linked transaction ID (if paid)
+  transactionSplitId: string | null;   // Linked transaction split ID (if paid)
+  paymentDate: Timestamp | null;       // When payment was made
+  amountDue: number;                   // Expected amount for this occurrence
+  amountPaid: number;                  // Actual amount paid (0 if unpaid)
+  paymentType: 'regular' | 'catch_up' | 'advance' | 'extra_principal' | null; // Payment classification
+  isAutoMatched: boolean;              // Was this automatically matched by system?
+  matchedAt: Timestamp | null;         // When the payment was matched
+  matchedBy: string | null;            // Who matched it ('system' or userId)
+  notes?: string;                      // Optional user notes for this occurrence
+  tags?: string[];                     // Optional tags for this occurrence
+}
+
+/**
  * Outflow Period - FLAT STRUCTURE (Fully Aligned with Firestore Schema)
  *
  * Represents an outflow occurrence within a specific period.
@@ -1757,12 +1789,19 @@ export interface OutflowPeriod extends BaseDocument {
   transactionIds: string[];                // All matched transaction IDs (flat array)
   transactionSplits?: TransactionSplitReference[]; // Array of payment splits assigned to this period
 
+  // === NEW: OCCURRENCE OBJECT ARRAY (Replaces parallel arrays) ===
+  occurrences?: OutflowOccurrence[];       // Array of occurrence objects with payment metadata
+
   // === MULTI-OCCURRENCE TRACKING (Additional Fields for Multi-Occurrence System) ===
   numberOfOccurrencesInPeriod: number;     // How many times bill occurs in this period
   numberOfOccurrencesPaid: number;         // How many occurrences have been paid
   numberOfOccurrencesUnpaid: number;       // Calculated: total - paid
+
+  /** @deprecated Use occurrences array instead */
   occurrenceDueDates: Timestamp[];         // Array of all due dates in period
+  /** @deprecated Use occurrences array instead */
   occurrencePaidFlags: boolean[];          // Parallel array: which occurrences paid
+  /** @deprecated Use occurrences array instead */
   occurrenceTransactionIds: (string | null)[]; // Parallel array: transaction IDs
 
   // === PROGRESS METRICS (Additional Fields) ===

@@ -1317,6 +1317,37 @@ export interface TransactionSplitReference {
     matchedBy: string;
 }
 /**
+ * Outflow Occurrence - Individual occurrence within an outflow period
+ *
+ * Represents a single occurrence of a recurring bill within a period.
+ * This replaces the parallel arrays pattern (occurrenceDueDates, occurrencePaidFlags, occurrenceTransactionIds)
+ * with a self-contained object pattern similar to TransactionSplit.
+ *
+ * Benefits:
+ * - Self-contained (impossible to desynchronize)
+ * - Type-safe
+ * - Easy to extend with new metadata
+ * - Supports partial payments, notes, and rich payment tracking
+ *
+ * Example: A weekly $10 bill in a monthly period has 4 OutflowOccurrence objects
+ */
+export interface OutflowOccurrence {
+    id: string;
+    dueDate: Timestamp;
+    isPaid: boolean;
+    transactionId: string | null;
+    transactionSplitId: string | null;
+    paymentDate: Timestamp | null;
+    amountDue: number;
+    amountPaid: number;
+    paymentType: 'regular' | 'catch_up' | 'advance' | 'extra_principal' | null;
+    isAutoMatched: boolean;
+    matchedAt: Timestamp | null;
+    matchedBy: string | null;
+    notes?: string;
+    tags?: string[];
+}
+/**
  * Outflow Period - FLAT STRUCTURE (Fully Aligned with Firestore Schema)
  *
  * Represents an outflow occurrence within a specific period.
@@ -1380,11 +1411,15 @@ export interface OutflowPeriod extends BaseDocument {
     source: string;
     transactionIds: string[];
     transactionSplits?: TransactionSplitReference[];
+    occurrences?: OutflowOccurrence[];
     numberOfOccurrencesInPeriod: number;
     numberOfOccurrencesPaid: number;
     numberOfOccurrencesUnpaid: number;
+    /** @deprecated Use occurrences array instead */
     occurrenceDueDates: Timestamp[];
+    /** @deprecated Use occurrences array instead */
     occurrencePaidFlags: boolean[];
+    /** @deprecated Use occurrences array instead */
     occurrenceTransactionIds: (string | null)[];
     paymentProgressPercentage: number;
     dollarProgressPercentage: number;
