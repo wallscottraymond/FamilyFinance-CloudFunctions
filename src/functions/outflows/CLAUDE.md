@@ -25,7 +25,7 @@
 
 ## Overview
 
-The Outflows System is a **recurring bill management module** that enables users to create, track, and monitor recurring expenses (bills) with automatic period-based withholding calculations. It supports both Plaid-synced recurring transactions and user-created bills, with automatic period generation and financial planning features.
+The Outflows System is a **recurring bill management module** that enables users to create, track, and monitor recurring expenses (bills) with automatic period-based withholding calculations and **per-occurrence payment tracking**. It supports both Plaid-synced recurring transactions and user-created bills, with automatic period generation and financial planning features.
 
 ### Core Concept: Three-Module Architecture
 
@@ -37,10 +37,11 @@ The Outflows System is organized into **three domain-specific modules**, each wi
    - Handles Plaid stream synchronization
    - Triggers period generation
 
-2. **`outflow_periods`** - Withholding Instances
+2. **`outflow_periods`** - Withholding Instances & Occurrence Tracking
    - Creates period-specific withholding allocations
    - Calculates daily withholding rates
-   - Tracks payment status per period
+   - **Tracks individual bill occurrences within periods**
+   - **Matches payments to specific occurrences**
    - Primary user interaction point for financial planning
 
 3. **`outflow_summaries`** - Period-Centric Aggregations
@@ -48,12 +49,13 @@ The Outflows System is organized into **three domain-specific modules**, each wi
    - Provides period-centric views for users
    - Powers summary tiles and dashboards
    - Maintains denormalized summary data
+   - **Centralized trigger system for real-time updates**
 
 ---
 
 ## Architecture
 
-### Module Structure (Updated December 2025)
+### Module Structure (Updated January 2026)
 
 ```
 outflows/
@@ -64,17 +66,22 @@ outflows/
 ├── outflow_main/               # MODULE 1: Recurring Bill Definitions
 │   ├── __tests__/              # Unit tests for outflow_main
 │   ├── admin/                  # Admin utilities
+│   │   └── index.ts
 │   ├── api/                    # Public API endpoints
+│   │   └── index.ts
 │   ├── crud/                   # Create/Read/Update/Delete operations
-│   │   └── createManualOutflow.ts
+│   │   ├── createManualOutflow.ts
+│   │   └── index.ts
 │   ├── dev/                    # Development and testing functions
 │   │   ├── createTestOutflows.ts
 │   │   ├── debugOutflowPeriods.ts
 │   │   ├── simulatePlaidRecurring.ts
-│   │   └── testOutflowUpdate.ts
+│   │   ├── testOutflowUpdate.ts
+│   │   └── index.ts
 │   ├── triggers/               # Firestore triggers
 │   │   ├── onOutflowCreated.ts
-│   │   └── onOutflowUpdated.ts
+│   │   ├── onOutflowUpdated.ts
+│   │   └── index.ts
 │   ├── types/                  # Type definitions
 │   │   └── index.ts
 │   └── utils/                  # Outflow-specific utilities
@@ -83,10 +90,14 @@ outflows/
 │       ├── batchCreateRecurringStreams.ts
 │       └── index.ts
 │
-├── outflow_periods/            # MODULE 2: Withholding Instances
+├── outflow_periods/            # MODULE 2: Withholding Instances & Occurrence Tracking
 │   ├── __tests__/              # Unit tests for outflow_periods
-│   │   └── calculateOutflowPeriodStatus.test.ts
+│   │   ├── calculateOutflowPeriodStatus.test.ts
+│   │   ├── calculateAllOccurrencesInPeriod.test.ts
+│   │   ├── findMatchingOccurrenceIndex.test.ts
+│   │   └── endToEnd.occurrenceTracking.test.ts
 │   ├── admin/                  # Admin utilities
+│   │   └── index.ts
 │   ├── api/                    # Public API endpoints
 │   │   ├── assignSplitToAllOutflowPeriods.ts
 │   │   ├── unassignSplitFromAllOutflowPeriods.ts
@@ -101,7 +112,10 @@ outflows/
 │   │   ├── debugTransactionMatching.ts
 │   │   └── index.ts
 │   ├── triggers/               # Firestore triggers
-│   │   └── onOutflowPeriodCreate.ts
+│   │   ├── onOutflowPeriodCreate.ts
+│   │   ├── onOutflowPeriodUpdate.ts      # NEW: Centralized summary update trigger
+│   │   ├── onOutflowPeriodDelete.ts      # NEW: Centralized summary delete trigger
+│   │   └── index.ts
 │   ├── types/                  # Type definitions
 │   │   └── index.ts
 │   └── utils/                  # Period-specific utilities
@@ -111,7 +125,8 @@ outflows/
 │       ├── checkIsDuePeriod.ts
 │       ├── calculateWithholdingAmount.ts
 │       ├── calculateOutflowPeriodStatus.ts
-│       ├── calculateAllOccurrencesInPeriod.ts
+│       ├── calculateAllOccurrencesInPeriod.ts   # NEW: Occurrence calculation
+│       ├── matchAllTransactionsToOccurrences.ts # NEW: Transaction matching
 │       ├── autoMatchTransactionToOutflowPeriods.ts
 │       ├── autoMatchSinglePeriod.ts
 │       ├── findMatchingOutflowPeriods.ts
@@ -123,14 +138,22 @@ outflows/
 └── outflow_summaries/          # MODULE 3: Period-Centric Aggregations
     ├── __tests__/              # Unit tests for summaries
     ├── admin/                  # Admin utilities
+    │   └── index.ts
     ├── api/                    # Public API endpoints
+    │   └── index.ts
     ├── crud/                   # CRUD operations
     │   ├── updateOutflowPeriodSummary.ts
     │   ├── deleteOutflowPeriodSummary.ts
+    │   ├── createOutflowPeriodSummary.ts         # NEW: Create summaries
+    │   ├── batchUpdateOutflowPeriodSummaries.ts  # NEW: Batch operations
     │   └── index.ts
     ├── dev/                    # Development functions
+    │   ├── regenerateAllSummaries.ts             # NEW: Regenerate all
+    │   └── index.ts
     ├── triggers/               # Firestore triggers
+    │   └── index.ts
     ├── types/                  # Type definitions
+    │   └── index.ts
     └── utils/                  # Summary-specific utilities
         ├── periodTypeHelpers.ts
         ├── batchUpdateSummary.ts
@@ -154,6 +177,8 @@ outflows/
 - Calculate daily withholding rate based on bill frequency
 - Track amount to set aside vs amount due in each period
 - Support all period types: Monthly, Bi-Monthly, Weekly
+- **Tracks individual occurrences** of bills within each period
+- **Matches payments to specific occurrences** for granular tracking
 - Automatically generated when outflow is created
 - Managed by **`outflow_periods`** module
 
@@ -162,6 +187,7 @@ outflows/
 - Groups periods by source period ID (e.g., "2025-M01")
 - Powers dashboard tiles and summary views
 - Denormalized data for fast queries
+- **Real-time updates via centralized triggers**
 - Managed by **`outflow_summaries`** module
 
 #### Source Periods (`source_periods` collection)
@@ -243,7 +269,21 @@ Manages recurring bill definitions from both Plaid and user-created sources.
 ## Module 2: Outflow Periods
 
 ### Purpose
-Manages period-specific withholding allocations and payment tracking.
+Manages period-specific withholding allocations, payment tracking, and **occurrence tracking**.
+
+### Key Concepts: Occurrence Tracking System
+
+**What is an Occurrence?**
+An occurrence represents a single instance of a recurring bill within a period. For example:
+- A weekly bill in a monthly period might have 4-5 occurrences
+- A monthly bill in a monthly period has 1 occurrence (when due)
+- A monthly bill in a non-due monthly period has 0 occurrences
+
+**Why Track Occurrences?**
+- **Granular payment tracking**: Match each payment to specific bill instance
+- **Accurate status calculation**: Know which specific bills are paid vs unpaid
+- **Better UX**: Show dots for each occurrence with paid/unpaid status
+- **Precise withholding**: Calculate exact amounts based on occurrence count
 
 ### Key Files
 
@@ -252,6 +292,7 @@ Manages period-specific withholding allocations and payment tracking.
   - Main period creation logic
   - Queries source_periods for date range
   - Calculates withholding amounts per period
+  - **Generates occurrences array for each period**
   - Batch creates period documents
   - Called by `onOutflowCreated` trigger
 
@@ -261,12 +302,14 @@ Manages period-specific withholding allocations and payment tracking.
   - Assigns split to ALL THREE period types (monthly, weekly, bi-weekly)
   - Updates transaction split with period references
   - Adds `TransactionSplitReference` to periods
+  - **Matches payment to specific occurrence**
   - Recalculates payment status
 
 - **`api/unassignSplitFromAllOutflowPeriods.ts`** - Remove split assignment
   - Callable Cloud Function
   - Clears split from all period types
   - Removes period references from split
+  - **Clears occurrence payment status**
   - Restores budget assignment if needed
 
 - **`api/getOutflowPeriodTransactions.ts`** - Get transactions for a period
@@ -279,6 +322,19 @@ Manages period-specific withholding allocations and payment tracking.
   - Firestore trigger on `outflow_periods` collection create
   - Future: Update summary documents
   - Future: Send notifications for upcoming bills
+
+- **`triggers/onOutflowPeriodUpdate.ts`** - **NEW: Centralized summary update trigger**
+  - Firestore trigger on `outflow_periods` collection update
+  - Detects changes to payment status, amounts, occurrences
+  - Calls `updateOutflowPeriodSummary()` to sync summary
+  - Handles both user and group summaries
+  - Ensures real-time summary consistency
+
+- **`triggers/onOutflowPeriodDelete.ts`** - **NEW: Centralized summary delete trigger**
+  - Firestore trigger on `outflow_periods` collection delete
+  - Calls `deleteOutflowPeriodSummary()` to remove from summary
+  - Recalculates summary totals
+  - Maintains summary data integrity
 
 #### Utilities (Period Creation)
 - **`utils/calculatePeriodGenerationRange.ts`** - Calculate date range for period generation
@@ -293,7 +349,7 @@ Manages period-specific withholding allocations and payment tracking.
 
 - **`utils/batchCreateOutflowPeriods.ts`** - Batch write periods to Firestore
   - Efficient batch operations (500 docs per batch)
-  - Constructs period documents
+  - Constructs period documents with occurrences
   - Handles Firestore batch limits
 
 #### Utilities (Period Calculations)
@@ -309,19 +365,44 @@ Manages period-specific withholding allocations and payment tracking.
 
 - **`utils/calculateOutflowPeriodStatus.ts`** - Determine period payment status
   - Returns: `pending`, `partial`, `paid`, `overdue`, `not_due`
-  - Compares payments to amount due
+  - **Uses occurrence tracking** for accurate status
+  - Compares payments to amount due per occurrence
   - Checks due dates for overdue detection
 
-- **`utils/calculateAllOccurrencesInPeriod.ts`** - Calculate bill occurrences
-  - For bills that occur multiple times per period
-  - Used in withholding calculations
-  - Handles edge cases (weekly bills in monthly periods)
+- **`utils/calculateAllOccurrencesInPeriod.ts`** - **NEW: Calculate bill occurrences**
+  - Core occurrence tracking logic
+  - Calculates number of times bill occurs in period
+  - Handles all frequency types (weekly, biweekly, monthly, annual)
+  - Returns array of `OutflowOccurrence` objects with:
+    - Due dates
+    - Amounts
+    - Payment status (isPaid)
+    - Payment references
+  - **Comprehensive test coverage** (18 test cases)
+  - Location: `outflow_periods/utils/calculateAllOccurrencesInPeriod.ts`
+
+#### Utilities (Occurrence Matching - NEW)
+- **`utils/matchAllTransactionsToOccurrences.ts`** - **NEW: Match payments to occurrences**
+  - Matches transaction splits to specific bill occurrences
+  - Called after payment assignment
+  - Algorithm:
+    1. Sort occurrences by due date (earliest first)
+    2. Sort payments by transaction date (earliest first)
+    3. Match each payment to earliest unpaid occurrence
+    4. Mark occurrence as paid and link payment
+  - Handles edge cases:
+    - More payments than occurrences (overpayment)
+    - More occurrences than payments (partial payment)
+    - Payments before due dates (advance payments)
+  - Updates both occurrences and transaction splits
+  - Location: `outflow_periods/utils/matchAllTransactionsToOccurrences.ts`
 
 #### Utilities (Transaction Matching)
 - **`utils/autoMatchTransactionToOutflowPeriods.ts`** - Auto-match transactions to periods
   - Matches historical Plaid transactions to outflow periods
   - Called after outflow creation
   - Determines payment type (regular, catch_up, advance)
+  - **Includes occurrence matching step**
 
 - **`utils/autoMatchSinglePeriod.ts`** - Match transactions to single period
   - Helper for auto-matching
@@ -337,12 +418,13 @@ Manages period-specific withholding allocations and payment tracking.
 - **`utils/predictFutureBillDueDate.ts`** - Calculate next bill due date
   - Projects forward from last date using frequency
   - Adjusts for weekends (Saturday/Sunday → Monday)
-  - Used in period calculations
+  - Used in period calculations and occurrence generation
 
 - **`utils/runUpdateOutflowPeriods.ts`** - Cascade outflow changes to periods
   - Called by `onOutflowUpdated` trigger
   - Updates unpaid periods only (preserves payment history)
   - Handles amount changes, name changes, transaction ID changes
+  - **Recalculates occurrences when amounts change**
   - Batch operations for efficiency
 
 - **`utils/updateBillStatus.ts`** - Update bill status
@@ -364,17 +446,46 @@ Manages period-specific withholding allocations and payment tracking.
   - HTTP request function
   - Shows matched/unmatched transactions
   - Validates auto-matching results
+  - **Shows occurrence matching details**
+
+#### Tests (NEW)
+- **`__tests__/calculateAllOccurrencesInPeriod.test.ts`** - Test occurrence calculations
+  - 18 comprehensive test cases
+  - Tests all frequency × period type combinations
+  - Validates edge cases (weekly in monthly, annual in monthly, etc.)
+  - Test matrix approach for thorough coverage
+
+- **`__tests__/findMatchingOccurrenceIndex.test.ts`** - Test occurrence matching logic
+  - Tests payment-to-occurrence matching algorithm
+  - Validates edge cases (overpayment, partial payment)
+  - Ensures correct occurrence selection
+
+- **`__tests__/endToEnd.occurrenceTracking.test.ts`** - End-to-end integration tests
+  - Tests complete occurrence tracking workflow
+  - Validates payment assignment → occurrence matching → status calculation
+  - Ensures data consistency across operations
+
+- **`__tests__/calculateOutflowPeriodStatus.test.ts`** - Test status calculations
+  - Tests all status types (pending, partial, paid, overdue, not_due)
+  - Validates occurrence-based status logic
 
 ---
 
 ## Module 3: Outflow Summaries
 
 ### Purpose
-Provides period-centric aggregation views for dashboard tiles and summary displays.
+Provides period-centric aggregation views for dashboard tiles and summary displays with **real-time updates via centralized triggers**.
 
 ### Key Concepts
 
 The summary system aggregates outflow periods by source period, creating denormalized summary documents that power fast queries for user dashboards.
+
+**Centralized Trigger Architecture (NEW):**
+- Summary updates are **triggered automatically** when outflow_periods change
+- `onOutflowPeriodUpdate` trigger → `updateOutflowPeriodSummary()`
+- `onOutflowPeriodDelete` trigger → `deleteOutflowPeriodSummary()`
+- Ensures summaries stay in sync with source data
+- No manual refresh needed
 
 **Example Summary Structure:**
 ```typescript
@@ -394,6 +505,8 @@ The summary system aggregates outflow periods by source period, creating denorma
         totalAmountDue: 89.99,
         totalAmountPaid: 0,
         isDuePeriod: true,
+        itemCount: 1,              // Occurrence count
+        fullyPaidCount: 0,         // Paid occurrence count
         // ... more fields
       }
     ],
@@ -406,14 +519,32 @@ The summary system aggregates outflow periods by source period, creating denorma
 
 #### CRUD Operations
 - **`crud/updateOutflowPeriodSummary.ts`** - Update summary when period changes
-  - Called by centralized summary triggers
+  - Called by `onOutflowPeriodUpdate` trigger
   - Recalculates affected period group
   - Updates both user and group summaries
+  - **Includes occurrence counts** in summary entries
 
 - **`crud/deleteOutflowPeriodSummary.ts`** - Update summary when period deleted
-  - Called by centralized summary triggers
+  - Called by `onOutflowPeriodDelete` trigger
   - Removes period from summary
   - Recalculates totals
+
+- **`crud/createOutflowPeriodSummary.ts`** - **NEW: Create new summary document**
+  - Called when first outflow period created for user/group
+  - Initializes summary structure
+  - Sets up period type-specific documents
+
+- **`crud/batchUpdateOutflowPeriodSummaries.ts`** - **NEW: Batch update operations**
+  - Update multiple summaries atomically
+  - Used for bulk operations (migrations, recalculations)
+  - Ensures consistency across summary documents
+
+#### Dev Functions (NEW)
+- **`dev/regenerateAllSummaries.ts`** - **NEW: Regenerate all user summaries**
+  - HTTP request function for admin use
+  - Rebuilds all summary documents from scratch
+  - Useful after schema changes or data migrations
+  - Validates summary data integrity
 
 #### Utilities
 - **`utils/periodTypeHelpers.ts`** - Determine period type from source period ID
@@ -433,6 +564,7 @@ The summary system aggregates outflow periods by source period, creating denorma
   - Queries all outflow_periods with given sourcePeriodId
   - Creates ONE OutflowPeriodEntry per period (no aggregation)
   - Fetches parent outflow data
+  - **Includes occurrence tracking data** (itemCount, fullyPaidCount)
   - Returns array ready for batch write
 
 - **`utils/updatePeriodNames.ts`** - Update denormalized names across entries
@@ -547,9 +679,12 @@ interface OutflowPeriod {
   amountWithheld: number;          // Amount to withhold in THIS period
   dailyWithholdingRate: number;    // Amount to withhold per day
 
-  // Occurrence tracking
+  // Occurrence tracking (NEW - 2025-12)
   occurrencesInPeriod: number;     // Number of bill occurrences
+  numberOfOccurrencesInPeriod: number; // Alias for compatibility
+  numberOfOccurrencesPaid: number; // Count of fully paid occurrences
   amountPerOccurrence: number;     // Amount per occurrence
+  occurrences: OutflowOccurrence[]; // Array of individual occurrences
 
   // Payment status
   isDuePeriod: boolean;            // Is bill due during this period?
@@ -575,6 +710,19 @@ interface OutflowPeriod {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastCalculated: Timestamp;       // Last calculation timestamp
+}
+
+// NEW: Individual occurrence within a period
+interface OutflowOccurrence {
+  id: string;                      // Unique ID for this occurrence
+  dueDate: Timestamp;              // When this occurrence is due
+  amountDue: number;               // Amount due for this occurrence
+  amountPaid: number;              // Amount paid for this occurrence
+  isPaid: boolean;                 // Payment status
+  paymentDate?: Timestamp;         // When payment was made
+  paymentType?: PaymentType;       // regular, catch_up, advance
+  transactionSplitId?: string;     // Reference to payment
+  notes?: string;                  // User notes for this occurrence
 }
 ```
 
@@ -609,6 +757,7 @@ interface OutflowPeriodEntry {
   // Period Identity
   periodId: string;                // Outflow period ID
   outflowId: string;               // Parent outflow ID
+  outflowPeriodId: string;         // Alias for periodId
   groupId: string;                 // Group ID (RBAC)
   merchant: string;                // Merchant name
   userCustomName: string;          // User's custom name
@@ -623,17 +772,165 @@ interface OutflowPeriodEntry {
   // Due Status
   isDuePeriod: boolean;            // Is due in this period
   duePeriodCount: number;          // Count of due periods (0 or 1)
+  nextUnpaidDueDate?: Timestamp;   // Next unpaid due date
+  firstDueDateInPeriod?: Timestamp; // First due date in period
+
+  // Occurrence Tracking (NEW - matches backend field names)
+  itemCount: number;               // Number of occurrences in period
+  fullyPaidCount: number;          // Number of fully paid occurrences
 
   // Status Breakdown
   statusCounts: OutflowStatusCounts; // Count by status
 
   // Progress Metrics
   paymentProgressPercentage: number; // 0-100
-  fullyPaidCount: number;          // Count fully paid
   unpaidCount: number;             // Count unpaid
-  itemCount: number;               // Always 1 (one entry per period)
 }
 ```
+
+---
+
+## Occurrence Tracking System (NEW - December 2025)
+
+### Overview
+
+The Occurrence Tracking System provides granular payment tracking for recurring bills by breaking down each period into individual bill occurrences. This enables precise status tracking, better UX with visual indicators (dots), and accurate withholding calculations.
+
+### Core Concepts
+
+**Occurrence**: A single instance of a recurring bill within a period
+- Example: Weekly bill in monthly period = 4-5 occurrences
+- Each occurrence has: due date, amount, payment status, payment reference
+
+**Occurrence Calculation**: Determines how many times a bill occurs
+- Uses bill frequency + period type + date range
+- Algorithm in `calculateAllOccurrencesInPeriod()`
+- Handles edge cases (monthly bill not due, annual bill, etc.)
+
+**Occurrence Matching**: Links payments to specific occurrences
+- Algorithm in `matchAllTransactionsToOccurrences()`
+- Matches earliest payment to earliest unpaid occurrence
+- Handles overpayment, partial payment, advance payment
+
+### Data Flow
+
+```
+1. Outflow Created
+   └→ calculateAllOccurrencesInPeriod()
+      └→ Generates occurrences array
+         └→ Each occurrence: { dueDate, amountDue, isPaid: false }
+
+2. Payment Assigned
+   └→ assignSplitToAllOutflowPeriods()
+      └→ matchAllTransactionsToOccurrences()
+         └→ Matches payment to specific occurrence
+            └→ Updates: { isPaid: true, amountPaid, paymentDate, transactionSplitId }
+
+3. Status Calculation
+   └→ calculateOutflowPeriodStatus()
+      └→ Counts paid vs unpaid occurrences
+         └→ Returns: pending/partial/paid/overdue/not_due
+
+4. Summary Update (Automatic)
+   └→ onOutflowPeriodUpdate trigger fires
+      └→ updateOutflowPeriodSummary()
+         └→ Updates itemCount, fullyPaidCount in summary
+```
+
+### Frontend Integration
+
+**Backend Field Names** (in `outflow_summary` collection):
+```typescript
+{
+  itemCount: 4,        // Number of occurrences
+  fullyPaidCount: 2    // Number paid
+}
+```
+
+**Frontend Display**:
+- Small/Medium/Large cards show occurrence dots
+- Green dot = paid occurrence
+- Gray dot = unpaid occurrence
+- "none" text when itemCount === 0
+
+**Data Mapping**:
+```typescript
+// Backend provides:
+const numberOfOccurrences = entry.itemCount;
+const numberOfOccurrencesPaid = entry.fullyPaidCount;
+
+// Frontend displays:
+// ● ● ○ ○ (2 paid, 2 unpaid)
+```
+
+### Key Functions
+
+#### `calculateAllOccurrencesInPeriod()`
+**Purpose**: Generate occurrence array for a period
+**Location**: `outflow_periods/utils/calculateAllOccurrencesInPeriod.ts`
+**Logic**:
+1. Check if bill is due in period (`checkIsDuePeriod()`)
+2. Calculate number of occurrences based on frequency
+3. Generate occurrence objects with due dates
+4. Return array of `OutflowOccurrence` objects
+
+**Test Coverage**: 18 test cases covering all combinations
+
+#### `matchAllTransactionsToOccurrences()`
+**Purpose**: Match payments to specific occurrences
+**Location**: `outflow_periods/utils/matchAllTransactionsToOccurrences.ts`
+**Algorithm**:
+1. Sort occurrences by due date (earliest first)
+2. Sort payments by transaction date (earliest first)
+3. For each payment:
+   - Find earliest unpaid occurrence
+   - Mark as paid
+   - Link payment reference
+4. Update both occurrences array and transaction splits
+
+**Edge Cases**:
+- More payments than occurrences: Mark all paid, track overpayment
+- More occurrences than payments: Some stay unpaid (partial)
+- Payments before due date: Still match to occurrence (advance payment)
+
+### Centralized Summary Updates
+
+**Trigger Architecture**:
+```
+outflow_period change
+    ↓
+onOutflowPeriodUpdate
+    ↓
+updateOutflowPeriodSummary()
+    ↓
+recalculatePeriodGroup()
+    ↓
+Updated summary with itemCount/fullyPaidCount
+```
+
+**Benefits**:
+- Real-time summary updates
+- No manual refresh needed
+- Consistent occurrence counts across views
+- Automatic propagation of payment status
+
+### Testing
+
+**Unit Tests**:
+- `calculateAllOccurrencesInPeriod.test.ts` - 18 test cases
+- `findMatchingOccurrenceIndex.test.ts` - Matching algorithm tests
+- `endToEnd.occurrenceTracking.test.ts` - Integration tests
+
+**Test Matrix** (sample):
+| Frequency | Period Type | Expected Occurrences | Status |
+|-----------|-------------|---------------------|--------|
+| WEEKLY | WEEKLY | 1 | ✅ PASS |
+| WEEKLY | MONTHLY | 4-5 | ✅ PASS |
+| BIWEEKLY | MONTHLY | 2-3 | ✅ PASS |
+| MONTHLY | MONTHLY (due) | 1 | ✅ PASS |
+| MONTHLY | MONTHLY (not due) | 0 | ✅ PASS |
+| ANNUALLY | MONTHLY (due) | 1 | ✅ PASS |
+| ANNUALLY | MONTHLY (not due) | 0 | ✅ PASS |
 
 ---
 
@@ -669,11 +966,13 @@ interface OutflowPeriodEntry {
 3. **Outflow period instances generated** from source_periods
    - Location: `outflow_periods/crud/createOutflowPeriods.ts`
    - 3 months of monthly, bi-monthly, and weekly instances created
+   - **Occurrences calculated** for each period
    - Batch written to `outflow_periods` collection
 
 4. **User can now view** withholding amounts in their budget
    - See how much to set aside each week/month
    - Track upcoming bill due dates
+   - **View occurrence dots** showing payment progress
 
 ### Plaid-Detected Recurring Transaction
 
@@ -683,7 +982,7 @@ interface OutflowPeriodEntry {
 2. **Plaid webhook** notifies system
 3. **Recurring outflow created** via `formatRecurringOutflows` → `enhanceRecurringOutflows` → `batchCreateRecurringStreams`
 4. **`onOutflowCreated` trigger fires** automatically
-5. **Outflow_periods generated** for planning
+5. **Outflow_periods generated** for planning with occurrences
 6. **User sees new bill** in their outflows list
 
 ### Assigning a Payment to a Bill
@@ -714,21 +1013,32 @@ interface OutflowPeriodEntry {
    - Updates transaction split with all three period references
    - Adds `TransactionSplitReference` to each period
 
-4. **Period status recalculated:**
-   - Location: `outflow_periods/utils/calculateOutflowPeriodStatus.ts`
-   - Compares payments to amount due
-   - Updates status (pending → paid)
+4. **Payment matched to occurrence:**
+   - Location: `outflow_periods/utils/matchAllTransactionsToOccurrences.ts`
+   - Finds appropriate occurrence based on payment date
+   - Marks occurrence as paid
+   - Links payment to occurrence
 
-5. **User sees updated status:**
-   - Monthly view: "Internet Bill - Paid"
-   - Weekly view: "Internet Bill - Paid"
+5. **Period status recalculated:**
+   - Location: `outflow_periods/utils/calculateOutflowPeriodStatus.ts`
+   - Counts paid occurrences vs total occurrences
+   - Updates status (pending → paid if all paid)
+
+6. **Summary automatically updated:**
+   - `onOutflowPeriodUpdate` trigger fires
+   - Updates `fullyPaidCount` in summary
+   - Real-time sync with frontend
+
+7. **User sees updated status:**
+   - Monthly view: "Internet Bill - Paid" with green dots
+   - Weekly view: "Internet Bill - Paid" with green dots
    - All views stay in sync
 
 ### Updating an Outflow
 
 **Module:** `outflow_main` + `outflow_periods`
 
-1. **User updates outflow** (e.g., changes custom name)
+1. **User updates outflow** (e.g., changes custom name or amount)
 2. **`onOutflowUpdated` trigger fires:**
    - Location: `outflow_main/triggers/onOutflowUpdated.ts`
    - Detects changed fields (averageAmount, userCustomName, transactionIds)
@@ -737,9 +1047,15 @@ interface OutflowPeriodEntry {
    - Location: `outflow_periods/utils/runUpdateOutflowPeriods.ts`
    - Queries all unpaid periods for this outflow
    - Updates amounts, names, or transaction assignments
+   - **Recalculates occurrences** if amounts changed
    - Batch writes changes
 
-4. **User sees updated data** in all views
+4. **Summary updates automatically:**
+   - `onOutflowPeriodUpdate` trigger fires for each updated period
+   - Summaries reflect new amounts/names
+   - Frontend sees changes immediately
+
+5. **User sees updated data** in all views
 
 ---
 
@@ -747,12 +1063,13 @@ interface OutflowPeriodEntry {
 
 ### Transaction Split Assignment
 
-The system supports assigning transaction splits to outflow periods for payment tracking. This enables users to link bank transactions to their recurring bills.
+The system supports assigning transaction splits to outflow periods for payment tracking. This enables users to link bank transactions to their recurring bills and track individual occurrence payments.
 
 **Key Feature:** **Multi-Period Assignment**
 - One transaction split can be assigned to ALL THREE period types simultaneously
 - Ensures consistency across monthly, weekly, and bi-weekly views
 - Bi-directional references (split ↔ period)
+- **Links to specific occurrences** within each period
 
 ### TransactionSplit Interface
 
@@ -819,14 +1136,16 @@ When an outflow is created (Plaid-detected), the system automatically matches hi
 
 **Process:**
 1. `onOutflowCreated` trigger fires
-2. After creating periods, calls `autoMatchTransactionToOutflowPeriods()`
+2. After creating periods with occurrences, calls `autoMatchTransactionToOutflowPeriods()`
 3. Fetches all transactions in `outflow.transactionIds` array
 4. For each transaction:
    - Finds matching outflow period based on date
    - Determines payment type (regular, catch_up, advance)
    - Assigns split to appropriate period
+   - **Matches payment to specific occurrence**
    - Sets `paymentDate` to match transaction date
 5. Recalculates all period statuses
+6. **Updates summaries automatically** via triggers
 
 **Location:** `outflow_periods/utils/autoMatchTransactionToOutflowPeriods.ts`
 
@@ -838,20 +1157,37 @@ When an outflow is created (Plaid-detected), the system automatically matches hi
 
 The summary system provides fast, aggregated views of outflow periods grouped by source period. This powers dashboard tiles and summary displays without expensive real-time aggregations.
 
+**NEW: Centralized Trigger System**
+- Summaries update **automatically** when outflow_periods change
+- No manual refresh or batch jobs needed
+- Real-time consistency across all views
+
 ### How It Works
 
-1. **Outflow period created/updated/deleted**
-2. **Centralized trigger fires** (future: in `summaries/` module)
-3. **Calls appropriate CRUD function:**
-   - `updateOutflowPeriodSummary()` for creates/updates
-   - `deleteOutflowPeriodSummary()` for deletes
-4. **CRUD function calls `batchUpdateSummary()`:**
+**Automatic Update Flow:**
+```
+1. Outflow period created/updated/deleted
+   ↓
+2. Firestore trigger fires automatically
+   - onCreate: onOutflowPeriodCreate
+   - onUpdate: onOutflowPeriodUpdate ← NEW
+   - onDelete: onOutflowPeriodDelete ← NEW
+   ↓
+3. Trigger calls appropriate CRUD function
+   - updateOutflowPeriodSummary() for creates/updates
+   - deleteOutflowPeriodSummary() for deletes
+   ↓
+4. CRUD function calls batchUpdateSummary()
    - Fetches current summary document
    - Executes recalculate operation for affected source period
+   - Includes occurrence tracking data (itemCount, fullyPaidCount)
    - Writes updated summary back to Firestore
-5. **Frontend queries summary collection:**
+   ↓
+5. Frontend queries summary collection
    - Fast reads (no aggregation needed)
    - Denormalized data ready for display
+   - Always up-to-date with source data
+```
 
 ### Summary Document Structure
 
@@ -863,8 +1199,22 @@ The summary system provides fast, aggregated views of outflow periods grouped by
   periodType: "MONTHLY",
   periods: {
     "2025-M01": [
-      { periodId: "...", merchant: "Comcast", totalAmountDue: 89.99, ... },
-      { periodId: "...", merchant: "Netflix", totalAmountDue: 15.99, ... }
+      {
+        periodId: "...",
+        merchant: "Comcast",
+        totalAmountDue: 89.99,
+        itemCount: 1,          // Occurrence count
+        fullyPaidCount: 0,     // Paid occurrence count
+        ...
+      },
+      {
+        periodId: "...",
+        merchant: "Netflix",
+        totalAmountDue: 15.99,
+        itemCount: 1,
+        fullyPaidCount: 1,     // Fully paid
+        ...
+      }
     ],
     "2025-M02": [ ... ]
   },
@@ -878,6 +1228,8 @@ The summary system provides fast, aggregated views of outflow periods grouped by
 - Groups entries by source period ID
 - Supports both user and group summaries
 - Separate documents for each period type (monthly, weekly, bi-monthly)
+- **Includes occurrence tracking** (itemCount, fullyPaidCount)
+- **Real-time updates** via centralized triggers
 
 ### Querying Summaries
 
@@ -889,7 +1241,13 @@ const summarySnap = await getDoc(summaryRef);
 if (summarySnap.exists()) {
   const summary = summarySnap.data();
   const january2025 = summary.periods['2025-M01'];
-  // Display january2025 entries in dashboard
+
+  // Each entry has occurrence tracking
+  january2025.forEach(entry => {
+    console.log(`${entry.merchant}: ${entry.fullyPaidCount}/${entry.itemCount} paid`);
+    // Example: "Netflix: 1/1 paid" (fully paid)
+    // Example: "Internet: 0/1 paid" (unpaid)
+  });
 }
 ```
 
@@ -910,6 +1268,7 @@ if (summarySnap.exists()) {
 - Withholding logic
 - Payment tracking and status
 - Transaction split assignments
+- **Occurrence tracking logic**
 - Period-level queries and operations
 
 #### When to add to `outflow_summaries`:
@@ -917,6 +1276,7 @@ if (summarySnap.exists()) {
 - Summary document updates
 - Dashboard data preparation
 - Period-centric views
+- **Centralized trigger processing**
 
 ### File Organization
 
@@ -934,6 +1294,7 @@ if (summarySnap.exists()) {
 - Place in `{module}/triggers/` directory
 - Export from main `outflows/index.ts`
 - Follow naming convention: `on{Resource}{Action}`
+- **Summary triggers** go in `outflow_periods/triggers/`
 
 **Dev/Testing:**
 - Place in `{module}/dev/` directory
@@ -961,6 +1322,7 @@ if (summarySnap.exists()) {
    - Keep trigger functions lightweight
    - Delegate heavy work to utility functions
    - Handle errors gracefully (don't break parent operations)
+   - **Always call summary update functions** for data consistency
 
 4. **Batch Operations:**
    - Use Firestore batch writes for efficiency
@@ -971,6 +1333,7 @@ if (summarySnap.exists()) {
    - Denormalize data for performance
    - Keep denormalized data in sync via triggers
    - Document which fields are denormalized
+   - **Include occurrence counts** in summaries
 
 6. **Error Handling:**
    - Always wrap async operations in try/catch
@@ -1011,6 +1374,8 @@ if (summarySnap.exists()) {
 | WEEKLY | WEEKLY | 1 | ✓ 1 | ✅ PASS |
 | WEEKLY | MONTHLY | 4-5 | ✓ 5 | ✅ PASS |
 | BIWEEKLY | MONTHLY | 2-3 | ✓ 3 | ✅ PASS |
+| MONTHLY | MONTHLY (due) | 1 | ✓ 1 | ✅ PASS |
+| MONTHLY | MONTHLY (not due) | 0 | ✓ 0 | ✅ PASS |
 
 #### Benefits:
 
@@ -1081,7 +1446,7 @@ if (summarySnap.exists()) {
 **Frontend Loading Strategy:**
 - **Summaries:** Query summary documents for dashboard displays
 - **Details:** Query individual periods for detail views
-- **Real-time:** Use Firestore listeners for live updates
+- **Real-time:** Use Firestore listeners for live updates (summaries auto-update)
 - **Pagination:** Limit queries to current + 1 future period
 
 **Backend Batch Operations:**
@@ -1096,10 +1461,16 @@ if (summarySnap.exists()) {
 - `expenseType`, `isEssential` from outflow
 - Kept in sync via `onOutflowUpdated` trigger
 
+**Denormalized Fields in Summaries:**
+- **Occurrence counts** (`itemCount`, `fullyPaidCount`)
+- Merchant names, amounts, status
+- Kept in sync via centralized summary triggers
+
 **Benefits:**
 - Fast queries (no joins needed)
 - Period documents are self-contained
 - Frontend can display periods without fetching outflows
+- **Real-time summary updates** without manual refresh
 
 **Trade-offs:**
 - Storage cost (duplicated data)
@@ -1114,17 +1485,28 @@ if (summarySnap.exists()) {
 
 **Test Files:**
 - `outflow_periods/__tests__/calculateOutflowPeriodStatus.test.ts`
+- `outflow_periods/__tests__/calculateAllOccurrencesInPeriod.test.ts` (NEW - 18 tests)
+- `outflow_periods/__tests__/findMatchingOccurrenceIndex.test.ts` (NEW)
+- `outflow_periods/__tests__/endToEnd.occurrenceTracking.test.ts` (NEW)
 
 **Coverage:**
 - Status calculation logic (pending, partial, paid, overdue, not_due)
-- Edge cases (no payments, overpayment, exact payment)
+- **Occurrence calculations** (all frequency × period type combinations)
+- **Occurrence matching** (payment to occurrence linking)
+- Edge cases (no payments, overpayment, exact payment, partial payment)
 - Date comparisons (past due, future due)
+
+**Test Matrix Coverage:**
+- 18 frequency × period type combinations
+- All edge cases documented
+- 100% pass rate verified
 
 **Future Tests:**
 - Withholding calculations
 - Period generation
 - Auto-matching logic
 - Summary aggregations
+- Centralized trigger flows
 
 ### Dev Testing Functions
 
@@ -1135,13 +1517,18 @@ if (summarySnap.exists()) {
 
 **`debugOutflowPeriods`:**
 - Returns diagnostic information
-- Shows calculation details
+- Shows calculation details including occurrences
 - Useful for troubleshooting
 
 **`extendOutflowPeriods`:**
 - Generates additional future periods
 - Tests long-term scenarios
 - Useful for year-end testing
+
+**`regenerateAllSummaries`:** (NEW)
+- Rebuilds all summary documents
+- Validates summary integrity
+- Useful after schema changes
 
 ### Emulator Testing
 
@@ -1163,11 +1550,56 @@ curl http://localhost:5001/{project}/us-central1/debugOutflowPeriods?userId=test
 
 # Test Plaid sync simulation
 curl http://localhost:5001/{project}/us-central1/simulatePlaidRecurring?userId=testUser
+
+# Test summary regeneration
+curl http://localhost:5001/{project}/us-central1/regenerateAllSummaries?userId=testUser
 ```
 
 ---
 
 ## Migration Notes
+
+### Occurrence Tracking Implementation (December 2025)
+
+Added per-occurrence payment tracking to outflow periods:
+
+**Changes:**
+1. ✅ Added `occurrences` array to OutflowPeriod interface
+2. ✅ Created `calculateAllOccurrencesInPeriod()` utility
+3. ✅ Created `matchAllTransactionsToOccurrences()` utility
+4. ✅ Updated period creation to generate occurrences
+5. ✅ Updated payment assignment to match occurrences
+6. ✅ Updated status calculation to use occurrences
+7. ✅ Updated summaries to include occurrence counts
+8. ✅ Added comprehensive test coverage (18+ tests)
+9. ✅ Frontend integration for occurrence dots display
+
+**Backend Field Names:**
+- `itemCount` - Number of occurrences
+- `fullyPaidCount` - Number of paid occurrences
+
+**Frontend Compatibility:**
+- Small/Medium/Large cards updated to read `itemCount`/`fullyPaidCount`
+- Display "none" when `itemCount === 0`
+- Show dots for each occurrence with paid status
+
+### Centralized Summary Triggers (December 2025)
+
+Implemented automatic summary updates via Firestore triggers:
+
+**Changes:**
+1. ✅ Created `onOutflowPeriodUpdate.ts` trigger
+2. ✅ Created `onOutflowPeriodDelete.ts` trigger
+3. ✅ Created `createOutflowPeriodSummary.ts` CRUD function
+4. ✅ Created `batchUpdateOutflowPeriodSummaries.ts` batch utility
+5. ✅ Created `regenerateAllSummaries.ts` dev function
+6. ✅ Updated summaries to include occurrence tracking data
+
+**Benefits:**
+- Real-time summary consistency
+- No manual refresh needed
+- Automatic propagation of occurrence counts
+- Simplified frontend logic
 
 ### Restructure (December 2025)
 
@@ -1204,39 +1636,283 @@ outflows/
 
 ---
 
+## Desired User Behavior
+
+**Purpose:** This section documents the intended user experience and interaction patterns for the outflows system. Use this to guide implementation decisions and ensure consistency.
+
+### User-Facing Features
+
+**Viewing Bills:**
+- [ ] Document expected behavior for viewing bill list
+- [ ] Document expected behavior for viewing bill details
+- [ ] Document expected behavior for occurrence dots display
+- [ ] Document expected behavior for filtering/sorting bills
+
+**Creating Bills:**
+- [ ] Document expected behavior for creating manual bills
+- [ ] Document expected behavior for editing bill details
+- [ ] Document expected behavior for deleting bills
+
+**Payment Tracking:**
+- [ ] Document expected behavior for assigning payments
+- [ ] Document expected behavior for viewing payment history
+- [ ] Document expected behavior for marking occurrences as paid
+- [ ] Document expected behavior for handling overpayments
+
+**Dashboard Interaction:**
+- [ ] Document expected behavior for summary tiles
+- [ ] Document expected behavior for period navigation
+- [ ] Document expected behavior for real-time updates
+
+**Notifications:**
+- [ ] Document expected behavior for bill reminders
+- [ ] Document expected behavior for overdue alerts
+- [ ] Document expected behavior for payment confirmations
+
+### UX Patterns
+
+**Loading States:**
+- [ ] Document loading indicators for bills
+- [ ] Document loading indicators for summaries
+- [ ] Document loading indicators for payment assignment
+
+**Error Handling:**
+- [ ] Document error messages for failed operations
+- [ ] Document retry behavior
+- [ ] Document fallback displays
+
+**Visual Feedback:**
+- [ ] Document success states (e.g., payment assigned)
+- [ ] Document status indicators (paid, unpaid, overdue)
+- [ ] Document occurrence dot behavior
+
+---
+
+## Function Flow
+
+**Purpose:** This section provides visual flow diagrams showing how data moves through the system and how functions interact.
+
+### Outflow Creation Flow
+
+```
+User Action: Create Manual Bill
+    ↓
+createManualOutflow (Callable)
+    ↓
+Write to /outflows/{outflowId}
+    ↓
+[TRIGGER] onOutflowCreated
+    ↓
+createOutflowPeriodsFromSource()
+    ↓
+Query source_periods (3 months)
+    ↓
+For each source period:
+    calculateAllOccurrencesInPeriod()
+        ↓
+    Generate OutflowOccurrence[]
+        ↓
+    Build period document with occurrences
+    ↓
+Batch write to /outflow_periods/
+    ↓
+[TRIGGER] onOutflowPeriodCreate (for each period)
+    ↓
+(Future: Summary creation)
+```
+
+### Payment Assignment Flow
+
+```
+User Action: Assign Payment to Bill
+    ↓
+assignSplitToAllOutflowPeriods (Callable)
+    ↓
+findMatchingOutflowPeriods()
+    ↓
+Find monthly, weekly, bi-weekly periods
+    ↓
+For each period:
+    Read current transactionSplits[]
+    Add TransactionSplitReference
+    ↓
+    matchAllTransactionsToOccurrences()
+        ↓
+    Sort occurrences by dueDate
+    Sort payments by transactionDate
+        ↓
+    Match payment to earliest unpaid occurrence
+        ↓
+    Update occurrence: { isPaid: true, transactionSplitId, ... }
+    ↓
+    calculateOutflowPeriodStatus()
+        ↓
+    Count paid vs unpaid occurrences
+        ↓
+    Return status (pending/partial/paid/overdue/not_due)
+    ↓
+Batch update all three period types
+    ↓
+Update transaction split with period references
+    ↓
+[TRIGGER] onOutflowPeriodUpdate (for each period)
+    ↓
+updateOutflowPeriodSummary()
+    ↓
+Update itemCount, fullyPaidCount in summary
+    ↓
+Frontend sees real-time update
+```
+
+### Summary Update Flow (Centralized Triggers)
+
+```
+Change to /outflow_periods/{periodId}
+    ↓
+[TRIGGER] onOutflowPeriodUpdate OR onOutflowPeriodDelete
+    ↓
+Extract: userId, periodType, sourcePeriodId
+    ↓
+Call updateOutflowPeriodSummary() OR deleteOutflowPeriodSummary()
+    ↓
+batchUpdateSummary()
+    ↓
+Fetch summary document:
+    /outflow_summary/{userId}_outflowsummary_{periodType}
+    ↓
+recalculatePeriodGroup(sourcePeriodId)
+    ↓
+Query all periods with sourcePeriodId:
+    WHERE sourcePeriodId == "2025-M01"
+    ↓
+For each period:
+    Fetch parent outflow data
+    Build OutflowPeriodEntry with:
+        - itemCount (occurrencesInPeriod)
+        - fullyPaidCount (numberOfOccurrencesPaid)
+        - All other summary fields
+    ↓
+Replace summary.periods[sourcePeriodId] with new array
+    ↓
+Write updated summary to Firestore
+    ↓
+Frontend listeners receive update
+    ↓
+UI refreshes with new occurrence counts
+```
+
+### Plaid Recurring Sync Flow
+
+```
+Plaid Webhook: Recurring transactions detected
+    ↓
+syncRecurringTransactions()
+    ↓
+Call Plaid API: /transactions/recurring/get
+    ↓
+Receive outflow_streams[]
+    ↓
+formatRecurringOutflows() - Step 1
+    ↓
+Flatten amount fields, normalize dates
+    ↓
+enhanceRecurringOutflows() - Step 2
+    ↓
+Determine expense type, essential status
+    ↓
+batchCreateRecurringStreams() - Step 3
+    ↓
+For each stream:
+    Check if exists (by streamId + userId)
+    ↓
+    If exists: UPDATE (preserve user mods)
+    If new: CREATE
+    ↓
+Write to /outflows/
+    ↓
+[TRIGGER] onOutflowCreated (if new)
+    ↓
+(Follow "Outflow Creation Flow" above)
+```
+
+### Occurrence Calculation Flow
+
+```
+Input: Outflow, SourcePeriod
+    ↓
+calculateAllOccurrencesInPeriod()
+    ↓
+checkIsDuePeriod(outflow, period)
+    ↓
+If NOT due: return []
+If due: continue
+    ↓
+Determine occurrence count:
+    WEEKLY in WEEKLY: 1
+    WEEKLY in MONTHLY: 4-5
+    BIWEEKLY in MONTHLY: 2-3
+    MONTHLY in MONTHLY: 1 (if due)
+    ANNUALLY in MONTHLY: 1 (if due month)
+    ↓
+Generate occurrences array:
+    For each occurrence:
+        Calculate dueDate (predictFutureBillDueDate)
+        Set amountDue
+        Set isPaid = false
+        Generate unique ID
+    ↓
+Return OutflowOccurrence[]
+    ↓
+Store in period.occurrences
+```
+
+---
+
 ## Future Enhancements
 
 ### Planned Features
 
 **Payment Tracking:**
-- Mark bills as paid in outflow_periods
-- Track payment history
-- Auto-detect payments from linked accounts
-- Payment reminders and notifications
+- ✅ Mark bills as paid in outflow_periods (COMPLETED)
+- ✅ Track payment history (COMPLETED via occurrences)
+- ✅ Auto-detect payments from linked accounts (COMPLETED via Plaid)
+- [ ] Payment reminders and notifications
+- [ ] Smart payment scheduling
+
+**Occurrence Tracking:**
+- ✅ Per-occurrence payment status (COMPLETED)
+- ✅ Visual occurrence dots (COMPLETED)
+- ✅ Occurrence matching algorithm (COMPLETED)
+- [ ] Occurrence editing (manual override of auto-calculated occurrences)
+- [ ] Occurrence notes and attachments
+- [ ] Occurrence-level notifications
 
 **Smart Recommendations:**
-- Suggest optimal withholding strategy
-- Alert when bills are increasing
-- Identify cancellable subscriptions
-- Budget optimization suggestions
+- [ ] Suggest optimal withholding strategy
+- [ ] Alert when bills are increasing
+- [ ] Identify cancellable subscriptions
+- [ ] Budget optimization suggestions
+- [ ] Detect unusual payment patterns
 
 **Group Collaboration:**
-- Shared household bills
-- Split bill responsibilities
-- Group bill dashboard
-- Payment tracking across group members
+- [ ] Shared household bills
+- [ ] Split bill responsibilities
+- [ ] Group bill dashboard
+- [ ] Payment tracking across group members
 
 **Advanced Analytics:**
-- Bill spending trends over time
-- Category breakdown of recurring expenses
-- Essential vs non-essential analysis
-- Year-over-year comparisons
+- [ ] Bill spending trends over time
+- [ ] Category breakdown of recurring expenses
+- [ ] Essential vs non-essential analysis
+- [ ] Year-over-year comparisons
+- [ ] Occurrence-based insights (payment consistency, etc.)
 
 **Summary Enhancements:**
-- Real-time summary updates via triggers
-- Configurable aggregation levels (by merchant, by category)
-- Historical summaries (archive old periods)
-- Performance monitoring and optimization
+- ✅ Real-time summary updates via triggers (COMPLETED)
+- ✅ Occurrence tracking in summaries (COMPLETED)
+- [ ] Configurable aggregation levels (by merchant, by category)
+- [ ] Historical summaries (archive old periods)
+- [ ] Performance monitoring and optimization
 
 ---
 
@@ -1244,8 +1920,8 @@ outflows/
 
 ### Module Organization
 - **outflow_main** = Recurring bill definitions (Plaid + user-created)
-- **outflow_periods** = Withholding instances (period calculations)
-- **outflow_summaries** = Period-centric aggregations (dashboard views)
+- **outflow_periods** = Withholding instances + occurrence tracking
+- **outflow_summaries** = Period-centric aggregations + centralized triggers
 
 ### Key Principles
 - ✅ Each module is self-contained with its own utilities, types, tests
@@ -1253,6 +1929,8 @@ outflows/
 - ✅ Triggers live in the module that owns the collection they watch
 - ✅ Public APIs exported from module-specific locations
 - ✅ Dev/testing functions in `{module}/dev/` directories
+- ✅ **Occurrence tracking** is core to payment status calculation
+- ✅ **Centralized triggers** maintain summary consistency
 
 ### When Adding New Code
 1. **Determine which module** the code belongs to
@@ -1261,12 +1939,14 @@ outflows/
 4. **Update module's index.ts** to export new functionality
 5. **Add tests** in module's `__tests__/` directory
 6. **Update this documentation** if adding new concepts
+7. **Consider occurrence impact** if changing payment logic
+8. **Update summary triggers** if changing period data
 
 ### Critical Paths
-- Outflow creation: `outflow_main/crud/` → `outflow_main/triggers/onOutflowCreated` → `outflow_periods/crud/createOutflowPeriods`
-- Period updates: `outflow_main/triggers/onOutflowUpdated` → `outflow_periods/utils/runUpdateOutflowPeriods`
-- Payment assignment: `outflow_periods/api/assignSplitToAllOutflowPeriods` → `outflow_periods/utils/findMatchingOutflowPeriods`
-- Summary updates: `outflow_summaries/crud/updateOutflowPeriodSummary` → `outflow_summaries/utils/batchUpdateSummary` → `outflow_summaries/utils/recalculatePeriodGroup`
+- Outflow creation: `outflow_main/crud/` → `outflow_main/triggers/onOutflowCreated` → `outflow_periods/crud/createOutflowPeriods` → **occurrence generation**
+- Period updates: `outflow_main/triggers/onOutflowUpdated` → `outflow_periods/utils/runUpdateOutflowPeriods` → **occurrence recalculation**
+- Payment assignment: `outflow_periods/api/assignSplitToAllOutflowPeriods` → `outflow_periods/utils/findMatchingOutflowPeriods` → **occurrence matching**
+- Summary updates: **`outflow_periods/triggers/onOutflowPeriodUpdate`** → `outflow_summaries/crud/updateOutflowPeriodSummary` → `outflow_summaries/utils/batchUpdateSummary` → `outflow_summaries/utils/recalculatePeriodGroup`
 
 ### Common Pitfalls
 - ❌ Don't create shared utilities in `/utils/` - use module-specific utils
@@ -1274,9 +1954,22 @@ outflows/
 - ❌ Don't forget to update index files when adding new functions
 - ❌ Don't skip tests - especially for calculation logic
 - ❌ Don't use `any` types - TypeScript strict mode is enforced
+- ❌ **Don't forget to update summaries** when changing period data
+- ❌ **Don't ignore occurrences** when calculating payment status
+- ❌ **Don't use singular field names** - backend uses `itemCount`/`fullyPaidCount`
+
+### Occurrence Tracking Reminders
+- ✅ Always generate occurrences when creating periods
+- ✅ Always recalculate occurrences when amounts change
+- ✅ Always match payments to occurrences when assigning
+- ✅ Always include occurrence counts in summaries
+- ✅ Frontend reads `itemCount` and `fullyPaidCount` from summaries
+- ✅ Display "none" when `itemCount === 0`
 
 ### Reference Documents
 - Main architecture: `/CLAUDE.md`
 - RBAC implementation: `/RBAC_IMPLEMENTATION_STATUS.md`
 - Restructure history: `/Restructure_Plan.md`
 - Type definitions: `/src/types/index.ts`
+- **Occurrence tracking tests**: `outflow_periods/__tests__/calculateAllOccurrencesInPeriod.test.ts`
+- **End-to-end tests**: `outflow_periods/__tests__/endToEnd.occurrenceTracking.test.ts`
