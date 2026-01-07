@@ -3,6 +3,8 @@
  *
  * When a new budget_period is created, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
 export declare const onBudgetPeriodCreatedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     budgetPeriodId: string;
@@ -12,6 +14,8 @@ export declare const onBudgetPeriodCreatedPeriodSummary: import("firebase-functi
  *
  * When a budget_period is updated, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
 export declare const onBudgetPeriodUpdatedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     budgetPeriodId: string;
@@ -21,6 +25,8 @@ export declare const onBudgetPeriodUpdatedPeriodSummary: import("firebase-functi
  *
  * When a budget_period is deleted, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
 export declare const onBudgetPeriodDeletedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     budgetPeriodId: string;

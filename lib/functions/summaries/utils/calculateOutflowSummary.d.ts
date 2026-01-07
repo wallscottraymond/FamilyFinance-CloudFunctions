@@ -1,5 +1,5 @@
 import { OutflowPeriod } from "../../../types";
-import { OutflowEntry } from "../../../types/periodSummaries";
+import { OutflowEntry } from "../types/periodSummaries";
 /**
  * Calculates outflow entries from outflow periods
  *

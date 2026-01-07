@@ -1,12 +1,72 @@
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { BudgetPeriodDocument } from "../../../types";
 import { updateUserPeriodSummary } from "../orchestration/updateUserPeriodSummary";
+
+const db = getFirestore();
+
+// Debounce interval in milliseconds (5 seconds)
+const SUMMARY_UPDATE_DEBOUNCE_MS = 5000;
+
+/**
+ * Check if a user_summary document was recently updated
+ *
+ * This prevents cascading trigger storms when multiple budget_periods
+ * are created/updated rapidly (e.g., when a budget is created, it generates
+ * ~78 budget_period documents, which would trigger 78 summary updates).
+ *
+ * @param userId - User ID
+ * @param periodType - Period type (MONTHLY, BI_MONTHLY, WEEKLY)
+ * @param sourcePeriodId - Source period ID
+ * @returns true if summary was recently updated (within debounce window)
+ */
+async function wasRecentlyUpdated(
+  userId: string,
+  periodType: string,
+  sourcePeriodId: string
+): Promise<boolean> {
+  try {
+    const summaryId = `${userId}_${periodType.toLowerCase()}_${sourcePeriodId}`;
+    const summaryRef = db.collection("user_summaries").doc(summaryId);
+    const summarySnap = await summaryRef.get();
+
+    if (!summarySnap.exists) {
+      // Document doesn't exist yet, so it wasn't recently updated
+      return false;
+    }
+
+    const summaryData = summarySnap.data();
+    const lastRecalculated = summaryData?.lastRecalculated;
+
+    if (!lastRecalculated) {
+      // No lastRecalculated timestamp, allow update
+      return false;
+    }
+
+    const timeSinceLastUpdate = Date.now() - lastRecalculated.toMillis();
+
+    if (timeSinceLastUpdate < SUMMARY_UPDATE_DEBOUNCE_MS) {
+      console.log(
+        `[Debounce] Summary ${summaryId} was updated ${timeSinceLastUpdate}ms ago, skipping recalculation`
+      );
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("[Debounce] Error checking recent update:", error);
+    // On error, allow the update to proceed
+    return false;
+  }
+}
 
 /**
  * Trigger: Update user period summary when a budget period is created
  *
  * When a new budget_period is created, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
 export const onBudgetPeriodCreatedPeriodSummary = onDocumentCreated(
   "budget_periods/{budgetPeriodId}",
@@ -29,6 +89,20 @@ export const onBudgetPeriodCreatedPeriodSummary = onDocumentCreated(
     }
 
     try {
+      // Check if summary was recently updated (debounce)
+      const recentlyUpdated = await wasRecentlyUpdated(
+        budgetPeriod.userId,
+        String(budgetPeriod.periodType),
+        budgetPeriod.sourcePeriodId
+      );
+
+      if (recentlyUpdated) {
+        console.log(
+          `[onBudgetPeriodCreatedPeriodSummary] Skipping update due to recent recalculation`
+        );
+        return;
+      }
+
       // Update the user period summary for this period
       await updateUserPeriodSummary(
         budgetPeriod.userId,
@@ -55,6 +129,8 @@ export const onBudgetPeriodCreatedPeriodSummary = onDocumentCreated(
  *
  * When a budget_period is updated, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
 export const onBudgetPeriodUpdatedPeriodSummary = onDocumentUpdated(
   "budget_periods/{budgetPeriodId}",
@@ -77,6 +153,20 @@ export const onBudgetPeriodUpdatedPeriodSummary = onDocumentUpdated(
     }
 
     try {
+      // Check if summary was recently updated (debounce)
+      const recentlyUpdated = await wasRecentlyUpdated(
+        budgetPeriod.userId,
+        String(budgetPeriod.periodType),
+        budgetPeriod.sourcePeriodId
+      );
+
+      if (recentlyUpdated) {
+        console.log(
+          `[onBudgetPeriodUpdatedPeriodSummary] Skipping update due to recent recalculation`
+        );
+        return;
+      }
+
       // Update the user period summary for this period
       await updateUserPeriodSummary(
         budgetPeriod.userId,
@@ -103,6 +193,8 @@ export const onBudgetPeriodUpdatedPeriodSummary = onDocumentUpdated(
  *
  * When a budget_period is deleted, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
 export const onBudgetPeriodDeletedPeriodSummary = onDocumentDeleted(
   "budget_periods/{budgetPeriodId}",
@@ -125,6 +217,20 @@ export const onBudgetPeriodDeletedPeriodSummary = onDocumentDeleted(
     }
 
     try {
+      // Check if summary was recently updated (debounce)
+      const recentlyUpdated = await wasRecentlyUpdated(
+        budgetPeriod.userId,
+        String(budgetPeriod.periodType),
+        budgetPeriod.sourcePeriodId
+      );
+
+      if (recentlyUpdated) {
+        console.log(
+          `[onBudgetPeriodDeletedPeriodSummary] Skipping update due to recent recalculation`
+        );
+        return;
+      }
+
       // Update the user period summary for this period
       await updateUserPeriodSummary(
         budgetPeriod.userId,

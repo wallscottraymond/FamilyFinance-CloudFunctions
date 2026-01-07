@@ -5,7 +5,6 @@ export * from "./users";
 export * from "./groups";
 export * from "./sharing";
 export * from "./outflowSummaries";
-export * from "./periodSummaries";
 export interface BaseDocument {
     id?: string;
     createdAt: Timestamp;
@@ -370,6 +369,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
     lastExtended?: Timestamp;
     isOngoing: boolean;
     budgetEndDate?: Timestamp;
+    isSystemEverythingElse?: boolean;
 }
 export declare enum BudgetPeriod {
     WEEKLY = "weekly",
@@ -604,6 +604,8 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
     periodEnd: Timestamp;
     allocatedAmount: number;
     originalAmount: number;
+    spent?: number;
+    remaining?: number;
     userNotes?: string;
     modifiedAmount?: number;
     isModified: boolean;

@@ -8,5 +8,7 @@ export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 export { verifyAccessControl } from "./verifyAccessControl";
 export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
+export { debugUserSummaryUpdate } from "./debugUserSummaryUpdate";
+export { fixBudgetPeriodUserIds } from "./fixBudgetPeriodUserIds";
 export { removeAllUserAccounts, removeAllUserBudgets, removeAllUserOutflows, removeAllUserInflows, removeAllUserTransactions, removeAllUserData } from "./cleanupUserData";
 //# sourceMappingURL=index.d.ts.map

@@ -86,10 +86,12 @@ export interface BudgetEntry {
     budgetPeriodId: string;
     budgetName: string;
     categoryId: string;
+    maxAmount: number;
     totalAllocated: number;
     totalSpent: number;
     totalRemaining: number;
     averageBudget: number;
+    userNotes?: string;
     progressPercentage: number;
     checklistItemsCount?: number;
     checklistItemsCompleted?: number;

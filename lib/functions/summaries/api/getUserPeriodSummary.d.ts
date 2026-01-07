@@ -1,4 +1,4 @@
-import { UserPeriodSummary } from "../../../types/periodSummaries";
+import { UserPeriodSummary } from "../types/periodSummaries";
 /**
  * API: Get User Period Summary
  *

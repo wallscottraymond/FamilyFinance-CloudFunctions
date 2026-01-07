@@ -1,5 +1,5 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { UserPeriodSummary } from "../../../types/periodSummaries";
+import { UserPeriodSummary } from "../types/periodSummaries";
 import { fetchSourcePeriod } from "./fetchSourcePeriod";
 import { fetchOutflowsBatch } from "./fetchOutflowsBatch";
 import { fetchBudgetsBatch } from "./fetchBudgetsBatch";
@@ -43,7 +43,7 @@ export async function calculateUserPeriodSummary(
   // Step 2: Fetch all resource periods in parallel
   const [outflowPeriods, budgetPeriods, inflowPeriods] = await Promise.all([
     fetchOutflowsBatch(userId, sourcePeriodId),
-    fetchBudgetsBatch(userId, sourcePeriodId),
+    fetchBudgetsBatch(userId, sourcePeriodId, periodType),
     fetchInflowsBatch(userId, sourcePeriodId),
   ]);
 

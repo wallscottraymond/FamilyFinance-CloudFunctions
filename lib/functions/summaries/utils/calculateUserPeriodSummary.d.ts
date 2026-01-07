@@ -1,4 +1,4 @@
-import { UserPeriodSummary } from "../../../types/periodSummaries";
+import { UserPeriodSummary } from "../types/periodSummaries";
 /**
  * Calculates a complete user period summary
  *

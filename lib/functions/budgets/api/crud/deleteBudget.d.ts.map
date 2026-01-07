@@ -1,1 +1,1 @@
-{"version":3,"file":"deleteBudget.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/crud/deleteBudget.ts"],"names":[],"mappings":"AAiBA;;GAEG;AACH,eAAO,MAAM,YAAY,qDA4EvB,CAAC"}
+{"version":3,"file":"deleteBudget.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/crud/deleteBudget.ts"],"names":[],"mappings":"AAiBA;;GAEG;AACH,eAAO,MAAM,YAAY,qDAsFvB,CAAC"}
