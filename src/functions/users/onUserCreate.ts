@@ -21,6 +21,7 @@ import {
   setUserClaims
 } from "../../utils/auth";
 import { preCreateUserPeriodSummaries } from "../summaries/orchestration/preCreateUserPeriodSummaries";
+import { createEverythingElseBudget } from "../budgets/utils/createEverythingElseBudget";
 
 /**
  * Create user profile (triggered on user registration)
@@ -115,7 +116,7 @@ export const onUserCreate = functions.region("us-central1").runWith({
       email: userRecord.email || "",
       displayName: userRecord.displayName || userRecord.email?.split("@")[0] || "User",
       photoURL: userRecord.photoURL,
-      role: UserRole.VIEWER, // Default role, will be updated when joining/creating family
+      role: UserRole.EDITOR, // Default role - allows users to create budgets/transactions
       preferences: defaultPreferences,
       isActive: true,
     };
@@ -124,8 +125,8 @@ export const onUserCreate = functions.region("us-central1").runWith({
     await createDocument<User>("users", userData, userRecord.uid);
 
     // Set custom claims for role-based access
-    await setUserClaims(userRecord.uid, { 
-      role: UserRole.VIEWER
+    await setUserClaims(userRecord.uid, {
+      role: UserRole.EDITOR
     });
 
     // Log successful creation
@@ -135,6 +136,16 @@ export const onUserCreate = functions.region("us-central1").runWith({
     // This runs asynchronously to avoid blocking user account creation
     preCreateUserPeriodSummaries(userRecord.uid).catch((error) => {
       console.error(`Error pre-creating summaries for ${userRecord.uid}:`, error);
+      // Don't throw - user account creation was successful
+    });
+
+    // Create "everything else" system budget (catch-all for unassigned transactions)
+    // This runs asynchronously to avoid blocking user account creation
+    const db = admin.firestore();
+    createEverythingElseBudget(db, userRecord.uid, detectedCurrency).then((budgetId) => {
+      console.log(`✅ Created "everything else" budget for user ${userRecord.uid}: ${budgetId}`);
+    }).catch((error) => {
+      console.error(`❌ Failed to create "everything else" budget for user ${userRecord.uid}:`, error);
       // Don't throw - user account creation was successful
     });
 

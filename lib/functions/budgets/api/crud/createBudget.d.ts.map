@@ -1,1 +1,1 @@
-{"version":3,"file":"createBudget.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/crud/createBudget.ts"],"names":[],"mappings":"AA0BA;;GAEG;AACH,eAAO,MAAM,YAAY,qDAyLvB,CAAC"}
+{"version":3,"file":"createBudget.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/crud/createBudget.ts"],"names":[],"mappings":"AAEA,OAAO,EACL,MAAM,EAIP,MAAM,mBAAmB,CAAC;AAc3B;;;;GAIG;AACH,eAAO,MAAM,YAAY,8EA+LvB,CAAC"}

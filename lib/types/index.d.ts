@@ -441,6 +441,8 @@ export interface UpdateTransactionRequest {
     category?: string;
     location?: TransactionLocation;
     tags?: string[];
+    splits?: TransactionSplit[];
+    transactionDate?: string | Timestamp;
 }
 export interface AddTransactionSplitRequest {
     transactionId: string;
