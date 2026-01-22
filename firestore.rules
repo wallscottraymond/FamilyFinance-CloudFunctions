@@ -292,10 +292,11 @@ service cloud.firestore {
       // Users can update their own transactions (splits, notes, visibility)
       // Parents/Admins can update family transactions
       // NEW FLAT STRUCTURE: Uses ownerId and groupId
+      // CRITICAL: Enforces immutable fields (transactionDate, ownerId, userId, amount)
       allow update: if isAuthenticated() && (
                        isOwner(resource.data.ownerId) ||
                        (resource.data.groupId != null && canManage() && inSameFamily(resource.data.groupId))
-                    );
+                    ) && isValidTransactionUpdate();
 
       // Users can delete their own manual transactions
       // Admins can delete any transaction
@@ -997,7 +998,10 @@ service cloud.firestore {
       let validFieldChanges = changedFields.hasOnly(allowedFields);
       
       // Prevent changing core immutable fields (if they exist)
+      // CRITICAL: transactionDate is immutable to prevent budget tracking issues
       let coreFieldsUnchanged = (!('userId' in data) || data.userId == resource_data.userId) &&
+                               (!('ownerId' in data) || data.ownerId == resource_data.ownerId) &&
+                               (!('transactionDate' in data) || data.transactionDate == resource_data.transactionDate) &&
                                (!('amount' in data) || data.amount == resource_data.amount);
       
       // For now, skip complex split validation to get basic updates working

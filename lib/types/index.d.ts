@@ -228,6 +228,7 @@ export declare enum PaymentType {
 export interface TransactionSplit {
     splitId: string;
     budgetId: string;
+    budgetName?: string;
     monthlyPeriodId: string | null;
     weeklyPeriodId: string | null;
     biWeeklyPeriodId: string | null;

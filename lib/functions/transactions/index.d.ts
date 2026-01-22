@@ -36,6 +36,7 @@ export { onTransactionCreate } from "./orchestration/triggers/onTransactionCreat
 export { onTransactionUpdate } from "./orchestration/triggers/onTransactionUpdate";
 export { onTransactionDelete } from "./orchestration/triggers/onTransactionDelete";
 export { createTestTransactions } from "./dev/createTestTransactions";
+export { createTestTransactionsByCategory } from "./dev/createTestTransactionsByCategory";
 /**
  * Function Overview:
  *

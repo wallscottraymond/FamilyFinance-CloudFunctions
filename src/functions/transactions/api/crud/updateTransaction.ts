@@ -87,6 +87,13 @@ export const updateTransaction = onRequest({
 
       const updateData = validation.value!;
 
+      // CRITICAL: Transaction dates are immutable - reject any attempt to change the date
+      if (updateData.transactionDate) {
+        return response.status(400).json(
+          createErrorResponse("immutable-field", "Transaction date cannot be modified after creation. Please delete and recreate the transaction with the correct date.")
+        );
+      }
+
       // Phase 1 & 2: Validate and reassign splits if they're being updated
       if (updateData.splits && updateData.splits.length > 0) {
         console.log(`[updateTransaction] Validating and reassigning ${updateData.splits.length} splits`);

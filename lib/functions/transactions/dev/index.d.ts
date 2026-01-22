@@ -8,4 +8,5 @@
  * DO NOT deploy these functions to production.
  */
 export { createTestTransactions } from './createTestTransactions';
+export { createTestTransactionsByCategory } from './createTestTransactionsByCategory';
 //# sourceMappingURL=index.d.ts.map
