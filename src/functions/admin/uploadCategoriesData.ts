@@ -1482,7 +1482,11 @@ export const uploadCategoriesData = onCall({ cors: true }, async (request) => {
       
       batchCategories.forEach((categoryId) => {
         const categoryRef = db.collection('categories').doc(categoryId);
-        batch.set(categoryRef, fullCategoriesData[categoryId]);
+        // Add isActive: true to all categories
+        batch.set(categoryRef, {
+          ...fullCategoriesData[categoryId],
+          isActive: true
+        });
       });
       
       await batch.commit();

@@ -10,6 +10,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { Transaction, UserRole } from "../../../../types";
 import { getDocument, updateDocument } from "../../../../utils/firestore";
+import * as admin from "firebase-admin";
 import {
   authMiddleware,
   createErrorResponse,
@@ -19,6 +20,8 @@ import {
 import { validateRequest, updateTransactionSchema } from "../../../../utils/validation";
 import { firebaseCors } from "../../../../middleware/cors";
 import { updateBudgetSpending } from "../../../../utils/budgetSpending";
+import { validateAndFixBudgetIds } from "../../utils/validateBudgetIds";
+import { matchTransactionSplitsToBudgets } from "../../utils/matchTransactionSplitsToBudgets";
 
 /**
  * Update transaction
@@ -84,11 +87,58 @@ export const updateTransaction = onRequest({
 
       const updateData = validation.value!;
 
+      // Phase 1 & 2: Validate and reassign splits if they're being updated
+      if (updateData.splits && updateData.splits.length > 0) {
+        console.log(`[updateTransaction] Validating and reassigning ${updateData.splits.length} splits`);
+
+        // Step 1: Validate and auto-fix budgetIds
+        updateData.splits = await validateAndFixBudgetIds(user.id!, updateData.splits);
+
+        // Step 1.5: Validate and redistribute splits to ensure total equals transaction amount
+        // Calculate finalAmount from splits (transactions don't have a direct amount field)
+        const existingAmount = existingTransaction.splits.reduce((sum, split) => sum + split.amount, 0);
+        const finalAmount = updateData.amount !== undefined ? updateData.amount : existingAmount;
+        const { validateAndRedistributeSplits } = await import('../../utils/validateAndRedistributeSplits');
+        const validationResult = validateAndRedistributeSplits(finalAmount, updateData.splits as any);
+
+        if (!validationResult.isValid && validationResult.redistributedSplits) {
+          console.log(`[updateTransaction] Split redistribution applied: transaction amount=${finalAmount}`);
+          updateData.splits = validationResult.redistributedSplits as any;
+        }
+
+        // Step 2: Reassign splits based on current categories and budget rules
+        // Create a temporary transaction object for the matcher
+        const tempTransaction: Transaction = {
+          ...existingTransaction,
+          ...updateData,
+          splits: updateData.splits || existingTransaction.splits,
+          transactionDate: updateData.transactionDate
+            ? (typeof updateData.transactionDate === 'string'
+                ? admin.firestore.Timestamp.fromDate(new Date(updateData.transactionDate))
+                : updateData.transactionDate)
+            : existingTransaction.transactionDate
+        };
+
+        // Call matcher to reassign budgetIds
+        const reassignedTransactions = await matchTransactionSplitsToBudgets([tempTransaction], user.id!);
+        updateData.splits = reassignedTransactions[0].splits;
+
+        console.log(`[updateTransaction] Splits reassigned - budgetIds: ${updateData.splits.map(s => s.budgetId).join(', ')}`);
+      }
+
+      // Convert transactionDate string to Timestamp if needed
+      const updateDataForFirestore: any = { ...updateData };
+      if (updateData.transactionDate && typeof updateData.transactionDate === 'string') {
+        updateDataForFirestore.transactionDate = admin.firestore.Timestamp.fromDate(
+          new Date(updateData.transactionDate)
+        );
+      }
+
       // Update transaction
       const updatedTransaction = await updateDocument<Transaction>(
         "transactions",
         transactionId,
-        updateData
+        updateDataForFirestore
       );
 
       // Update budget spending based on transaction changes

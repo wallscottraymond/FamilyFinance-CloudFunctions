@@ -52,6 +52,7 @@ export { onTransactionDelete } from "./orchestration/triggers/onTransactionDelet
 // These functions are for local development only - they seed test data
 
 export { createTestTransactions } from "./dev/createTestTransactions";
+export { createTestTransactionsByCategory } from "./dev/createTestTransactionsByCategory";
 
 // ===== Admin Functions =====
 // (Legacy admin functions can be placed here)

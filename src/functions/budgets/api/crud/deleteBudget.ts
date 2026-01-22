@@ -82,6 +82,16 @@ export const deleteBudget = onRequest({
         }
       }
 
+      // CRITICAL: Prevent deletion of "everything else" budget
+      if (existingBudget.isSystemEverythingElse) {
+        return response.status(400).json(
+          createErrorResponse(
+            "cannot-delete-system-budget",
+            'The "Everything Else" budget is a system budget and cannot be deleted'
+          )
+        );
+      }
+
       // Soft delete - mark as inactive
       await updateDocument<Budget>("budgets", budgetId, { isActive: false });
 

@@ -6,6 +6,7 @@
  */
 
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from '../../../types';
 import { calculatePeriodAllocatedAmount } from './calculatePeriodAllocatedAmount';
 
@@ -127,8 +128,8 @@ export async function createBudgetPeriodsFromSource(
   // Use endDate >= startDate to include periods that started before budget creation
   // but are still active (e.g., current month when creating mid-month)
   const sourcePeriodsQuery = db.collection('source_periods')
-    .where('endDate', '>=', admin.firestore.Timestamp.fromDate(startDate))
-    .where('startDate', '<=', admin.firestore.Timestamp.fromDate(endDate));
+    .where('endDate', '>=', Timestamp.fromDate(startDate))
+    .where('startDate', '<=', Timestamp.fromDate(endDate));
 
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
@@ -138,7 +139,7 @@ export async function createBudgetPeriodsFromSource(
 
   console.log(`[budgetPeriods] Found ${sourcePeriodsSnapshot.size} source periods to process`);
 
-  const now = admin.firestore.Timestamp.now();
+  const now = Timestamp.now();
   const budgetPeriods: BudgetPeriodDocument[] = [];
 
   const counts = {
@@ -155,7 +156,7 @@ export async function createBudgetPeriodsFromSource(
     // Convert budget.period (BudgetPeriod) to PeriodType for calculation
     const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
                               budget.period === 'weekly' ? PeriodType.WEEKLY :
-                              PeriodType.MONTHLY; // Default to monthly for other types
+                              PeriodType.MONTHLY; // Default to monthly for QUARTERLY, YEARLY, CUSTOM
     const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
 
     const budgetPeriod: BudgetPeriodDocument = {
@@ -165,15 +166,16 @@ export async function createBudgetPeriodsFromSource(
       sourcePeriodId: doc.id,
 
       // === INHERIT RBAC FIELDS FROM PARENT BUDGET ===
-      createdBy: budget.createdBy,
-      ownerId: budget.ownerId,
+      // Read from nested access object if it exists, otherwise from root
+      createdBy: budget.access?.createdBy || budget.createdBy,
+      ownerId: budget.access?.ownerId || budget.ownerId,
       groupId: budget.groupId,
-      isPrivate: budget.isPrivate,
+      isPrivate: budget.access?.isPrivate ?? budget.isPrivate,
       accessibleBy: budget.accessibleBy,
 
       // === LEGACY FIELDS (Backward compatibility) ===
       familyId: String(budget.familyId || ''),
-      userId: budget.createdBy,
+      userId: budget.access?.createdBy || budget.createdBy,
 
       periodType: sourcePeriod.type,
       periodStart: sourcePeriod.startDate,
@@ -272,12 +274,12 @@ export async function updateBudgetPeriodRange(
       startPeriod: firstPeriodId,
       endPeriod: lastPeriodId,
     },
-    lastExtended: admin.firestore.Timestamp.now(),
+    lastExtended: Timestamp.now(),
   };
 
   // Add metadata for recurring budgets to enable future extension
   if (isRecurring) {
-    updateData.periodsGeneratedUntil = admin.firestore.Timestamp.fromDate(endDate);
+    updateData.periodsGeneratedUntil = Timestamp.fromDate(endDate);
     updateData.canExtendPeriods = true;
     updateData.needsScheduledExtension = true; // Flag for scheduled function
   }

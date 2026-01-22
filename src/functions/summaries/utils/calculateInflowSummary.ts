@@ -1,7 +1,7 @@
 import { InflowPeriod } from "../../../types";
 import {
   InflowEntry,
-} from "../../../types/periodSummaries";
+} from "../types/periodSummaries";
 
 /**
  * Calculates inflow entries from inflow periods

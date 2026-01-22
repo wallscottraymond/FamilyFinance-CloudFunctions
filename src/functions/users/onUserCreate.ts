@@ -112,11 +112,19 @@ export const onUserCreate = functions.region("us-central1").runWith({
       } as SecuritySettings,
     };
 
+    // Determine role based on environment
+    // In dev/emulator mode, create users as ADMIN for easier testing
+    // In production, create users as EDITOR (standard role)
+    const isDevMode = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV === 'development';
+    const userRole = isDevMode ? UserRole.ADMIN : UserRole.EDITOR;
+
+    console.log(`Creating user in ${isDevMode ? 'DEV MODE' : 'PRODUCTION'} - assigning role: ${userRole}`);
+
     const userData: Omit<User, "id" | "createdAt" | "updatedAt"> = {
       email: userRecord.email || "",
       displayName: userRecord.displayName || userRecord.email?.split("@")[0] || "User",
       photoURL: userRecord.photoURL,
-      role: UserRole.EDITOR, // Default role - allows users to create budgets/transactions
+      role: userRole, // ADMIN in dev, EDITOR in production
       preferences: defaultPreferences,
       isActive: true,
     };
@@ -126,7 +134,7 @@ export const onUserCreate = functions.region("us-central1").runWith({
 
     // Set custom claims for role-based access
     await setUserClaims(userRecord.uid, {
-      role: UserRole.EDITOR
+      role: userRole
     });
 
     // Log successful creation

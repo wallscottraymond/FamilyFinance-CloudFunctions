@@ -1326,6 +1326,242 @@ firebase functions:shell
 - Currently focus on individual/personal user experience
 - Design with future family/group collaboration in mind
 
+## "Everything Else" System Budget
+
+### Overview
+
+The "everything else" budget is an automatic catch-all budget that captures transaction splits not assigned to any other budget. This prevents spending from going untracked when transactions don't match existing budget criteria.
+
+### Key Characteristics
+
+- **Auto-created:** Generated automatically for every user on signup
+- **System-managed:** Cannot be deleted; amount cannot be edited
+- **Lowest priority:** Only catches transactions after all regular budgets are tried
+- **Name editable:** Users can rename it (e.g., "Miscellaneous", "Other Spending")
+- **Amount = $0:** Blueprint amount is always zero; actual spending calculated from transactions
+
+### Implementation Details
+
+#### Data Model
+
+**Budget Blueprint:**
+```typescript
+{
+  id: "budget_everything_else_<userId>",
+  name: "Everything Else",  // User can change
+  isSystemEverythingElse: true,  // NEW FIELD - identifies system budget
+  amount: 0,  // Always zero
+  categoryIds: [],  // Empty = catches all categories
+  budgetType: 'recurring',
+  isOngoing: true,
+  isActive: true,
+  userId: "<userId>",
+  groupIds: [],  // Personal budget (empty array)
+  // ... other standard fields
+}
+```
+
+**Identification:**
+- Uses `isSystemEverythingElse: boolean` flag
+- Queries can filter: `where('isSystemEverythingElse', '==', true)`
+
+#### Transaction Matching Priority
+
+**Order of operations:**
+1. Query all active budgets for user
+2. Separate "everything else" budget from regular budgets
+3. Try regular budgets first (existing logic: date range + category match)
+4. **If no match found:** Assign to "everything else" budget
+5. **If "everything else" doesn't exist:** Leave as `budgetId: 'unassigned'` (graceful degradation)
+
+**Code location:** `/src/functions/transactions/utils/matchTransactionSplitsToBudgets.ts`
+
+#### Budget Period Generation
+
+**Behavior:** Works exactly like regular budgets
+- `onBudgetCreate` trigger fires when "everything else" budget created
+- Generates 1 year of budget_periods (monthly, bi-monthly, weekly)
+- Historical spending calculated from existing transactions
+- Periods inherit `isSystemEverythingElse` context from parent budget
+
+**Note:** Blueprint `amount: 0` means period `allocatedAmount` will be calculated proportionally from 0
+- **Need to verify:** Does period generation handle zero-amount budgets correctly?
+- **Possible fix:** Override allocatedAmount calculation for system budgets
+
+#### Budget Update Restrictions
+
+**Allowed updates:**
+- ✅ `name` - User can rename the budget
+- ✅ `updatedAt` - System timestamp
+
+**Blocked updates:**
+- ❌ `amount` - Always zero, calculated from spending
+- ❌ `isSystemEverythingElse` - Cannot remove system flag
+- ❌ `categoryIds` - Empty = all categories
+- ❌ `budgetType` - Always recurring
+- ❌ `isOngoing` - Always true
+- ❌ All other blueprint fields
+
+**Enforcement:**
+- Cloud Function validation in `updateBudget` (before Firestore write)
+- Firestore security rules (database-level enforcement)
+
+#### Deletion Prevention
+
+**Cannot be deleted:**
+- `deleteBudget` Cloud Function rejects deletion
+- Firestore security rules block deletion
+- Returns error: "The 'Everything Else' budget is a system budget and cannot be deleted"
+
+**Auto-recreation safety net:**
+- If deleted directly from Firestore (bypassing functions)
+- `onBudgetDelete` trigger detects `isSystemEverythingElse: true`
+- Automatically recreates the budget for the user
+
+#### Creation on User Signup
+
+**Trigger:** User profile creation
+- **File:** User creation trigger (need to locate)
+- **Function:** `createEverythingElseBudget(db, userId, userCurrency)`
+- **Timing:** Non-blocking (profile created even if budget creation fails)
+- **Logging:** Success/failure logged for monitoring
+
+### User Experience
+
+**What users see:**
+- Budget appears in budget list like any other budget
+- Shows actual spending (not pre-allocated amount)
+- Budget periods track spending over time
+- Can rename it to preferred name
+
+**What users DON'T see:**
+- Cannot edit amount (field disabled in UI)
+- Cannot delete it (delete button disabled)
+- System nature is transparent (looks like regular budget)
+
+### Firestore Security Rules
+
+**Helper function:**
+```javascript
+function isSystemEverythingElseBudget(budgetData) {
+  return budgetData.isSystemEverythingElse == true;
+}
+```
+
+**Budget updates:**
+- For system budgets: Only allow `name` and `updatedAt` changes
+- Prevent `isSystemEverythingElse` flag modification
+
+**Budget deletion:**
+- Block if `isSystemEverythingElseBudget(resource.data) == true`
+
+### Migration for Existing Users
+
+**Admin Function:** `createMissingEverythingElseBudgets`
+- **Purpose:** Backfill "everything else" budgets for existing users
+- **Process:**
+  1. Query all active users
+  2. For each user, check if they already have system budget
+  3. If not, create it
+  4. Return summary stats (created, skipped, errors)
+- **Usage:** `firebase functions:call createMissingEverythingElseBudgets`
+- **Permissions:** Admin only
+
+### Future: Group-Aware "Everything Else"
+
+**Current:** Personal budgets only (`groupIds: []`)
+
+**Future Enhancement:**
+- Detect if user belongs to a group
+- Create shared "everything else" budget for group
+- All group members' unassigned transactions → shared budget
+- Enables true shared finance tracking
+
+**Implementation:**
+- Check user's group membership on signup
+- Create shared budget if user in group: `groupIds: [groupId]`
+- Transaction matching checks transaction's group context
+- Personal fallback for non-group users
+
+### Known Limitations
+
+1. **Zero-amount periods:** Budget periods may show $0 allocated (since blueprint amount is $0)
+   - **Workaround:** Display "Calculated" or "Actual" instead of allocated amount in UI
+   - **Fix:** Override `allocatedAmount` calculation for system budgets
+
+2. **Multiple "everything else" per user:** User could theoretically have multiple if created manually
+   - **Prevention:** Migration function checks for duplicates
+   - **Detection:** Query by `isSystemEverythingElse + userId`
+
+3. **No category filtering:** Catches ALL categories (empty categoryIds array)
+   - **Design decision:** Intentional - it's a catch-all
+   - **User control:** Users can create specific budgets to "catch" categories before "everything else"
+
+### Related Files
+
+**Core Implementation:**
+- `/src/types/index.ts` - Budget interface with `isSystemEverythingElse` field
+- `/src/functions/budgets/utils/createEverythingElseBudget.ts` - Creation utility
+- `/src/functions/transactions/utils/matchTransactionSplitsToBudgets.ts` - Matching logic
+- `/src/functions/budgets/api/crud/updateBudget.ts` - Update restrictions
+- `/src/functions/budgets/api/crud/deleteBudget.ts` - Deletion prevention
+
+**Supporting Functions:**
+- `/src/functions/budgets/admin/createMissingEverythingElseBudgets.ts` - Migration
+- `/src/functions/budgets/orchestration/triggers/onBudgetDelete.ts` - Auto-recreation
+- User creation trigger (need to locate) - Auto-creation on signup
+
+**Security:**
+- `/firestore.rules` - Database-level restrictions
+
+### Testing Checklist
+
+**Unit Tests:**
+- [ ] Budget created with `isSystemEverythingElse: true` and correct configuration
+- [ ] Transaction matching prioritizes regular budgets before system budget
+- [ ] Update operations: name allowed, amount rejected
+- [ ] Delete operations: rejected for system budgets
+- [ ] Security rules: enforce update/delete restrictions
+
+**Integration Tests:**
+- [ ] New user signup creates "everything else" budget automatically
+- [ ] Unassigned transaction gets assigned to "everything else" budget
+- [ ] Budget period spending updates correctly for system budget
+- [ ] Budget periods generated with correct configuration
+- [ ] Migration function creates budgets for existing users without duplicates
+
+**Manual Tests:**
+- [ ] Create new user → verify budget created
+- [ ] Create transaction with no matching budget → verify assigned to "everything else"
+- [ ] Try to edit amount via UI → verify disabled/error
+- [ ] Try to delete via UI → verify disabled/error
+- [ ] Edit budget name → verify success
+- [ ] View budget periods → verify spending tracked correctly
+
+### Troubleshooting
+
+**"Everything else" budget not created on signup:**
+- Check user creation trigger logs
+- Verify `createEverythingElseBudget` function deployed
+- Check for errors in function execution
+
+**Transactions still showing `budgetId: 'unassigned'`:**
+- Verify "everything else" budget exists for user
+- Check `matchTransactionSplitsToBudgets` logic
+- Ensure `isSystemEverythingElse` flag set correctly
+
+**Multiple "everything else" budgets per user:**
+- Run deduplication query
+- Keep oldest budget, delete duplicates
+- Update transactions pointing to deleted budgets
+
+**Budget periods showing $0 allocated:**
+- Expected behavior (blueprint amount is $0)
+- UI should display "Actual spending" instead of "Allocated"
+- Future fix: Override allocatedAmount for system budgets
+
+---
+
 ## Future Enhancements
 
 ### Family/Group Collaboration (Planned)

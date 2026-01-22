@@ -15,6 +15,7 @@
     "lint:fix": "eslint --ext .js,.ts . --fix",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:emulator": "jest __emulator_tests__",
     "dev": "concurrently \"npm run build:watch\" \"firebase emulators:start --import=./emulator-data --export-on-exit\"",
     "emulator": "firebase emulators:start --import=./emulator-data --export-on-exit",
     "emulator:save": "firebase emulators:export ./emulator-data --force",

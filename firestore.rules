@@ -74,10 +74,15 @@ service cloud.firestore {
 
     // Check if user can access another user (same family or admin)
     function canAccessUser(targetUserId) {
-      return isOwner(targetUserId) || 
+      return isOwner(targetUserId) ||
              isAdmin() ||
              (exists(/databases/$(database)/documents/users/$(targetUserId)) &&
               inSameFamily(get(/databases/$(database)/documents/users/$(targetUserId)).data.familyId));
+    }
+
+    // Check if budget is system "everything else" budget
+    function isSystemEverythingElseBudget(budgetData) {
+      return budgetData.isSystemEverythingElse == true;
     }
     
     // Validate user data structure
@@ -316,17 +321,20 @@ service cloud.firestore {
 
       // Only budget creator or family admin can update with valid data
       // Group-based access: Check groupIds array
+      // NEW: Use isValidBudgetUpdate() to restrict system budget changes
       allow update: if (isOwner(resource.data.createdBy) ||
                         canAccessGroup(resource.data.groupIds) ||
                         (resource.data.familyId != null &&
                          get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid)) &&
-                       isValidBudgetData();
+                       isValidBudgetUpdate();
 
       // Only family admin or group admins can delete budgets
-      allow delete: if isAdmin() ||
-                       canAccessGroup(resource.data.groupIds) ||
-                       (resource.data.familyId != null &&
-                        get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid);
+      // CRITICAL: Prevent deletion of system "everything else" budget
+      allow delete: if !isSystemEverythingElseBudget(resource.data) &&
+                       (isAdmin() ||
+                        canAccessGroup(resource.data.groupIds) ||
+                        (resource.data.familyId != null &&
+                         get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.adminUserId == request.auth.uid));
     }
     
     // =======================
@@ -652,10 +660,15 @@ service cloud.firestore {
     // =======================
 
     match /user_summaries/{summaryId} {
-      // Read: User's own summaries
+      // Read: User's own summaries (direct document access)
       // Format: userId_periodType_sourcePeriodId (e.g., user123_monthly_2025-M11)
       allow read: if isAuthenticated() &&
                      summaryId.matches('^' + request.auth.uid + '_.*');
+
+      // List: Allow querying user's own summaries
+      // This is needed for queries using .where('userId', '==', userId)
+      allow list: if isAuthenticated() &&
+                     resource.data.userId == request.auth.uid;
 
       // Write: Cloud Functions only
       allow create, update, delete: if false;
@@ -917,7 +930,8 @@ service cloud.firestore {
       let data = request.resource.data;
       return data.keys().hasAll(['name', 'amount', 'createdBy', 'isActive', 'isOngoing']) &&
              data.name is string && data.name.size() > 0 &&
-             data.amount is number && data.amount > 0 &&
+             // Allow amount = 0 for system "everything else" budget, otherwise require amount > 0
+             data.amount is number && (data.amount > 0 || (data.keys().hasAny(['isSystemEverythingElse']) && data.isSystemEverythingElse == true)) &&
              data.createdBy is string && data.createdBy.size() > 0 &&
              data.isActive is bool &&
              data.isOngoing is bool &&
@@ -928,6 +942,26 @@ service cloud.firestore {
              (!data.keys().hasAny(['budgetEndDate']) ||
               !data.keys().hasAny(['startDate']) ||
               data.budgetEndDate.toMillis() > data.startDate.toMillis());
+    }
+
+    // Budget update validation - restrict system budget changes
+    function isValidBudgetUpdate() {
+      let data = request.resource.data;
+      let resource_data = resource.data;
+
+      // For "everything else" budget, only allow name and updatedAt changes
+      let isEverythingElse = isSystemEverythingElseBudget(resource_data);
+      let allowedFields = isEverythingElse
+        ? ['name', 'updatedAt']
+        : ['name', 'description', 'amount', 'categoryIds', 'alertThreshold',
+           'isActive', 'updatedAt', 'activePeriodRange', 'lastExtended',
+           'periodsGeneratedUntil', 'canExtendPeriods', 'needsScheduledExtension'];
+
+      let changedFields = data.diff(resource_data).affectedKeys();
+
+      // Prevent changing system budget flag
+      return changedFields.hasOnly(allowedFields) &&
+             !changedFields.hasAny(['isSystemEverythingElse']);
     }
     
     function isValidTransactionUpdate() {

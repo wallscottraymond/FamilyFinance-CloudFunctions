@@ -1,4 +1,4 @@
-import { GoalEntry } from "../../../types/periodSummaries";
+import { GoalEntry } from "../types/periodSummaries";
 
 /**
  * Calculates goal entries (PLACEHOLDER/STUB)

@@ -16,6 +16,7 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { Transaction } from '../../../../types';
 import { updateBudgetSpending } from '../../../../utils/budgetSpending';
+import * as admin from 'firebase-admin';
 
 /**
  * Triggered when a transaction document is updated
@@ -56,6 +57,33 @@ export const onTransactionUpdate = onDocumentUpdated({
       splitsChanged: JSON.stringify(beforeData.splits) !== JSON.stringify(afterData.splits),
       dateChanged: beforeData.transactionDate !== afterData.transactionDate
     });
+
+    // SAFETY NET: Validate and fix splits if they're invalid
+    // This catches cases where invalid splits slip through (direct Firestore writes, bugs, etc.)
+    if (afterData.splits && afterData.splits.length > 0) {
+      const { validateAndRedistributeSplits} = await import('../../utils/validateAndRedistributeSplits');
+      // Calculate transaction amount from splits
+      const transactionAmount = afterData.splits.reduce((sum, split) => sum + split.amount, 0);
+      const validationResult = validateAndRedistributeSplits(transactionAmount, afterData.splits as any);
+
+      if (!validationResult.isValid && validationResult.redistributedSplits) {
+        console.log(`[onTransactionUpdate] Invalid splits detected - auto-fixing: transaction amount=${transactionAmount}`);
+
+        // Update the transaction document with corrected splits
+        const { getFirestore } = await import('firebase-admin/firestore');
+        const db = getFirestore();
+        await db.collection('transactions').doc(transactionId).update({
+          splits: validationResult.redistributedSplits,
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        console.log(`[onTransactionUpdate] Splits auto-corrected for transaction ${transactionId}`);
+
+        // Early return - the update will trigger this function again with valid splits
+        // Next iteration will have valid splits and proceed to budget update normally
+        return;
+      }
+    }
 
     // Update budget spending (reverses old and applies new)
     try {

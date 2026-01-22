@@ -5,3 +5,5 @@
  */
 
 export { onBudgetCreate } from './onBudgetCreate';
+export { onBudgetDelete } from './onBudgetDelete';
+export { onBudgetUpdatedReassignTransactions } from './onBudgetUpdate';

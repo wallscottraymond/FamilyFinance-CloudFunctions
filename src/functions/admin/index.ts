@@ -9,6 +9,9 @@ export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 export { verifyAccessControl } from "./verifyAccessControl";
 export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
+export { debugUserSummaryUpdate } from "./debugUserSummaryUpdate";
+export { fixBudgetPeriodUserIds } from "./fixBudgetPeriodUserIds";
+export { makeUserAdmin } from "./makeUserAdmin";
 
 // Transaction splitting migration functions (DEPRECATED - stubbed out)
 // export {

@@ -13,9 +13,9 @@ import { Timestamp } from "firebase-admin/firestore";
 import {
   OutflowPeriod,
   Outflow,
-  OutflowEntry,
   OutflowPeriodStatus
 } from '../../../../types';
+import { OutflowEntry } from "../../../summaries/types";
 import { determinePeriodType } from '../utils/periodTypeHelpers';
 
 /**

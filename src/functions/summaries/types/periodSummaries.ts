@@ -1,5 +1,5 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { PeriodType, OutflowPeriodStatus } from "./index";
+import { PeriodType, OutflowPeriodStatus } from "../../../types";
 
 /**
  * Period-Centric Summary System Types
@@ -128,10 +128,14 @@ export interface BudgetEntry {
   categoryId: string;
 
   // === AMOUNTS ===
-  totalAllocated: number;          // Total amount allocated
+  maxAmount: number;               // Clearer name for allocated amount
+  totalAllocated: number;          // Total amount allocated (backward compatibility)
   totalSpent: number;              // Total amount spent
   totalRemaining: number;          // Remaining amount
   averageBudget: number;           // Average budget from parent
+
+  // === USER INPUT ===
+  userNotes?: string;              // User notes from budget_period.userNotes
 
   // === PROGRESS METRICS ===
   progressPercentage: number;      // (spent/allocated) × 100

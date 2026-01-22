@@ -4,7 +4,7 @@ import {
 } from "../../../types";
 import {
   OutflowEntry,
-} from "../../../types/periodSummaries";
+} from "../types/periodSummaries";
 
 /**
  * Calculates outflow entries from outflow periods

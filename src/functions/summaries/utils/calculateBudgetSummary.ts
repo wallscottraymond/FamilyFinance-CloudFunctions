@@ -1,19 +1,12 @@
 import { BudgetPeriodDocument } from "../../../types";
-import {
-  BudgetEntry,
-} from "../../../types/periodSummaries";
+import { BudgetEntry } from "../types/periodSummaries";
 
 /**
  * Calculates budget entries from budget periods
  *
  * Converts budget periods into an array of budget entries for frontend display.
- * Frontend calculates aggregated totals on-the-fly for better performance.
- *
- * NOTE: Currently, spentAmount is set to 0 as a placeholder.
- * In a future enhancement, this should be calculated by:
- * 1. Querying transactions linked to each budget
- * 2. Summing transaction amounts that fall within the period
- * 3. Calculating actual spending against allocated amounts
+ * Spending amounts are read from budget_period.spent, which is calculated by
+ * updateBudgetSpending() when transactions are created/updated/deleted.
  *
  * @param budgetPeriods - Array of budget periods to convert
  * @returns Array of BudgetEntry objects
@@ -31,9 +24,8 @@ export function calculateBudgetSummary(
     const allocatedAmount =
       budgetPeriod.modifiedAmount || budgetPeriod.allocatedAmount;
 
-    // TODO: Calculate actual spent amount from linked transactions
-    // For now, using placeholder value of 0
-    const spentAmount = 0;
+    // Use actual spent amount from budget period (calculated by updateBudgetSpending)
+    const spentAmount = budgetPeriod.spent || 0;
 
     const remainingAmount = allocatedAmount - spentAmount;
 
@@ -46,6 +38,9 @@ export function calculateBudgetSummary(
       checklistItemsCount > 0
         ? Math.round((checklistItemsCompleted / checklistItemsCount) * 100)
         : 0;
+
+    // Extract user notes
+    const userNotes = budgetPeriod.userNotes;
 
     // Calculate progress percentage
     const progressPercentage =
@@ -65,10 +60,14 @@ export function calculateBudgetSummary(
       categoryId: "uncategorized", // TODO: Fetch from parent budget document
 
       // === AMOUNTS ===
-      totalAllocated: allocatedAmount,
-      totalSpent: spentAmount,
+      maxAmount: allocatedAmount,           // Clearer field name
+      totalAllocated: allocatedAmount,      // Backward compatibility
+      totalSpent: spentAmount,              // Now uses actual data
       totalRemaining: remainingAmount,
-      averageBudget: allocatedAmount, // TODO: Fetch from parent budget for true average
+      averageBudget: allocatedAmount,       // TODO: Fetch from parent budget for true average
+
+      // === USER INPUT ===
+      userNotes,                            // User notes from period
 
       // === PROGRESS METRICS ===
       progressPercentage,

@@ -7,7 +7,6 @@ export * from "./users";
 export * from "./groups";
 export * from "./sharing";
 export * from "./outflowSummaries";
-export * from "./periodSummaries";
 
 // Base interface for all documents
 export interface BaseDocument {
@@ -285,6 +284,7 @@ export enum PaymentType {
 export interface TransactionSplit {
   splitId: string;                // Unique identifier for the split (renamed from 'id')
   budgetId: string;               // Reference to budgets collection ('unassigned' if not assigned)
+  budgetName?: string;            // Budget name for display purposes (optional, populated by backend)
 
   // Source period IDs based on transaction date (always populated)
   monthlyPeriodId: string | null;        // Monthly source period ID containing transaction date
@@ -478,6 +478,9 @@ export interface Budget extends BaseDocument, ResourceOwnership {
   // Budget end date functionality
   isOngoing: boolean; // True for ongoing budgets, false for budgets with fixed end dates
   budgetEndDate?: Timestamp; // Specific end date when isOngoing is false
+
+  // System budget flag
+  isSystemEverythingElse?: boolean; // Flag for "everything else" catch-all budget
 }
 
 export enum BudgetPeriod {
@@ -560,6 +563,8 @@ export interface UpdateTransactionRequest {
   category?: string;             // Category ID from categories collection
   location?: TransactionLocation;
   tags?: string[];
+  splits?: TransactionSplit[];   // Transaction splits
+  transactionDate?: string | Timestamp; // Transaction date
 }
 
 // Transaction Splitting Request/Response types
@@ -763,7 +768,11 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
   // Budget amounts
   allocatedAmount: number;    // Proportionally calculated amount for this period
   originalAmount: number;     // Store original calculation for reference
-  
+
+  // Spending tracking (calculated by updateBudgetSpending utility)
+  spent?: number;             // Current amount spent (calculated from transactions)
+  remaining?: number;         // Remaining amount (allocatedAmount - spent)
+
   // User modifications (only by owner or family managers)
   userNotes?: string;         // User-added notes for this period
   modifiedAmount?: number;    // If user overrode the calculated amount

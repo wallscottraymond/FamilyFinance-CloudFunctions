@@ -38,23 +38,51 @@ export async function matchTransactionSplitsToBudgets(
 
     console.log(`💰 [matchTransactionSplitsToBudgets] Found ${budgetsSnapshot.size} active budgets for user`);
 
-    // Build budget lookup array
-    const budgets = budgetsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      name: doc.data().name || 'General',
-      startDate: doc.data().startDate ? (doc.data().startDate as Timestamp).toMillis() : null,
-      endDate: doc.data().endDate ? (doc.data().endDate as Timestamp).toMillis() : null,
-      isOngoing: doc.data().isOngoing !== false // Default to ongoing if not specified
-    }));
+    // Separate "everything else" system budget from regular budgets
+    const regularBudgets: Array<{
+      id: string;
+      name: string;
+      startDate: number | null;
+      endDate: number | null;
+      isOngoing: boolean;
+    }> = [];
+
+    let everythingElseBudget: {
+      id: string;
+      name: string;
+      startDate: number | null;
+      endDate: number | null;
+      isOngoing: boolean;
+    } | null = null;
+
+    budgetsSnapshot.docs.forEach(doc => {
+      const budgetData = doc.data();
+      const budget = {
+        id: doc.id,
+        name: budgetData.name || 'General',
+        startDate: budgetData.startDate ? (budgetData.startDate as Timestamp).toMillis() : null,
+        endDate: budgetData.endDate ? (budgetData.endDate as Timestamp).toMillis() : null,
+        isOngoing: budgetData.isOngoing !== false // Default to ongoing if not specified
+      };
+
+      // Separate system "everything else" budget from regular budgets
+      if (budgetData.isSystemEverythingElse === true) {
+        everythingElseBudget = budget;
+      } else {
+        regularBudgets.push(budget);
+      }
+    });
+
+    console.log(`💰 [matchTransactionSplitsToBudgets] Regular budgets: ${regularBudgets.length}, Everything else budget: ${everythingElseBudget ? 'Yes' : 'No'}`);
 
     // Process each transaction
     let matchedCount = 0;
     transactions.forEach(transaction => {
       const txnDate = transaction.transactionDate.toMillis();
 
-      // Find budget that contains this transaction date
+      // Step 1: Try regular budgets first
       let matchedBudget = null;
-      for (const budget of budgets) {
+      for (const budget of regularBudgets) {
         if (!budget.startDate) continue;
 
         const isAfterStart = txnDate >= budget.startDate;
@@ -73,15 +101,25 @@ export async function matchTransactionSplitsToBudgets(
         }
       }
 
-      // Update all splits in the transaction with budget info
+      // Step 2: Fallback to "everything else" budget if no regular budget matched
+      if (!matchedBudget && everythingElseBudget) {
+        matchedBudget = everythingElseBudget;
+        console.log(`💰 [matchTransactionSplitsToBudgets] Transaction assigned to "everything else" budget (no regular budget match)`);
+      }
+
+      // Step 3: Update all splits in the transaction with budget info
       if (matchedBudget) {
         transaction.splits = transaction.splits.map(split => ({
           ...split,
           budgetId: matchedBudget!.id,
+          budgetName: matchedBudget!.name,
           updatedAt: Timestamp.now()
         }));
 
         matchedCount++;
+      } else {
+        // No match found - remains 'unassigned' (graceful degradation)
+        console.warn(`💰 [matchTransactionSplitsToBudgets] Transaction has no matching budget (no "everything else" budget found)`);
       }
     });
 

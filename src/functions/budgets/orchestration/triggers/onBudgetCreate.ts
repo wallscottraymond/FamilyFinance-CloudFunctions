@@ -28,7 +28,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Budget } from '../../../../types';
-import { recalculateBudgetSpendingOnCreate } from '../../utils/budgetSpending';
+import { recalculateHistoricalTransactions } from '../../utils/recalculateHistoricalTransactions';
 import { generateBudgetPeriodsForNewBudget } from '../../utils/budgetPeriods';
 
 /**
@@ -69,19 +69,37 @@ export const onBudgetCreate = onDocumentCreated({
     console.log(`Successfully created ${result.count} budget periods for budget ${budgetId}`);
 
     // Recalculate spending from existing transactions that match budget categories
+    // AND update transaction.splits[].budgetId for historical transactions
     try {
-      console.log(`🔄 Starting spending recalculation for new budget ${budgetId}`);
-      const recalcResult = await recalculateBudgetSpendingOnCreate(budgetId, budgetData);
+      console.log(`🔄 Starting historical transaction recalculation for new budget ${budgetId}`);
 
-      console.log(`✅ Spending recalculation completed:`, {
-        transactionsProcessed: recalcResult.transactionsProcessed,
-        totalSpending: recalcResult.totalSpending,
-        budgetPeriodsUpdated: recalcResult.budgetPeriodsUpdated,
-        periodTypes: recalcResult.periodTypesUpdated
+      // Extract user ID (handle both new access structure and legacy)
+      const userId = budgetData.userId || budgetData.access?.createdBy;
+      if (!userId) {
+        console.error('❌ No userId found in budget document, skipping recalculation');
+        return;
+      }
+
+      // Calculate end date based on budget type
+      const endDate = budgetData.budgetType === 'recurring'
+        ? null  // Ongoing budgets have no end date
+        : (budgetData.budgetEndDate || budgetData.endDate);
+
+      const recalcResult = await recalculateHistoricalTransactions(
+        budgetId,
+        userId,
+        budgetData.categoryIds || [],
+        budgetData.startDate,
+        endDate
+      );
+
+      console.log(`✅ Historical transaction recalculation completed:`, {
+        transactionsUpdated: recalcResult.transactionsUpdated,
+        spendingUpdated: recalcResult.spendingUpdated
       });
     } catch (recalcError) {
       // Log error but don't fail budget creation
-      console.error('❌ Error recalculating budget spending:', recalcError);
+      console.error('❌ Error recalculating historical transactions:', recalcError);
     }
 
   } catch (error) {

@@ -32,6 +32,7 @@ import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
 import { updateBudgetSpending } from "../../../../utils/budgetSpending";
 import { matchTransactionSplitsToSourcePeriods } from "../../utils/matchTransactionSplitsToSourcePeriods";
+import { validateAndFixBudgetIds } from "../../utils/validateBudgetIds";
 
 /**
  * Create a new transaction
@@ -191,6 +192,18 @@ export const createTransaction = onRequest({
           source: 'plaid' as const, // Keep as plaid type for consistency
         },
       };
+
+      // Validate and auto-fix budgetIds before saving
+      transaction.splits = await validateAndFixBudgetIds(user.id!, transaction.splits);
+
+      // Validate and redistribute splits to ensure total equals transaction amount
+      const { validateAndRedistributeSplits } = await import('../../utils/validateAndRedistributeSplits');
+      const validationResult = validateAndRedistributeSplits(transactionData.amount, transaction.splits as any);
+
+      if (!validationResult.isValid && validationResult.redistributedSplits) {
+        console.log(`[createTransaction] Split redistribution applied: transaction amount=${transactionData.amount}`);
+        transaction.splits = validationResult.redistributedSplits as TransactionSplit[];
+      }
 
       // Match transaction splits to source periods (app-wide)
       const transactionsWithPeriods = await matchTransactionSplitsToSourcePeriods([transaction as Transaction]);

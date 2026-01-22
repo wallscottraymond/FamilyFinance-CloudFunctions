@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
-import { UserPeriodSummary } from "../../../types/periodSummaries";
+import { UserPeriodSummary } from "../types/periodSummaries";
 import { updateUserPeriodSummary } from "../orchestration/updateUserPeriodSummary";
 
 const db = getFirestore();

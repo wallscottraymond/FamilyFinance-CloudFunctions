@@ -9,3 +9,4 @@
  */
 
 export { createTestTransactions } from './createTestTransactions';
+export { createTestTransactionsByCategory } from './createTestTransactionsByCategory';
