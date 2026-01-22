@@ -2,19 +2,45 @@
  * Transaction Reassignment Utility
  *
  * Reassigns transactions when budget categories change.
- * Queries all transactions assigned to a budget and reassigns them based on current rules.
+ * - Category Additions: Picks up unassigned transactions matching new categories
+ * - Category Removals: Re-evaluates ALL splits in affected transactions (not just removed category)
+ *
+ * Key Features:
+ * - Full transaction re-evaluation on category removal (user requirement)
+ * - Batch processing (respects 500-doc Firestore limit)
+ * - Comprehensive logging and statistics
+ *
+ * Called by: onBudgetUpdate trigger when categoryIds change
  */
 /**
- * Reassign all transactions for a specific budget
+ * Category change information
+ */
+export interface CategoryChange {
+    categoriesAdded: string[];
+    categoriesRemoved: string[];
+}
+/**
+ * Reassignment statistics
+ */
+export interface ReassignmentStats {
+    success: boolean;
+    transactionsReassigned: number;
+    splitsReassigned: number;
+    errors: string[];
+}
+/**
+ * Reassign transactions when budget categories change (ENHANCED VERSION)
  *
- * Used when budget categories change - finds all transactions assigned to the budget
- * and reassigns them based on current category matching rules.
+ * This function handles two scenarios:
+ * 1. Category Additions: Picks up transactions with unassigned splits matching new categories
+ * 2. Category Removals: Re-evaluates ALL splits in affected transactions (not just removed category)
  *
  * @param budgetId - Budget ID whose transactions need reassignment
  * @param userId - User ID for querying user-specific transactions
- * @returns Count of transactions reassigned
+ * @param changes - Categories added/removed
+ * @returns Reassignment statistics
  */
-export declare function reassignTransactionsForBudget(budgetId: string, userId: string): Promise<number>;
+export declare function reassignTransactionsForBudget(budgetId: string, userId: string, changes?: CategoryChange): Promise<number | ReassignmentStats>;
 /**
  * Reassign all transactions for all budgets (useful for bulk operations)
  *

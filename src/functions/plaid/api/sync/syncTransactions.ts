@@ -31,7 +31,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { formatTransactions } from '../../../transactions/utils/formatTransactions';
 import { matchCategoriesToTransactions } from '../../../transactions/utils/matchCategoriesToTransactions';
 import { matchTransactionSplitsToSourcePeriods } from '../../../transactions/utils/matchTransactionSplitsToSourcePeriods';
-import { matchTransactionSplitsToBudgets } from '../../../transactions/utils/matchTransactionSplitsToBudgets';
+import { assignTransactionSplitsBatch } from '../../../transactions/utils/assignTransactionSplits';
 import { matchTransactionSplitsToOutflows } from '../../../transactions/utils/matchTransactionSplitsToOutflows';
 import { batchCreateTransactions } from '../../../transactions/utils/batchCreateTransactions';
 import {
@@ -336,9 +336,11 @@ async function performTransactionSync(
         const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
         console.log(`✅ Step 3/6: Matched ${withPeriods.length} transaction splits to source periods (monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId)`);
 
-        // Step 4: Match budget IDs to splits (in-memory)
-        const withBudgets = await matchTransactionSplitsToBudgets(withPeriods, userId);
-        console.log(`✅ Step 4/6: Matched budget IDs for ${withBudgets.length} transaction splits`);
+        // Step 4: CENTRALIZED SPLIT ASSIGNMENT - Validate budgetIds, redistribute amounts, match to budgets
+        const assignmentResults = await assignTransactionSplitsBatch(withPeriods, userId);
+        const withBudgets = assignmentResults.map(r => r.transaction);
+        const totalModified = assignmentResults.filter(r => r.modified).length;
+        console.log(`✅ Step 4/6: Assigned budget IDs for ${withBudgets.length} transaction splits (${totalModified} validated/modified)`);
 
         // Step 5: Match outflow IDs to splits (in-memory)
         const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, userId);
@@ -469,9 +471,11 @@ async function processModifiedTransactions(
       const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
       console.log(`✅ Step 3/6: Re-matched source periods for ${withPeriods.length} transaction splits`);
 
-      // Step 4: Match budgets
-      const withBudgets = await matchTransactionSplitsToBudgets(withPeriods, userId);
-      console.log(`✅ Step 4/6: Re-matched budgets for ${withBudgets.length} transaction splits`);
+      // Step 4: CENTRALIZED SPLIT ASSIGNMENT - Validate budgetIds, redistribute amounts, match to budgets
+      const assignmentResults = await assignTransactionSplitsBatch(withPeriods, userId);
+      const withBudgets = assignmentResults.map(r => r.transaction);
+      const totalModified = assignmentResults.filter(r => r.modified).length;
+      console.log(`✅ Step 4/6: Re-matched budgets for ${withBudgets.length} transaction splits (${totalModified} validated/modified)`);
 
       // Step 5: Match outflows
       const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, userId);

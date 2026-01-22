@@ -1,1 +1,1 @@
-{"version":3,"file":"updateTransaction.d.ts","sourceRoot":"","sources":["../../../../../src/functions/transactions/api/crud/updateTransaction.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAkBH;;GAEG;AACH,eAAO,MAAM,iBAAiB,qDA6H5B,CAAC"}
+{"version":3,"file":"updateTransaction.d.ts","sourceRoot":"","sources":["../../../../../src/functions/transactions/api/crud/updateTransaction.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAiBH;;GAEG;AACH,eAAO,MAAM,iBAAiB,qDAsI5B,CAAC"}

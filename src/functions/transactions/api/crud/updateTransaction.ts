@@ -20,8 +20,7 @@ import {
 import { validateRequest, updateTransactionSchema } from "../../../../utils/validation";
 import { firebaseCors } from "../../../../middleware/cors";
 import { updateBudgetSpending } from "../../../../utils/budgetSpending";
-import { validateAndFixBudgetIds } from "../../utils/validateBudgetIds";
-import { matchTransactionSplitsToBudgets } from "../../utils/matchTransactionSplitsToBudgets";
+import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 /**
  * Update transaction
@@ -94,27 +93,11 @@ export const updateTransaction = onRequest({
         );
       }
 
-      // Phase 1 & 2: Validate and reassign splits if they're being updated
+      // CENTRALIZED SPLIT ASSIGNMENT: Validate budgetIds, redistribute amounts, and match to budgets
       if (updateData.splits && updateData.splits.length > 0) {
         console.log(`[updateTransaction] Validating and reassigning ${updateData.splits.length} splits`);
 
-        // Step 1: Validate and auto-fix budgetIds
-        updateData.splits = await validateAndFixBudgetIds(user.id!, updateData.splits);
-
-        // Step 1.5: Validate and redistribute splits to ensure total equals transaction amount
-        // Calculate finalAmount from splits (transactions don't have a direct amount field)
-        const existingAmount = existingTransaction.splits.reduce((sum, split) => sum + split.amount, 0);
-        const finalAmount = updateData.amount !== undefined ? updateData.amount : existingAmount;
-        const { validateAndRedistributeSplits } = await import('../../utils/validateAndRedistributeSplits');
-        const validationResult = validateAndRedistributeSplits(finalAmount, updateData.splits as any);
-
-        if (!validationResult.isValid && validationResult.redistributedSplits) {
-          console.log(`[updateTransaction] Split redistribution applied: transaction amount=${finalAmount}`);
-          updateData.splits = validationResult.redistributedSplits as any;
-        }
-
-        // Step 2: Reassign splits based on current categories and budget rules
-        // Create a temporary transaction object for the matcher
+        // Create a temporary transaction object with updated data
         const tempTransaction: Transaction = {
           ...existingTransaction,
           ...updateData,
@@ -126,9 +109,15 @@ export const updateTransaction = onRequest({
             : existingTransaction.transactionDate
         };
 
-        // Call matcher to reassign budgetIds
-        const reassignedTransactions = await matchTransactionSplitsToBudgets([tempTransaction], user.id!);
-        updateData.splits = reassignedTransactions[0].splits;
+        // Call centralized assignment utility
+        const assignmentResult = await assignTransactionSplits(tempTransaction, user.id!);
+
+        if (assignmentResult.modified) {
+          console.log('[updateTransaction] Splits modified during assignment:', assignmentResult.changes);
+        }
+
+        // Use the validated and assigned splits
+        updateData.splits = assignmentResult.transaction.splits;
 
         console.log(`[updateTransaction] Splits reassigned - budgetIds: ${updateData.splits.map(s => s.budgetId).join(', ')}`);
       }

@@ -32,7 +32,7 @@ import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
 import { updateBudgetSpending } from "../../../../utils/budgetSpending";
 import { matchTransactionSplitsToSourcePeriods } from "../../utils/matchTransactionSplitsToSourcePeriods";
-import { validateAndFixBudgetIds } from "../../utils/validateBudgetIds";
+import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 /**
  * Create a new transaction
@@ -193,20 +193,18 @@ export const createTransaction = onRequest({
         },
       };
 
-      // Validate and auto-fix budgetIds before saving
-      transaction.splits = await validateAndFixBudgetIds(user.id!, transaction.splits);
+      // CENTRALIZED SPLIT ASSIGNMENT: Validate budgetIds, redistribute amounts, and match to budgets
+      const assignmentResult = await assignTransactionSplits(transaction as Transaction, user.id!);
 
-      // Validate and redistribute splits to ensure total equals transaction amount
-      const { validateAndRedistributeSplits } = await import('../../utils/validateAndRedistributeSplits');
-      const validationResult = validateAndRedistributeSplits(transactionData.amount, transaction.splits as any);
-
-      if (!validationResult.isValid && validationResult.redistributedSplits) {
-        console.log(`[createTransaction] Split redistribution applied: transaction amount=${transactionData.amount}`);
-        transaction.splits = validationResult.redistributedSplits as TransactionSplit[];
+      if (assignmentResult.modified) {
+        console.log('[createTransaction] Splits modified during assignment:', assignmentResult.changes);
       }
 
+      // Use the transaction with assigned splits
+      let transactionWithBudgets = assignmentResult.transaction;
+
       // Match transaction splits to source periods (app-wide)
-      const transactionsWithPeriods = await matchTransactionSplitsToSourcePeriods([transaction as Transaction]);
+      const transactionsWithPeriods = await matchTransactionSplitsToSourcePeriods([transactionWithBudgets]);
       const transactionWithPeriods = transactionsWithPeriods[0];
 
       const createdTransaction = await createDocument<Transaction>("transactions", transactionWithPeriods);
