@@ -4,7 +4,7 @@
  * Generates 5 transactions for each category in the categories collection.
  * Transaction names follow pattern: "{category_name} {number}"
  * Income categories = credits (positive), Outflow categories = debits (negative)
- * Dates spread equally between November 2025 and March 2026 (5 months)
+ * Dates spread evenly across the current month
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -26,11 +26,16 @@ interface Category {
 }
 
 /**
- * Generate evenly spaced dates between Nov 2025 and Mar 2026
+ * Generate evenly spaced dates within the current month
  */
 function generateDateRange(count: number): Date[] {
-  const startDate = new Date('2025-11-01');  // Nov 1, 2025
-  const endDate = new Date('2026-03-31');    // Mar 31, 2026
+  const now = new Date();
+
+  // First day of current month
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Last day of current month
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
   const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   const interval = Math.floor(totalDays / (count - 1));
@@ -309,6 +314,12 @@ export const createTestTransactionsByCategory = onCall({
     }
     console.log('');
 
+    // Calculate date range for output
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const monthName = startOfMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+
     // Final summary
     console.log('═══════════════════════════════════════════════════════════');
     console.log('🎉 TEST TRANSACTION CREATION COMPLETE!');
@@ -317,7 +328,7 @@ export const createTestTransactionsByCategory = onCall({
     console.log('📈 Results:');
     console.log(`   📂 Categories Processed: ${categories.length}`);
     console.log(`   💳 Transactions Created: ${count}`);
-    console.log(`   📅 Date Range: Nov 2025 - Mar 2026`);
+    console.log(`   📅 Date Range: ${monthName}`);
     console.log(`   💰 Income Transactions: ${categories.filter(c => c.type === 'Income').length * 5}`);
     console.log(`   💸 Outflow Transactions: ${categories.filter(c => c.type === 'Outflow').length * 5}`);
     console.log('');
@@ -332,13 +343,13 @@ export const createTestTransactionsByCategory = onCall({
         categoriesProcessed: categories.length,
         transactionsCreated: count,
         dateRange: {
-          start: '2025-11-01',
-          end: '2026-03-31'
+          start: formatDate(startOfMonth),
+          end: formatDate(endOfMonth)
         },
         incomeTransactions: categories.filter(c => c.type === 'Income').length * 5,
         outflowTransactions: categories.filter(c => c.type === 'Outflow').length * 5
       },
-      hint: 'Check your Firestore emulator UI to see the created transactions. Transactions are spread evenly across 5 months with 5 per category.'
+      hint: `Check your Firestore emulator UI to see the created transactions. Transactions are spread evenly across ${monthName} with 5 per category.`
     };
 
   } catch (error) {
