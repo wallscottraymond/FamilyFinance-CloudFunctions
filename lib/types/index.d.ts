@@ -1187,6 +1187,7 @@ export declare enum PlaidRecurringFrequency {
     BIWEEKLY = "BIWEEKLY",
     SEMI_MONTHLY = "SEMI_MONTHLY",
     MONTHLY = "MONTHLY",
+    QUARTERLY = "QUARTERLY",// Added for commission/bonus tracking
     ANNUALLY = "ANNUALLY"
 }
 export interface PlaidRecurringTransactionUpdate extends BaseDocument {
@@ -1560,6 +1561,7 @@ export interface InflowPeriod extends BaseDocument {
     occurrenceDueDates: Timestamp[];
     occurrencePaidFlags: boolean[];
     occurrenceTransactionIds: (string | null)[];
+    occurrenceAmounts: number[];
     paymentProgressPercentage: number;
     dollarProgressPercentage: number;
     firstDueDateInPeriod: Timestamp | null;

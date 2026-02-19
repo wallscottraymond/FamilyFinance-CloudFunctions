@@ -1482,10 +1482,11 @@ export interface PlaidRecurringAmount {
 
 export enum PlaidRecurringFrequency {
   UNKNOWN = "UNKNOWN",
-  WEEKLY = "WEEKLY", 
+  WEEKLY = "WEEKLY",
   BIWEEKLY = "BIWEEKLY",
   SEMI_MONTHLY = "SEMI_MONTHLY",
   MONTHLY = "MONTHLY",
+  QUARTERLY = "QUARTERLY",  // Added for commission/bonus tracking
   ANNUALLY = "ANNUALLY"
 }
 
@@ -2026,6 +2027,7 @@ export interface InflowPeriod extends BaseDocument {
   occurrenceDueDates: Timestamp[];            // Array of all expected dates in period
   occurrencePaidFlags: boolean[];             // Parallel array: which occurrences received
   occurrenceTransactionIds: (string | null)[]; // Parallel array: transaction IDs
+  occurrenceAmounts: number[];                // Parallel array: actual amounts received per occurrence
 
   // === PROGRESS METRICS ===
   paymentProgressPercentage: number;          // (received / total) × 100 (unit %)

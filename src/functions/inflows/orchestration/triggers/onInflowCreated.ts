@@ -29,6 +29,8 @@ import {
   SourcePeriod,
   PlaidRecurringFrequency
 } from '../../../../types';
+import { alignTransactionsToInflowPeriods } from '../../inflow_periods/utils/alignTransactionsToInflowPeriods';
+import { predictNextPayment } from '../../inflow_periods/utils/predictNextPayment';
 
 /**
  * Triggered when an inflow is created
@@ -252,8 +254,50 @@ export const onInflowCreated = onDocumentCreated({
     
     // Batch create all inflow_periods
     await batchCreateInflowPeriods(db, inflowPeriods);
-    
+
     console.log(`Successfully created ${inflowPeriods.length} inflow periods for inflow ${inflowId}`);
+
+    // STEP 4: Align historical transactions to periods
+    const transactionIds = inflowData.transactionIds || [];
+    if (transactionIds.length > 0) {
+      console.log(`[onInflowCreated] STEP 4: Aligning ${transactionIds.length} historical transactions`);
+
+      try {
+        const alignmentResult = await alignTransactionsToInflowPeriods(
+          db,
+          inflowId,
+          inflowData,
+          inflowPeriods.map(p => p.id!)
+        );
+
+        console.log('[onInflowCreated] Transaction alignment complete:');
+        console.log(`  - Transactions processed: ${alignmentResult.transactionsProcessed}`);
+        console.log(`  - Transactions matched: ${alignmentResult.transactionsMatched}`);
+        console.log(`  - Periods updated: ${alignmentResult.periodsUpdated}`);
+        if (alignmentResult.errors.length > 0) {
+          console.warn(`  - Errors: ${alignmentResult.errors.join(', ')}`);
+        }
+      } catch (alignError) {
+        console.error('[onInflowCreated] Transaction alignment error (non-fatal):', alignError);
+      }
+    } else {
+      console.log('[onInflowCreated] No historical transactions to align');
+    }
+
+    // STEP 5: Update prediction information
+    console.log('[onInflowCreated] STEP 5: Calculating payment prediction');
+    try {
+      const prediction = predictNextPayment(inflowData);
+      if (prediction) {
+        console.log(`[onInflowCreated] Next payment prediction:`);
+        console.log(`  - Expected date: ${prediction.expectedDate.toDate().toISOString().split('T')[0]}`);
+        console.log(`  - Expected amount: $${prediction.expectedAmount.toFixed(2)}`);
+        console.log(`  - Confidence: ${prediction.confidenceLevel}`);
+        console.log(`  - Method: ${prediction.predictionMethod}`);
+      }
+    } catch (predictionError) {
+      console.error('[onInflowCreated] Prediction calculation error (non-fatal):', predictionError);
+    }
     
   } catch (error) {
     console.error('Error in onInflowCreated:', error);

@@ -4,7 +4,7 @@
  * Generates 5 transactions for each category in the categories collection.
  * Transaction names follow pattern: "{category_name} {number}"
  * Income categories = credits (positive), Outflow categories = debits (negative)
- * Dates spread equally between November 2025 and March 2026 (5 months)
+ * Dates spread evenly across the current month
  */
 /**
  * Firebase Callable Function to create test transactions for all categories

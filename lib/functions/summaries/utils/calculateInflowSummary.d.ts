@@ -4,6 +4,7 @@ import { InflowEntry } from "../types/periodSummaries";
  * Calculates inflow entries from inflow periods
  *
  * Converts inflow periods into an array of inflow entries for frontend display.
+ * Now includes occurrence tracking and payment prediction data.
  * Frontend calculates aggregated totals on-the-fly for better performance.
  *
  * @param inflowPeriods - Array of inflow periods to convert

@@ -71,6 +71,14 @@ export async function reassignTransactionsForBudget(
   };
 
   try {
+    // Verify budget exists
+    const budgetDoc = await db.collection('budgets').doc(budgetId).get();
+    if (!budgetDoc.exists) {
+      stats.success = false;
+      stats.errors.push('Budget not found');
+      return stats;
+    }
+
     // Get all active budgets for matching
     const activeBudgetsSnapshot = await db.collection('budgets')
       .where('userId', '==', userId)
@@ -187,50 +195,44 @@ export async function reassignTransactionsForBudget(
             continue;
           }
 
-          // Re-evaluate ALL splits
-          let splitsChanged = false;
-          const updatedSplits = txnData.splits.map((split: any) => {
-            // Find best matching budget for this split
-            let matchedBudget = null;
+          // Store original splits for comparison
+          const originalSplits = JSON.stringify(txnData.splits.map((s: any) => s.budgetId));
 
-            // Try regular budgets first (date-based matching)
-            for (const budget of allActiveBudgets) {
-              const isAfterStart = transactionDate >= budget.startDate.toDate();
-              let isWithinRange = false;
+          // Re-evaluate ALL splits using category-aware matching
+          const transactionToMatch: Transaction = {
+            id: txnDoc.id,
+            ownerId: txnData.ownerId,
+            transactionDate: txnData.transactionDate,
+            amount: txnData.amount,
+            splits: txnData.splits,
+            isActive: txnData.isActive,
+            createdAt: txnData.createdAt,
+            updatedAt: txnData.updatedAt
+          } as Transaction;
 
-              if (budget.isOngoing) {
-                isWithinRange = isAfterStart;
-              } else {
-                const budgetEnd = budget.budgetEndDate || budget.endDate;
-                isWithinRange = isAfterStart && budgetEnd && (transactionDate <= budgetEnd.toDate());
-              }
+          // Use category-aware matching
+          const matchedTransactions = await matchTransactionSplitsToBudgets([transactionToMatch], userId);
 
-              if (isWithinRange) {
-                matchedBudget = budget;
-                break;
-              }
-            }
+          if (matchedTransactions.length === 0) {
+            stats.errors.push(`Transaction ${txnDoc.id}: Failed to match`);
+            continue;
+          }
 
-            // Fallback to "Everything Else" budget
-            if (!matchedBudget && everythingElseBudget) {
-              matchedBudget = everythingElseBudget;
-            }
+          const matchedTransaction = matchedTransactions[0];
+          const updatedSplits = matchedTransaction.splits;
 
-            const newBudgetId = matchedBudget ? matchedBudget.id : 'unassigned';
-
-            if (split.budgetId !== newBudgetId) {
-              splitsChanged = true;
-              stats.splitsReassigned++;
-            }
-
-            return {
-              ...split,
-              budgetId: newBudgetId,
-              updatedAt: Timestamp.now()
-            };
-          });
+          // Check if any splits changed
+          const newSplits = JSON.stringify(updatedSplits.map((s: any) => s.budgetId));
+          const splitsChanged = originalSplits !== newSplits;
 
           if (splitsChanged) {
+            // Count how many splits changed
+            for (let i = 0; i < updatedSplits.length; i++) {
+              if (txnData.splits[i]?.budgetId !== updatedSplits[i]?.budgetId) {
+                stats.splitsReassigned++;
+              }
+            }
+
             firestoreBatch.update(txnDoc.ref, {
               splits: updatedSplits,
               updatedAt: Timestamp.now()

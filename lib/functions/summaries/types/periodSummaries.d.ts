@@ -115,6 +115,16 @@ export interface InflowSummaryData {
     entries?: InflowEntry[];
 }
 /**
+ * Payment prediction for an inflow
+ */
+export interface InflowPaymentPrediction {
+    expectedDate: Timestamp;
+    expectedAmount: number;
+    confidenceLevel: 'high' | 'medium' | 'low';
+    predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override';
+    daysUntilPayment: number;
+}
+/**
  * Individual inflow entry for detailed view
  * Enhanced to include all fields for frontend tile rendering
  */
@@ -123,16 +133,26 @@ export interface InflowEntry {
     inflowPeriodId: string;
     description: string;
     source: string;
+    userCustomName?: string;
     totalExpected: number;
     totalReceived: number;
     totalPending: number;
     averageAmount: number;
+    amountPerOccurrence: number;
     isReceiptPeriod: boolean;
     expectedDate?: Timestamp;
     isRegularSalary: boolean;
     receiptProgressPercentage: number;
+    dollarProgressPercentage: number;
     isFullyReceived: boolean;
     isPending: boolean;
+    occurrenceCount: number;
+    occurrencesPaid: number;
+    occurrenceDueDates: Timestamp[];
+    firstDueDateInPeriod?: Timestamp;
+    lastDueDateInPeriod?: Timestamp;
+    nextUnpaidDueDate?: Timestamp;
+    nextPaymentPrediction?: InflowPaymentPrediction;
     groupId: string;
     incomeType: string;
 }

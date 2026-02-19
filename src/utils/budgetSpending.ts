@@ -101,7 +101,11 @@ export async function updateBudgetSpending(
         result.periodTypesUpdated.weekly += updateResult.weeklyUpdated;
         result.periodTypesUpdated.bi_monthly += updateResult.biMonthlyUpdated;
         result.periodTypesUpdated.monthly += updateResult.monthlyUpdated;
-        result.budgetsAffected.push(budgetId);
+
+        // Only add to budgetsAffected if periods were actually updated
+        if (updateResult.totalUpdated > 0) {
+          result.budgetsAffected.push(budgetId);
+        }
 
       } catch (error) {
         const errorMsg = `Failed to update budget ${budgetId}: ${error}`;

@@ -176,6 +176,17 @@ export interface InflowSummaryData {
 }
 
 /**
+ * Payment prediction for an inflow
+ */
+export interface InflowPaymentPrediction {
+  expectedDate: Timestamp;
+  expectedAmount: number;
+  confidenceLevel: 'high' | 'medium' | 'low';
+  predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override';
+  daysUntilPayment: number;
+}
+
+/**
  * Individual inflow entry for detailed view
  * Enhanced to include all fields for frontend tile rendering
  */
@@ -185,12 +196,14 @@ export interface InflowEntry {
   inflowPeriodId: string;
   description: string;
   source: string;                  // Employer, client, etc.
+  userCustomName?: string;         // User's custom name override
 
   // === AMOUNTS ===
   totalExpected: number;           // Total expected income
   totalReceived: number;           // Total received income
   totalPending: number;            // Pending income (expected - received)
   averageAmount: number;           // Average amount from parent inflow
+  amountPerOccurrence: number;     // Amount per occurrence
 
   // === STATUS ===
   isReceiptPeriod: boolean;
@@ -199,8 +212,20 @@ export interface InflowEntry {
 
   // === PROGRESS METRICS ===
   receiptProgressPercentage: number; // (received/expected) × 100
+  dollarProgressPercentage: number;  // ($ received / $ expected) × 100
   isFullyReceived: boolean;        // Whether received >= expected
   isPending: boolean;              // Whether totalPending > 0
+
+  // === OCCURRENCE TRACKING ===
+  occurrenceCount: number;         // Total occurrences in period
+  occurrencesPaid: number;         // Count of paid occurrences
+  occurrenceDueDates: Timestamp[]; // Array of expected dates
+  firstDueDateInPeriod?: Timestamp;
+  lastDueDateInPeriod?: Timestamp;
+  nextUnpaidDueDate?: Timestamp;
+
+  // === PREDICTION ===
+  nextPaymentPrediction?: InflowPaymentPrediction;
 
   // === GROUPING ===
   groupId: string;                 // Group association
