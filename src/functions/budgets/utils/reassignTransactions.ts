@@ -199,7 +199,8 @@ export async function reassignTransactionsForBudget(
           const originalSplits = JSON.stringify(txnData.splits.map((s: any) => s.budgetId));
 
           // Re-evaluate ALL splits using category-aware matching
-          const transactionToMatch: Transaction = {
+          // Cast through unknown since we only need a subset of Transaction fields for matching
+          const transactionToMatch = {
             id: txnDoc.id,
             ownerId: txnData.ownerId,
             transactionDate: txnData.transactionDate,
@@ -208,7 +209,7 @@ export async function reassignTransactionsForBudget(
             isActive: txnData.isActive,
             createdAt: txnData.createdAt,
             updatedAt: txnData.updatedAt
-          } as Transaction;
+          } as unknown as Transaction;
 
           // Use category-aware matching
           const matchedTransactions = await matchTransactionSplitsToBudgets([transactionToMatch], userId);
