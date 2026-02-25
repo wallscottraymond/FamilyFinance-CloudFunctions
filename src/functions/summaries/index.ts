@@ -23,3 +23,6 @@ export * from "./triggers/inflowPeriodSummaryTriggers";
 
 // Export types
 export * from "./types";
+
+// Export admin functions
+export * from "./admin/backfillUserSummaries";
