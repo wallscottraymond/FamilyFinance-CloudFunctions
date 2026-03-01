@@ -5,6 +5,64 @@ import { SourcePeriod, PeriodType } from "../../../types";
 const db = getFirestore();
 
 /**
+ * Calculate the proper index for a period N units before/after current
+ *
+ * Index formats:
+ * - Monthly: YYYYMM (e.g., 202502)
+ * - Bi-monthly: YYYYMM1 or YYYYMM2 (e.g., 2025021, 2025022)
+ * - Weekly: YYYYWW (e.g., 202509)
+ *
+ * Simple arithmetic (index - 12) doesn't work across year boundaries!
+ * 202502 - 12 = 202490 (invalid) instead of 202402 (Feb 2024)
+ *
+ * @param currentPeriod - The current period to calculate from
+ * @param offset - Number of periods to go back (negative) or forward (positive)
+ * @param periodType - The type of period
+ * @returns The calculated index value
+ */
+function calculateOffsetIndex(
+  currentPeriod: SourcePeriod,
+  offset: number,
+  periodType: PeriodType
+): number {
+  const startDate = currentPeriod.startDate.toDate();
+
+  if (periodType === PeriodType.MONTHLY) {
+    // Go back/forward by months
+    const newDate = new Date(startDate);
+    newDate.setMonth(newDate.getMonth() + offset);
+    const year = newDate.getFullYear();
+    const month = newDate.getMonth() + 1; // JS months are 0-indexed
+    return parseInt(`${year}${String(month).padStart(2, '0')}`);
+  } else if (periodType === PeriodType.BI_MONTHLY) {
+    // Bi-monthly has 2 periods per month, so offset by half-months
+    const currentHalf = currentPeriod.metadata.biMonthlyHalf || 1;
+    const totalHalfMonths = (startDate.getMonth() * 2) + currentHalf - 1 + offset;
+
+    // Calculate the new month and half
+    const newMonthsFromStart = Math.floor(totalHalfMonths / 2);
+    const newHalf = (totalHalfMonths % 2) + 1;
+
+    const newDate = new Date(startDate.getFullYear(), 0, 1); // Start of year
+    newDate.setMonth(newMonthsFromStart);
+
+    const year = newDate.getFullYear();
+    const month = newDate.getMonth() + 1;
+    return parseInt(`${year}${String(month).padStart(2, '0')}${newHalf}`);
+  } else {
+    // Weekly - go back/forward by weeks
+    const newDate = new Date(startDate);
+    newDate.setDate(newDate.getDate() + (offset * 7));
+    const year = newDate.getFullYear();
+    // Calculate week number
+    const startOfYear = new Date(year, 0, 1);
+    const daysSinceYearStart = Math.floor((newDate.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.ceil((daysSinceYearStart + startOfYear.getDay() + 1) / 7);
+    return parseInt(`${year}${String(weekNumber).padStart(2, '0')}`);
+  }
+}
+
+/**
  * Pre-creates user period summaries for all period types (weekly, bi-monthly, monthly)
  *
  * This function is called when a new user account is created to pre-populate
@@ -13,7 +71,7 @@ const db = getFirestore();
  *
  * Strategy:
  * 1. Query source_periods to find current periods for each type (isCurrent: true)
- * 2. Use the index field to find 12 periods before and 12 periods after
+ * 2. Calculate proper index range accounting for year boundaries
  * 3. Create summaries using the actual periodId values from the database
  *
  * Creates summaries for:
@@ -36,10 +94,11 @@ export async function preCreateUserPeriodSummaries(
 
   try {
     // Process all three period types
+    // IMPORTANT: Use enum values directly to ensure document IDs match frontend expectations
     const periodTypes = [
-      { type: PeriodType.WEEKLY, name: "weekly" },
-      { type: PeriodType.BI_MONTHLY, name: "bi-monthly" },
-      { type: PeriodType.MONTHLY, name: "monthly" },
+      { type: PeriodType.WEEKLY, name: PeriodType.WEEKLY },         // "weekly"
+      { type: PeriodType.BI_MONTHLY, name: PeriodType.BI_MONTHLY }, // "bi_monthly" (NOT "bi-monthly"!)
+      { type: PeriodType.MONTHLY, name: PeriodType.MONTHLY },       // "monthly"
     ];
 
     // Create a single Firestore batch for all summaries
@@ -74,9 +133,14 @@ export async function preCreateUserPeriodSummaries(
         `[preCreateUserPeriodSummaries] Found current ${name} period: ${currentPeriodDoc.id} (index: ${currentIndex})`
       );
 
-      // Step 2: Query for 12 periods before and 12 periods after
-      const minIndex = currentIndex - 12;
-      const maxIndex = currentIndex + 12;
+      // Step 2: Calculate proper index range accounting for year boundaries
+      // Simple arithmetic (index - 12) doesn't work! 202502 - 12 = 202490, not 202402
+      const minIndex = calculateOffsetIndex(currentPeriod, -12, type);
+      const maxIndex = calculateOffsetIndex(currentPeriod, 12, type);
+
+      console.log(
+        `[preCreateUserPeriodSummaries] Calculated index range: ${minIndex} to ${maxIndex}`
+      );
 
       const periodsQuery = await db
         .collection("source_periods")
@@ -105,8 +169,10 @@ export async function preCreateUserPeriodSummaries(
         const summaryId = summary.id;
         const summaryRef = db.collection("user_summaries").doc(summaryId);
 
-        // Add to batch (will create new document)
-        batch.set(summaryRef, summary);
+        // Add to batch with merge:true to handle race conditions
+        // If budget triggers create the document first, merge won't overwrite their data
+        // This prevents data loss when preCreateUserPeriodSummaries and budget triggers run concurrently
+        batch.set(summaryRef, summary, { merge: true });
         summaryCount++;
 
         console.log(`[preCreateUserPeriodSummaries] Queued summary: ${summaryId}`);

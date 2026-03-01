@@ -11,7 +11,8 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { OutflowPeriod } from '../../../../types';
 import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactionsToOccurrences';
-import { updateOutflowPeriodSummary } from '../../outflow_summaries/crud/updateOutflowPeriodSummary';
+// NOTE: updateOutflowPeriodSummary removed - summary updates handled by centralized trigger
+// in /summaries/triggers/outflowPeriodSummaryTriggers.ts to avoid duplicate writes
 
 /**
  * Triggered when an outflow_period is updated
@@ -83,18 +84,14 @@ export const onOutflowPeriodUpdate = onDocumentUpdated({
       console.log('');
     }
 
-    // FINAL STEP: Update outflow summaries (non-critical)
-    console.log('[onOutflowPeriodUpdate] Updating outflow summaries...');
-    try {
-      await updateOutflowPeriodSummary(afterData);
-      console.log('[onOutflowPeriodUpdate] ✓ Summaries updated successfully');
-    } catch (summaryError) {
-      console.error('[onOutflowPeriodUpdate] ⚠️  Summary update failed:', summaryError);
-      // Don't throw - summary failures shouldn't break the update
-      // Summaries can be recalculated via manual API call if needed
-    }
+    // NOTE: Summary updates are handled by the centralized trigger in
+    // /summaries/triggers/outflowPeriodSummaryTriggers.ts (onOutflowPeriodUpdatedSummary)
+    // which fires on the same event and calls updateUserPeriodSummary().
+    // We don't duplicate the summary update here to avoid race conditions
+    // and redundant writes to user_summaries.
 
     console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
+    console.log('[onOutflowPeriodUpdate] Note: Summary update handled by centralized trigger');
     console.log('');
 
   } catch (error) {
@@ -146,17 +143,14 @@ function detectOnlyOccurrenceFieldsChanged(before: OutflowPeriod | undefined, af
 }
 
 /**
- * Helper function to update summaries only (without running occurrence matching)
+ * Helper function for when only occurrence fields changed
+ * Summary updates are handled by centralized trigger, so we just log and return
  */
 async function updateSummaryOnly(afterData: OutflowPeriod): Promise<void> {
-  try {
-    await updateOutflowPeriodSummary(afterData);
-    console.log('[onOutflowPeriodUpdate] ✓ Summaries updated successfully');
-    console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
-    console.log('');
-  } catch (summaryError) {
-    console.error('[onOutflowPeriodUpdate] ⚠️  Summary update failed:', summaryError);
-    console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
-    console.log('');
-  }
+  // NOTE: Summary updates are handled by the centralized trigger in
+  // /summaries/triggers/outflowPeriodSummaryTriggers.ts (onOutflowPeriodUpdatedSummary)
+  // We don't duplicate the summary update here to avoid race conditions.
+  console.log('[onOutflowPeriodUpdate] Summary update handled by centralized trigger');
+  console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
+  console.log('');
 }

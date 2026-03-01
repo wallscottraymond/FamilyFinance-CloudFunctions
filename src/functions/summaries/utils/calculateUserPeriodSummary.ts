@@ -65,8 +65,13 @@ export async function calculateUserPeriodSummary(
   // Step 5: Build the complete UserPeriodSummary
   const now = Timestamp.now();
 
+  // IMPORTANT: Always use sourcePeriod.type for the document ID to ensure consistency
+  // This prevents ID mismatches when periodType parameter has different casing/formatting
+  // than the actual source period type (e.g., "bi-monthly" vs "bi_monthly")
+  const normalizedPeriodType = sourcePeriod.type.toLowerCase();
+
   // Build document ID: {userId}_{periodType}_{sourcePeriodId}
-  const summaryId = `${userId}_${periodType}_${sourcePeriodId}`;
+  const summaryId = `${userId}_${normalizedPeriodType}_${sourcePeriodId}`;
 
   const summary: UserPeriodSummary = {
     // === IDENTITY ===
@@ -81,6 +86,7 @@ export async function calculateUserPeriodSummary(
     year: sourcePeriod.year,
     month: sourcePeriod.metadata.month,
     weekNumber: sourcePeriod.metadata.weekNumber,
+    biMonthlyHalf: sourcePeriod.metadata.biMonthlyHalf,
 
     // === RESOURCE ENTRIES (Arrays) ===
     outflows,
