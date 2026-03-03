@@ -204,6 +204,7 @@ export interface InflowEntry {
   totalPending: number;            // Pending income (expected - received)
   averageAmount: number;           // Average amount from parent inflow
   amountPerOccurrence: number;     // Amount per occurrence
+  amountAllocated: number;         // Amount allocated to this period for budgeting (for cross-period distribution)
 
   // === STATUS ===
   isReceiptPeriod: boolean;
@@ -302,6 +303,7 @@ export interface UserPeriodSummary {
   year: number;                    // 2025
   month?: number;                  // 1-12 for monthly/bi-monthly
   weekNumber?: number;             // 1-52 for weekly
+  biMonthlyHalf?: 1 | 2;           // First/second half for bi-monthly periods
 
   // === RESOURCE ENTRIES (Arrays for frontend calculation) ===
   outflows: OutflowEntry[];        // Array of individual outflow entries

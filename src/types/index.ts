@@ -1955,6 +1955,7 @@ export interface InflowPeriod extends BaseDocument {
 
   // === FINANCIAL TRACKING ===
   actualAmount: number | null;                // Actual amount received (null until transaction attached)
+  amountAllocated: number;                    // Amount allocated to this period for budgeting (for cross-period distribution)
   amountWithheld: number;                     // Amount to withhold for this period
   averageAmount: number;                      // Average amount received from Plaid
   expectedAmount: number;                     // Total expected amount for period

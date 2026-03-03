@@ -113,6 +113,7 @@ export function calculateInflowSummary(
       totalPending: pendingAmount,
       averageAmount: inflowPeriod.averageAmount || 0,
       amountPerOccurrence: inflowPeriod.amountPerOccurrence || inflowPeriod.averageAmount || 0,
+      amountAllocated: inflowPeriod.amountAllocated || 0, // Amount allocated to this period for budgeting (for cross-period distribution)
 
       // === STATUS ===
       isReceiptPeriod: inflowPeriod.isReceiptPeriod,

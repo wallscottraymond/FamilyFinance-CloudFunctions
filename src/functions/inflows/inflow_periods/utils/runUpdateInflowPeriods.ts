@@ -244,6 +244,9 @@ export async function runUpdateInflowPeriods(
           updates.amountPerOccurrence = incomeAmount;
           updates.dailyWithholdingRate = dailyRate;
           updates.totalAmountUnpaid = updates.totalAmountDue - (period.totalAmountPaid || 0);
+          // Calculate amountAllocated: distributes income across periods proportionally
+          // Formula: amountPerOccurrence × (periodDays / cycleDays)
+          updates.amountAllocated = Math.round((incomeAmount * (daysInPeriod / cycleDays)) * 100) / 100;
 
           // Update occurrence amounts for unreceived occurrences
           if (period.occurrenceAmounts && period.occurrenceAmounts.length > 0) {

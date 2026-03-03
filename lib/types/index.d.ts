@@ -1515,6 +1515,7 @@ export interface InflowPeriod extends BaseDocument {
     accountId: string;
     plaidItemId: string;
     actualAmount: number | null;
+    amountAllocated: number;
     amountWithheld: number;
     averageAmount: number;
     expectedAmount: number;

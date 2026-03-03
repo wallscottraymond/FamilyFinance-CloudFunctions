@@ -139,6 +139,7 @@ export interface InflowEntry {
     totalPending: number;
     averageAmount: number;
     amountPerOccurrence: number;
+    amountAllocated: number;
     isReceiptPeriod: boolean;
     expectedDate?: Timestamp;
     isRegularSalary: boolean;
@@ -206,6 +207,7 @@ export interface UserPeriodSummary {
     year: number;
     month?: number;
     weekNumber?: number;
+    biMonthlyHalf?: 1 | 2;
     outflows: OutflowEntry[];
     budgets: BudgetEntry[];
     inflows: InflowEntry[];

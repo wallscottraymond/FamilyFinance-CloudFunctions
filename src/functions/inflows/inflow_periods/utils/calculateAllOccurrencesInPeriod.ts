@@ -17,12 +17,52 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { Inflow, SourcePeriod, PlaidRecurringFrequency } from '../../../../types';
 
 /**
+ * Get approximate cycle days for a frequency
+ */
+function getCycleDays(frequency: PlaidRecurringFrequency | string): number {
+  switch (frequency) {
+    case PlaidRecurringFrequency.WEEKLY:
+    case 'WEEKLY':
+      return 7;
+    case PlaidRecurringFrequency.BIWEEKLY:
+    case 'BIWEEKLY':
+      return 14;
+    case PlaidRecurringFrequency.SEMI_MONTHLY:
+    case 'SEMI_MONTHLY':
+      return 15; // Approximate
+    case PlaidRecurringFrequency.MONTHLY:
+    case 'MONTHLY':
+      return 30; // Approximate
+    case 'QUARTERLY':
+      return 91; // Approximate (365/4)
+    case PlaidRecurringFrequency.ANNUALLY:
+    case 'ANNUALLY':
+      return 365;
+    default:
+      return 30; // Default to monthly
+  }
+}
+
+/**
+ * Get number of days in a period
+ */
+function getPeriodDays(periodStart: Date, periodEnd: Date): number {
+  return Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+/**
  * Result of calculating occurrences for a period
  */
 export interface OccurrenceResult {
   numberOfOccurrences: number;
   occurrenceDueDates: Timestamp[];
   totalExpectedAmount: number;
+  /** The next expected payment date (for periods with or without occurrences) */
+  nextExpectedDate: Timestamp | null;
+  /** Amount allocated to this period for budgeting (distributes income across periods) */
+  amountAllocated: number;
+  /** Number of days between income payments (based on frequency) */
+  cycleDays: number;
 }
 
 /**
@@ -156,7 +196,10 @@ export function calculateAllOccurrencesInPeriod(
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
-      totalExpectedAmount: 0
+      totalExpectedAmount: 0,
+      nextExpectedDate: null,
+      amountAllocated: 0,
+      cycleDays: 0
     };
   }
 
@@ -169,7 +212,10 @@ export function calculateAllOccurrencesInPeriod(
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
-      totalExpectedAmount: 0
+      totalExpectedAmount: 0,
+      nextExpectedDate: null,
+      amountAllocated: 0,
+      cycleDays: 0
     };
   }
 
@@ -180,9 +226,15 @@ export function calculateAllOccurrencesInPeriod(
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
-      totalExpectedAmount: 0
+      totalExpectedAmount: 0,
+      nextExpectedDate: null,
+      amountAllocated: 0,
+      cycleDays: 0
     };
   }
+
+  // Calculate cycle days for this frequency
+  const cycleDays = getCycleDays(frequency);
 
   // Get reference date from inflow (use predictedNextDate, lastDate, or firstDate)
   let referenceDate: Date;
@@ -197,7 +249,10 @@ export function calculateAllOccurrencesInPeriod(
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
-      totalExpectedAmount: 0
+      totalExpectedAmount: 0,
+      nextExpectedDate: null,
+      amountAllocated: 0,
+      cycleDays
     };
   }
 
@@ -232,19 +287,33 @@ export function calculateAllOccurrencesInPeriod(
     currentDate = addFrequencyInterval(currentDate, frequency);
   }
 
+  // After the loop, currentDate is the NEXT occurrence AFTER the period
+  // This is the nextExpectedDate for this period
+  const nextExpectedDate = Timestamp.fromDate(adjustForMonthEnd(currentDate, referenceDate, frequency));
+
   const numberOfOccurrences = occurrenceDueDates.length;
   const totalExpectedAmount = numberOfOccurrences * amountPerOccurrence;
+
+  // Calculate amountAllocated: distribute income across periods proportionally
+  // Formula: amountPerOccurrence × (periodDays / cycleDays)
+  // This gives a normalized "how much income belongs to this period" value
+  const periodDays = getPeriodDays(periodStart, periodEnd);
+  const amountAllocated = Math.round((amountPerOccurrence * (periodDays / cycleDays)) * 100) / 100;
 
   console.log(
     `[calculateAllOccurrencesInPeriod] Inflow: ${inflow.description || inflow.id}, ` +
     `Frequency: ${frequency}, Period: ${sourcePeriod.periodId || sourcePeriod.id}, ` +
-    `Occurrences: ${numberOfOccurrences}, Total: $${totalExpectedAmount.toFixed(2)}`
+    `Occurrences: ${numberOfOccurrences}, Total: $${totalExpectedAmount.toFixed(2)}, ` +
+    `Allocated: $${amountAllocated.toFixed(2)}, NextExpected: ${nextExpectedDate.toDate().toISOString().split('T')[0]}`
   );
 
   return {
     numberOfOccurrences,
     occurrenceDueDates,
-    totalExpectedAmount
+    totalExpectedAmount,
+    nextExpectedDate,
+    amountAllocated,
+    cycleDays
   };
 }
 

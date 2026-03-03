@@ -21,6 +21,12 @@ export interface OccurrenceResult {
     numberOfOccurrences: number;
     occurrenceDueDates: Timestamp[];
     totalExpectedAmount: number;
+    /** The next expected payment date (for periods with or without occurrences) */
+    nextExpectedDate: Timestamp | null;
+    /** Amount allocated to this period for budgeting (distributes income across periods) */
+    amountAllocated: number;
+    /** Number of days between income payments (based on frequency) */
+    cycleDays: number;
 }
 /**
  * Calculate all income occurrences within a given period

@@ -31,6 +31,7 @@ import {
 } from '../../../../types';
 import { alignTransactionsToInflowPeriods } from '../../inflow_periods/utils/alignTransactionsToInflowPeriods';
 import { predictNextPayment } from '../../inflow_periods/utils/predictNextPayment';
+import { calculateAllOccurrencesInPeriod as calculateOccurrencesUtil } from '../../inflow_periods/utils/calculateAllOccurrencesInPeriod';
 
 /**
  * Triggered when an inflow is created
@@ -74,12 +75,14 @@ export const onInflowCreated = onDocumentCreated({
     const db = admin.firestore();
     const now = Timestamp.now();
     
-    // Calculate time range for period generation (3 months forward like budget periods)
-    const startDate = new Date();
-    const endDate = new Date(startDate);
+    // Calculate time range for period generation
+    // Start from the inflow's firstDate (for historical periods)
+    // End at 3 months forward (for future planning)
+    const startDate = inflowData.firstDate?.toDate() || new Date();
+    const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 3); // 3 months forward
-    
-    console.log(`Generating inflow periods from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+    console.log(`Generating inflow periods from ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()} (3 months forward)`);
     
     // Get all source periods that overlap with our time range
     const sourcePeriodsQuery = db.collection('source_periods')
@@ -112,8 +115,10 @@ export const onInflowCreated = onDocumentCreated({
         inflowData
       );
 
-      // Calculate multi-occurrence tracking (similar to outflows)
-      const occurrences = calculateAllOccurrencesInPeriod(inflowData, sourcePeriod, cycleInfo);
+      // Calculate multi-occurrence tracking using the proper utility
+      // This uses the inflow's actual dates (lastDate, predictedNextDate, firstDate)
+      // to find which occurrences fall within each period
+      const occurrences = calculateOccurrencesUtil(inflowData, sourcePeriod);
 
       // Calculate financial totals based on occurrences
       const amountPerOccurrence = cycleInfo.incomeAmount;
@@ -163,6 +168,7 @@ export const onInflowCreated = onDocumentCreated({
         averageAmount: cycleInfo.incomeAmount,
         expectedAmount: totalAmountDue,
         amountPerOccurrence: amountPerOccurrence,
+        amountAllocated: occurrences.amountAllocated, // Amount allocated to this period for budgeting (for cross-period distribution)
         totalAmountDue: totalAmountDue,
         totalAmountPaid: totalAmountPaid,
         totalAmountUnpaid: totalAmountUnpaid,
@@ -209,7 +215,8 @@ export const onInflowCreated = onDocumentCreated({
         periodType: sourcePeriod.type,
 
         // === PLAID PREDICTION ===
-        predictedNextDate: inflowData.predictedNextDate || null,
+        // Use the period-specific next expected date (next payment AFTER this period)
+        predictedNextDate: occurrences.nextExpectedDate,
 
         // === USER INTERACTION ===
         rules: [],
@@ -411,42 +418,6 @@ async function batchCreateInflowPeriods(
     await batch.commit();
     console.log(`Created batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(inflowPeriods.length / BATCH_SIZE)} (${batchPeriods.length} periods)`);
   }
-}
-
-/**
- * Calculate all occurrences of an inflow within a period
- * Similar to outflow occurrence calculation
- */
-function calculateAllOccurrencesInPeriod(
-  inflow: any,
-  sourcePeriod: SourcePeriod,
-  cycleInfo: ReturnType<typeof calculatePaymentCycle>
-) {
-  const periodStart = sourcePeriod.startDate.toDate();
-  const periodEnd = sourcePeriod.endDate.toDate();
-
-  // For now, simple implementation - calculate based on frequency
-  let numberOfOccurrences = 0;
-  const occurrenceDueDates: Timestamp[] = [];
-
-  // Calculate occurrences based on cycle days
-  const cycleDays = cycleInfo.cycleDays;
-  const periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
-
-  // Estimate number of occurrences
-  numberOfOccurrences = Math.max(1, Math.floor(periodDays / cycleDays));
-
-  // Generate occurrence dates
-  for (let i = 0; i < numberOfOccurrences; i++) {
-    const occurrenceDate = new Date(periodStart);
-    occurrenceDate.setDate(occurrenceDate.getDate() + (i * cycleDays));
-    occurrenceDueDates.push(Timestamp.fromDate(occurrenceDate));
-  }
-
-  return {
-    numberOfOccurrences,
-    occurrenceDueDates
-  };
 }
 
 /**
