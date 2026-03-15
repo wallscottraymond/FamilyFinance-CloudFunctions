@@ -2251,6 +2251,24 @@
       ]
     },
     {
+      "collectionGroup": "user_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sourcePeriodId",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "group_summaries",
       "queryScope": "COLLECTION",
       "fields": [

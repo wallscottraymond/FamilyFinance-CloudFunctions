@@ -9,13 +9,18 @@ import { PeriodType } from '../../../../types';
  *
  * Parses the source period ID format to identify the period type.
  *
- * @param sourcePeriodId - Source period identifier (e.g., "2025-M01", "2025-BM01-1", "2025-W01")
+ * Source period ID formats (from generateSourcePeriods.ts):
+ * - Monthly: "2025M01" (no hyphen)
+ * - Bi-Monthly: "2025BM01A" or "2025BM01B" (no hyphen)
+ * - Weekly: "2025W01" (no hyphen)
+ *
+ * @param sourcePeriodId - Source period identifier (e.g., "2025M01", "2025BM01A", "2025W01")
  * @returns The corresponding PeriodType enum value
  *
  * @example
- * determinePeriodType("2025-M01")     // Returns PeriodType.MONTHLY
- * determinePeriodType("2025-BM01-1")  // Returns PeriodType.BI_MONTHLY
- * determinePeriodType("2025-W15")     // Returns PeriodType.WEEKLY
+ * determinePeriodType("2025M01")      // Returns PeriodType.MONTHLY
+ * determinePeriodType("2025BM01A")    // Returns PeriodType.BI_MONTHLY
+ * determinePeriodType("2025W15")      // Returns PeriodType.WEEKLY
  */
 export declare function determinePeriodType(sourcePeriodId: string): PeriodType;
 //# sourceMappingURL=periodTypeHelpers.d.ts.map

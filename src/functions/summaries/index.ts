@@ -15,6 +15,7 @@
 // Export API callable functions
 export * from "./api/getUserPeriodSummary";
 export * from "./api/recalculateUserPeriodSummary";
+export * from "./api/regenerateAllUserSummaries";
 
 // Export Firestore triggers
 export * from "./triggers/outflowPeriodSummaryTriggers";

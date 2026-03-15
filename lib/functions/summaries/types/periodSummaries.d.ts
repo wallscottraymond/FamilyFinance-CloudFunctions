@@ -58,6 +58,8 @@ export interface OutflowEntry {
     duePeriodCount: number;
     dueDate?: Timestamp;
     status: OutflowPeriodStatus;
+    firstDueDateInPeriod?: Timestamp;
+    nextUnpaidDueDate?: Timestamp;
     paymentProgressPercentage: number;
     fullyPaidCount: number;
     unpaidCount: number;

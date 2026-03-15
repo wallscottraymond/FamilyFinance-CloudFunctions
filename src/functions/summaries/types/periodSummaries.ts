@@ -83,6 +83,10 @@ export interface OutflowEntry {
   dueDate?: Timestamp;
   status: OutflowPeriodStatus;
 
+  // === PERIOD-SPECIFIC DATES ===
+  firstDueDateInPeriod?: Timestamp;  // First due date within this period
+  nextUnpaidDueDate?: Timestamp;     // Next unpaid due date within this period
+
   // === PROGRESS METRICS ===
   paymentProgressPercentage: number; // (paid/due) × 100
   fullyPaidCount: number;          // Count of fully paid occurrences

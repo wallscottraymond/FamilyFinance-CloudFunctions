@@ -44,6 +44,10 @@ export function calculateOutflowSummary(
     dueDate: outflowPeriod.dueDate || outflowPeriod.predictedNextDate || undefined,
     status: outflowPeriod.status || OutflowPeriodStatus.PENDING,
 
+    // === PERIOD-SPECIFIC DATES ===
+    firstDueDateInPeriod: outflowPeriod.firstDueDateInPeriod || undefined,
+    nextUnpaidDueDate: outflowPeriod.nextUnpaidDueDate || undefined,
+
     // === PROGRESS METRICS ===
     paymentProgressPercentage: outflowPeriod.paymentProgressPercentage || 0,
     fullyPaidCount: outflowPeriod.numberOfOccurrencesPaid || 0,

@@ -7,7 +7,7 @@
  *
  * Strategy:
  * 1. Query source_periods to find current periods for each type (isCurrent: true)
- * 2. Use the index field to find 12 periods before and 12 periods after
+ * 2. Calculate proper index range accounting for year boundaries
  * 3. Create summaries using the actual periodId values from the database
  *
  * Creates summaries for:

@@ -19,6 +19,10 @@
 export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";
 export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
 
+// API Functions
+export { regenerateInflowPeriods } from "./inflow_periods/api/regenerateInflowPeriods";
+export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";
+
 // ===== Inflow Period Utilities =====
 export {
   alignTransactionsToInflowPeriods,
