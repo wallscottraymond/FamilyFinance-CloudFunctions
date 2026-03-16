@@ -86,7 +86,7 @@ export async function savePlaidItem(
       id: itemId,
       plaidItemId: itemId,
       userId: userId,
-      familyId: '', // TODO: Get user's familyId from userData
+      groupIds: [], // Empty array = private (use groupIds for new sharing model)
       institutionId: institutionId,
       institutionName: institutionName,
       institutionLogo: null,

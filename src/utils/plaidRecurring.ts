@@ -106,7 +106,7 @@ async function processInflowStreams(streams: any[], userId: string): Promise<{ p
         plaidStreamId: streamId,
         accountId: stream.account_id,
         userId: userId,
-        familyId: '', // TODO: Get user's familyId from userData
+        groupIds: [], // Empty array = private (use groupIds for new sharing model)
         
         // Basic stream info
         description: stream.description || 'Recurring Income',
@@ -170,7 +170,7 @@ async function processOutflowStreams(streams: any[], userId: string): Promise<{ 
         plaidStreamId: streamId,
         accountId: stream.account_id,
         userId: userId,
-        familyId: '', // TODO: Get user's familyId from userData
+        groupIds: [], // Empty array = private (use groupIds for new sharing model)
         
         // Basic stream info
         description: stream.description || 'Recurring Expense',

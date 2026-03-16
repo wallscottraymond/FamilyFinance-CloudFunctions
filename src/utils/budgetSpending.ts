@@ -11,6 +11,7 @@
 
 import { db } from '../index';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { Transaction, TransactionType, TransactionStatus, PeriodType, Budget } from '../types';
 
 interface UpdateBudgetSpendingParams {
@@ -279,7 +280,8 @@ async function updateBudgetPeriodSpending(
     return result;
   }
 
-  // Update matching periods using batch writes
+  // Update matching periods using batch writes with atomic increments
+  // RACE CONDITION FIX: Use FieldValue.increment() to prevent concurrent update conflicts
   const batch = db.batch();
 
   matchingPeriods.forEach(periodDoc => {
@@ -290,27 +292,19 @@ async function updateBudgetPeriodSpending(
       return;
     }
 
-    const currentSpent = periodData.spent || 0;
-    const allocatedAmount = periodData.modifiedAmount || periodData.allocatedAmount || 0;
-
-    // Calculate new values
-    const newSpent = currentSpent + spendingDelta;
-    const newRemaining = allocatedAmount - newSpent;
-
     console.log(`📊 Updating budget_period ${periodDoc.id}:`, {
       periodType: periodData.periodType,
       periodId: periodData.periodId,
       budgetName: periodData.budgetName,
-      oldSpent: currentSpent,
-      delta: spendingDelta,
-      newSpent: newSpent,
-      allocated: allocatedAmount,
-      newRemaining: newRemaining
+      currentSpent: periodData.spent || 0,
+      delta: spendingDelta
     });
 
+    // ATOMIC UPDATE: Use FieldValue.increment() to prevent race conditions
+    // This ensures correct values even with concurrent transaction updates
     batch.update(periodDoc.ref, {
-      spent: newSpent,
-      remaining: newRemaining,
+      spent: FieldValue.increment(spendingDelta),
+      remaining: FieldValue.increment(-spendingDelta), // Decrease remaining by delta
       updatedAt: admin.firestore.Timestamp.now()
     });
 

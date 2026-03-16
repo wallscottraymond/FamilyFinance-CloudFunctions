@@ -268,6 +268,9 @@ export async function deleteUserAccount(uid: string): Promise<void> {
 
 /**
  * Validate CORS origin
+ *
+ * SECURITY FIX: Only allow specific localhost ports instead of all ports.
+ * This prevents malicious localhost applications from making authenticated requests.
  */
 export function validateCorsOrigin(origin: string): boolean {
   const allowedOrigins = [
@@ -277,12 +280,22 @@ export function validateCorsOrigin(origin: string): boolean {
     "https://family-finance-app.firebaseapp.com",
   ];
 
-  // Add environment-specific origins
+  // Add environment-specific origins (specific ports only)
   if (process.env.NODE_ENV === "development") {
-    allowedOrigins.push("http://localhost:8080", "http://127.0.0.1:3000");
+    allowedOrigins.push(
+      "http://localhost:8080",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:8080",
+      "http://127.0.0.1:8081",
+      "http://localhost:19000", // Expo dev server
+      "http://localhost:19001", // Expo dev server
+      "http://localhost:19006", // Expo web
+    );
   }
 
-  return allowedOrigins.includes(origin) || origin.startsWith("http://localhost:");
+  // SECURITY: Only allow explicitly whitelisted origins
+  // Removed wildcard localhost check that allowed ALL ports
+  return allowedOrigins.includes(origin);
 }
 
 /**

@@ -41,6 +41,7 @@ import {
   PlaidItem
 } from '../../../../types';
 import { Timestamp } from 'firebase-admin/firestore';
+import { getAccessToken } from '../../../../utils/encryption';
 
 // Define secrets for Plaid configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -289,10 +290,13 @@ async function processItemRecurringTransactions(
     console.log(`Using account IDs for Plaid API:`, targetAccountIds);
 
     // Prepare Plaid API request
+    // SECURITY FIX: Properly decrypt access token (handles both encrypted and legacy plaintext)
+    const decryptedAccessToken = getAccessToken(itemData.accessToken);
+
     const request: TransactionsRecurringGetRequest = {
       client_id: plaidClientId.value(),
       secret: plaidSecret.value(),
-      access_token: itemData.accessToken, // TODO: Decrypt this in production
+      access_token: decryptedAccessToken,
       account_ids: targetAccountIds, // Use specific account IDs instead of empty array
     };
 
