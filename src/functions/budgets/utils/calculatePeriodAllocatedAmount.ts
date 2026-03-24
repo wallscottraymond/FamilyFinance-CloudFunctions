@@ -17,14 +17,21 @@ import * as admin from 'firebase-admin';
 const DAYS_IN_WEEK = 7;
 
 /**
- * Calculate the number of days in a period
+ * Calculate the number of days in a period (inclusive)
+ * Uses only date components (ignoring time) to avoid off-by-one errors
+ * when end dates are stored with time 23:59:59.999
  */
 function getDaysInPeriod(startDate: admin.firestore.Timestamp, endDate: admin.firestore.Timestamp): number {
   const start = startDate.toDate();
   const end = endDate.toDate();
-  const diffMs = end.getTime() - start.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end day
-  return diffDays;
+
+  // Normalize to UTC midnight to avoid timezone and time-of-day issues
+  const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endUTC = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+
+  // Calculate difference in days and add 1 for inclusive counting
+  const diffDays = Math.round((endUTC - startUTC) / (1000 * 60 * 60 * 24));
+  return diffDays + 1;
 }
 
 /**

@@ -10,6 +10,9 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from '../../../types';
 import { calculatePeriodAllocatedAmount } from './calculatePeriodAllocatedAmount';
 
+// Re-export the new Prime/Non-Prime system orchestrator
+export { generateBudgetPeriodsWithPrimeSystem } from './periodGenerationOrchestrator';
+
 /**
  * Result of budget period creation
  */
@@ -302,6 +305,9 @@ export async function updateBudgetPeriodRange(
  * 3. Batch create periods in Firestore
  * 4. Update budget with period range metadata
  *
+ * @deprecated Use generateBudgetPeriodsWithPrimeSystem() for new code.
+ * This function delegates to the new Prime/Non-Prime system.
+ *
  * @param db - Firestore instance
  * @param budgetId - Budget document ID
  * @param budget - Budget document data
@@ -313,38 +319,11 @@ export async function generateBudgetPeriodsForNewBudget(
   budget: Budget
 ): Promise<CreateBudgetPeriodsResult> {
   console.log(`[budgetPeriods] Starting complete budget period generation workflow for budget ${budgetId}`);
+  console.log(`[budgetPeriods] Delegating to Prime/Non-Prime system (periodGenerationOrchestrator)`);
 
-  // Step 1: Determine date range for budget period generation
-  const dateRange = await determineBudgetPeriodDateRange(db, budget);
-  const { startDate, endDate } = dateRange;
+  // Import the new orchestrator
+  const { generateBudgetPeriodsWithPrimeSystem } = await import('./periodGenerationOrchestrator');
 
-  // Step 2: Create budget periods from source_periods
-  const result = await createBudgetPeriodsFromSource(
-    db,
-    budgetId,
-    budget,
-    startDate,
-    endDate
-  );
-
-  // Step 3: Batch create all budget_periods in Firestore
-  await batchCreateBudgetPeriods(db, result.budgetPeriods);
-
-  // Step 4: Update budget with period range tracking
-  await updateBudgetPeriodRange(
-    db,
-    budgetId,
-    result.firstPeriodId,
-    result.lastPeriodId,
-    endDate,
-    budget.budgetType === 'recurring'
-  );
-
-  console.log(`[budgetPeriods] Completed budget period generation workflow for budget ${budgetId}:`, {
-    totalPeriods: result.count,
-    periodRange: `${result.firstPeriodId} to ${result.lastPeriodId}`,
-    periodCounts: result.periodTypeCounts,
-  });
-
-  return result;
+  // Delegate to new system
+  return generateBudgetPeriodsWithPrimeSystem(db, budgetId, budget);
 }

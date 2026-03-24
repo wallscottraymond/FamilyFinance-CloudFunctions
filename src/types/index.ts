@@ -752,6 +752,20 @@ export interface ChecklistItem {
   isChecked: boolean;
 }
 
+/**
+ * Tracks how much of a non-prime period's allocated amount comes from each overlapping prime period.
+ * This enables accurate cross-period calculations when prime periods have different daily rates.
+ */
+export interface PrimePeriodContribution {
+  primePeriodId: string;      // Budget period ID, e.g., "budget_123_2026M01"
+  sourcePeriodId: string;     // Source period ID for reference, e.g., "2026M01"
+  daysContributed: number;    // Days from this prime period that fall within non-prime period
+  dailyRate: number;          // Daily rate from prime period (allocatedAmount / daysInPeriod)
+  amountContributed: number;  // daysContributed × dailyRate (rounded to 2 decimals)
+  overlapStart: Timestamp;    // Start of overlap range (inclusive)
+  overlapEnd: Timestamp;      // End of overlap range (inclusive)
+}
+
 // Budget Periods - Links budgets to specific source periods with proportional amounts
 // NOTE: Budget periods INHERIT ownership from parent budget (no separate ownership)
 export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
@@ -786,6 +800,23 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
   // System fields
   lastCalculated: Timestamp;  // When allocatedAmount was last calculated
   isActive: boolean;          // Whether this budget period is active
+
+  // === PRIME/NON-PRIME PERIOD FIELDS (Optional - added 2026-03) ===
+
+  /** Whether this is a prime period (matches budget's period type). Default: undefined (treat as true for existing docs) */
+  isPrime?: boolean;
+
+  /** Daily rate for this period: allocatedAmount / daysInPeriod. Calculated field. */
+  dailyRate?: number;
+
+  /** Number of days in this specific budget period */
+  daysInPeriod?: number;
+
+  /** For non-prime periods: IDs of overlapping prime periods. Empty array for prime periods. */
+  primePeriodIds?: string[];
+
+  /** For non-prime periods: detailed breakdown of contributions from each prime. Empty array for prime periods. */
+  primePeriodBreakdown?: PrimePeriodContribution[];
 }
 
 // Function response types
