@@ -1,14 +1,14 @@
 /**
- * Scheduled Budget Period Maintenance (Simplified)
+ * Scheduled Budget Period Maintenance (Prime/Non-Prime System)
  *
  * This Cloud Function runs monthly to maintain a rolling 1-year window
- * of budget periods for recurring budgets. Simple and efficient.
+ * of budget periods for recurring budgets using the Prime/Non-Prime system.
  *
  * Features:
  * - Runs on the 1st of each month at 2:00 AM UTC
  * - Maintains 1-year rolling window for recurring budgets
- * - Processes all period types (weekly, bi-monthly, monthly)
- * - Simplified logic with consistent behavior
+ * - Uses Prime/Non-Prime period generation for accurate cross-period calculations
+ * - Prime periods generated first, then non-prime derived from primes
  *
  * Memory: 512MiB, Timeout: 300s (5 minutes)
  */

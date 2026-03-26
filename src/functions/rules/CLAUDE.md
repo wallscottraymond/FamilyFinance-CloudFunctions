@@ -1,5 +1,10 @@
 # Rules System - Cloud Functions
 
+> **⚠️ SPEC ONLY - NOT YET IMPLEMENTED**
+>
+> This document describes the **planned** rules system architecture. The code has not been written yet.
+> Once implemented, remove this banner.
+
 ## ⚠️ RBAC System Migration (2025-01)
 
 **IMPORTANT**: The Rules System will be updated to support the new RBAC (Role-Based Access Control) and group-based sharing system.

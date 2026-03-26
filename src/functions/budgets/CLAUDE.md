@@ -1,15 +1,15 @@
 # Budget System - Cloud Functions
 
-> **Full documentation:** `../../../../FamilyFinanceObsidian/Backend/Budgets/`
+> **Full documentation:** `../../../../FamilyFinanceObsidian/Documentation/FamilyFinanceBackend/Budgets/`
 
 ## Key Documentation
 
 | Topic | Obsidian Path |
 |-------|---------------|
-| Budget System | `Backend/Budgets/Budget-System.md` |
-| Prime/Non-Prime | `Backend/Budgets/Prime-NonPrime-Periods.md` |
-| Triggers | `Backend/Budgets/Budget-Triggers.md` |
-| Checklist | `Backend/Budgets/Checklist-System.md` |
+| Budget System | `Documentation/FamilyFinanceBackend/Budgets/System.md` |
+| Prime/Non-Prime | `Documentation/FamilyFinanceBackend/Budgets/Prime-NonPrime.md` |
+| Creation Flow | `Documentation/FamilyFinanceBackend/Budgets/Creation-Flow.md` |
+| Checklist | `Documentation/FamilyFinanceBackend/Budgets/Checklist.md` |
 
 ## Quick Reference
 

@@ -39,12 +39,14 @@ export declare function executeBatch(operations: Array<{
 export declare function getDocumentWithSubcollections<T extends BaseDocument>(collection: string, id: string, subcollections: string[]): Promise<T & Record<string, any[]> | null>;
 /**
  * Function to listen to document changes
+ * IMPORTANT: Caller must store and call the returned unsubscribe function to prevent memory leaks
  */
-export declare function listenToDocument<T extends BaseDocument>(collection: string, id: string, callback: (doc: T | null) => void): () => void;
+export declare function listenToDocument<T extends BaseDocument>(collection: string, id: string, callback: (doc: T | null) => void, onError?: (error: Error) => void): () => void;
 /**
  * Function to listen to collection changes
+ * IMPORTANT: Caller must store and call the returned unsubscribe function to prevent memory leaks
  */
-export declare function listenToCollection<T extends BaseDocument>(collection: string, options: QueryOptions, callback: (docs: T[]) => void): () => void;
+export declare function listenToCollection<T extends BaseDocument>(collection: string, options: QueryOptions, callback: (docs: T[]) => void, onError?: (error: Error) => void): () => void;
 /**
  * Function to check if a document exists
  */

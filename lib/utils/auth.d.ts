@@ -59,6 +59,9 @@ export declare function revokeUserTokens(uid: string): Promise<void>;
 export declare function deleteUserAccount(uid: string): Promise<void>;
 /**
  * Validate CORS origin
+ *
+ * SECURITY FIX: Only allow specific localhost ports instead of all ports.
+ * This prevents malicious localhost applications from making authenticated requests.
  */
 export declare function validateCorsOrigin(origin: string): boolean;
 /**

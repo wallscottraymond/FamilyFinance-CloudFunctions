@@ -6,6 +6,7 @@
  */
 import * as admin from 'firebase-admin';
 import { Budget, BudgetPeriodDocument } from '../../../types';
+export { generateBudgetPeriodsWithPrimeSystem } from './periodGenerationOrchestrator';
 /**
  * Result of budget period creation
  */
@@ -67,6 +68,9 @@ export declare function updateBudgetPeriodRange(db: admin.firestore.Firestore, b
  * 2. Create budget periods from source periods
  * 3. Batch create periods in Firestore
  * 4. Update budget with period range metadata
+ *
+ * @deprecated Use generateBudgetPeriodsWithPrimeSystem() for new code.
+ * This function delegates to the new Prime/Non-Prime system.
  *
  * @param db - Firestore instance
  * @param budgetId - Budget document ID

@@ -139,7 +139,22 @@ service cloud.firestore {
              display.timeFormat is string && display.timeFormat in ['12h', '24h'] &&
              display.numberFormat is string && display.numberFormat in ['US', 'EU', 'IN'] &&
              display.showCentsInDisplays is bool &&
-             display.defaultTransactionView is string && display.defaultTransactionView in ['list', 'cards', 'table'];
+             display.defaultTransactionView is string && display.defaultTransactionView in ['list', 'cards', 'table'] &&
+             // Optional periodView settings for cashflow screen
+             (!display.keys().hasAny(['periodView']) || isValidPeriodViewSettings(display.periodView));
+    }
+
+    // Validate period view settings (for cashflow/periods screen preferences)
+    function isValidPeriodViewSettings(periodView) {
+      return periodView is map &&
+             periodView.keys().hasAll(['defaultPeriodType', 'incomeTileSize', 'budgetsTileSize', 'billsTileSize', 'incomeAccordionOpen', 'budgetsAccordionOpen', 'billsAccordionOpen']) &&
+             periodView.defaultPeriodType is string && periodView.defaultPeriodType in ['weekly', 'monthly', 'bi_monthly'] &&
+             periodView.incomeTileSize is string && periodView.incomeTileSize in ['small', 'medium', 'large', 'debug'] &&
+             periodView.budgetsTileSize is string && periodView.budgetsTileSize in ['small', 'medium', 'large', 'debug'] &&
+             periodView.billsTileSize is string && periodView.billsTileSize in ['small', 'medium', 'large', 'debug'] &&
+             periodView.incomeAccordionOpen is bool &&
+             periodView.budgetsAccordionOpen is bool &&
+             periodView.billsAccordionOpen is bool;
     }
     
     // Validate accessibility settings

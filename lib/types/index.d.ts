@@ -597,6 +597,19 @@ export interface ChecklistItem {
     actualAmount: number;
     isChecked: boolean;
 }
+/**
+ * Tracks how much of a non-prime period's allocated amount comes from each overlapping prime period.
+ * This enables accurate cross-period calculations when prime periods have different daily rates.
+ */
+export interface PrimePeriodContribution {
+    primePeriodId: string;
+    sourcePeriodId: string;
+    daysContributed: number;
+    dailyRate: number;
+    amountContributed: number;
+    overlapStart: Timestamp;
+    overlapEnd: Timestamp;
+}
 export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
     budgetId: string;
     budgetName: string;
@@ -617,6 +630,16 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
     checklistItems: ChecklistItem[];
     lastCalculated: Timestamp;
     isActive: boolean;
+    /** Whether this is a prime period (matches budget's period type). Default: undefined (treat as true for existing docs) */
+    isPrime?: boolean;
+    /** Daily rate for this period: allocatedAmount / daysInPeriod. Calculated field. */
+    dailyRate?: number;
+    /** Number of days in this specific budget period */
+    daysInPeriod?: number;
+    /** For non-prime periods: IDs of overlapping prime periods. Empty array for prime periods. */
+    primePeriodIds?: string[];
+    /** For non-prime periods: detailed breakdown of contributions from each prime. Empty array for prime periods. */
+    primePeriodBreakdown?: PrimePeriodContribution[];
 }
 export interface FunctionResponse<T = any> {
     success: boolean;
