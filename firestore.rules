@@ -6,50 +6,105 @@ service cloud.firestore {
     // =======================
     // HELPER FUNCTIONS
     // =======================
-    
+
     // Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Get user role from custom claims
+
+    // =======================
+    // SYSTEM ROLE FUNCTIONS (RBAC)
+    // =======================
+
+    // Get user's system role from User document
+    // Returns: 'admin' | 'power_user' | 'standard_user' | 'demo_user' | null
+    function getSystemRole() {
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.systemRole
+             : null;
+    }
+
+    // Check if user has a specific system role
+    function hasSystemRole(role) {
+      return getSystemRole() == role;
+    }
+
+    // Check if user is system admin (highest privilege)
+    function isSystemAdmin() {
+      return hasSystemRole('admin');
+    }
+
+    // Check if user is power user (can add Plaid accounts)
+    function isPowerUser() {
+      return hasSystemRole('power_user') || hasSystemRole('admin');
+    }
+
+    // Check if user can add Plaid accounts (admin or power_user only)
+    function canAddPlaidAccounts() {
+      return isPowerUser();
+    }
+
+    // Check if user is a demo user (read-only, limited access)
+    function isDemoUser() {
+      return hasSystemRole('demo_user');
+    }
+
+    // =======================
+    // LEGACY ROLE FUNCTIONS (Backward Compatibility)
+    // =======================
+
+    // Get user role from custom claims (legacy)
     function getUserRole() {
       return request.auth.token.role;
     }
-    
-    // Check if user has a specific role
+
+    // Check if user has a specific role (legacy)
     function hasRole(role) {
       return isAuthenticated() && getUserRole() == role;
     }
-    
-    // Check if user is admin
+
+    // Check if user is admin (supports both legacy and new RBAC)
     function isAdmin() {
-      return hasRole('admin');
+      return hasRole('admin') || isSystemAdmin();
     }
-    
-    // Check if user is parent
+
+    // Check if user is parent (legacy)
     function isParent() {
       return hasRole('parent');
     }
-    
+
     // Check if user can manage (admin or parent)
     function canManage() {
       return isAdmin() || isParent();
     }
-    
+
+    // =======================
+    // OWNERSHIP FUNCTIONS
+    // =======================
+
     // Check if user owns the resource
     function isOwner(resourceUserId) {
       return isAuthenticated() && request.auth.uid == resourceUserId;
     }
-    
-    // Check if user is in the same family
+
+    // Check if user is resource owner (alias for isOwner, used with ownerId field)
+    function isResourceOwner(ownerId) {
+      return isOwner(ownerId);
+    }
+
+    // =======================
+    // FAMILY/GROUP ACCESS FUNCTIONS
+    // =======================
+
+    // Check if user is in the same family (legacy)
     function inSameFamily(familyId) {
       return isAuthenticated() &&
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
     }
 
-    // Check if user belongs to any of the document's groups
+    // Check if user belongs to any of the document's groups (NEW - groupIds array)
     function canAccessGroup(documentGroupIds) {
       return isAuthenticated() &&
              documentGroupIds != null &&
@@ -62,6 +117,13 @@ service cloud.firestore {
     function hasAnyGroupAccess(userGroupIds, documentGroupIds) {
       return userGroupIds != null &&
              userGroupIds.hasAny(documentGroupIds);
+    }
+
+    // Check if user belongs to a specific group
+    function userBelongsToGroup(groupId) {
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupIds.hasAny([groupId]);
     }
 
     // Check if user belongs to group extracted from summary ID
@@ -261,9 +323,50 @@ service cloud.firestore {
     }
     
     // =======================
-    // FAMILIES COLLECTION RULES
+    // GROUPS COLLECTION RULES (NEW - RBAC)
     // =======================
-    
+
+    match /groups/{groupId} {
+      // Members can read group info
+      allow read: if userBelongsToGroup(groupId) || isAdmin();
+
+      // Only authenticated users can create groups (they become owner)
+      // Demo users cannot create groups
+      allow create: if isAuthenticated() &&
+                       !isDemoUser() &&
+                       request.resource.data.ownerId == request.auth.uid &&
+                       isValidGroupData();
+
+      // Only group owner or admin can update group settings
+      allow update: if (isOwner(resource.data.ownerId) || isAdmin()) &&
+                       isValidGroupData() &&
+                       // Prevent changing ownerId (use transferOwnership function)
+                       request.resource.data.ownerId == resource.data.ownerId;
+
+      // Only group owner or admin can delete group
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+
+      // Group members subcollection
+      match /members/{memberId} {
+        // Members can read member list
+        allow read: if userBelongsToGroup(groupId) || isAdmin();
+
+        // Only group owner/admin can add/remove members
+        allow create, delete: if (isOwner(get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId) ||
+                                  isAdmin());
+
+        // Members can update their own membership settings (e.g., notifications)
+        // Owner/admin can update any member's role
+        allow update: if isOwner(memberId) ||
+                        isOwner(get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId) ||
+                        isAdmin();
+      }
+    }
+
+    // =======================
+    // FAMILIES COLLECTION RULES (LEGACY)
+    // =======================
+
     match /families/{familyId} {
       // Family members can read family data
       allow read: if inSameFamily(familyId);
@@ -285,39 +388,46 @@ service cloud.firestore {
     // =======================
     
     match /transactions/{transactionId} {
-      // Group-based access: Users can read transactions they have access to via groupId
-      // NEW FLAT STRUCTURE: Uses ownerId and groupId at root level
+      // Group-based access: Users can read transactions they have access to
+      // NEW RBAC: Uses groupIds array for group membership
+      // Falls back to groupId (singular) for legacy documents
       allow read: if isAuthenticated() && (
                      isOwner(resource.data.ownerId) ||
+                     canAccessGroup(resource.data.groupIds) ||
                      (resource.data.groupId != null && inSameFamily(resource.data.groupId))
                   );
 
-      // Group-based access: Allow list queries using groupId
-      // This supports queries on groupId for efficient group-based filtering
+      // Group-based access: Allow list queries
+      // This supports queries filtered by userId or groupIds
       allow list: if isAuthenticated();
 
       // Users can create transactions for themselves
       // Parents/Admins can create for family members
       // Cloud functions can create Plaid transactions
-      // NEW FLAT STRUCTURE: Uses ownerId and groupId
+      // Demo users cannot create transactions
       allow create: if isAuthenticated() &&
+                       !isDemoUser() &&
                        (isOwner(request.resource.data.ownerId) || canManage()) &&
                        isValidTransactionData();
 
       // Users can update their own transactions (splits, notes, visibility)
+      // Group members can update shared transactions
       // Parents/Admins can update family transactions
-      // NEW FLAT STRUCTURE: Uses ownerId and groupId
-      // CRITICAL: Enforces immutable fields (transactionDate, ownerId, userId, amount)
-      allow update: if isAuthenticated() && (
-                       isOwner(resource.data.ownerId) ||
-                       (resource.data.groupId != null && canManage() && inSameFamily(resource.data.groupId))
-                    ) && isValidTransactionUpdate();
+      // Demo users cannot update transactions
+      // CRITICAL: Enforces immutable fields (transactionDate, ownerId, amount)
+      allow update: if isAuthenticated() &&
+                       !isDemoUser() &&
+                       (isOwner(resource.data.ownerId) ||
+                        canAccessGroup(resource.data.groupIds) ||
+                        (resource.data.groupId != null && canManage() && inSameFamily(resource.data.groupId))
+                       ) && isValidTransactionUpdate();
 
       // Users can delete their own manual transactions
       // Admins can delete any transaction
-      // NEW FLAT STRUCTURE: Uses ownerId
-      allow delete: if (isOwner(resource.data.ownerId) && resource.data.source != 'plaid') ||
-                       isAdmin();
+      // Demo users cannot delete transactions
+      allow delete: if !isDemoUser() &&
+                       ((isOwner(resource.data.ownerId) && resource.data.source != 'plaid') ||
+                        isAdmin());
     }
     
     // =======================
@@ -736,6 +846,36 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    // =======================
+    // GROUP VALIDATION FUNCTIONS
+    // =======================
+
+    // Validate group data structure
+    function isValidGroupData() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'ownerId', 'isActive', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.ownerId is string && data.ownerId.size() > 0 &&
+             data.isActive is bool &&
+             data.createdAt is timestamp &&
+             // Optional fields validation
+             (!data.keys().hasAny(['description']) || (data.description is string && data.description.size() <= 500)) &&
+             (!data.keys().hasAny(['settings']) || isValidGroupSettings(data.settings));
+    }
+
+    // Validate group settings
+    function isValidGroupSettings(settings) {
+      return settings is map &&
+             (!settings.keys().hasAny(['defaultMemberRole']) ||
+              settings.defaultMemberRole in ['viewer', 'editor', 'admin']) &&
+             (!settings.keys().hasAny(['allowMemberInvites']) || settings.allowMemberInvites is bool) &&
+             (!settings.keys().hasAny(['requireApprovalForExpenses']) || settings.requireApprovalForExpenses is bool);
+    }
+
+    // =======================
+    // PLAID VALIDATION FUNCTIONS
+    // =======================
+
     // Validation functions for Plaid data
     function isValidPlaidItemData() {
       let data = request.resource.data;

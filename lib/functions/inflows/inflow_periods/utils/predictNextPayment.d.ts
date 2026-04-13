@@ -19,7 +19,7 @@ export interface PaymentPrediction {
     expectedDate: Timestamp;
     expectedAmount: number;
     confidenceLevel: 'high' | 'medium' | 'low';
-    predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override';
+    predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override' | 'hourly_calc' | 'commission_calc';
     isInPeriod: boolean;
     daysUntilPayment: number;
 }

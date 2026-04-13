@@ -131,7 +131,8 @@ export interface User extends BaseDocument {
 
   // RBAC fields (NEW - optional during migration)
   systemRole?: SystemRole;          // System-level role
-  groupMemberships?: GroupMembership[]; // Groups user belongs to
+  groupIds?: string[];              // Quick array for group membership queries
+  groupMemberships?: GroupMembership[]; // Detailed groups user belongs to
   demoAccountId?: string;           // For demo_user role
 
   // Legacy fields (DEPRECATED but REQUIRED for backward compatibility)
@@ -333,7 +334,9 @@ export interface Transaction extends BaseDocument {
   // === QUERY-CRITICAL FIELDS AT ROOT ===
   transactionId: string;          // Plaid transaction_id (used as Firestore document ID)
   ownerId: string;                // User who owns this transaction (renamed from userId)
-  groupId: string | null;         // Group this transaction belongs to (null = private)
+  groupId: string | null;         // DEPRECATED: Use groupIds. Group this transaction belongs to (null = private)
+  groupIds?: string[];            // NEW: Groups this transaction belongs to ([] = private)
+  isPrivate?: boolean;            // NEW: Quick filter for private resources (groupIds.length === 0)
   transactionDate: Timestamp;     // Transaction date (renamed from 'date')
   accountId: string;              // Plaid account ID
   createdBy: string;              // User who created this transaction
@@ -834,8 +837,10 @@ export interface FunctionResponse<T = any> {
 // Plaid Items - represents the connection between user and financial institution
 export interface PlaidItem extends BaseDocument {
   itemId: string; // Plaid item_id
-  userId: string; // Family Finance user ID
-  familyId?: string; // Optional family association
+  userId: string; // Family Finance user ID (owner)
+  familyId?: string; // DEPRECATED: Use groupIds. Optional family association
+  groupIds?: string[]; // NEW: Groups this item belongs to ([] = private)
+  isPrivate?: boolean; // NEW: Quick filter for private resources (groupIds.length === 0)
   institutionId: string; // Plaid institution_id
   institutionName: string; // Human-readable institution name
   institutionLogo?: string; // Institution logo URL from Plaid
@@ -916,8 +921,10 @@ export interface PlaidSyncStats {
 export interface PlaidAccount extends BaseDocument {
   // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
   userId: string;                 // Family Finance user ID (REQUIRED for existing queries)
-  groupId: string | null;         // Group this account belongs to (null = private) (REQUIRED for existing queries)
-  accessibleBy: string[];         // Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+  groupId: string | null;         // DEPRECATED: Use groupIds. Group this account belongs to (null = private)
+  groupIds?: string[];            // NEW: Groups this account belongs to ([] = private)
+  isPrivate?: boolean;            // NEW: Quick filter for private resources (groupIds.length === 0)
+  accessibleBy: string[];         // DEPRECATED: Denormalized array of user IDs who can access
   accountId: string;              // Plaid account_id (REQUIRED for filtering)
   itemId: string;                 // Reference to plaid_items document (REQUIRED for filtering)
   isActive: boolean;              // Whether this account should be included in transactions (REQUIRED for filtering)
@@ -1404,8 +1411,9 @@ export interface PlaidItemStatusResponse {
 export interface BaseRecurringTransaction extends BaseDocument, ResourceOwnership {
   // === QUERY-CRITICAL FIELDS AT ROOT (for composite indexes) ===
   userId: string;                 // Family Finance user ID (REQUIRED for existing queries)
-  groupId: string | null;         // Group this recurring transaction belongs to (null = private) (REQUIRED for existing queries)
-  accessibleBy: string[];         // Denormalized array of user IDs who can access (REQUIRED for array-contains queries)
+  groupId: string | null;         // DEPRECATED: Use groupIds. Group this recurring transaction belongs to (null = private)
+  // NOTE: groupIds inherited from ResourceOwnership - Groups this resource belongs to ([] = private)
+  accessibleBy: string[];         // DEPRECATED: Denormalized array of user IDs who can access
   streamId: string;               // Plaid recurring stream ID (REQUIRED for filtering)
   itemId: string;                 // Reference to plaid_items document (REQUIRED for filtering)
   accountId: string;              // Primary account where this recurring stream appears (REQUIRED for filtering)
@@ -1639,7 +1647,9 @@ export interface Outflow extends BaseDocument {
   ownerId: string;                     // userId of creator (renamed from userId for consistency with transactions)
   createdBy: string;                   // userId of creator (audit trail)
   updatedBy: string;                   // userId of last updater (audit trail)
-  groupId: string | null;              // Family/group association (null = private)
+  groupId: string | null;              // DEPRECATED: Use groupIds. Family/group association (null = private)
+  groupIds?: string[];                 // NEW: Groups this outflow belongs to ([] = private)
+  isPrivate?: boolean;                 // NEW: Quick filter for private resources (groupIds.length === 0)
 
   // === PLAID IDENTIFIERS ===
   plaidItemId: string;                 // Plaid item ID reference
@@ -1755,7 +1765,9 @@ export interface OutflowPeriod extends BaseDocument {
   ownerId: string;                         // User ID of owner
   createdBy: string;                       // User ID of creator
   updatedBy: string;                       // User ID of last updater
-  groupId: string | null;                  // Family/group association
+  groupId: string | null;                  // DEPRECATED: Use groupIds. Family/group association
+  groupIds?: string[];                     // NEW: Groups this outflow period belongs to ([] = private)
+  isPrivate?: boolean;                     // NEW: Quick filter for private resources (groupIds.length === 0)
 
   // === PLAID IDENTIFIERS ===
   accountId: string;                       // Plaid account ID (comes from plaid)
@@ -1881,6 +1893,90 @@ export interface PeriodManagementConfig {
 }
 
 // =======================
+// INCOME TYPE CONFIGURATION
+// =======================
+
+/**
+ * Income Type Classification
+ * Determines prediction strategy and UI configuration
+ */
+export enum IncomeType {
+  SALARY = 'salary',                     // Fixed regular salary
+  HOURLY = 'hourly',                     // Variable hours-based
+  BASE_PLUS_COMMISSION = 'base_plus_commission', // Fixed base + variable commission
+  COMMISSION_ONLY = 'commission_only',   // Entirely variable commission
+  BONUS = 'bonus',                       // Periodic performance bonuses
+  FREELANCE = 'freelance',               // Contract/gig work
+  INVESTMENT = 'investment',             // Dividends, interest
+  RENTAL = 'rental',                     // Property income
+  PENSION = 'pension',                   // Retirement income
+  GOVERNMENT = 'government',             // Benefits, tax refunds
+  OTHER = 'other'
+}
+
+/**
+ * Income Variability Level
+ * Affects prediction confidence
+ */
+export enum IncomeVariability {
+  FIXED = 'fixed',       // Always same amount (salary, pension)
+  LOW = 'low',           // Minor variations (rental, government)
+  MEDIUM = 'medium',     // Moderate variations (hourly, base+commission)
+  HIGH = 'high'          // Highly variable (commission-only, bonus, freelance)
+}
+
+/**
+ * Hourly Income Configuration
+ */
+export interface HourlyIncomeConfig {
+  hourlyRate: number;                   // $/hour (supports 2 decimals)
+  expectedHoursPerPeriod: number;       // Expected hours (supports 2 decimals)
+  includeOvertime?: boolean;
+  overtimeRate?: number;                // Multiplier (e.g., 1.5)
+  expectedOvertimeHours?: number;
+}
+
+/**
+ * Commission Income Configuration
+ */
+export interface CommissionIncomeConfig {
+  basePlusCommission: boolean;          // True if base salary + commission
+  baseAmount?: number;                  // Base salary portion (for withholding)
+  targetCommission?: number;            // Target commission amount
+  schedule: 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
+  expectedPaymentDay?: number;          // Day of month when paid (1-28)
+}
+
+/**
+ * Bonus Income Configuration
+ */
+export interface BonusIncomeConfig {
+  schedule: 'annual' | 'quarterly' | 'monthly' | 'performance' | 'custom';
+  expectedMonth?: number;               // 1-12 for annual bonuses
+  expectedQuarter?: number;             // 1-4 for quarterly bonuses
+  lastBonusAmount?: number;
+  lastBonusDate?: Timestamp;
+}
+
+/**
+ * Variable Income Configuration (generic)
+ */
+export interface VariableIncomeConfig {
+  useRollingAverage: boolean;           // Use rolling average for prediction
+  rollingAveragePeriods: number;        // Number of periods to average (default: 3)
+  userOverrideAmount?: number | null;   // User's manual estimate
+}
+
+/**
+ * Union type for all income config types
+ */
+export type IncomeConfig =
+  | HourlyIncomeConfig
+  | CommissionIncomeConfig
+  | BonusIncomeConfig
+  | VariableIncomeConfig;
+
+// =======================
 // INFLOW TYPES
 // =======================
 
@@ -1901,7 +1997,9 @@ export interface Inflow extends BaseDocument {
   ownerId: string;                     // userId of creator
   createdBy: string;                   // userId of creator
   updatedBy: string;                   // userId of last updater
-  groupId: string | null;              // Family/group association
+  groupId: string | null;              // DEPRECATED: Use groupIds. Family/group association
+  groupIds?: string[];                 // NEW: Groups this inflow belongs to ([] = private)
+  isPrivate?: boolean;                 // NEW: Quick filter for private resources (groupIds.length === 0)
 
   // === PLAID IDENTIFIERS ===
   plaidItemId: string;                 // Plaid item ID
@@ -1932,8 +2030,16 @@ export interface Inflow extends BaseDocument {
   internalDetailedCategory: string | null;  // User override detailed
 
   // === INCOME CLASSIFICATION ===
-  incomeType: string;                  // 'salary', 'wage', 'investment', 'other'
+  incomeType: IncomeType | string;     // Enum or legacy string value
+  incomeVariability?: IncomeVariability;
   isRegularSalary: boolean;            // Whether this is regular salary/wage
+  isUserClassified?: boolean;          // True when user has configured income type
+
+  // === TYPE-SPECIFIC CONFIGURATION (optional) ===
+  hourlyConfig?: HourlyIncomeConfig;
+  commissionConfig?: CommissionIncomeConfig;
+  bonusConfig?: BonusIncomeConfig;
+  variableConfig?: VariableIncomeConfig;
 
   // === STATUS & CONTROL ===
   source: string;                      // 'plaid' or 'user'
@@ -1978,7 +2084,9 @@ export interface InflowPeriod extends BaseDocument {
   ownerId: string;
   createdBy: string;
   updatedBy: string;
-  groupId: string | null;
+  groupId: string | null;              // DEPRECATED: Use groupIds. Family/group association
+  groupIds?: string[];                 // NEW: Groups this inflow period belongs to ([] = private)
+  isPrivate?: boolean;                 // NEW: Quick filter for private resources (groupIds.length === 0)
 
   // === PLAID IDENTIFIERS ===
   accountId: string;                          // Plaid account ID (comes from plaid)
@@ -2010,6 +2118,8 @@ export interface InflowPeriod extends BaseDocument {
   // === INFLOW METADATA (Denormalized) ===
   description: string;                        // Income description
   frequency: string;                          // "WEEKLY" | "BIWEEKLY" | "MONTHLY" | etc.
+  incomeType?: IncomeType | string;           // Denormalized from parent Inflow
+  predictionConfidence?: 'high' | 'medium' | 'low'; // Confidence level based on income type
 
   // === PAYMENT STATUS ===
   isPaid: boolean;                            // Legacy: same as isFullyPaid

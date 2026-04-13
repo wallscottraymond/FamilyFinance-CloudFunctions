@@ -16,6 +16,8 @@ export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";
 export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
 export { regenerateInflowPeriods } from "./inflow_periods/api/regenerateInflowPeriods";
 export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";
+export { updateInflowConfiguration } from "./inflow_periods/api/updateInflowConfiguration";
+export { createManualInflow } from "./inflow_periods/api/createManualInflow";
 export { alignTransactionsToInflowPeriods, matchTransactionToInflowPeriod, predictNextPayment, predictPaymentsInPeriod, calculateInflowPeriodStatus, runUpdateInflowPeriods, AlignmentResult, PaymentPrediction, InflowPeriodStatus, InflowUpdateResult } from "./inflow_periods/utils";
 /**
  * Function Overview:

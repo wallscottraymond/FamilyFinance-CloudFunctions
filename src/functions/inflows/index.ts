@@ -22,6 +22,8 @@ export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
 // API Functions
 export { regenerateInflowPeriods } from "./inflow_periods/api/regenerateInflowPeriods";
 export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";
+export { updateInflowConfiguration } from "./inflow_periods/api/updateInflowConfiguration";
+export { createManualInflow } from "./inflow_periods/api/createManualInflow";
 
 // ===== Inflow Period Utilities =====
 export {

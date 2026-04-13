@@ -9,7 +9,7 @@
  */
 
 // === CRUD Operations ===
-// export * from './crud';
+export * from './crud';
 
 // === API Endpoints ===
 // export * from './api';

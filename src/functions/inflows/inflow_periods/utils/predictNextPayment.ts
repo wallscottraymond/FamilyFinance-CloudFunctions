@@ -12,7 +12,11 @@
  */
 
 import { Timestamp } from 'firebase-admin/firestore';
-import { Inflow, PlaidRecurringFrequency } from '../../../../types';
+import {
+  Inflow,
+  PlaidRecurringFrequency,
+  IncomeType
+} from '../../../../types';
 
 /**
  * Payment prediction result
@@ -21,39 +25,9 @@ export interface PaymentPrediction {
   expectedDate: Timestamp;
   expectedAmount: number;
   confidenceLevel: 'high' | 'medium' | 'low';
-  predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override';
+  predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override' | 'hourly_calc' | 'commission_calc';
   isInPeriod: boolean;
   daysUntilPayment: number;
-}
-
-/**
- * Variable income configuration interface
- */
-interface VariableIncomeConfig {
-  useRollingAverage?: boolean;
-  rollingAveragePeriods?: number;
-  userOverrideAmount?: number | null;
-}
-
-/**
- * Bonus configuration interface
- */
-interface BonusConfig {
-  schedule?: 'annual' | 'quarterly' | 'monthly' | 'performance' | 'custom';
-  expectedMonth?: number;
-  expectedQuarter?: number;
-  lastBonusAmount?: number;
-  lastBonusDate?: Timestamp;
-}
-
-/**
- * Commission configuration interface
- */
-interface CommissionConfig {
-  schedule?: 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
-  expectedPaymentDay?: number;
-  basePlusCommission?: boolean;
-  baseAmount?: number;
 }
 
 /**
@@ -138,14 +112,47 @@ function calculateRollingAverage(inflow: Partial<Inflow>, periods: number = 3): 
 
 /**
  * Determine confidence level based on income type and prediction method
+ *
+ * Income Type Confidence Mapping:
+ * - HIGH: SALARY, PENSION, GOVERNMENT, RENTAL
+ * - MEDIUM: HOURLY, BASE_PLUS_COMMISSION, INVESTMENT
+ * - LOW: COMMISSION_ONLY, BONUS, FREELANCE, OTHER
  */
 function determineConfidenceLevel(
   inflow: Partial<Inflow>,
   predictionMethod: PaymentPrediction['predictionMethod']
 ): PaymentPrediction['confidenceLevel'] {
-  const incomeType = inflow.incomeType;
+  const incomeType = inflow.incomeType as IncomeType | string;
   const isRegularSalary = inflow.isRegularSalary;
 
+  // Check by income type enum first (most accurate)
+  switch (incomeType) {
+    case IncomeType.SALARY:
+    case IncomeType.PENSION:
+    case IncomeType.GOVERNMENT:
+    case IncomeType.RENTAL:
+      return 'high';
+
+    case IncomeType.HOURLY:
+      // Hourly with config is medium, without is lower
+      return predictionMethod === 'hourly_calc' ? 'medium' : 'low';
+
+    case IncomeType.BASE_PLUS_COMMISSION:
+      return 'medium';
+
+    case IncomeType.INVESTMENT:
+      return 'medium';
+
+    case IncomeType.COMMISSION_ONLY:
+    case IncomeType.BONUS:
+    case IncomeType.FREELANCE:
+      return 'low';
+
+    case IncomeType.OTHER:
+      return 'low';
+  }
+
+  // Fallback: Legacy logic for non-enum income types
   // High confidence: Regular salary with Plaid prediction
   if (isRegularSalary && predictionMethod === 'plaid') {
     return 'high';
@@ -166,13 +173,108 @@ function determineConfidenceLevel(
     return 'medium';
   }
 
-  // Low confidence: Commission or bonus without specific config
+  // Low confidence: Commission or bonus (legacy string values)
   if (incomeType === 'commission' || incomeType === 'bonus') {
     return 'low';
   }
 
   // Default to medium
   return 'medium';
+}
+
+/**
+ * Calculate expected amount based on income type and configuration
+ *
+ * Income Type Calculation Strategy:
+ * - SALARY, PENSION, GOVERNMENT, RENTAL: Use averageAmount (high confidence)
+ * - HOURLY: hourlyRate × expectedHours (medium confidence)
+ * - BASE_PLUS_COMMISSION: baseAmount + targetCommission (medium confidence)
+ * - COMMISSION_ONLY: Rolling average or user override (low confidence)
+ * - BONUS: Last bonus amount or schedule-based (low confidence)
+ * - FREELANCE, INVESTMENT: Rolling average or user override (low-medium confidence)
+ */
+function calculateExpectedAmountByType(
+  incomeType: IncomeType | string,
+  averageAmount: number,
+  inflow: Partial<Inflow>
+): { amount: number; method?: PaymentPrediction['predictionMethod'] } {
+  // Access type-specific configs
+  const hourlyConfig = inflow.hourlyConfig;
+  const commissionConfig = inflow.commissionConfig;
+  const bonusConfig = inflow.bonusConfig;
+  const variableConfig = inflow.variableConfig;
+
+  switch (incomeType) {
+    // Fixed income types - use average amount
+    case IncomeType.SALARY:
+    case IncomeType.PENSION:
+    case IncomeType.GOVERNMENT:
+    case IncomeType.RENTAL:
+      return { amount: averageAmount };
+
+    // Hourly income - calculate from rate × hours
+    case IncomeType.HOURLY:
+      if (hourlyConfig) {
+        const { hourlyRate, expectedHoursPerPeriod, includeOvertime, overtimeRate, expectedOvertimeHours } = hourlyConfig;
+        let total = hourlyRate * expectedHoursPerPeriod;
+        if (includeOvertime && overtimeRate && expectedOvertimeHours) {
+          total += hourlyRate * overtimeRate * expectedOvertimeHours;
+        }
+        return { amount: Math.round(total * 100) / 100, method: 'hourly_calc' };
+      }
+      return { amount: averageAmount };
+
+    // Base + Commission - add base and target
+    case IncomeType.BASE_PLUS_COMMISSION:
+      if (commissionConfig && commissionConfig.basePlusCommission) {
+        const baseAmount = commissionConfig.baseAmount || 0;
+        const targetCommission = commissionConfig.targetCommission || 0;
+        return { amount: baseAmount + targetCommission, method: 'commission_calc' };
+      }
+      return { amount: averageAmount };
+
+    // Commission only - use rolling average or override
+    case IncomeType.COMMISSION_ONLY:
+      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
+      }
+      if (variableConfig?.useRollingAverage) {
+        const periods = variableConfig.rollingAveragePeriods || 3;
+        return { amount: calculateRollingAverage(inflow, periods), method: 'rolling_average' };
+      }
+      // Fallback to average for commission-only
+      return { amount: averageAmount };
+
+    // Bonus - use last bonus amount or average
+    case IncomeType.BONUS:
+      if (bonusConfig?.lastBonusAmount && bonusConfig.lastBonusAmount > 0) {
+        return { amount: bonusConfig.lastBonusAmount };
+      }
+      return { amount: averageAmount };
+
+    // Investment income - use average (dividends are typically consistent)
+    case IncomeType.INVESTMENT:
+      return { amount: averageAmount };
+
+    // Freelance - highly variable, use override or rolling average
+    case IncomeType.FREELANCE:
+      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
+      }
+      if (variableConfig?.useRollingAverage) {
+        const periods = variableConfig.rollingAveragePeriods || 3;
+        return { amount: calculateRollingAverage(inflow, periods), method: 'rolling_average' };
+      }
+      return { amount: averageAmount };
+
+    // Other / default - use variable config if available, else average
+    case IncomeType.OTHER:
+    default:
+      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
+      }
+      return { amount: averageAmount };
+  }
 }
 
 /**
@@ -205,14 +307,6 @@ export function predictNextPayment(
   let expectedDate: Date;
   let expectedAmount: number;
   let predictionMethod: PaymentPrediction['predictionMethod'];
-
-  // Cast to access extended properties
-  const inflowExtended = inflow as Partial<Inflow> & {
-    isVariable?: boolean;
-    variableIncomeConfig?: VariableIncomeConfig;
-    bonusConfig?: BonusConfig;
-    commissionConfig?: CommissionConfig;
-  };
 
   // Step 1: Determine expected date
   // Priority: Plaid's predictedNextDate > frequency calculation from lastDate
@@ -254,25 +348,19 @@ export function predictNextPayment(
     predictionMethod = 'frequency';
   }
 
-  // Step 2: Determine expected amount
-  // Priority: User override > Rolling average > Plaid average
+  // Step 2: Determine expected amount based on income type
+  // Priority varies by income type - see calculateExpectedAmountByType
 
-  const variableConfig = inflowExtended.variableIncomeConfig;
+  const incomeType = inflow.incomeType as IncomeType | string;
+  const averageAmount = Math.abs(inflow.averageAmount || 0);
 
-  if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
-    // User has set an override amount
-    expectedAmount = variableConfig.userOverrideAmount;
-    predictionMethod = 'user_override';
-  } else if (inflowExtended.isVariable && variableConfig?.useRollingAverage) {
-    // Use rolling average for variable income
-    const periods = variableConfig.rollingAveragePeriods || 3;
-    expectedAmount = calculateRollingAverage(inflow, periods);
-    if (predictionMethod !== 'plaid') {
-      predictionMethod = 'rolling_average';
-    }
-  } else {
-    // Use average amount (always positive)
-    expectedAmount = Math.abs(inflow.averageAmount || 0);
+  // Calculate based on income type and configuration
+  const amountResult = calculateExpectedAmountByType(incomeType, averageAmount, inflow);
+  expectedAmount = amountResult.amount;
+
+  // Update prediction method if using type-specific calculation
+  if (amountResult.method) {
+    predictionMethod = amountResult.method;
   }
 
   // Calculate days until payment

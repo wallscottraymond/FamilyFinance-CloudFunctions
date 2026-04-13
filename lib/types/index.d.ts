@@ -98,6 +98,7 @@ export interface User extends BaseDocument {
     displayName: string;
     photoURL?: string;
     systemRole?: SystemRole;
+    groupIds?: string[];
     groupMemberships?: GroupMembership[];
     demoAccountId?: string;
     familyId?: string;
@@ -259,6 +260,8 @@ export interface Transaction extends BaseDocument {
     transactionId: string;
     ownerId: string;
     groupId: string | null;
+    groupIds?: string[];
+    isPrivate?: boolean;
     transactionDate: Timestamp;
     accountId: string;
     createdBy: string;
@@ -651,6 +654,8 @@ export interface PlaidItem extends BaseDocument {
     itemId: string;
     userId: string;
     familyId?: string;
+    groupIds?: string[];
+    isPrivate?: boolean;
     institutionId: string;
     institutionName: string;
     institutionLogo?: string;
@@ -719,6 +724,8 @@ export interface PlaidSyncStats {
 export interface PlaidAccount extends BaseDocument {
     userId: string;
     groupId: string | null;
+    groupIds?: string[];
+    isPrivate?: boolean;
     accessibleBy: string[];
     accountId: string;
     itemId: string;
@@ -1306,6 +1313,8 @@ export interface Outflow extends BaseDocument {
     createdBy: string;
     updatedBy: string;
     groupId: string | null;
+    groupIds?: string[];
+    isPrivate?: boolean;
     plaidItemId: string;
     accountId: string;
     lastAmount: number;
@@ -1395,6 +1404,8 @@ export interface OutflowPeriod extends BaseDocument {
     createdBy: string;
     updatedBy: string;
     groupId: string | null;
+    groupIds?: string[];
+    isPrivate?: boolean;
     accountId: string;
     plaidItemId: string;
     actualAmount: number | null;
@@ -1474,6 +1485,75 @@ export interface PeriodManagementConfig {
     preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
 }
 /**
+ * Income Type Classification
+ * Determines prediction strategy and UI configuration
+ */
+export declare enum IncomeType {
+    SALARY = "salary",// Fixed regular salary
+    HOURLY = "hourly",// Variable hours-based
+    BASE_PLUS_COMMISSION = "base_plus_commission",// Fixed base + variable commission
+    COMMISSION_ONLY = "commission_only",// Entirely variable commission
+    BONUS = "bonus",// Periodic performance bonuses
+    FREELANCE = "freelance",// Contract/gig work
+    INVESTMENT = "investment",// Dividends, interest
+    RENTAL = "rental",// Property income
+    PENSION = "pension",// Retirement income
+    GOVERNMENT = "government",// Benefits, tax refunds
+    OTHER = "other"
+}
+/**
+ * Income Variability Level
+ * Affects prediction confidence
+ */
+export declare enum IncomeVariability {
+    FIXED = "fixed",// Always same amount (salary, pension)
+    LOW = "low",// Minor variations (rental, government)
+    MEDIUM = "medium",// Moderate variations (hourly, base+commission)
+    HIGH = "high"
+}
+/**
+ * Hourly Income Configuration
+ */
+export interface HourlyIncomeConfig {
+    hourlyRate: number;
+    expectedHoursPerPeriod: number;
+    includeOvertime?: boolean;
+    overtimeRate?: number;
+    expectedOvertimeHours?: number;
+}
+/**
+ * Commission Income Configuration
+ */
+export interface CommissionIncomeConfig {
+    basePlusCommission: boolean;
+    baseAmount?: number;
+    targetCommission?: number;
+    schedule: 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
+    expectedPaymentDay?: number;
+}
+/**
+ * Bonus Income Configuration
+ */
+export interface BonusIncomeConfig {
+    schedule: 'annual' | 'quarterly' | 'monthly' | 'performance' | 'custom';
+    expectedMonth?: number;
+    expectedQuarter?: number;
+    lastBonusAmount?: number;
+    lastBonusDate?: Timestamp;
+}
+/**
+ * Variable Income Configuration (generic)
+ */
+export interface VariableIncomeConfig {
+    useRollingAverage: boolean;
+    rollingAveragePeriods: number;
+    userOverrideAmount?: number | null;
+}
+/**
+ * Union type for all income config types
+ */
+export type IncomeConfig = HourlyIncomeConfig | CommissionIncomeConfig | BonusIncomeConfig | VariableIncomeConfig;
+/**
  * Inflow (Recurring Income Stream) - FLAT STRUCTURE
  *
  * Represents a recurring income detected by Plaid or manually created by users.
@@ -1488,6 +1568,8 @@ export interface Inflow extends BaseDocument {
     createdBy: string;
     updatedBy: string;
     groupId: string | null;
+    groupIds?: string[];
+    isPrivate?: boolean;
     plaidItemId: string;
     accountId: string;
     lastAmount: number;
@@ -1506,8 +1588,14 @@ export interface Inflow extends BaseDocument {
     plaidCategoryId: string | null;
     internalPrimaryCategory: string | null;
     internalDetailedCategory: string | null;
-    incomeType: string;
+    incomeType: IncomeType | string;
+    incomeVariability?: IncomeVariability;
     isRegularSalary: boolean;
+    isUserClassified?: boolean;
+    hourlyConfig?: HourlyIncomeConfig;
+    commissionConfig?: CommissionIncomeConfig;
+    bonusConfig?: BonusIncomeConfig;
+    variableConfig?: VariableIncomeConfig;
     source: string;
     isActive: boolean;
     isHidden: boolean;
@@ -1535,6 +1623,8 @@ export interface InflowPeriod extends BaseDocument {
     createdBy: string;
     updatedBy: string;
     groupId: string | null;
+    groupIds?: string[];
+    isPrivate?: boolean;
     accountId: string;
     plaidItemId: string;
     actualAmount: number | null;
@@ -1556,6 +1646,8 @@ export interface InflowPeriod extends BaseDocument {
     dailyWithholdingRate: number;
     description: string;
     frequency: string;
+    incomeType?: IncomeType | string;
+    predictionConfidence?: 'high' | 'medium' | 'low';
     isPaid: boolean;
     isFullyPaid: boolean;
     isPartiallyPaid: boolean;
