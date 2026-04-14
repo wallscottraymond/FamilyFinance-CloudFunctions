@@ -71,4 +71,14 @@ export interface RemoveGroupMemberResponse {
     success: boolean;
     message?: string;
 }
+export interface TransferGroupOwnershipRequest {
+    groupId: string;
+    newOwnerId: string;
+}
+export interface TransferGroupOwnershipResponse {
+    success: boolean;
+    message?: string;
+    previousOwnerId?: string;
+    newOwnerId?: string;
+}
 //# sourceMappingURL=groups.d.ts.map

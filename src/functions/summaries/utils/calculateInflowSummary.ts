@@ -60,14 +60,17 @@ export function calculateInflowSummary(
       plaidCategory.includes("WAGES") ||
       plaidCategory.includes("SALARY");
 
-    // Determine income type based on Plaid category
-    let incomeType = "other";
-    if (plaidCategory.includes("WAGES") || plaidCategory.includes("SALARY")) {
-      incomeType = "salary";
-    } else if (plaidCategory.includes("FREELANCE") || plaidCategory.includes("CONTRACT")) {
-      incomeType = "freelance";
-    } else if (plaidCategory.includes("INVESTMENT") || plaidCategory.includes("DIVIDEND")) {
-      incomeType = "investment";
+    // Use configured income type if available, otherwise fall back to Plaid category detection
+    let incomeType = inflowPeriod.incomeType || "other";
+    if (!inflowPeriod.incomeType || inflowPeriod.incomeType === "other") {
+      // Fall back to Plaid category detection
+      if (plaidCategory.includes("WAGES") || plaidCategory.includes("SALARY")) {
+        incomeType = "salary";
+      } else if (plaidCategory.includes("FREELANCE") || plaidCategory.includes("CONTRACT")) {
+        incomeType = "freelance";
+      } else if (plaidCategory.includes("INVESTMENT") || plaidCategory.includes("DIVIDEND")) {
+        incomeType = "investment";
+      }
     }
 
     // Calculate receipt progress percentage (unit count)

@@ -7,7 +7,8 @@ admin.initializeApp();
 // Export all function modules
 export * from "./functions/auth";
 export * from "./functions/users"; // Includes auth triggers (onUserCreate, onUserDelete)
-export * from "./functions/sharing"; // Group management (CRUD + orchestration triggers)
+export * from "./functions/sharing"; // Legacy group management (onRequest, familyId) - DEPRECATED
+export * from "./functions/groups";  // RBAC v2 group management (onCall, groupIds[])
 export * from "./functions/transactions";
 export * from "./functions/budgets";
 export * from "./functions/categories"; // Categories management functions

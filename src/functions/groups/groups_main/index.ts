@@ -11,6 +11,12 @@
 // === CRUD Operations ===
 export * from './crud';
 
+// === Resource Sharing ===
+export * from './sharing';
+
+// === Permission Checks ===
+export * from './permissions';
+
 // === API Endpoints ===
 // export * from './api';
 
