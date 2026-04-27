@@ -111,13 +111,13 @@ async function processInflow(
     const groupId = inflowData.groupId || null;
     const now = Timestamp.now();
 
-    // Calculate time range: from inflow's firstDate to 3 months forward
-    // This ensures we generate periods for the entire history of the inflow
+    // Calculate time range: from inflow's firstDate to 12 months forward
+    // This ensures we generate periods for the entire history of the inflow (matches budget periods)
     const startDate = inflowData.firstDate?.toDate() || new Date();
     const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + 3);
+    endDate.setMonth(endDate.getMonth() + 12); // 12 months forward (matches budgets)
 
-    console.log(`[regenerateInflowPeriods] Date range: ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()}`);
+    console.log(`[regenerateInflowPeriods] Date range: ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()} (12 months forward)`);
 
     // Get source periods in range
     const sourcePeriodsQuery = db.collection('source_periods')

@@ -6,4 +6,6 @@
 export { onBudgetCreate } from './onBudgetCreate';
 export { onBudgetDelete } from './onBudgetDelete';
 export { onBudgetUpdatedReassignTransactions } from './onBudgetUpdate';
+export { onBudgetUpdatedCascade } from './onBudgetUpdatedCascade';
+export { onBudgetPeriodUpdated } from './onBudgetPeriodUpdated';
 //# sourceMappingURL=index.d.ts.map

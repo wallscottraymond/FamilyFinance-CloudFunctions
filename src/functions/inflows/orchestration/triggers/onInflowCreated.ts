@@ -77,12 +77,12 @@ export const onInflowCreated = onDocumentCreated({
     
     // Calculate time range for period generation
     // Start from the inflow's firstDate (for historical periods)
-    // End at 3 months forward (for future planning)
+    // End at 12 months forward (for future planning - matches budget period generation)
     const startDate = inflowData.firstDate?.toDate() || new Date();
     const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + 3); // 3 months forward
+    endDate.setMonth(endDate.getMonth() + 12); // 12 months forward (matches budgets)
 
-    console.log(`Generating inflow periods from ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()} (3 months forward)`);
+    console.log(`Generating inflow periods from ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()} (12 months forward)`);
     
     // Get all source periods that overlap with our time range
     const sourcePeriodsQuery = db.collection('source_periods')

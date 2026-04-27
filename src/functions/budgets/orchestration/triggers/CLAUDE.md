@@ -8,17 +8,20 @@ This directory contains Firestore triggers that automatically respond to budget 
 
 Budget triggers automate key workflows in the budget system:
 - **Budget Creation** → Generate 1 year of budget_period documents
-- **Budget Updates** → Reassign transactions when categories change
+- **Budget Updates (Category)** → Reassign transactions when categories change
+- **Budget Updates (Fields)** → Cascade name, amount, etc. to budget_periods
 - **Budget Deletion** → Auto-recreate "Everything Else" system budgets
 
 ## Directory Structure
 
 ```
 orchestration/triggers/
-├── index.ts                 # Exports all trigger functions
-├── onBudgetCreate.ts        # Generates budget_periods on budget creation
-├── onBudgetUpdate.ts        # Reassigns transactions on category changes
-└── onBudgetDelete.ts        # Protects system budgets from deletion
+├── index.ts                      # Exports all trigger functions
+├── onBudgetCreate.ts             # Generates budget_periods on budget creation
+├── onBudgetUpdate.ts             # Reassigns transactions on category changes
+├── onBudgetUpdatedCascade.ts     # Cascades field changes to budget_periods
+├── onBudgetPeriodUpdated.ts      # Syncs notes/checklist across overlapping periods
+└── onBudgetDelete.ts             # Protects system budgets from deletion
 ```
 
 ---
@@ -155,6 +158,194 @@ if (categoriesBefore === categoriesAfter) {
 ```
 
 **Note:** Transaction updates will automatically trigger `updateBudgetSpending()` via the `onTransactionUpdate` trigger, so manual budget_periods updates aren't needed here.
+
+---
+
+### onBudgetUpdatedCascade.ts
+
+**Purpose:** Cascade budget field changes (name, amount, description, alertThreshold) to budget_periods
+
+**Trigger Event:** Document updated in `budgets` collection
+
+**Function Signature:**
+```typescript
+export const onBudgetUpdatedCascade = onDocumentUpdated({
+  document: 'budgets/{budgetId}',
+  region: 'us-central1',
+  memory: '512MiB',
+  timeoutSeconds: 60,
+}, async (event) => { ... });
+```
+
+**Process Flow:**
+1. Extract before/after budget data
+2. Skip if budget is inactive
+3. Call `runUpdateBudgetPeriods()` to cascade changes
+4. Log cascade results (fields updated, periods affected)
+
+**Handled Fields:**
+- `name` → Updates `budgetName` on current + future periods
+- `amount` → Recalculates `allocatedAmount` on current + future periods
+- `description` → Logged for future use (not currently stored on periods)
+- `alertThreshold` → Logged for future use (not currently stored on periods)
+- `isActive` → Pause/resume with redistribution to Everything Else (current period only)
+
+**Note:** `categoryIds` changes are handled separately by `onBudgetUpdatedReassignTransactions`.
+
+**isActive Change Handling (Pause/Resume):**
+When a budget's `isActive` changes:
+- Only affects the CURRENT period (not all periods)
+- **Pausing (isActive → false):**
+  - Sets current period to inactive
+  - Stores `allocatedAmount` in `pausedAllocatedAmount`
+  - Sets `allocatedAmount` to 0
+  - Adds the allocation to Everything Else budget's corresponding period
+- **Resuming (isActive → true):**
+  - Sets current period to active
+  - Restores `allocatedAmount` from `pausedAllocatedAmount`
+  - Subtracts the allocation from Everything Else budget
+- System budgets (isSystemEverythingElse) are skipped
+
+**Update Strategy (Current + Future):**
+- **Current + future** = periods where `periodEnd >= today`
+- Historical periods (periodEnd < today) are preserved
+- Follows same pattern as `runUpdateInflowPeriods` / `runUpdateOutflowPeriods`
+
+**Amount Recalculation:**
+When budget `amount` changes:
+1. Fetch source period for each budget_period
+2. Call `calculatePeriodAllocatedAmount()` with new base amount
+3. Update `allocatedAmount`, `originalAmount`, and `remaining`
+
+```typescript
+const newAllocatedAmount = calculatePeriodAllocatedAmount(
+  budgetAfter.amount,
+  budgetPeriodType,
+  sourcePeriod
+);
+
+updates.allocatedAmount = newAllocatedAmount;
+updates.originalAmount = newAllocatedAmount;
+updates.remaining = newAllocatedAmount - period.spent;
+```
+
+**Error Handling:**
+- Non-throwing: Errors logged but budget update succeeds
+- Allows budget changes even if cascade fails
+- Detailed error logging for debugging
+
+**Performance:**
+- Memory: 512MiB (for batch operations)
+- Timeout: 60s
+- Batch writes (500-document limit)
+- Source period caching for efficiency
+
+**Dependencies:**
+- `runUpdateBudgetPeriods` - Core cascade logic
+- `calculatePeriodAllocatedAmount` - Period amount calculation
+
+**Logging:**
+```
+[onBudgetUpdatedCascade] ════════════════════════════════════════════
+[onBudgetUpdatedCascade] BUDGET UPDATED - CHECKING FOR CASCADE
+[onBudgetUpdatedCascade] ════════════════════════════════════════════
+[onBudgetUpdatedCascade] Budget ID: budget_abc123
+[onBudgetUpdatedCascade] Name: Groceries
+[onBudgetUpdatedCascade] Calling runUpdateBudgetPeriods...
+[onBudgetUpdatedCascade] ════════════════════════════════════════════
+[onBudgetUpdatedCascade] CASCADE COMPLETE
+[onBudgetUpdatedCascade] ════════════════════════════════════════════
+[onBudgetUpdatedCascade] ✓ Fields changed: name, amount
+[onBudgetUpdatedCascade] ✓ Periods queried: 78
+[onBudgetUpdatedCascade] ✓ Periods updated: 52
+[onBudgetUpdatedCascade] ✓ Periods skipped (historical): 26
+```
+
+**Relationship to onBudgetUpdatedReassignTransactions:**
+Both triggers fire on budget updates but handle different concerns:
+- `onBudgetUpdatedReassignTransactions` → Handles `categoryIds` changes (transaction reassignment)
+- `onBudgetUpdatedCascade` → Handles `name`, `amount`, etc. changes (period cascades)
+
+This separation keeps each trigger focused and prevents duplicate processing.
+
+---
+
+### onBudgetPeriodUpdated.ts
+
+**Purpose:** Sync user-entered data across overlapping periods of different types
+
+**Trigger Event:** Document updated in `budget_periods` collection
+
+**Function Signature:**
+```typescript
+export const onBudgetPeriodUpdated = onDocumentUpdated({
+  document: 'budget_periods/{periodId}',
+  region: 'us-central1',
+  memory: '256MiB',
+  timeoutSeconds: 30,
+}, async (event) => { ... });
+```
+
+**Process Flow:**
+1. Extract before/after period data
+2. Check if this is a cascaded sync update (prevent infinite loops)
+3. Detect changes to userNotes, checklistItems, or modifiedAmount
+4. If changes detected, sync to overlapping periods of other types
+
+**Handled Fields:**
+- `userNotes` → Syncs to overlapping periods via `syncNotesToOverlappingPeriods()`
+- `checklistItems` → Syncs to overlapping periods via `syncChecklistToOverlappingPeriods()`
+- `modifiedAmount` / `isModified` → Syncs to overlapping periods via `syncModifiedAmountToOverlappingPeriods()`
+
+**Infinite Loop Prevention:**
+The trigger detects cascaded updates by checking sync timestamps:
+- `notesSyncedAt` - Set when notes are synced from another period
+- `checklistSyncedAt` - Set when checklist is synced from another period
+- `modifiedAmountSyncedAt` - Set when modified amount is synced
+
+If any sync timestamp increased, the update was a cascade and is skipped.
+
+**Overlapping Period Logic:**
+Two periods overlap if their date ranges intersect:
+```typescript
+periodsOverlap(aStart, aEnd, bStart, bEnd) = aStart <= bEnd && aEnd >= bStart
+```
+
+Example: When a user adds a note to a Monthly period (2025-04-01 to 2025-04-30):
+- Note syncs to Weekly periods W14, W15, W16, W17, W18 (if they overlap April)
+- Note syncs to Bi-Monthly periods BM04A, BM04B (if they exist)
+
+**Error Handling:**
+- Non-throwing: Errors logged but period update succeeds
+- Individual sync failures don't prevent other syncs
+- Detailed error logging for debugging
+
+**Performance:**
+- Memory: 256MiB (lightweight sync operations)
+- Timeout: 30s
+- Uses batch writes for efficiency
+
+**Dependencies:**
+- `syncNotesToOverlappingPeriods` - Notes sync utility
+- `syncChecklistToOverlappingPeriods` - Checklist sync utility
+- `syncModifiedAmountToOverlappingPeriods` - Modified amount sync utility
+
+**Logging:**
+```
+[onBudgetPeriodUpdated] ════════════════════════════════════════════
+[onBudgetPeriodUpdated] BUDGET PERIOD UPDATED - SYNC CHECK
+[onBudgetPeriodUpdated] ════════════════════════════════════════════
+[onBudgetPeriodUpdated] Period ID: budget123_2025M04
+[onBudgetPeriodUpdated] Budget ID: budget123
+[onBudgetPeriodUpdated] Period Type: monthly
+[onBudgetPeriodUpdated] Notes changed: true
+[onBudgetPeriodUpdated] Checklist changed: false
+[onBudgetPeriodUpdated] Modified amount changed: false
+[onBudgetPeriodUpdated] Syncing notes to overlapping periods...
+[onBudgetPeriodUpdated] ✓ Notes synced to 6 periods
+[onBudgetPeriodUpdated] ════════════════════════════════════════════
+[onBudgetPeriodUpdated] SYNC COMPLETE
+```
 
 ---
 

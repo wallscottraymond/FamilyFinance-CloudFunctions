@@ -118,6 +118,42 @@ export async function runUpdateInflowPeriods(
       console.log(`[runUpdateInflowPeriods] predictedNextDate changed`);
     }
 
+    // Check for description changes (separate from userCustomName)
+    if (inflowBefore.description !== inflowAfter.description) {
+      changedFields.push('description');
+      console.log(`[runUpdateInflowPeriods] description changed: "${inflowBefore.description}" → "${inflowAfter.description}"`);
+    }
+
+    // Check for merchantName changes (maps to payerName on periods)
+    if (inflowBefore.merchantName !== inflowAfter.merchantName) {
+      changedFields.push('merchantName');
+      console.log(`[runUpdateInflowPeriods] merchantName changed: "${inflowBefore.merchantName}" → "${inflowAfter.merchantName}"`);
+    }
+
+    // Check for frequency changes
+    if (inflowBefore.frequency !== inflowAfter.frequency) {
+      changedFields.push('frequency');
+      console.log(`[runUpdateInflowPeriods] frequency changed: "${inflowBefore.frequency}" → "${inflowAfter.frequency}"`);
+    }
+
+    // Check for incomeType changes
+    if (inflowBefore.incomeType !== inflowAfter.incomeType) {
+      changedFields.push('incomeType');
+      console.log(`[runUpdateInflowPeriods] incomeType changed: "${inflowBefore.incomeType}" → "${inflowAfter.incomeType}"`);
+    }
+
+    // Check for isRegularSalary changes
+    if (inflowBefore.isRegularSalary !== inflowAfter.isRegularSalary) {
+      changedFields.push('isRegularSalary');
+      console.log(`[runUpdateInflowPeriods] isRegularSalary changed: ${inflowBefore.isRegularSalary} → ${inflowAfter.isRegularSalary}`);
+    }
+
+    // Check for isActive changes
+    if (inflowBefore.isActive !== inflowAfter.isActive) {
+      changedFields.push('isActive');
+      console.log(`[runUpdateInflowPeriods] isActive changed: ${inflowBefore.isActive} → ${inflowAfter.isActive}`);
+    }
+
     if (changedFields.length === 0) {
       console.log(`[runUpdateInflowPeriods] No relevant changes detected, skipping update`);
       result.success = true;
@@ -268,6 +304,46 @@ export async function runUpdateInflowPeriods(
           updates.userCustomName = inflowAfter.userCustomName || '';
           updates.description = inflowAfter.userCustomName || inflowAfter.description;
           console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating userCustomName to "${updates.userCustomName}"`);
+        }
+
+        // Handle description change (when not overridden by userCustomName)
+        if (changedFields.includes('description') && !changedFields.includes('userCustomName')) {
+          // Only update description if userCustomName is not set
+          if (!inflowAfter.userCustomName) {
+            updates.description = inflowAfter.description || '';
+            console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating description to "${updates.description}"`);
+          }
+        }
+
+        // Handle merchantName change (maps to payerName on periods)
+        if (changedFields.includes('merchantName')) {
+          updates.payerName = inflowAfter.merchantName || null;
+          console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating payerName to "${updates.payerName}"`);
+        }
+
+        // Handle frequency change
+        if (changedFields.includes('frequency')) {
+          updates.frequency = inflowAfter.frequency;
+          console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating frequency to "${updates.frequency}"`);
+        }
+
+        // Handle incomeType change
+        if (changedFields.includes('incomeType')) {
+          updates.incomeType = inflowAfter.incomeType;
+          console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating incomeType to "${updates.incomeType}"`);
+        }
+
+        // Handle isRegularSalary change
+        if (changedFields.includes('isRegularSalary')) {
+          updates.isRegularSalary = inflowAfter.isRegularSalary ?? false;
+          console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating isRegularSalary to ${updates.isRegularSalary}`);
+        }
+
+        // Handle isActive change - only affects CURRENT period (not received ones)
+        // When base inflow is deactivated, mark current period as inactive
+        if (changedFields.includes('isActive') && !isReceived) {
+          updates.isActive = inflowAfter.isActive ?? true;
+          console.log(`[runUpdateInflowPeriods] Period ${periodDoc.id}: updating isActive to ${updates.isActive}`);
         }
 
         // Handle predictedNextDate change

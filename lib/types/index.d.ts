@@ -374,6 +374,12 @@ export interface Budget extends BaseDocument, ResourceOwnership {
     isOngoing: boolean;
     budgetEndDate?: Timestamp;
     isSystemEverythingElse?: boolean;
+    flaggedForDeletion?: boolean;
+    deletionScheduledAt?: Timestamp;
+    deletedBy?: string;
+    deletedAt?: Timestamp;
+    restoredBy?: string;
+    restoredAt?: Timestamp;
 }
 export declare enum BudgetPeriod {
     WEEKLY = "weekly",
@@ -633,6 +639,7 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
     checklistItems: ChecklistItem[];
     lastCalculated: Timestamp;
     isActive: boolean;
+    pausedAllocatedAmount?: number;
     /** Whether this is a prime period (matches budget's period type). Default: undefined (treat as true for existing docs) */
     isPrime?: boolean;
     /** Daily rate for this period: allocatedAmount / daysInPeriod. Calculated field. */

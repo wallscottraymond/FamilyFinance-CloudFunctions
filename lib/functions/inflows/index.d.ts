@@ -7,13 +7,16 @@
  * Functions included:
  * - onInflowCreated: Automatic inflow period generation trigger
  * - onInflowUpdated: Cascade inflow changes to periods trigger
+ * - extendRecurringInflowPeriods: Scheduled monthly maintenance (1st at 2:00 AM UTC)
  *
  * Architecture:
  * - orchestration/triggers: Firestore triggers (Inflow period generation/updates)
+ * - orchestration/scheduled: Scheduled functions (rolling window maintenance)
  * - inflow_periods/utils: Utilities for period management, alignment, prediction
  */
 export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";
 export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
+export { extendRecurringInflowPeriods } from "./orchestration/scheduled/extendRecurringInflowPeriods";
 export { regenerateInflowPeriods } from "./inflow_periods/api/regenerateInflowPeriods";
 export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";
 export { updateInflowConfiguration } from "./inflow_periods/api/updateInflowConfiguration";
@@ -35,5 +38,11 @@ export { alignTransactionsToInflowPeriods, matchTransactionToInflowPeriod, predi
  * - Triggers: When document updated in inflows collection
  * - Memory: 512MiB, Timeout: 60s
  * - Location: orchestration/triggers/onInflowUpdated.ts
+ *
+ * extendRecurringInflowPeriods:
+ * - Purpose: Maintain rolling 1-year window of inflow periods
+ * - Schedule: Monthly on 1st at 2:00 AM UTC (matches budget maintenance)
+ * - Memory: 512MiB, Timeout: 300s
+ * - Location: orchestration/scheduled/extendRecurringInflowPeriods.ts
  */
 //# sourceMappingURL=index.d.ts.map

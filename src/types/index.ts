@@ -484,6 +484,14 @@ export interface Budget extends BaseDocument, ResourceOwnership {
 
   // System budget flag
   isSystemEverythingElse?: boolean; // Flag for "everything else" catch-all budget
+
+  // Soft deletion / trash functionality
+  flaggedForDeletion?: boolean;     // True if budget is in "trash" awaiting permanent deletion
+  deletionScheduledAt?: Timestamp;  // When the budget will be permanently deleted
+  deletedBy?: string;               // User ID who deleted the budget
+  deletedAt?: Timestamp;            // When the budget was soft deleted
+  restoredBy?: string;              // User ID who restored the budget (if applicable)
+  restoredAt?: Timestamp;           // When the budget was restored (if applicable)
 }
 
 export enum BudgetPeriod {
@@ -803,6 +811,9 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
   // System fields
   lastCalculated: Timestamp;  // When allocatedAmount was last calculated
   isActive: boolean;          // Whether this budget period is active
+
+  // Pause/Resume tracking (added 2026-04)
+  pausedAllocatedAmount?: number; // Stores allocatedAmount when period is paused, for restore on resume
 
   // === PRIME/NON-PRIME PERIOD FIELDS (Optional - added 2026-03) ===
 

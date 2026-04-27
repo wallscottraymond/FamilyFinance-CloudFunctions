@@ -1,12 +1,17 @@
 /**
  * Transaction Splits to Budgets Matching Utility (In-Memory Processing)
  *
- * Matches transaction splits to budgets based on date range.
+ * Matches transaction splits to budgets based on date range AND category.
  * Operates in-memory on transaction arrays (no DB writes).
+ *
+ * Matching Priority:
+ * 1. Regular budgets: Must match BOTH date range AND category
+ * 2. "Everything Else" budget: Fallback for unmatched transactions
+ * 3. Unassigned: Only if no "Everything Else" budget exists
  */
 import { Transaction as FamilyTransaction } from '../../../types';
 /**
- * Match transaction splits to budgets based on transaction dates (in-memory)
+ * Match transaction splits to budgets based on transaction dates AND categories (in-memory)
  *
  * Queries budgets by date range and updates each transaction's splits
  * with matching budgetId and budgetName fields.

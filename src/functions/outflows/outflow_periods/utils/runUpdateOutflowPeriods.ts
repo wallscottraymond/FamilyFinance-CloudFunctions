@@ -110,6 +110,42 @@ export async function runUpdateOutflowPeriods(
       console.log(`[runUpdateOutflowPeriods] transactionIds changed: ${beforeCount} → ${afterCount} transactions`);
     }
 
+    // Check for description changes (separate from userCustomName)
+    if (outflowBefore.description !== outflowAfter.description) {
+      changedFields.push('description');
+      console.log(`[runUpdateOutflowPeriods] description changed: "${outflowBefore.description}" → "${outflowAfter.description}"`);
+    }
+
+    // Check for merchantName changes
+    if (outflowBefore.merchantName !== outflowAfter.merchantName) {
+      changedFields.push('merchantName');
+      console.log(`[runUpdateOutflowPeriods] merchantName changed: "${outflowBefore.merchantName}" → "${outflowAfter.merchantName}"`);
+    }
+
+    // Check for expenseType changes
+    if (outflowBefore.expenseType !== outflowAfter.expenseType) {
+      changedFields.push('expenseType');
+      console.log(`[runUpdateOutflowPeriods] expenseType changed: "${outflowBefore.expenseType}" → "${outflowAfter.expenseType}"`);
+    }
+
+    // Check for isEssential changes
+    if (outflowBefore.isEssential !== outflowAfter.isEssential) {
+      changedFields.push('isEssential');
+      console.log(`[runUpdateOutflowPeriods] isEssential changed: ${outflowBefore.isEssential} → ${outflowAfter.isEssential}`);
+    }
+
+    // Check for frequency changes
+    if (outflowBefore.frequency !== outflowAfter.frequency) {
+      changedFields.push('frequency');
+      console.log(`[runUpdateOutflowPeriods] frequency changed: "${outflowBefore.frequency}" → "${outflowAfter.frequency}"`);
+    }
+
+    // Check for isActive changes
+    if (outflowBefore.isActive !== outflowAfter.isActive) {
+      changedFields.push('isActive');
+      console.log(`[runUpdateOutflowPeriods] isActive changed: ${outflowBefore.isActive} → ${outflowAfter.isActive}`);
+    }
+
     if (changedFields.length === 0) {
       console.log(`[runUpdateOutflowPeriods] No relevant changes detected, skipping update`);
       result.success = true;
@@ -232,6 +268,41 @@ export async function runUpdateOutflowPeriods(
           // Also update description for backwards compatibility
           updates.description = outflowAfter.userCustomName || outflowAfter.description;
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating userCustomName to "${updates.userCustomName}"`);
+        }
+
+        // Handle description change (when not overridden by userCustomName)
+        if (changedFields.includes('description') && !changedFields.includes('userCustomName')) {
+          // Only update description if userCustomName is not set
+          if (!outflowAfter.userCustomName) {
+            updates.description = outflowAfter.description || '';
+            console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating description to "${updates.description}"`);
+          }
+        }
+
+        // Handle merchantName change
+        if (changedFields.includes('merchantName')) {
+          updates.merchantName = outflowAfter.merchantName || null;
+          console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating merchantName to "${updates.merchantName}"`);
+        }
+
+        // Handle expenseType change
+        if (changedFields.includes('expenseType')) {
+          updates.expenseType = outflowAfter.expenseType;
+          console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating expenseType to "${updates.expenseType}"`);
+        }
+
+        // Handle isEssential change
+        if (changedFields.includes('isEssential')) {
+          updates.isEssential = outflowAfter.isEssential ?? false;
+          console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating isEssential to ${updates.isEssential}`);
+        }
+
+        // Handle isActive change - only affects unpaid periods
+        // Check if this is a paid period (skip isActive update for paid periods)
+        const isPaid = period.isPaid || period.isFullyPaid || period.isPartiallyPaid;
+        if (changedFields.includes('isActive') && !isPaid) {
+          updates.isActive = outflowAfter.isActive ?? true;
+          console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating isActive to ${updates.isActive}`);
         }
 
         // Handle transactionIds change - call autoMatchSinglePeriod

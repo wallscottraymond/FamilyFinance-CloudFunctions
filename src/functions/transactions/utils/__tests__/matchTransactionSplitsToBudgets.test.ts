@@ -100,6 +100,7 @@ describe('matchTransactionSplitsToBudgets', () => {
       isOngoing?: boolean;
       endDate?: Date;
       isSystemEverythingElse?: boolean;
+      categoryIds?: string[];
     } = {}
   ) => ({
     id,
@@ -108,7 +109,8 @@ describe('matchTransactionSplitsToBudgets', () => {
       startDate: Timestamp.fromDate(startDate),
       endDate: options.endDate ? Timestamp.fromDate(options.endDate) : null,
       isOngoing: options.isOngoing !== false,
-      isSystemEverythingElse: options.isSystemEverythingElse || false
+      isSystemEverythingElse: options.isSystemEverythingElse || false,
+      categoryIds: options.categoryIds || []
     })
   });
 
@@ -133,14 +135,14 @@ describe('matchTransactionSplitsToBudgets', () => {
     jest.clearAllMocks();
   });
 
-  describe('Regular Budget Matching', () => {
-    it('should match transaction to budget within date range', async () => {
+  describe('Regular Budget Matching (Date + Category)', () => {
+    it('should match transaction to budget within date range AND matching category', async () => {
       const budgets = [
         createBudget(
           'budget_groceries',
           'Groceries',
           new Date('2025-01-01'),
-          { isOngoing: true }
+          { isOngoing: true, categoryIds: ['GENERAL_MERCHANDISE'] }
         )
       ];
 
@@ -156,10 +158,13 @@ describe('matchTransactionSplitsToBudgets', () => {
       expect(result[0].splits[0].budgetName).toBe('Groceries');
     });
 
-    it('should match transaction to budget on exact start date', async () => {
+    it('should match transaction to budget on exact start date with matching category', async () => {
       const startDate = new Date('2025-01-01');
       const budgets = [
-        createBudget('budget_test', 'Test Budget', startDate, { isOngoing: true })
+        createBudget('budget_test', 'Test Budget', startDate, {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
       ];
 
       mockBudgetQuery(budgets);
@@ -175,7 +180,10 @@ describe('matchTransactionSplitsToBudgets', () => {
 
     it('should NOT match transaction before budget start date', async () => {
       const budgets = [
-        createBudget('budget_test', 'Test Budget', new Date('2025-02-01'), { isOngoing: true }),
+        createBudget('budget_test', 'Test Budget', new Date('2025-02-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
           isSystemEverythingElse: true
@@ -194,10 +202,16 @@ describe('matchTransactionSplitsToBudgets', () => {
       expect(result[0].splits[0].budgetId).toBe('budget_everything');
     });
 
-    it('should match to first budget when multiple budgets match', async () => {
+    it('should match to first budget when multiple budgets match date AND category', async () => {
       const budgets = [
-        createBudget('budget_first', 'First Budget', new Date('2025-01-01'), { isOngoing: true }),
-        createBudget('budget_second', 'Second Budget', new Date('2025-01-01'), { isOngoing: true })
+        createBudget('budget_first', 'First Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        }),
+        createBudget('budget_second', 'Second Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
       ];
 
       mockBudgetQuery(budgets);
@@ -214,12 +228,148 @@ describe('matchTransactionSplitsToBudgets', () => {
     });
   });
 
+  describe('Category Matching', () => {
+    it('should NOT match budget when category does not match', async () => {
+      const budgets = [
+        createBudget('budget_food', 'Food Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['FOOD_AND_DRINK'] // Different from transaction's GENERAL_MERCHANDISE
+        }),
+        createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
+          isOngoing: true,
+          isSystemEverythingElse: true
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transactions = [
+        createTransaction(new Date('2025-01-15'), 50.00) // Has GENERAL_MERCHANDISE category
+      ];
+
+      const result = await matchTransactionSplitsToBudgets(transactions, mockUserId);
+
+      // Should fall back to "Everything Else" due to category mismatch
+      expect(result[0].splits[0].budgetId).toBe('budget_everything');
+    });
+
+    it('should match budget with multiple categoryIds', async () => {
+      const budgets = [
+        createBudget('budget_shopping', 'Shopping Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['FOOD_AND_DRINK', 'GENERAL_MERCHANDISE', 'ENTERTAINMENT']
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transactions = [
+        createTransaction(new Date('2025-01-15'), 50.00) // Has GENERAL_MERCHANDISE
+      ];
+
+      const result = await matchTransactionSplitsToBudgets(transactions, mockUserId);
+
+      expect(result[0].splits[0].budgetId).toBe('budget_shopping');
+    });
+
+    it('should prioritize internalPrimaryCategory over plaidPrimaryCategory', async () => {
+      const budgets = [
+        createBudget('budget_food', 'Food Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GROCERIES'] // Matches internal category
+        }),
+        createBudget('budget_merchandise', 'Merchandise', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE'] // Matches Plaid category
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transaction = createTransaction(new Date('2025-01-15'), 50.00);
+      // Set internal category override
+      transaction.splits[0].internalPrimaryCategory = 'GROCERIES';
+
+      const result = await matchTransactionSplitsToBudgets([transaction], mockUserId);
+
+      // Should match GROCERIES (internal) not GENERAL_MERCHANDISE (Plaid)
+      expect(result[0].splits[0].budgetId).toBe('budget_food');
+    });
+
+    it('should NOT match budget with empty categoryIds (user has not configured categories)', async () => {
+      const budgets = [
+        createBudget('budget_unconfigured', 'Unconfigured Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: [] // Empty = not configured
+        }),
+        createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
+          isOngoing: true,
+          isSystemEverythingElse: true
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transactions = [
+        createTransaction(new Date('2025-01-15'), 50.00)
+      ];
+
+      const result = await matchTransactionSplitsToBudgets(transactions, mockUserId);
+
+      // Should fall back to "Everything Else" because unconfigured budget has no categories
+      expect(result[0].splits[0].budgetId).toBe('budget_everything');
+    });
+
+    it('should match different splits to different budgets based on category', async () => {
+      const budgets = [
+        createBudget('budget_food', 'Food Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['FOOD_AND_DRINK']
+        }),
+        createBudget('budget_shopping', 'Shopping Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transaction = createTransaction(new Date('2025-01-15'), 100.00);
+      // Create multi-split transaction with different categories
+      transaction.splits = [
+        {
+          ...transaction.splits[0],
+          splitId: 'split_001',
+          amount: 60.00,
+          plaidPrimaryCategory: 'FOOD_AND_DRINK',
+          internalPrimaryCategory: null
+        },
+        {
+          ...transaction.splits[0],
+          splitId: 'split_002',
+          amount: 40.00,
+          plaidPrimaryCategory: 'GENERAL_MERCHANDISE',
+          internalPrimaryCategory: null
+        }
+      ];
+
+      const result = await matchTransactionSplitsToBudgets([transaction], mockUserId);
+
+      // Each split should match its category-appropriate budget
+      expect(result[0].splits[0].budgetId).toBe('budget_food');
+      expect(result[0].splits[0].budgetName).toBe('Food Budget');
+      expect(result[0].splits[1].budgetId).toBe('budget_shopping');
+      expect(result[0].splits[1].budgetName).toBe('Shopping Budget');
+    });
+  });
+
   describe('Ongoing vs Limited Budgets', () => {
     it('should match ongoing budget (no end date) for any future transaction', async () => {
       const budgets = [
         createBudget('budget_ongoing', 'Ongoing Budget', new Date('2025-01-01'), {
           isOngoing: true,
-          endDate: undefined
+          endDate: undefined,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -238,7 +388,8 @@ describe('matchTransactionSplitsToBudgets', () => {
       const budgets = [
         createBudget('budget_limited', 'Limited Budget', new Date('2025-01-01'), {
           isOngoing: false,
-          endDate: new Date('2025-12-31')
+          endDate: new Date('2025-12-31'),
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -257,7 +408,8 @@ describe('matchTransactionSplitsToBudgets', () => {
       const budgets = [
         createBudget('budget_limited', 'Limited Budget', new Date('2025-01-01'), {
           isOngoing: false,
-          endDate: new Date('2025-12-31')
+          endDate: new Date('2025-12-31'),
+          categoryIds: ['GENERAL_MERCHANDISE']
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
@@ -282,7 +434,8 @@ describe('matchTransactionSplitsToBudgets', () => {
       const budgets = [
         createBudget('budget_limited', 'Limited Budget', new Date('2025-01-01'), {
           isOngoing: false,
-          endDate
+          endDate,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -299,9 +452,12 @@ describe('matchTransactionSplitsToBudgets', () => {
   });
 
   describe('"Everything Else" Fallback', () => {
-    it('should assign to "Everything Else" when no regular budget matches', async () => {
+    it('should assign to "Everything Else" when no regular budget matches date', async () => {
       const budgets = [
-        createBudget('budget_future', 'Future Budget', new Date('2026-01-01'), { isOngoing: true }),
+        createBudget('budget_future', 'Future Budget', new Date('2026-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
           isSystemEverythingElse: true
@@ -320,9 +476,36 @@ describe('matchTransactionSplitsToBudgets', () => {
       expect(result[0].splits[0].budgetName).toBe('Everything Else');
     });
 
-    it('should prefer regular budget over "Everything Else"', async () => {
+    it('should assign to "Everything Else" when no regular budget matches category', async () => {
       const budgets = [
-        createBudget('budget_groceries', 'Groceries', new Date('2025-01-01'), { isOngoing: true }),
+        createBudget('budget_food', 'Food Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['FOOD_AND_DRINK'] // Different from transaction's GENERAL_MERCHANDISE
+        }),
+        createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
+          isOngoing: true,
+          isSystemEverythingElse: true
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transactions = [
+        createTransaction(new Date('2025-01-15'), 50.00)
+      ];
+
+      const result = await matchTransactionSplitsToBudgets(transactions, mockUserId);
+
+      expect(result[0].splits[0].budgetId).toBe('budget_everything');
+      expect(result[0].splits[0].budgetName).toBe('Everything Else');
+    });
+
+    it('should prefer regular budget over "Everything Else" when both date AND category match', async () => {
+      const budgets = [
+        createBudget('budget_groceries', 'Groceries', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
           isSystemEverythingElse: true
@@ -345,7 +528,8 @@ describe('matchTransactionSplitsToBudgets', () => {
       const budgets = [
         createBudget('budget_groceries', 'Groceries', new Date('2025-01-01'), {
           isOngoing: false,
-          endDate: new Date('2025-06-30')
+          endDate: new Date('2025-06-30'),
+          categoryIds: ['GENERAL_MERCHANDISE']
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
@@ -417,7 +601,8 @@ describe('matchTransactionSplitsToBudgets', () => {
             startDate: null, // Missing start date
             endDate: null,
             isOngoing: true,
-            isSystemEverythingElse: false
+            isSystemEverythingElse: false,
+            categoryIds: ['GENERAL_MERCHANDISE']
           })
         },
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
@@ -438,9 +623,12 @@ describe('matchTransactionSplitsToBudgets', () => {
       expect(result[0].splits[0].budgetId).toBe('budget_everything');
     });
 
-    it('should update all splits in multi-split transaction', async () => {
+    it('should update all splits in multi-split transaction with same category', async () => {
       const budgets = [
-        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), { isOngoing: true })
+        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
       ];
 
       mockBudgetQuery(budgets);
@@ -455,7 +643,7 @@ describe('matchTransactionSplitsToBudgets', () => {
 
       const result = await matchTransactionSplitsToBudgets(transactions, mockUserId);
 
-      // Both splits should have budgetId updated
+      // Both splits should have budgetId updated (same category)
       expect(result[0].splits[0].budgetId).toBe('budget_test');
       expect(result[0].splits[1].budgetId).toBe('budget_test');
       expect(result[0].splits[0].budgetName).toBe('Test Budget');
@@ -477,12 +665,40 @@ describe('matchTransactionSplitsToBudgets', () => {
       // Should return original transactions unchanged
       expect(result[0].splits[0].budgetId).toBe('unassigned');
     });
+
+    it('should handle transaction with no category (falls back to Everything Else)', async () => {
+      const budgets = [
+        createBudget('budget_food', 'Food Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['FOOD_AND_DRINK']
+        }),
+        createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
+          isOngoing: true,
+          isSystemEverythingElse: true
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      const transaction = createTransaction(new Date('2025-01-15'), 50.00);
+      // Clear category fields
+      transaction.splits[0].plaidPrimaryCategory = '';
+      transaction.splits[0].internalPrimaryCategory = null;
+
+      const result = await matchTransactionSplitsToBudgets([transaction], mockUserId);
+
+      // Should fall back to Everything Else since no category to match
+      expect(result[0].splits[0].budgetId).toBe('budget_everything');
+    });
   });
 
   describe('Split Field Preservation', () => {
     it('should preserve all 18 split fields during matching', async () => {
       const budgets = [
-        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), { isOngoing: true })
+        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['FOOD'] // Will match internalPrimaryCategory set below
+        })
       ];
 
       mockBudgetQuery(budgets);
@@ -543,7 +759,10 @@ describe('matchTransactionSplitsToBudgets', () => {
   describe('Performance & Scalability', () => {
     it('should handle 100 transactions efficiently', async () => {
       const budgets = [
-        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), { isOngoing: true })
+        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
       ];
 
       mockBudgetQuery(budgets);
@@ -565,13 +784,16 @@ describe('matchTransactionSplitsToBudgets', () => {
     });
 
     it('should handle 20 budgets efficiently', async () => {
-      // Create 20 budgets
+      // Create 20 budgets with different categories
       const budgets = Array.from({ length: 20 }, (_, i) =>
         createBudget(
           `budget_${i}`,
           `Budget ${i}`,
           new Date(`2025-0${Math.floor(i / 2) + 1}-01`),
-          { isOngoing: true }
+          {
+            isOngoing: true,
+            categoryIds: i === 0 ? ['GENERAL_MERCHANDISE'] : [`CATEGORY_${i}`]
+          }
         )
       );
 
@@ -583,7 +805,8 @@ describe('matchTransactionSplitsToBudgets', () => {
 
       const result = await matchTransactionSplitsToBudgets(transactions, mockUserId);
 
-      expect(result[0].splits[0].budgetId).toBe('budget_0'); // First match
+      // First budget with matching category
+      expect(result[0].splits[0].budgetId).toBe('budget_0');
     });
   });
 
@@ -592,7 +815,10 @@ describe('matchTransactionSplitsToBudgets', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       const budgets = [
-        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), { isOngoing: true })
+        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
       ];
 
       mockBudgetQuery(budgets);
@@ -610,7 +836,10 @@ describe('matchTransactionSplitsToBudgets', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       const budgets = [
-        createBudget('budget_future', 'Future Budget', new Date('2026-01-01'), { isOngoing: true }),
+        createBudget('budget_future', 'Future Budget', new Date('2026-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
           isSystemEverythingElse: true
@@ -622,7 +851,7 @@ describe('matchTransactionSplitsToBudgets', () => {
       await matchTransactionSplitsToBudgets([createTransaction(new Date('2025-01-15'), 50)], mockUserId);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Transaction assigned to "everything else" budget')
+        expect.stringContaining('Split assigned to "Everything Else" budget')
       );
 
       consoleSpy.mockRestore();
@@ -636,10 +865,31 @@ describe('matchTransactionSplitsToBudgets', () => {
       await matchTransactionSplitsToBudgets([createTransaction(new Date('2025-01-15'), 50)], mockUserId);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Transaction has no matching budget')
+        expect.stringContaining('Split has no matching budget')
       );
 
       consoleWarnSpy.mockRestore();
+    });
+
+    it('should log category matching success', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const budgets = [
+        createBudget('budget_test', 'Test Budget', new Date('2025-01-01'), {
+          isOngoing: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
+        })
+      ];
+
+      mockBudgetQuery(budgets);
+
+      await matchTransactionSplitsToBudgets([createTransaction(new Date('2025-01-15'), 50)], mockUserId);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Split matched to "Test Budget" (date + category')
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });
