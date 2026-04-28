@@ -19,6 +19,6 @@ interface UpdateInflowConfigResponse {
         confidence: 'high' | 'medium' | 'low';
     };
 }
-export declare const updateInflowConfiguration: import("firebase-functions/v2/https").CallableFunction<any, Promise<UpdateInflowConfigResponse>>;
+export declare const updateInflowConfiguration: import("firebase-functions/v2/https").CallableFunction<any, Promise<UpdateInflowConfigResponse>, unknown>;
 export {};
 //# sourceMappingURL=updateInflowConfiguration.d.ts.map

@@ -25,6 +25,6 @@ interface ExtendBudgetPeriodsResponse {
  * Extend budget periods to cover a specific period
  * Called when frontend needs budget data for a period that doesn't exist yet
  */
-export declare const extendBudgetPeriods: import("firebase-functions/v2/https").CallableFunction<ExtendBudgetPeriodsRequest, Promise<ExtendBudgetPeriodsResponse>>;
+export declare const extendBudgetPeriods: import("firebase-functions/v2/https").CallableFunction<ExtendBudgetPeriodsRequest, Promise<ExtendBudgetPeriodsResponse>, unknown>;
 export {};
 //# sourceMappingURL=extendBudgetPeriods.d.ts.map

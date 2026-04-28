@@ -11,5 +11,5 @@ export declare const exportSourcePeriods: import("firebase-functions/v2/https").
     success: boolean;
     count: number;
     documents: any[];
-}>>;
+}>, unknown>;
 //# sourceMappingURL=copySourcePeriodsToEmulator.d.ts.map

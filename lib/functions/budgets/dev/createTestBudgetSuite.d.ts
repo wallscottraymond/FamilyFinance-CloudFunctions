@@ -60,5 +60,5 @@ export declare const createTestBudgetSuite: import("firebase-functions/v2/https"
     testingInstructions: {
         nextSteps: string[];
     };
-}>>;
+}>, unknown>;
 //# sourceMappingURL=createTestBudgetSuite.d.ts.map

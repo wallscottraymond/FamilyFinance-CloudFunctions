@@ -20,5 +20,5 @@ export declare const debugUserSummaryUpdate: import("firebase-functions/v2/https
     error: string;
     results: any;
     diagnosis?: undefined;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=debugUserSummaryUpdate.d.ts.map

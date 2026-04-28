@@ -16,7 +16,7 @@
  * Triggered when a transaction document is deleted
  * Automatically reverses budget spending for the deleted transaction
  */
-export declare const onTransactionDelete: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onTransactionDelete: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     transactionId: string;
 }>>;
 //# sourceMappingURL=onTransactionDelete.d.ts.map

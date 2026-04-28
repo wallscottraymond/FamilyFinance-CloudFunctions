@@ -64,5 +64,5 @@ export interface GetOutflowPeriodTransactionsResponse {
 /**
  * Callable function to get transactions assigned to an outflow period
  */
-export declare const getOutflowPeriodTransactions: import("firebase-functions/v2/https").CallableFunction<any, Promise<GetOutflowPeriodTransactionsResponse>>;
+export declare const getOutflowPeriodTransactions: import("firebase-functions/v2/https").CallableFunction<any, Promise<GetOutflowPeriodTransactionsResponse>, unknown>;
 //# sourceMappingURL=getOutflowPeriodTransactions.d.ts.map

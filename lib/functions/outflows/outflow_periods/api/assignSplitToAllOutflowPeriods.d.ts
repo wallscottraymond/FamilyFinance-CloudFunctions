@@ -65,5 +65,5 @@ export interface AssignSplitToAllOutflowPeriodsResponse {
 /**
  * Callable function to assign a transaction split to ALL outflow periods
  */
-export declare const assignSplitToAllOutflowPeriods: import("firebase-functions/v2/https").CallableFunction<any, Promise<AssignSplitToAllOutflowPeriodsResponse>>;
+export declare const assignSplitToAllOutflowPeriods: import("firebase-functions/v2/https").CallableFunction<any, Promise<AssignSplitToAllOutflowPeriodsResponse>, unknown>;
 //# sourceMappingURL=assignSplitToAllOutflowPeriods.d.ts.map

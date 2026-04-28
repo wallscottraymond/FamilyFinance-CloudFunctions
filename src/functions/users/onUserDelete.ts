@@ -1,10 +1,12 @@
-import * as functions from "firebase-functions";
-import { 
-  deleteDocument 
+import * as functions from "firebase-functions/v1";
+import {
+  deleteDocument
 } from "../../utils/firestore";
 
 /**
  * Clean up user data on account deletion
+ * Note: Uses v1 API as there's no v2 equivalent for auth onDelete triggers.
+ * The v2 identity module only provides blocking triggers (beforeUserCreated, beforeUserSignedIn).
  */
 export const onUserDelete = functions.region("us-central1").runWith({
   memory: "256MB",

@@ -31,7 +31,7 @@
  * - Limited budgets: Periods until specified end date
  * - Default: 1 year of periods (12 monthly, 24 bi-monthly, 52 weekly)
  */
-export declare const onBudgetCreate: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onBudgetCreate: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     budgetId: string;
 }>>;
 //# sourceMappingURL=onBudgetCreate.d.ts.map

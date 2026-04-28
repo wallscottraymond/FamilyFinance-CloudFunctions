@@ -26,7 +26,7 @@ export declare const syncTransactionsForItem: import("firebase-functions/v2/http
     };
     nextCursor: string | undefined;
     message: string;
-}>>;
+}>, unknown>;
 /**
  * Process webhook-triggered transaction sync (called by webhook handler)
  *

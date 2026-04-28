@@ -19,5 +19,5 @@ export declare const fixBudgetPeriodUserIds: import("firebase-functions/v2/https
     fixed: number;
     errors: number;
     total: number;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=fixBudgetPeriodUserIds.d.ts.map

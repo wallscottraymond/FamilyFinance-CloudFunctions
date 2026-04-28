@@ -15,5 +15,5 @@ export declare const testUserSummaryCreation: import("firebase-functions/v2/http
     success: boolean;
     summaryId: string;
     message: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=testUserSummaryCreation.d.ts.map

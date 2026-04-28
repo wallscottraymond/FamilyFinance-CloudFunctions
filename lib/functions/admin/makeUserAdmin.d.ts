@@ -7,5 +7,5 @@ export declare const makeUserAdmin: import("firebase-functions/v2/https").Callab
     message: string;
     userId: string;
     role: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=makeUserAdmin.d.ts.map

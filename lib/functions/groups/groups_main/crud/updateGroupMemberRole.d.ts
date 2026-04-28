@@ -6,5 +6,5 @@ import { UpdateGroupMemberRoleRequest, UpdateGroupMemberRoleResponse } from "../
  * Admins can promote/demote editors and viewers.
  * Cannot change owner's role (use transferOwnership instead).
  */
-export declare const updateGroupMemberRole: import("firebase-functions/v2/https").CallableFunction<UpdateGroupMemberRoleRequest, Promise<UpdateGroupMemberRoleResponse>>;
+export declare const updateGroupMemberRole: import("firebase-functions/v2/https").CallableFunction<UpdateGroupMemberRoleRequest, Promise<UpdateGroupMemberRoleResponse>, unknown>;
 //# sourceMappingURL=updateGroupMemberRole.d.ts.map

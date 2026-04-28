@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import {
@@ -26,7 +26,8 @@ import { createEverythingElseBudget } from "../budgets/utils/createEverythingEls
 /**
  * Create user profile (triggered on user registration)
  * This function automatically creates a comprehensive user document in Firestore
- * when a new user registers via Firebase Authentication
+ * when a new user registers via Firebase Authentication.
+ * Note: Uses v1 API as v2 beforeUserCreated requires GCIP (Google Cloud Identity Platform).
  */
 export const onUserCreate = functions.region("us-central1").runWith({
   memory: "512MB",

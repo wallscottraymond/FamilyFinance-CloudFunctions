@@ -11,5 +11,5 @@ import { CreateRecurringOutflowRequest, CreateRecurringOutflowResponse } from '.
 /**
  * Create Manual Outflow Cloud Function
  */
-export declare const createManualOutflow: import("firebase-functions/v2/https").CallableFunction<CreateRecurringOutflowRequest, Promise<CreateRecurringOutflowResponse>>;
+export declare const createManualOutflow: import("firebase-functions/v2/https").CallableFunction<CreateRecurringOutflowRequest, Promise<CreateRecurringOutflowResponse>, unknown>;
 //# sourceMappingURL=createManualOutflow.d.ts.map

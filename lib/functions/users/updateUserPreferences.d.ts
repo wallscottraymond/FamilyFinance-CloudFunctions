@@ -30,5 +30,5 @@
 export declare const updateUserPreferences: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
     preferences: any;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=updateUserPreferences.d.ts.map

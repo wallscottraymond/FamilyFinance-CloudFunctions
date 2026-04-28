@@ -16,5 +16,5 @@ export declare const plaidErrorHandler: import("firebase-functions/v2/https").Ca
     userId: string;
     actionsPerformed: string[];
     message: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=plaidErrorHandler.d.ts.map

@@ -44,5 +44,5 @@ export declare const createTestTransactions: import("firebase-functions/v2/https
         };
     };
     hint: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=createTestTransactions.d.ts.map

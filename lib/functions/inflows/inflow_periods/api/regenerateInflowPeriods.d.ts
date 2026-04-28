@@ -14,6 +14,6 @@ interface RegenerateResult {
     periodsUpdated: number;
     errors: string[];
 }
-export declare const regenerateInflowPeriods: import("firebase-functions/v2/https").CallableFunction<any, Promise<RegenerateResult>>;
+export declare const regenerateInflowPeriods: import("firebase-functions/v2/https").CallableFunction<any, Promise<RegenerateResult>, unknown>;
 export {};
 //# sourceMappingURL=regenerateInflowPeriods.d.ts.map

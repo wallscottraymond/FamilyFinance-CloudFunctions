@@ -5,5 +5,5 @@ import { ShareResourceRequest, ShareResourceResponse } from "../../../../types";
  * Only the resource owner can share resources.
  * When sharing with a group, adds the groupId to the resource's groupIds array.
  */
-export declare const shareResource: import("firebase-functions/v2/https").CallableFunction<ShareResourceRequest, Promise<ShareResourceResponse>>;
+export declare const shareResource: import("firebase-functions/v2/https").CallableFunction<ShareResourceRequest, Promise<ShareResourceResponse>, unknown>;
 //# sourceMappingURL=shareResource.d.ts.map

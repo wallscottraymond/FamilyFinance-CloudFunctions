@@ -5,5 +5,5 @@ import { UnshareResourceRequest, UnshareResourceResponse } from "../../../../typ
  * Only the resource owner can unshare resources.
  * Removes the share entry and updates groupIds array if applicable.
  */
-export declare const unshareResource: import("firebase-functions/v2/https").CallableFunction<UnshareResourceRequest, Promise<UnshareResourceResponse>>;
+export declare const unshareResource: import("firebase-functions/v2/https").CallableFunction<UnshareResourceRequest, Promise<UnshareResourceResponse>, unknown>;
 //# sourceMappingURL=unshareResource.d.ts.map

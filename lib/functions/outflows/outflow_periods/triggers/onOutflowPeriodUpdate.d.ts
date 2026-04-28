@@ -10,7 +10,7 @@
  * Triggered when an outflow_period is updated
  * Updates summaries to reflect changes
  */
-export declare const onOutflowPeriodUpdate: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onOutflowPeriodUpdate: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     outflowPeriodId: string;
 }>>;
 //# sourceMappingURL=onOutflowPeriodUpdate.d.ts.map

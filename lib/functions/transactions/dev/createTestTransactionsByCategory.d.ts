@@ -26,5 +26,5 @@ export declare const createTestTransactionsByCategory: import("firebase-function
         outflowTransactions: number;
     };
     hint: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=createTestTransactionsByCategory.d.ts.map

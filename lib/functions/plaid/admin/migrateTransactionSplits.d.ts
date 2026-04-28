@@ -17,5 +17,5 @@ export declare const reprocessPlaidTransactions: import("firebase-functions/v2/h
         changes: any;
     }[];
     message: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=migrateTransactionSplits.d.ts.map

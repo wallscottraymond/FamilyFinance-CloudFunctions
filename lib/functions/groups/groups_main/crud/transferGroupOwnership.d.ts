@@ -6,5 +6,5 @@ import { TransferGroupOwnershipRequest, TransferGroupOwnershipResponse } from ".
  * The new owner must be an existing member of the group.
  * The previous owner is demoted to admin.
  */
-export declare const transferGroupOwnership: import("firebase-functions/v2/https").CallableFunction<TransferGroupOwnershipRequest, Promise<TransferGroupOwnershipResponse>>;
+export declare const transferGroupOwnership: import("firebase-functions/v2/https").CallableFunction<TransferGroupOwnershipRequest, Promise<TransferGroupOwnershipResponse>, unknown>;
 //# sourceMappingURL=transferGroupOwnership.d.ts.map

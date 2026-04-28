@@ -17,7 +17,7 @@
  * Triggered when a group or family document is updated
  * Updates accessibleBy arrays in all related resources
  */
-export declare const onGroupMembershipUpdate: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onGroupMembershipUpdate: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     groupId: string;
     collection: string;
 }>>;

@@ -1,1 +1,1 @@
-{"version":3,"file":"createGroup.d.ts","sourceRoot":"","sources":["../../../../../src/functions/groups/groups_main/crud/createGroup.ts"],"names":[],"mappings":"AAEA,OAAO,EAML,kBAAkB,EAClB,mBAAmB,EAEpB,MAAM,mBAAmB,CAAC;AAe3B;;;;;GAKG;AACH,eAAO,MAAM,WAAW,0GA2GtB,CAAC"}
+{"version":3,"file":"createGroup.d.ts","sourceRoot":"","sources":["../../../../../src/functions/groups/groups_main/crud/createGroup.ts"],"names":[],"mappings":"AAEA,OAAO,EAML,kBAAkB,EAClB,mBAAmB,EAEpB,MAAM,mBAAmB,CAAC;AAe3B;;;;;GAKG;AACH,eAAO,MAAM,WAAW,mHA2GtB,CAAC"}

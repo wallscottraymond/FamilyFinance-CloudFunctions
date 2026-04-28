@@ -40,11 +40,6 @@ service cloud.firestore {
       return hasSystemRole('power_user') || hasSystemRole('admin');
     }
 
-    // Check if user can add Plaid accounts (admin or power_user only)
-    function canAddPlaidAccounts() {
-      return isPowerUser();
-    }
-
     // Check if user is a demo user (read-only, limited access)
     function isDemoUser() {
       return hasSystemRole('demo_user');
@@ -86,11 +81,6 @@ service cloud.firestore {
     // Check if user owns the resource
     function isOwner(resourceUserId) {
       return isAuthenticated() && request.auth.uid == resourceUserId;
-    }
-
-    // Check if user is resource owner (alias for isOwner, used with ownerId field)
-    function isResourceOwner(ownerId) {
-      return isOwner(ownerId);
     }
 
     // =======================
@@ -1165,92 +1155,7 @@ service cloud.firestore {
       
       return validFieldChanges && coreFieldsUnchanged && splitsValid;
     }
-    
-    // Validate transaction splits array
-    function isValidTransactionSplitsUpdate(splits, transactionAmount) {
-      return splits is list &&
-             splits.size() >= 1 && // Must have at least one split
-             splits.size() <= 20 && // Reasonable limit
-             splits.all(splitItem, isValidTransactionSplit(splitItem)) &&
-             isValidSplitAmounts(splits, transactionAmount);
-    }
 
-    // Validate individual transaction split with enhanced status fields - NEW FLAT STRUCTURE
-    function isValidTransactionSplit(splitItem) {
-      return splitItem is map &&
-             // Core required fields - NEW NAMING
-             splitItem.keys().hasAll(['splitId', 'plaidPrimaryCategory', 'amount', 'isDefault', 'createdAt', 'updatedAt']) &&
-             splitItem.splitId is string && splitItem.splitId.size() > 0 &&
-             splitItem.plaidPrimaryCategory is string &&
-             splitItem.amount is number && splitItem.amount > 0 &&
-             splitItem.isDefault is bool &&
-             splitItem.createdAt is timestamp &&
-             splitItem.updatedAt is timestamp &&
-
-             // Budget assignment fields (optional for unassigned splits)
-             (!splitItem.keys().hasAny(['budgetId']) || (splitItem.budgetId is string && splitItem.budgetId.size() > 0)) &&
-
-             // Period ID fields
-             (!splitItem.keys().hasAny(['monthlyPeriodId']) || (splitItem.monthlyPeriodId == null || splitItem.monthlyPeriodId is string)) &&
-             (!splitItem.keys().hasAny(['weeklyPeriodId']) || (splitItem.weeklyPeriodId == null || splitItem.weeklyPeriodId is string)) &&
-             (!splitItem.keys().hasAny(['biWeeklyPeriodId']) || (splitItem.biWeeklyPeriodId == null || splitItem.biWeeklyPeriodId is string)) &&
-
-             // Status fields validation
-             isValidSplitStatusFields(splitItem) &&
-
-             // Optional fields validation
-             (!splitItem.keys().hasAny(['description']) || splitItem.description is string) &&
-             (!splitItem.keys().hasAny(['tags']) || splitItem.tags is list) &&
-             (!splitItem.keys().hasAny(['rules']) || splitItem.rules is list);
-    }
-
-    // Enhanced validation for split status fields
-    function isValidSplitStatusFields(split) {
-      return (
-        // Ignored status validation
-        (!split.keys().hasAny(['isIgnored']) || split.isIgnored is bool) &&
-        (!split.keys().hasAny(['ignoredReason']) || (split.ignoredReason is string && split.ignoredReason.size() <= 200)) &&
-
-        // Refund status validation
-        (!split.keys().hasAny(['isRefund']) || split.isRefund is bool) &&
-        (!split.keys().hasAny(['refundReason']) || (split.refundReason is string && split.refundReason.size() <= 200)) &&
-
-        // Tax deductible status validation
-        (!split.keys().hasAny(['isTaxDeductible']) || split.isTaxDeductible is bool) &&
-        (!split.keys().hasAny(['taxDeductibleCategory']) || (split.taxDeductibleCategory is string && split.taxDeductibleCategory.size() <= 100)) &&
-
-        // Budget exclusion validation
-        (!split.keys().hasAny(['excludedFromBudgets']) || split.excludedFromBudgets is bool) &&
-
-        // Manual budget assignment validation
-        (!split.keys().hasAny(['manualBudgetAssignment']) || split.manualBudgetAssignment is bool) &&
-
-        // Status consistency checks
-        isValidSplitStatusConsistency(split)
-      );
-    }
-
-    // Validate status field consistency
-    function isValidSplitStatusConsistency(split) {
-      return (
-        // If ignored reason is provided, isIgnored must be true
-        (!split.keys().hasAny(['ignoredReason']) || split.get('isIgnored', false) == true) &&
-
-        // If refund reason is provided, isRefund must be true
-        (!split.keys().hasAny(['refundReason']) || split.get('isRefund', false) == true) &&
-
-        // If tax deductible category is provided, isTaxDeductible must be true
-        (!split.keys().hasAny(['taxDeductibleCategory']) || split.get('isTaxDeductible', false) == true)
-      );
-    }
-    
-    // Validate that split amounts don't exceed transaction amount
-    function isValidSplitAmounts(splits, transactionAmount) {
-      // Use a simple iteration approach since complex aggregation in .all() is tricky
-      return splits.size() > 0 &&
-             splits.all(splitItem, splitItem.amount > 0 && splitItem.amount <= transactionAmount * 1.1); // Allow 10% tolerance for floating point
-    }
-    
     // Validate budget period updates
     function isValidBudgetPeriodUpdate() {
       let data = request.resource.data;

@@ -24,7 +24,7 @@
  * - Bug in deletion prevention logic
  * - Direct API access circumventing protections
  */
-export declare const onBudgetDelete: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onBudgetDelete: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     budgetId: string;
 }>>;
 //# sourceMappingURL=onBudgetDelete.d.ts.map

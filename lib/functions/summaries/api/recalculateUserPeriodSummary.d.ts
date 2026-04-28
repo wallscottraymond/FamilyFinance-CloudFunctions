@@ -25,5 +25,5 @@ export declare const recalculateUserPeriodSummary: import("firebase-functions/v2
     success: boolean;
     summaryId: string;
     message: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=recalculateUserPeriodSummary.d.ts.map

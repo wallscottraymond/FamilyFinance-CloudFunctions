@@ -7,5 +7,5 @@ import { CheckResourceAccessRequest, CheckResourceAccessResponse } from "../../.
  * 2. If user has direct share access
  * 3. If user is a member of a group that has access
  */
-export declare const checkUserResourceAccess: import("firebase-functions/v2/https").CallableFunction<CheckResourceAccessRequest, Promise<CheckResourceAccessResponse>>;
+export declare const checkUserResourceAccess: import("firebase-functions/v2/https").CallableFunction<CheckResourceAccessRequest, Promise<CheckResourceAccessResponse>, unknown>;
 //# sourceMappingURL=checkUserResourceAccess.d.ts.map

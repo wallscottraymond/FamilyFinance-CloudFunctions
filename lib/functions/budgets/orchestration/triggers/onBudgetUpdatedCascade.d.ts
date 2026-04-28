@@ -22,7 +22,7 @@
  * name, amount, description, alertThreshold and cascades them
  * to current + future budget_periods.
  */
-export declare const onBudgetUpdatedCascade: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onBudgetUpdatedCascade: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     budgetId: string;
 }>>;
 //# sourceMappingURL=onBudgetUpdatedCascade.d.ts.map

@@ -17,7 +17,7 @@
  *
  * Automatically syncs all Plaid data when a new item is created
  */
-export declare const onPlaidItemCreated: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onPlaidItemCreated: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     itemDocId: string;
 }>>;
 //# sourceMappingURL=onPlaidItemCreated.d.ts.map

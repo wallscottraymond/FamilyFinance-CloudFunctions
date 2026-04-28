@@ -25,5 +25,5 @@ export declare const createTestUserPeriodSummaries: import("firebase-functions/v
         created: number;
     };
     message: string;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=createTestUserPeriodSummaries.d.ts.map

@@ -14,6 +14,6 @@ interface ChecklistItemResponse {
 /**
  * Toggle the checked status of a checklist item
  */
-export declare const toggleChecklistItem: import("firebase-functions/v2/https").CallableFunction<any, Promise<ChecklistItemResponse>>;
+export declare const toggleChecklistItem: import("firebase-functions/v2/https").CallableFunction<any, Promise<ChecklistItemResponse>, unknown>;
 export {};
 //# sourceMappingURL=toggleChecklistItem.d.ts.map

@@ -71,5 +71,5 @@ export declare const createTestBudget: import("firebase-functions/v2/https").Cal
         step4: string;
         step5: string;
     };
-}>>;
+}>, unknown>;
 //# sourceMappingURL=createTestBudget.d.ts.map

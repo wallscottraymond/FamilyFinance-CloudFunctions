@@ -16,7 +16,7 @@
  * Triggered when an inflow is updated
  * Automatically cascades changes to inflow_periods
  */
-export declare const onInflowUpdated: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onInflowUpdated: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     inflowId: string;
 }>>;
 //# sourceMappingURL=onInflowUpdated.d.ts.map

@@ -24,26 +24,26 @@ interface CleanupResponse {
 /**
  * Remove all Plaid accounts, items, and associated data for a user
  */
-export declare const removeAllUserAccounts: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>>;
+export declare const removeAllUserAccounts: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>, unknown>;
 /**
  * Remove all budgets and budget periods for a user
  */
-export declare const removeAllUserBudgets: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>>;
+export declare const removeAllUserBudgets: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>, unknown>;
 /**
  * Remove all outflow transactions for a user
  */
-export declare const removeAllUserOutflows: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>>;
+export declare const removeAllUserOutflows: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>, unknown>;
 /**
  * Remove all inflow transactions for a user
  */
-export declare const removeAllUserInflows: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>>;
+export declare const removeAllUserInflows: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>, unknown>;
 /**
  * Remove all transactions for a user (including manual and Plaid transactions)
  */
-export declare const removeAllUserTransactions: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>>;
+export declare const removeAllUserTransactions: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>, unknown>;
 /**
  * Nuclear option: Remove ALL user data across all collections
  */
-export declare const removeAllUserData: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>>;
+export declare const removeAllUserData: import("firebase-functions/v2/https").CallableFunction<any, Promise<CleanupResponse>, unknown>;
 export {};
 //# sourceMappingURL=cleanupUserData.d.ts.map

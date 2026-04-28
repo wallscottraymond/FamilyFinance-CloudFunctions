@@ -14,6 +14,6 @@ interface ChecklistItemResponse {
 /**
  * Delete a checklist item from a budget period
  */
-export declare const deleteChecklistItem: import("firebase-functions/v2/https").CallableFunction<any, Promise<ChecklistItemResponse>>;
+export declare const deleteChecklistItem: import("firebase-functions/v2/https").CallableFunction<any, Promise<ChecklistItemResponse>, unknown>;
 export {};
 //# sourceMappingURL=deleteChecklistItem.d.ts.map

@@ -19,7 +19,7 @@
  * userNotes, checklistItems, and modifiedAmount and syncs them
  * to overlapping periods of other types.
  */
-export declare const onBudgetPeriodUpdated: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onBudgetPeriodUpdated: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     periodId: string;
 }>>;
 //# sourceMappingURL=onBudgetPeriodUpdated.d.ts.map

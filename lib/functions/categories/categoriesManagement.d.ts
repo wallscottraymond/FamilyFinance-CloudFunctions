@@ -45,19 +45,19 @@ interface ToggleCategoryRequest {
 /**
  * Get categories with filtering options
  */
-export declare const getCategories: import("firebase-functions/v2/https").CallableFunction<GetCategoriesRequest, Promise<GetCategoriesResponse>>;
+export declare const getCategories: import("firebase-functions/v2/https").CallableFunction<GetCategoriesRequest, Promise<GetCategoriesResponse>, unknown>;
 /**
  * Add a new custom category (Admin only)
  */
-export declare const addCategory: import("firebase-functions/v2/https").CallableFunction<AddCategoryRequest, Promise<CategoryResponse>>;
+export declare const addCategory: import("firebase-functions/v2/https").CallableFunction<AddCategoryRequest, Promise<CategoryResponse>, unknown>;
 /**
  * Update an existing category (Admin only)
  */
-export declare const updateCategory: import("firebase-functions/v2/https").CallableFunction<UpdateCategoryRequest, Promise<CategoryResponse>>;
+export declare const updateCategory: import("firebase-functions/v2/https").CallableFunction<UpdateCategoryRequest, Promise<CategoryResponse>, unknown>;
 /**
  * Toggle category active status (Admin only)
  */
-export declare const toggleCategoryStatus: import("firebase-functions/v2/https").CallableFunction<ToggleCategoryRequest, Promise<CategoryResponse>>;
+export declare const toggleCategoryStatus: import("firebase-functions/v2/https").CallableFunction<ToggleCategoryRequest, Promise<CategoryResponse>, unknown>;
 /**
  * Get valid category IDs for validation purposes
  */
@@ -65,6 +65,6 @@ export declare const getCategoryValidationList: import("firebase-functions/v2/ht
     success: boolean;
     categoryIds: string[];
     error?: string;
-}>>;
+}>, unknown>;
 export {};
 //# sourceMappingURL=categoriesManagement.d.ts.map

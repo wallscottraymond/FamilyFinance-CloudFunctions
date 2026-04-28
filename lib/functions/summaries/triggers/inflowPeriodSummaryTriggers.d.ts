@@ -4,7 +4,7 @@
  * When a new inflow_period is created, this trigger recalculates the
  * user period summary for the corresponding period.
  */
-export declare const onInflowPeriodCreatedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onInflowPeriodCreatedPeriodSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     inflowPeriodId: string;
 }>>;
 /**
@@ -13,7 +13,7 @@ export declare const onInflowPeriodCreatedPeriodSummary: import("firebase-functi
  * When an inflow_period is updated, this trigger recalculates the
  * user period summary for the corresponding period.
  */
-export declare const onInflowPeriodUpdatedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onInflowPeriodUpdatedPeriodSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     inflowPeriodId: string;
 }>>;
 /**
@@ -22,7 +22,7 @@ export declare const onInflowPeriodUpdatedPeriodSummary: import("firebase-functi
  * When an inflow_period is deleted, this trigger recalculates the
  * user period summary for the corresponding period.
  */
-export declare const onInflowPeriodDeletedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onInflowPeriodDeletedPeriodSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     inflowPeriodId: string;
 }>>;
 //# sourceMappingURL=inflowPeriodSummaryTriggers.d.ts.map

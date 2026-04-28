@@ -5,5 +5,5 @@ import { CreateGroupRequest, CreateGroupResponse } from "../../../../types";
  * The user creating the group becomes the owner.
  * Group ID is added to the user's groupIds array.
  */
-export declare const createGroup: import("firebase-functions/v2/https").CallableFunction<CreateGroupRequest, Promise<CreateGroupResponse>>;
+export declare const createGroup: import("firebase-functions/v2/https").CallableFunction<CreateGroupRequest, Promise<CreateGroupResponse>, unknown>;
 //# sourceMappingURL=createGroup.d.ts.map

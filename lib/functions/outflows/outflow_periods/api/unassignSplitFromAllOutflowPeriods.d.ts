@@ -36,5 +36,5 @@ export interface UnassignSplitFromAllOutflowPeriodsResponse {
 /**
  * Callable function to unassign a transaction split from ALL outflow periods
  */
-export declare const unassignSplitFromAllOutflowPeriods: import("firebase-functions/v2/https").CallableFunction<any, Promise<UnassignSplitFromAllOutflowPeriodsResponse>>;
+export declare const unassignSplitFromAllOutflowPeriods: import("firebase-functions/v2/https").CallableFunction<any, Promise<UnassignSplitFromAllOutflowPeriodsResponse>, unknown>;
 //# sourceMappingURL=unassignSplitFromAllOutflowPeriods.d.ts.map

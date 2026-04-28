@@ -14,7 +14,7 @@
  * Fires when a budget document is updated. Detects if categoryIds changed
  * and reassigns all affected transactions to the correct budgets.
  */
-export declare const onBudgetUpdatedReassignTransactions: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onBudgetUpdatedReassignTransactions: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     budgetId: string;
 }>>;
 //# sourceMappingURL=onBudgetUpdate.d.ts.map

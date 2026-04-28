@@ -5,5 +5,5 @@ import { AddGroupMemberRequest, AddGroupMemberResponse } from "../../../../types
  * Only group owners and admins can add members.
  * The new member's groupIds array is updated automatically.
  */
-export declare const addGroupMember: import("firebase-functions/v2/https").CallableFunction<AddGroupMemberRequest, Promise<AddGroupMemberResponse>>;
+export declare const addGroupMember: import("firebase-functions/v2/https").CallableFunction<AddGroupMemberRequest, Promise<AddGroupMemberResponse>, unknown>;
 //# sourceMappingURL=addGroupMember.d.ts.map

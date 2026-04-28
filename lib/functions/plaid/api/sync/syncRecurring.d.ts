@@ -22,7 +22,7 @@ export declare const syncRecurringTransactionsCallable: import("firebase-functio
     outflowsUpdated: number;
     errors: string[];
     success: boolean;
-}>>;
+}>, unknown>;
 /**
  * Internal sync recurring transactions function (called by trigger and callable function)
  *

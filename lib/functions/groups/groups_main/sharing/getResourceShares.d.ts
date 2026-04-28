@@ -14,6 +14,6 @@ interface GetResourceSharesResponse {
  *
  * Only the resource owner can view all shares.
  */
-export declare const getResourceShares: import("firebase-functions/v2/https").CallableFunction<GetResourceSharesRequest, Promise<GetResourceSharesResponse>>;
+export declare const getResourceShares: import("firebase-functions/v2/https").CallableFunction<GetResourceSharesRequest, Promise<GetResourceSharesResponse>, unknown>;
 export {};
 //# sourceMappingURL=getResourceShares.d.ts.map

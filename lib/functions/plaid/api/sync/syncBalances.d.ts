@@ -19,7 +19,7 @@ export declare const syncBalancesCallable: import("firebase-functions/v2/https")
     accountsUpdated: number;
     errors: string[];
     success: boolean;
-}>>;
+}>, unknown>;
 /**
  * Internal sync balances function (called by trigger and callable function)
  *

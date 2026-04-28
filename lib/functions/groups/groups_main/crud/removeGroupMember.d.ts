@@ -6,5 +6,5 @@ import { RemoveGroupMemberRequest, RemoveGroupMemberResponse } from "../../../..
  * Admins cannot remove the owner or other admins.
  * The removed member's groupIds array is updated automatically.
  */
-export declare const removeGroupMember: import("firebase-functions/v2/https").CallableFunction<RemoveGroupMemberRequest, Promise<RemoveGroupMemberResponse>>;
+export declare const removeGroupMember: import("firebase-functions/v2/https").CallableFunction<RemoveGroupMemberRequest, Promise<RemoveGroupMemberResponse>, unknown>;
 //# sourceMappingURL=removeGroupMember.d.ts.map

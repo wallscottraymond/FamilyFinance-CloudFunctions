@@ -6,7 +6,7 @@
  *
  * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
-export declare const onBudgetPeriodCreatedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onBudgetPeriodCreatedPeriodSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     budgetPeriodId: string;
 }>>;
 /**
@@ -17,7 +17,7 @@ export declare const onBudgetPeriodCreatedPeriodSummary: import("firebase-functi
  *
  * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
-export declare const onBudgetPeriodUpdatedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onBudgetPeriodUpdatedPeriodSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     budgetPeriodId: string;
 }>>;
 /**
@@ -28,7 +28,7 @@ export declare const onBudgetPeriodUpdatedPeriodSummary: import("firebase-functi
  *
  * Includes debounce logic to prevent rapid-fire updates during bulk operations.
  */
-export declare const onBudgetPeriodDeletedPeriodSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onBudgetPeriodDeletedPeriodSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     budgetPeriodId: string;
 }>>;
 //# sourceMappingURL=budgetPeriodSummaryTriggers.d.ts.map

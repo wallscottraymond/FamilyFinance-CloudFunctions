@@ -21,5 +21,5 @@ export declare const removePlaidAccount: import("firebase-functions/v2/https").C
     itemId: any;
     plaidRemovalSuccess: boolean;
     itemStillActive: boolean;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=removePlaidAccount.d.ts.map

@@ -25,6 +25,6 @@ interface GetUserAccessibleResourcesResponse {
  *
  * Optionally filters by resource type and minimum access level.
  */
-export declare const getUserAccessibleResources: import("firebase-functions/v2/https").CallableFunction<GetUserAccessibleResourcesRequest, Promise<GetUserAccessibleResourcesResponse>>;
+export declare const getUserAccessibleResources: import("firebase-functions/v2/https").CallableFunction<GetUserAccessibleResourcesRequest, Promise<GetUserAccessibleResourcesResponse>, unknown>;
 export {};
 //# sourceMappingURL=getUserAccessibleResources.d.ts.map

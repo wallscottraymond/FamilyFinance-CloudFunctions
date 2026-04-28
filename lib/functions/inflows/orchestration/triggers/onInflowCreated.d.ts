@@ -25,7 +25,7 @@
  * Automatically generates inflow_periods for all active source periods
  * Supports BOTH flat and nested inflow structures
  */
-export declare const onInflowCreated: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onInflowCreated: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     inflowId: string;
 }>>;
 //# sourceMappingURL=onInflowCreated.d.ts.map

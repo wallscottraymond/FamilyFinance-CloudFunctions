@@ -18,5 +18,5 @@ import { UserPeriodSummary } from "../types/periodSummaries";
  * - invalid-argument: Missing or invalid parameters
  * - internal: Server error during summary generation
  */
-export declare const getUserPeriodSummary: import("firebase-functions/v2/https").CallableFunction<any, Promise<UserPeriodSummary>>;
+export declare const getUserPeriodSummary: import("firebase-functions/v2/https").CallableFunction<any, Promise<UserPeriodSummary>, unknown>;
 //# sourceMappingURL=getUserPeriodSummary.d.ts.map

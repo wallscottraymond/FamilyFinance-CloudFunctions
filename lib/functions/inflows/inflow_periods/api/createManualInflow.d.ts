@@ -13,6 +13,6 @@ interface CreateManualInflowResponse {
     inflowId: string;
     message: string;
 }
-export declare const createManualInflow: import("firebase-functions/v2/https").CallableFunction<any, Promise<CreateManualInflowResponse>>;
+export declare const createManualInflow: import("firebase-functions/v2/https").CallableFunction<any, Promise<CreateManualInflowResponse>, unknown>;
 export {};
 //# sourceMappingURL=createManualInflow.d.ts.map

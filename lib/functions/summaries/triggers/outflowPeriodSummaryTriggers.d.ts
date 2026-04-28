@@ -15,7 +15,7 @@
  *
  * Updates the user_summaries document for this period with the new outflow period entry.
  */
-export declare const onOutflowPeriodCreatedSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onOutflowPeriodCreatedSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     outflowPeriodId: string;
 }>>;
 /**
@@ -23,7 +23,7 @@ export declare const onOutflowPeriodCreatedSummary: import("firebase-functions/v
  *
  * Recalculates the user_summaries document for this period to reflect changes.
  */
-export declare const onOutflowPeriodUpdatedSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onOutflowPeriodUpdatedSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     outflowPeriodId: string;
 }>>;
 /**
@@ -31,7 +31,7 @@ export declare const onOutflowPeriodUpdatedSummary: import("firebase-functions/v
  *
  * Recalculates the user_summaries document to remove the deleted period entry.
  */
-export declare const onOutflowPeriodDeletedSummary: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
+export declare const onOutflowPeriodDeletedSummary: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").QueryDocumentSnapshot | undefined, {
     outflowPeriodId: string;
 }>>;
 //# sourceMappingURL=outflowPeriodSummaryTriggers.d.ts.map

@@ -48,6 +48,6 @@ interface MigrationResponse {
  * @param request - Callable function request
  * @returns Migration summary with created/skipped/error counts
  */
-export declare const createMissingEverythingElseBudgets: import("firebase-functions/v2/https").CallableFunction<any, Promise<MigrationResponse>>;
+export declare const createMissingEverythingElseBudgets: import("firebase-functions/v2/https").CallableFunction<any, Promise<MigrationResponse>, unknown>;
 export {};
 //# sourceMappingURL=createMissingEverythingElseBudgets.d.ts.map

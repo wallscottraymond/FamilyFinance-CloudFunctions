@@ -18,7 +18,7 @@
  * Triggered when an outflow is updated
  * Automatically updates unpaid outflow_periods when relevant fields change
  */
-export declare const onOutflowUpdated: import("firebase-functions/v2/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
+export declare const onOutflowUpdated: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     outflowId: string;
 }>>;
 //# sourceMappingURL=onOutflowUpdated.d.ts.map

@@ -24,7 +24,7 @@ export declare const fireTransactionWebhook: import("firebase-functions/v2/https
     webhook_fired: boolean;
     webhook_code: any;
     item_id: string;
-}>>;
+}>, unknown>;
 /**
  * Fire an income webhook for testing
  */
@@ -34,7 +34,7 @@ export declare const fireIncomeWebhook: import("firebase-functions/v2/https").Ca
     webhook_fired: boolean;
     webhook_code: any;
     item_id: any;
-}>>;
+}>, unknown>;
 /**
  * Fire an item webhook for testing
  */
@@ -44,7 +44,7 @@ export declare const fireItemWebhook: import("firebase-functions/v2/https").Call
     webhook_fired: boolean;
     webhook_code: any;
     item_id: any;
-}>>;
+}>, unknown>;
 /**
  * Get user's Plaid items for webhook testing
  */
@@ -60,5 +60,5 @@ export declare const getUserPlaidItems: import("firebase-functions/v2/https").Ca
         lastSyncedAt: any;
     }[];
     count: number;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=testWebhooks.d.ts.map

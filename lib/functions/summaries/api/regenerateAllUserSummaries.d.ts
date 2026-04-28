@@ -26,5 +26,5 @@ export declare const regenerateAllUserSummaries: import("firebase-functions/v2/h
     errors: number;
     errorDetails: string[];
     success: boolean;
-}>>;
+}>, unknown>;
 //# sourceMappingURL=regenerateAllUserSummaries.d.ts.map

@@ -30,5 +30,5 @@ export declare const createTestOutflows: import("firebase-functions/v2/https").C
             outflowStreams: number;
         };
     };
-}>>;
+}>, unknown>;
 //# sourceMappingURL=createTestOutflows.d.ts.map

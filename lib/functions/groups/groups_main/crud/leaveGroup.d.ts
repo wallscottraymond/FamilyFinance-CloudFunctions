@@ -11,6 +11,6 @@ interface LeaveGroupResponse {
  * Any member can leave a group except the owner.
  * Owner must transfer ownership or delete the group instead.
  */
-export declare const leaveGroup: import("firebase-functions/v2/https").CallableFunction<LeaveGroupRequest, Promise<LeaveGroupResponse>>;
+export declare const leaveGroup: import("firebase-functions/v2/https").CallableFunction<LeaveGroupRequest, Promise<LeaveGroupResponse>, unknown>;
 export {};
 //# sourceMappingURL=leaveGroup.d.ts.map
