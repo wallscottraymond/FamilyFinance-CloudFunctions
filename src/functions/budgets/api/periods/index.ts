@@ -6,3 +6,4 @@
 
 export { extendBudgetPeriods } from './extendBudgetPeriods';
 export { extendBudgetPeriodsRange } from './extendBudgetPeriodsRange';
+export { updateBudgetPeriodAmount } from './updateBudgetPeriodAmount';
