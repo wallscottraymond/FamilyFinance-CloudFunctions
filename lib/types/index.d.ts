@@ -168,6 +168,7 @@ export interface AccessibilitySettings {
     hapticFeedback: boolean;
     longPressDelay: number;
 }
+export type RolloverStrategy = 'immediate' | 'spread';
 export interface FinancialSettings {
     defaultTransactionCategory: TransactionCategory;
     autoCategorizationEnabled: boolean;
@@ -181,6 +182,9 @@ export interface FinancialSettings {
     dailySpendingLimit?: number;
     weeklySpendingLimit?: number;
     monthlySpendingLimit?: number;
+    budgetRolloverEnabled: boolean;
+    budgetRolloverStrategy: RolloverStrategy;
+    budgetRolloverSpreadPeriods?: number;
 }
 export interface SecuritySettings {
     biometricAuthEnabled: boolean;
@@ -380,6 +384,9 @@ export interface Budget extends BaseDocument, ResourceOwnership {
     deletedAt?: Timestamp;
     restoredBy?: string;
     restoredAt?: Timestamp;
+    rolloverEnabled?: boolean;
+    rolloverStrategy?: RolloverStrategy;
+    rolloverSpreadPeriods?: number;
 }
 export declare enum BudgetPeriod {
     WEEKLY = "weekly",
@@ -650,6 +657,14 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
     primePeriodIds?: string[];
     /** For non-prime periods: detailed breakdown of contributions from each prime. Empty array for prime periods. */
     primePeriodBreakdown?: PrimePeriodContribution[];
+    /** Amount rolled over from previous period. Positive = surplus, Negative = overspend deduction. */
+    rolledOverAmount?: number;
+    /** Reference to the period this rollover came from (e.g., "budget_123_2026M01"). */
+    rolledOverFromPeriodId?: string;
+    /** For spread rollover: remaining amount to be deducted from future periods. */
+    pendingRolloverDeduction?: number;
+    /** For spread rollover: number of periods remaining for spread deduction. */
+    pendingRolloverPeriods?: number;
 }
 export interface FunctionResponse<T = any> {
     success: boolean;

@@ -12,3 +12,4 @@ export * from './redistributeBudgetAllocation';
 export * from './handleBudgetDateChanges';
 export * from './syncNotesToOverlappingPeriods';
 export * from './handleBudgetPeriodPauseResume';
+export * from './rolloverCalculation';

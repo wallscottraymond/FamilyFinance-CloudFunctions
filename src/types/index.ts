@@ -213,6 +213,9 @@ export interface AccessibilitySettings {
   longPressDelay: number; // in milliseconds
 }
 
+// Rollover strategy for budget surplus/deficit handling
+export type RolloverStrategy = 'immediate' | 'spread';
+
 export interface FinancialSettings {
   defaultTransactionCategory: TransactionCategory;
   autoCategorizationEnabled: boolean;
@@ -226,6 +229,11 @@ export interface FinancialSettings {
   dailySpendingLimit?: number;
   weeklySpendingLimit?: number;
   monthlySpendingLimit?: number;
+
+  // Budget Rollover Settings (added 2026-05)
+  budgetRolloverEnabled: boolean;           // Whether rollover is enabled globally
+  budgetRolloverStrategy: RolloverStrategy; // 'immediate' = next period, 'spread' = across multiple
+  budgetRolloverSpreadPeriods?: number;     // 1-6, number of periods for spread strategy
 }
 
 export interface SecuritySettings {
@@ -492,6 +500,11 @@ export interface Budget extends BaseDocument, ResourceOwnership {
   deletedAt?: Timestamp;            // When the budget was soft deleted
   restoredBy?: string;              // User ID who restored the budget (if applicable)
   restoredAt?: Timestamp;           // When the budget was restored (if applicable)
+
+  // Rollover settings (per-budget override, falls back to user global settings if not set)
+  rolloverEnabled?: boolean;              // Whether rollover is enabled for this budget
+  rolloverStrategy?: RolloverStrategy;    // 'immediate' or 'spread'
+  rolloverSpreadPeriods?: number;         // 1-6, number of periods to spread overspend
 }
 
 export enum BudgetPeriod {
@@ -831,6 +844,20 @@ export interface BudgetPeriodDocument extends BaseDocument, ResourceOwnership {
 
   /** For non-prime periods: detailed breakdown of contributions from each prime. Empty array for prime periods. */
   primePeriodBreakdown?: PrimePeriodContribution[];
+
+  // === ROLLOVER FIELDS (Optional - added 2026-05) ===
+
+  /** Amount rolled over from previous period. Positive = surplus, Negative = overspend deduction. */
+  rolledOverAmount?: number;
+
+  /** Reference to the period this rollover came from (e.g., "budget_123_2026M01"). */
+  rolledOverFromPeriodId?: string;
+
+  /** For spread rollover: remaining amount to be deducted from future periods. */
+  pendingRolloverDeduction?: number;
+
+  /** For spread rollover: number of periods remaining for spread deduction. */
+  pendingRolloverPeriods?: number;
 }
 
 // Function response types

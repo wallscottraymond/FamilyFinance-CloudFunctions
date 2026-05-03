@@ -98,6 +98,9 @@ export const onUserCreate = functions.region("us-central1").runWith({
         hiddenAccounts: [],
         defaultBudgetAlertThreshold: 80,
         enableSpendingLimits: false,
+        budgetRolloverEnabled: true,
+        budgetRolloverStrategy: 'spread',
+        budgetRolloverSpreadPeriods: 3,
       } as FinancialSettings,
       security: {
         biometricAuthEnabled: false,
