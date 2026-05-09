@@ -5,3 +5,4 @@
  */
 
 export { extendRecurringBudgetPeriods } from './extendRecurringBudgetPeriods';
+export { calculateDailyRollover } from './calculateDailyRollover';

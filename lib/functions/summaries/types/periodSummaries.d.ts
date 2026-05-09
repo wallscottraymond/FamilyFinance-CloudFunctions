@@ -74,9 +74,12 @@ export interface BudgetSummaryData {
     totalAllocated: number;
     totalSpent: number;
     totalRemaining: number;
+    totalRollover: number;
+    totalEffective: number;
     totalCount: number;
     overBudgetCount: number;
     underBudgetCount: number;
+    withRolloverCount: number;
     entries?: BudgetEntry[];
 }
 /**
@@ -93,6 +96,9 @@ export interface BudgetEntry {
     totalSpent: number;
     totalRemaining: number;
     averageBudget: number;
+    rolledOverAmount?: number;
+    effectiveAmount?: number;
+    hasRollover?: boolean;
     userNotes?: string;
     progressPercentage: number;
     checklistItemsCount?: number;

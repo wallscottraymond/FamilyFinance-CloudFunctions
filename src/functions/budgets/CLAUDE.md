@@ -36,6 +36,39 @@ const days = Math.round((endUTC - startUTC) / (1000 * 60 * 60 * 24)) + 1;
 - Prime `dailyRate`: 6 decimal places
 - Non-prime `dailyRate`: 2 decimal places
 
+## Rollover System
+
+Budget periods support rollover - carrying surplus/deficit between periods.
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `utils/rolloverCalculation.ts` | Core rollover logic |
+| `utils/rolloverChainCalculation.ts` | Chain recalculation |
+| `orchestration/scheduled/calculateDailyRollover.ts` | Daily scheduled function |
+
+### Rollover Rules
+- **Same type only**: Weekly → Weekly, Monthly → Monthly
+- **Surplus (underspend)**: Positive rollover added to next period
+- **Deficit (overspend)**: Negative rollover (immediate or spread)
+- **Spread**: Max 6 periods, equal distribution
+
+### Calculation Formula
+```typescript
+effectiveAmount = allocatedAmount + rolledOverAmount
+remaining = effectiveAmount - spent
+// Can be negative if deficit exceeds allocation
+```
+
+### Triggers
+1. **Spending changes**: `onBudgetPeriodUpdated` recalculates chain
+2. **Daily scheduled**: `calculateDailyRollover` at 3 AM UTC
+
+### Settings Priority
+1. Per-budget settings (`budget.rolloverEnabled`, etc.)
+2. User global settings (`user.financialSettings.budgetRolloverEnabled`)
+3. Defaults (enabled, spread, 3 periods)
+
 ## RBAC Migration Status
 - [x] Budget interface updated
 - [x] BudgetPeriodDocument updated

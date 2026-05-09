@@ -22,6 +22,7 @@ import {
   syncModifiedAmountToOverlappingPeriods
 } from "../../utils/syncNotesToOverlappingPeriods";
 import { handleBudgetPeriodPauseResume } from "../../utils/handleBudgetPeriodPauseResume";
+import { recalculateRolloverChain } from "../../utils/rolloverChainCalculation";
 
 /**
  * Trigger: Sync budget period changes to overlapping periods
@@ -69,9 +70,15 @@ export const onBudgetPeriodUpdated = onDocumentUpdated({
     const modifiedAmountChanged = (beforeData as any).modifiedAmount !== (afterData as any).modifiedAmount ||
                                   beforeData.isModified !== afterData.isModified;
     const isActiveChanged = beforeData.isActive !== afterData.isActive;
+    const spentChanged = (beforeData.spent ?? 0) !== (afterData.spent ?? 0);
+
+    // Skip rollover recalculation if this is a rollover update (prevent infinite loop)
+    const beforeRolloverCalcAt = (beforeData as any).rolloverCalculatedAt?.toMillis?.() ?? 0;
+    const afterRolloverCalcAt = (afterData as any).rolloverCalculatedAt?.toMillis?.() ?? 0;
+    const isRolloverUpdate = afterRolloverCalcAt > beforeRolloverCalcAt;
 
     // Skip if nothing we care about changed
-    if (!notesChanged && !checklistChanged && !modifiedAmountChanged && !isActiveChanged) {
+    if (!notesChanged && !checklistChanged && !modifiedAmountChanged && !isActiveChanged && !spentChanged) {
       return;
     }
 
@@ -86,6 +93,8 @@ export const onBudgetPeriodUpdated = onDocumentUpdated({
     console.log(`[onBudgetPeriodUpdated] Checklist changed: ${checklistChanged}`);
     console.log(`[onBudgetPeriodUpdated] Modified amount changed: ${modifiedAmountChanged}`);
     console.log(`[onBudgetPeriodUpdated] isActive changed: ${isActiveChanged} (${beforeData.isActive} → ${afterData.isActive})`);
+    console.log(`[onBudgetPeriodUpdated] Spent changed: ${spentChanged} (${beforeData.spent ?? 0} → ${afterData.spent ?? 0})`);
+    console.log(`[onBudgetPeriodUpdated] Is rollover update: ${isRolloverUpdate}`);
     console.log('');
 
     // Initialize Firestore
@@ -161,6 +170,27 @@ export const onBudgetPeriodUpdated = onDocumentUpdated({
         console.log(`[onBudgetPeriodUpdated] ✓ ${pauseResumeResult.action}: ${pauseResumeResult.message}`);
       } else {
         console.error(`[onBudgetPeriodUpdated] ⚠️ Pause/resume error: ${pauseResumeResult.error}`);
+      }
+    }
+
+    // Handle spent change - recalculate rollover chain
+    // Skip if this update is itself a rollover recalculation (prevent infinite loop)
+    if (spentChanged && !isRolloverUpdate) {
+      console.log('[onBudgetPeriodUpdated] Spent changed, recalculating rollover chain...');
+
+      const rolloverResult = await recalculateRolloverChain(
+        db,
+        afterData.budgetId,
+        periodId // Start from this period for efficiency
+      );
+
+      if (rolloverResult.success) {
+        console.log(`[onBudgetPeriodUpdated] ✓ Rollover recalculated: ${rolloverResult.periodsUpdated} periods updated`);
+        if (Object.keys(rolloverResult.periodsByType).length > 0) {
+          console.log(`[onBudgetPeriodUpdated]   By type:`, rolloverResult.periodsByType);
+        }
+      } else {
+        console.error(`[onBudgetPeriodUpdated] ⚠️ Rollover errors:`, rolloverResult.errors);
       }
     }
 

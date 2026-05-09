@@ -27,7 +27,16 @@ export function calculateBudgetSummary(
     // Use actual spent amount from budget period (calculated by updateBudgetSpending)
     const spentAmount = budgetPeriod.spent || 0;
 
-    const remainingAmount = allocatedAmount - spentAmount;
+    // Get rollover amount (can be positive for surplus or negative for deficit)
+    const rolledOverAmount = budgetPeriod.rolledOverAmount || 0;
+    const hasRollover = rolledOverAmount !== 0;
+
+    // Effective amount is what the user actually has available (allocated + rollover)
+    const effectiveAmount = allocatedAmount + rolledOverAmount;
+
+    // Remaining includes rollover: effective - spent
+    // This allows negative remaining when rollover deficit exceeds spending capacity
+    const remainingAmount = effectiveAmount - spentAmount;
 
     // Calculate checklist completion
     const checklistItemsCount = budgetPeriod.checklistItems?.length || 0;
@@ -42,15 +51,18 @@ export function calculateBudgetSummary(
     // Extract user notes
     const userNotes = budgetPeriod.userNotes;
 
-    // Calculate progress percentage
+    // Calculate progress percentage based on effective amount (includes rollover)
+    // Use effectiveAmount for accurate progress when rollover is present
     const progressPercentage =
-      allocatedAmount > 0
-        ? Math.round((spentAmount / allocatedAmount) * 100)
-        : 0;
+      effectiveAmount > 0
+        ? Math.round((spentAmount / effectiveAmount) * 100)
+        : effectiveAmount < 0
+          ? 100 // Already over due to negative rollover
+          : 0;
 
-    // Check if over budget
-    const isOverBudget = spentAmount > allocatedAmount;
-    const overageAmount = isOverBudget ? spentAmount - allocatedAmount : undefined;
+    // Check if over budget (comparing against effective amount)
+    const isOverBudget = spentAmount > effectiveAmount;
+    const overageAmount = isOverBudget ? spentAmount - effectiveAmount : undefined;
 
     return {
       // === IDENTITY ===
@@ -63,8 +75,13 @@ export function calculateBudgetSummary(
       maxAmount: allocatedAmount,           // Clearer field name
       totalAllocated: allocatedAmount,      // Backward compatibility
       totalSpent: spentAmount,              // Now uses actual data
-      totalRemaining: remainingAmount,
+      totalRemaining: remainingAmount,      // Now includes rollover
       averageBudget: allocatedAmount,       // TODO: Fetch from parent budget for true average
+
+      // === ROLLOVER ===
+      rolledOverAmount: hasRollover ? rolledOverAmount : undefined,
+      effectiveAmount: hasRollover ? effectiveAmount : undefined,
+      hasRollover: hasRollover || undefined,
 
       // === USER INPUT ===
       userNotes,                            // User notes from period

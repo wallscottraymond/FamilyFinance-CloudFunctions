@@ -109,12 +109,15 @@ export interface BudgetSummaryData {
   // === TOTALS ===
   totalAllocated: number;          // Total budget allocated
   totalSpent: number;              // Total actually spent
-  totalRemaining: number;          // Budget remaining
+  totalRemaining: number;          // Budget remaining (includes rollover)
+  totalRollover: number;           // Net rollover amount (positive = surplus, negative = deficit)
+  totalEffective: number;          // Total allocated + rollover (what user actually has available)
 
   // === COUNTS ===
   totalCount: number;              // Total budgets with periods
   overBudgetCount: number;         // How many over budget
   underBudgetCount: number;        // How many under budget
+  withRolloverCount: number;       // How many have non-zero rollover
 
   // === DETAILED ENTRIES (Optional) ===
   entries?: BudgetEntry[];
@@ -135,20 +138,25 @@ export interface BudgetEntry {
   maxAmount: number;               // Clearer name for allocated amount
   totalAllocated: number;          // Total amount allocated (backward compatibility)
   totalSpent: number;              // Total amount spent
-  totalRemaining: number;          // Remaining amount
+  totalRemaining: number;          // Remaining amount (includes rollover)
   averageBudget: number;           // Average budget from parent
+
+  // === ROLLOVER ===
+  rolledOverAmount?: number;       // Amount rolled over from previous period (positive = surplus, negative = deficit)
+  effectiveAmount?: number;        // Allocated + rollover (what user actually has available)
+  hasRollover?: boolean;           // Whether this period has non-zero rollover
 
   // === USER INPUT ===
   userNotes?: string;              // User notes from budget_period.userNotes
 
   // === PROGRESS METRICS ===
-  progressPercentage: number;      // (spent/allocated) × 100
+  progressPercentage: number;      // (spent/effectiveAmount) × 100
   checklistItemsCount?: number;
   checklistItemsCompleted?: number;
   checklistProgressPercentage?: number; // Checklist completion percentage
 
   // === STATUS ===
-  isOverBudget: boolean;           // Whether spent > allocated
+  isOverBudget: boolean;           // Whether spent > effectiveAmount
   overageAmount?: number;          // Amount over budget (if over)
 
   // === GROUPING ===
