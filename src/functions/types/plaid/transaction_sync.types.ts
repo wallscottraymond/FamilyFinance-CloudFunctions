@@ -1,0 +1,410 @@
+/**
+ * Transaction Sync Types
+ *
+ * Types for the sync_transactions flow in the 5-layer architecture.
+ * This migration focuses ONLY on syncing transactions from Plaid -> Firestore.
+ * Budget calculations are handled by existing Firestore triggers.
+ *
+ * @module types/plaid/transaction_sync
+ */
+
+// Types for transaction sync
+
+// ============================================================================
+// Input Types
+// ============================================================================
+
+/**
+ * Input for syncing transactions.
+ * Validated by Zod in the entry layer.
+ */
+export interface TransactionSyncInput {
+  /** Plaid item document ID (required) */
+  item_id: string;
+
+  /** User ID performing the sync */
+  user_id: string;
+
+  /** Optional: Use specific cursor instead of stored cursor */
+  cursor?: string;
+}
+
+/**
+ * Input for webhook-triggered transaction sync.
+ */
+export interface WebhookTransactionSyncInput {
+  /** Plaid item ID from webhook payload */
+  plaid_item_id: string;
+
+  /** Webhook type (SYNC_UPDATES_AVAILABLE, DEFAULT_UPDATE, INITIAL_UPDATE) */
+  webhook_code: string;
+
+  /** Webhook request ID for idempotency */
+  request_id: string;
+}
+
+// ============================================================================
+// Output Types
+// ============================================================================
+
+/**
+ * Result of syncing a single transaction.
+ */
+export interface TransactionSyncItemResult {
+  /** The Plaid transaction ID */
+  plaid_transaction_id: string;
+
+  /** Our internal document ID */
+  doc_id?: string;
+
+  /** Action taken */
+  action: "created" | "updated" | "removed" | "migrated";
+
+  /** Whether the operation succeeded */
+  success: boolean;
+
+  /** Error message if failed */
+  error?: string;
+}
+
+/**
+ * Response from sync_transactions orchestrator.
+ */
+export interface TransactionSyncResponse {
+  /** Whether the overall sync succeeded */
+  success: boolean;
+
+  /** Number of transactions added */
+  added_count: number;
+
+  /** Number of transactions modified */
+  modified_count: number;
+
+  /** Number of transactions removed (soft-deleted) */
+  removed_count: number;
+
+  /** Number of pending->posted migrations performed */
+  pending_migrated_count: number;
+
+  /** New cursor position (null if sync is complete) */
+  next_cursor: string | null;
+
+  /** Whether there are more transactions to fetch */
+  has_more: boolean;
+
+  /** Individual results (optional, for debugging) */
+  results?: TransactionSyncItemResult[];
+
+  /** Error message if sync failed */
+  error?: string;
+}
+
+// ============================================================================
+// Resolver Types
+// ============================================================================
+
+/**
+ * Dependencies resolved for transaction sync.
+ */
+export interface TransactionSyncDependencies {
+  /** Plaid item details */
+  plaid_item: {
+    doc_id: string;
+    plaid_item_id: string;
+    access_token: string; // Decrypted
+    cursor: string | null;
+    user_id: string;
+    institution_id: string;
+    institution_name: string;
+  };
+
+  /** User context for transaction creation */
+  user_context: {
+    family_id: string | null;
+    currency: string;
+    group_ids: string[];
+  };
+
+  /** Existing pending transactions for this item (for migration lookup) */
+  pending_transactions: Map<string, PendingTransactionInfo>;
+}
+
+/**
+ * Minimal info needed for pending transaction lookup.
+ */
+export interface PendingTransactionInfo {
+  /** Our document ID */
+  doc_id: string;
+
+  /** Plaid transaction ID */
+  plaid_transaction_id: string;
+
+  /** Current amount */
+  amount: number;
+
+  /** User's splits (for migration) */
+  splits: TransactionSplitForMigration[];
+
+  /** User-set internal categories */
+  internal_primary_category: string | null;
+  internal_detailed_category: string | null;
+
+  /** User notes */
+  description_override: string | null;
+
+  /** User tags */
+  tags: string[];
+}
+
+/**
+ * Minimal split info for migration.
+ */
+export interface TransactionSplitForMigration {
+  split_id: string;
+  amount: number;
+  budget_id: string;
+  outflow_id: string | null;
+  internal_primary_category: string | null;
+  internal_detailed_category: string | null;
+  is_default: boolean;
+  tags: string[];
+}
+
+/**
+ * Input for resolving transaction sync dependencies.
+ */
+export interface ResolveTransactionSyncInput {
+  /** Plaid item document ID */
+  item_id: string;
+
+  /** User ID */
+  user_id: string;
+}
+
+// ============================================================================
+// Domain Types
+// ============================================================================
+
+/**
+ * Transaction data ready for persistence (from domain layer).
+ * Does NOT include timestamps - repository adds those on write.
+ * This keeps domain functions pure (no Date.now() calls).
+ */
+export interface TransactionForPersistence {
+  /** Internal document ID (generated by repo if new) */
+  id?: string;
+
+  /** Plaid transaction ID */
+  transaction_id: string;
+
+  /** User who owns this transaction */
+  user_id: string;
+
+  /** Group IDs for RBAC */
+  group_ids: string[];
+
+  /** Whether transaction is active (false = soft-deleted) */
+  is_active: boolean;
+
+  /** Plaid item document ID */
+  plaid_item_id: string;
+
+  /** Plaid account ID */
+  account_id: string;
+
+  /** Transaction amount (positive = money out, negative = money in for Plaid) */
+  amount: number;
+
+  /** ISO currency code */
+  currency: string;
+
+  /** Transaction date */
+  transaction_date: Date;
+
+  /** Transaction name from Plaid */
+  name: string;
+
+  /** Merchant name from Plaid */
+  merchant_name: string | null;
+
+  /** Whether transaction is pending */
+  is_pending: boolean;
+
+  /** Pending transaction ID if this posted from a pending */
+  pending_transaction_id: string | null;
+
+  /** Transaction type */
+  type: "income" | "expense" | "transfer";
+
+  /** Data source */
+  source: "plaid";
+
+  /** Plaid primary category */
+  plaid_primary_category: string;
+
+  /** Plaid detailed category */
+  plaid_detailed_category: string;
+
+  /** User-set primary category */
+  internal_primary_category: string | null;
+
+  /** User-set detailed category */
+  internal_detailed_category: string | null;
+
+  /** Transaction splits */
+  splits: TransactionSplitForPersistence[];
+
+  /** Initial Plaid data preservation */
+  initial_plaid_data: {
+    plaid_account_id: string;
+    plaid_merchant_name: string | null;
+    plaid_name: string;
+    plaid_transaction_id: string;
+    plaid_pending: boolean;
+  };
+}
+
+/**
+ * Split data ready for persistence.
+ */
+export interface TransactionSplitForPersistence {
+  split_id: string;
+  amount: number;
+  budget_id: string;
+  outflow_id: string | null;
+  monthly_period_id: string | null;
+  weekly_period_id: string | null;
+  bi_weekly_period_id: string | null;
+  plaid_primary_category: string;
+  plaid_detailed_category: string;
+  internal_primary_category: string | null;
+  internal_detailed_category: string | null;
+  is_default: boolean;
+  is_ignored: boolean;
+  is_refund: boolean;
+  is_tax_deductible: boolean;
+  payment_date: Date;
+  tags: string[];
+  rules: string[];
+}
+
+/**
+ * Result from detecting material changes.
+ */
+export interface MaterialChangeResult {
+  /** Whether the change requires full re-processing */
+  has_material_change: boolean;
+
+  /** Which fields changed */
+  changed_fields: MaterialChangeField[];
+
+  /** Old amount (for proportional split adjustment) */
+  old_amount?: number;
+
+  /** New amount */
+  new_amount?: number;
+}
+
+export type MaterialChangeField = "amount" | "date" | "pending" | "category";
+
+/**
+ * Pending to posted migration data.
+ */
+export interface PendingMigration {
+  /** The posted transaction from Plaid */
+  posted_plaid_transaction_id: string;
+
+  /** The pending transaction from Plaid (linked via pending_transaction_id) */
+  pending_plaid_transaction_id: string;
+
+  /** Our pending transaction document */
+  pending_transaction: PendingTransactionInfo;
+
+  /** Whether amount changed during posting */
+  amount_changed: boolean;
+
+  /** Old amount (pending) */
+  old_amount: number;
+
+  /** New amount (posted) */
+  new_amount: number;
+}
+
+/**
+ * Result from validating transactions for sync.
+ */
+export interface TransactionValidationResult {
+  /** Validated transactions ready for persistence */
+  valid_transactions: TransactionForPersistence[];
+
+  /** Validation errors encountered */
+  validation_errors: TransactionValidationError[];
+}
+
+export interface TransactionValidationError {
+  plaid_transaction_id: string;
+  field: string;
+  error: string;
+}
+
+// ============================================================================
+// Event Types
+// ============================================================================
+
+/**
+ * Payload for transaction.synced event.
+ */
+export interface TransactionSyncedEventPayload {
+  /** Item ID that was synced */
+  item_id: string;
+
+  /** User ID */
+  user_id: string;
+
+  /** Counts */
+  added_count: number;
+  modified_count: number;
+  removed_count: number;
+  pending_migrated_count: number;
+
+  /** New cursor position */
+  cursor: string | null;
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Performance budget for transaction sync.
+ */
+export const TRANSACTION_SYNC_BUDGET = {
+  /** Maximum Firestore read operations */
+  max_reads: 200,
+
+  /** Maximum Firestore write operations (high due to bulk sync) */
+  max_writes: 600,
+
+  /** Maximum execution time (5 minutes for full sync) */
+  max_time_ms: 300000,
+};
+
+/**
+ * Rate limit for manual transaction sync (in seconds).
+ */
+export const TRANSACTION_SYNC_RATE_LIMIT_SECONDS = 300; // 5 minutes
+
+/**
+ * Delay between Plaid API pages (to avoid rate limiting).
+ */
+export const PLAID_SYNC_PAGE_DELAY_MS = 100;
+
+/**
+ * Maximum transactions per Plaid API page.
+ */
+export const PLAID_SYNC_MAX_PAGE_SIZE = 500;
+
+/**
+ * Threshold for detecting material amount change (in absolute value).
+ */
+export const MATERIAL_AMOUNT_CHANGE_THRESHOLD = 0.01;

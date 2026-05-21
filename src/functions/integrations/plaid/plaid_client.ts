@@ -1,0 +1,351 @@
+/**
+ * Plaid Integration Client
+ *
+ * Handles Plaid API calls with retry logic and error handling.
+ * This is the ONLY place that makes direct Plaid API calls.
+ *
+ * @module integrations/plaid/plaid_client
+ */
+
+import {
+  PlaidApi,
+  Configuration,
+  PlaidEnvironments,
+  AccountBase,
+  LinkTokenCreateRequest,
+  LinkTokenCreateResponse,
+  ItemPublicTokenExchangeResponse,
+  TransactionsSyncResponse,
+  Products,
+  CountryCode,
+  DepositoryAccountSubtype,
+  CreditAccountSubtype,
+  InvestmentAccountSubtype,
+} from "plaid";
+import { PlaidCreateLinkTokenInput } from "../../types/plaid";
+import { defineSecret, defineString } from "firebase-functions/params";
+
+// Plaid credentials - use secrets for sensitive data
+const PLAID_CLIENT_ID = defineSecret("PLAID_CLIENT_ID");
+const PLAID_SECRET = defineSecret("PLAID_SECRET");
+// Environment can use defineString with default since it's not sensitive
+const PLAID_ENV = defineString("PLAID_ENV", { default: "sandbox" });
+
+/**
+ * Maximum retry attempts for Plaid API calls.
+ */
+const MAX_RETRIES = 3;
+
+/**
+ * Base delay for exponential backoff (ms).
+ */
+const BASE_DELAY_MS = 1000;
+
+/**
+ * Raw account data from Plaid API.
+ */
+export interface PlaidAccountData {
+  account_id: string;
+  name: string;
+  official_name: string | null;
+  type: string;
+  subtype: string | null;
+  mask: string | null;
+  balances: {
+    current: number | null;
+    available: number | null;
+    limit: number | null;
+    iso_currency_code: string | null;
+  };
+}
+
+/**
+ * Result of fetching accounts from Plaid.
+ */
+export interface PlaidAccountsResult {
+  accounts: PlaidAccountData[];
+  item_id: string;
+  request_id: string;
+}
+
+/**
+ * Institution information from Plaid.
+ */
+export interface PlaidInstitutionInfo {
+  institution_id: string;
+  name: string;
+}
+
+/**
+ * Creates a configured Plaid API client.
+ */
+function create_plaid_client(): PlaidApi {
+  const env = PLAID_ENV.value();
+  const plaid_env = env === "production"
+    ? PlaidEnvironments.production
+    : env === "development"
+      ? PlaidEnvironments.development
+      : PlaidEnvironments.sandbox;
+
+  const configuration = new Configuration({
+    basePath: plaid_env,
+    baseOptions: {
+      headers: {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        "PLAID-CLIENT-ID": PLAID_CLIENT_ID.value(),
+        "PLAID-SECRET": PLAID_SECRET.value(),
+        /* eslint-enable @typescript-eslint/naming-convention */
+      },
+    },
+  });
+
+  return new PlaidApi(configuration);
+}
+
+/**
+ * Executes an operation with exponential backoff retry.
+ */
+async function with_retry<T>(
+  operation: () => Promise<T>,
+  max_retries: number = MAX_RETRIES
+): Promise<T> {
+  let last_error: Error | undefined;
+
+  for (let attempt = 0; attempt <= max_retries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      last_error = error instanceof Error ? error : new Error(String(error));
+
+      // Don't retry on client errors (4xx) except rate limits (429)
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status && status >= 400 && status < 500 && status !== 429) {
+        throw last_error;
+      }
+
+      // Don't retry on last attempt
+      if (attempt === max_retries) {
+        break;
+      }
+
+      // Exponential backoff with jitter
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw last_error ?? new Error("Unknown error during Plaid API call");
+}
+
+/**
+ * Fetches accounts from Plaid for a given access token.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @returns Account data from Plaid
+ */
+export async function fetch_plaid_accounts(
+  access_token: string
+): Promise<PlaidAccountsResult> {
+  const client = create_plaid_client();
+
+  const response = await with_retry(async () => {
+    return client.accountsGet({
+      /* eslint-disable @typescript-eslint/naming-convention */
+      access_token,
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
+  });
+
+  const accounts: PlaidAccountData[] = response.data.accounts.map(
+    (account: AccountBase) => ({
+      account_id: account.account_id,
+      name: account.name,
+      official_name: account.official_name,
+      type: account.type,
+      subtype: account.subtype,
+      mask: account.mask,
+      balances: {
+        current: account.balances.current,
+        available: account.balances.available,
+        limit: account.balances.limit,
+        iso_currency_code: account.balances.iso_currency_code,
+      },
+    })
+  );
+
+  return {
+    accounts,
+    item_id: response.data.item.item_id,
+    request_id: response.data.request_id,
+  };
+}
+
+/**
+ * Fetches account balances from Plaid (for balance refresh).
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param account_ids - Optional specific account IDs to fetch
+ * @returns Account data with fresh balances
+ */
+export async function fetch_plaid_balances(
+  access_token: string,
+  account_ids?: string[]
+): Promise<PlaidAccountsResult> {
+  const client = create_plaid_client();
+
+  const response = await with_retry(async () => {
+    return client.accountsBalanceGet({
+      /* eslint-disable @typescript-eslint/naming-convention */
+      access_token,
+      options: account_ids ? { account_ids } : undefined,
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
+  });
+
+  const accounts: PlaidAccountData[] = response.data.accounts.map(
+    (account: AccountBase) => ({
+      account_id: account.account_id,
+      name: account.name,
+      official_name: account.official_name,
+      type: account.type,
+      subtype: account.subtype,
+      mask: account.mask,
+      balances: {
+        current: account.balances.current,
+        available: account.balances.available,
+        limit: account.balances.limit,
+        iso_currency_code: account.balances.iso_currency_code,
+      },
+    })
+  );
+
+  return {
+    accounts,
+    item_id: response.data.item.item_id,
+    request_id: response.data.request_id,
+  };
+}
+
+/**
+ * Creates a Plaid Link token for initializing Plaid Link.
+ *
+ * Returns the RAW Plaid SDK response (LinkTokenCreateResponse).
+ * Transformation to domain format is done by the transformer.
+ *
+ * @param input - User and configuration data
+ * @returns Raw Plaid LinkTokenCreateResponse
+ */
+export async function create_link_token(
+  input: PlaidCreateLinkTokenInput
+): Promise<LinkTokenCreateResponse> {
+  const client = create_plaid_client();
+
+  /* eslint-disable @typescript-eslint/naming-convention */
+  const request: LinkTokenCreateRequest = {
+    client_name: "Family Finance",
+    language: "en",
+    country_codes: [CountryCode.Us],
+    user: {
+      client_user_id: input.user_id,
+      legal_name: input.user_name,
+      email_address: input.user_email || undefined,
+    },
+    products: [Products.Transactions, Products.Auth],
+    account_filters: {
+      depository: {
+        account_subtypes: [
+          DepositoryAccountSubtype.Checking,
+          DepositoryAccountSubtype.Savings,
+          DepositoryAccountSubtype.MoneyMarket,
+          DepositoryAccountSubtype.Cd,
+        ],
+      },
+      credit: {
+        account_subtypes: [CreditAccountSubtype.CreditCard],
+      },
+      investment: {
+        account_subtypes: [
+          InvestmentAccountSubtype._401k,
+          InvestmentAccountSubtype._403B,
+          InvestmentAccountSubtype.Ira,
+          InvestmentAccountSubtype.Roth,
+          InvestmentAccountSubtype.Brokerage,
+        ],
+      },
+    },
+    webhook: process.env.PLAID_WEBHOOK_URL || undefined,
+  };
+
+  // Update mode: use access_token instead of products
+  // This is used for re-authentication when user credentials expire
+  if (input.access_token) {
+    delete request.products;
+    request.access_token = input.access_token;
+  }
+  /* eslint-enable @typescript-eslint/naming-convention */
+
+  return with_retry(async () => {
+    const response = await client.linkTokenCreate(request);
+    return response.data; // Return RAW SDK type
+  });
+}
+
+/**
+ * Exchanges a public token for an access token.
+ *
+ * Called after user completes Plaid Link. Returns RAW Plaid SDK response.
+ * The access_token in the response should be encrypted before storage.
+ *
+ * @param public_token - The public token from Plaid Link
+ * @returns Raw Plaid ItemPublicTokenExchangeResponse
+ */
+export async function exchange_public_token(
+  public_token: string
+): Promise<ItemPublicTokenExchangeResponse> {
+  const client = create_plaid_client();
+
+  return with_retry(async () => {
+    const response = await client.itemPublicTokenExchange({
+      /* eslint-disable @typescript-eslint/naming-convention */
+      public_token,
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
+    return response.data; // Return RAW SDK type
+  });
+}
+
+/**
+ * Syncs transactions from Plaid using the /transactions/sync endpoint.
+ *
+ * Returns the RAW Plaid SDK response (TransactionsSyncResponse).
+ * The response includes:
+ * - added: New transactions since last cursor
+ * - modified: Transactions that were updated
+ * - removed: Transaction IDs that were removed
+ * - next_cursor: Cursor for next sync
+ * - has_more: Whether there are more pages
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param cursor - Optional cursor from previous sync (null for initial)
+ * @param count - Number of transactions per page (max 500)
+ * @returns Raw Plaid TransactionsSyncResponse
+ */
+export async function sync_transactions(
+  access_token: string,
+  cursor?: string | null,
+  count: number = 500
+): Promise<TransactionsSyncResponse> {
+  const client = create_plaid_client();
+
+  return with_retry(async () => {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const response = await client.transactionsSync({
+      access_token,
+      cursor: cursor || undefined,
+      count: Math.min(count, 500), // Plaid max is 500
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+
+    return response.data; // Return RAW SDK type
+  });
+}
