@@ -22,6 +22,9 @@ export async function fetchOutflowsBatch(
   );
 
   try {
+    // ===== DIAGNOSTIC: Log query parameters =====
+    console.log(`[fetchOutflowsBatch] DIAGNOSTIC - Query: ownerId=${userId}, sourcePeriodId=${sourcePeriodId}, isActive=true`);
+
     const outflowPeriodsSnapshot = await db
       .collection("outflow_periods")
       .where("ownerId", "==", userId)
@@ -36,6 +39,14 @@ export async function fetchOutflowsBatch(
     console.log(
       `[fetchOutflowsBatch] Found ${outflowPeriods.length} outflow periods`
     );
+
+    // ===== DIAGNOSTIC: Log sample data if found =====
+    if (outflowPeriods.length > 0) {
+      const sample = outflowPeriods[0];
+      console.log(`[fetchOutflowsBatch] DIAGNOSTIC - Sample period: id=${sample.id}, ownerId=${sample.ownerId}, description=${sample.description}`);
+    } else {
+      console.log(`[fetchOutflowsBatch] DIAGNOSTIC - No outflow periods found. Check if periods exist with these query params.`);
+    }
 
     return outflowPeriods;
   } catch (error) {

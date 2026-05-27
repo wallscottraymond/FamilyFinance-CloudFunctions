@@ -23,12 +23,24 @@ export function calculateOutflowSummary(
   );
 
   // Build entries array directly (one entry per period)
-  const entries: OutflowEntry[] = outflowPeriods.map(outflowPeriod => ({
+  // NOTE: Firestore stores merchantName (camelCase) but TypeScript type says merchant
+  // We need to handle both field names for compatibility
+  const entries: OutflowEntry[] = outflowPeriods.map(outflowPeriod => {
+    // Handle field name mismatch: Firestore uses merchantName, type uses merchant
+    const rawPeriod = outflowPeriod as unknown as Record<string, unknown>;
+    const merchantValue = (rawPeriod.merchantName as string) || outflowPeriod.merchant || "Unknown";
+
+    // DIAGNOSTIC: Log field values to verify mapping
+    console.log(`[calculateOutflowSummary] DIAGNOSTIC - Period ${outflowPeriod.id}: ` +
+      `merchantName=${rawPeriod.merchantName}, merchant=${outflowPeriod.merchant}, ` +
+      `resolved=${merchantValue}, description=${outflowPeriod.description}`);
+
+    return {
     // === IDENTITY ===
     outflowId: outflowPeriod.outflowId,
     outflowPeriodId: outflowPeriod.id,
     description: outflowPeriod.description || "Unknown",
-    merchant: outflowPeriod.merchant || "Unknown",
+    merchant: merchantValue,
     userCustomName: outflowPeriod.userCustomName || undefined,
 
     // === AMOUNTS ===
@@ -56,7 +68,8 @@ export function calculateOutflowSummary(
 
     // === GROUPING ===
     groupId: outflowPeriod.groupId || "",
-  }));
+  };
+  });
 
   console.log(`[calculateOutflowSummary] Converted ${entries.length} entries`);
 
