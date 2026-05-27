@@ -444,13 +444,15 @@ export const outflow_period_repo = {
    * @param period_id - Outflow period ID
    * @param transaction_id - Transaction ID to remove
    * @param split_id - Split ID to remove
+   * @param new_status - New status to set (computed by orchestrator/domain layer)
    * @returns Write result
    */
   async remove_transaction_split(
     ctx: TraceContext,
     period_id: string,
     transaction_id: string,
-    split_id: string
+    split_id: string,
+    new_status: string
   ): Promise<WriteResult | null> {
     const db = getFirestore();
     const now = Timestamp.now();
@@ -482,12 +484,8 @@ export const outflow_period_repo = {
       return null;
     }
 
-    // Determine new status based on remaining splits
-    const remaining_splits = transactionSplits.filter(
-      (s: { transactionId: string; splitId: string }) =>
-        !(s.transactionId === transaction_id && s.splitId === split_id)
-    );
-    const new_status = remaining_splits.length > 0 ? "paid" : "unpaid";
+    // Note: new_status is computed by orchestrator/domain layer, not here
+    // Repository only persists what's computed elsewhere
 
     await ref.update({
       transactionSplits: FieldValue.arrayRemove(split_ref_to_remove),

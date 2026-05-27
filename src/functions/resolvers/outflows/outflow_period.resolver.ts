@@ -99,9 +99,8 @@ export async function resolve_outflow_period_dependencies(
     throw new Error(`Outflow not found: ${input.outflow_id}`);
   }
 
-  if (!outflow.is_active) {
-    throw new Error(`Outflow is not active: ${input.outflow_id}`);
-  }
+  // Note: is_active validation is done in domain layer, not resolver
+  // Resolver only does data lookups, not business logic validation
 
   // 2. Calculate date range for period generation
   const start_date = input.start_date ?? outflow.first_date.toDate();
@@ -234,10 +233,8 @@ export async function resolve_outflow_period_dependencies_from_doc(
   );
   // ===== END DIAGNOSTIC =====
 
-  // Check if active
-  if (!outflow.is_active) {
-    throw new Error(`Outflow is not active: ${outflow_id}`);
-  }
+  // Note: is_active validation is done in domain layer, not resolver
+  // Resolver only does data lookups, not business logic validation
 
   // Calculate date range
   const start_date = options?.start_date ?? first_date.toDate();
