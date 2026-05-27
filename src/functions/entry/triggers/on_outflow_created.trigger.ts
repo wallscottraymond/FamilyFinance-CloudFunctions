@@ -7,16 +7,12 @@
  * This replaces the legacy onOutflowCreated trigger with an architecture-compliant version
  * that follows the 5-layer architecture: Entry → Orchestrator → Resolver → Domain → Repository.
  *
- * COEXISTENCE: During migration, this trigger checks if periods already exist
- * (created by legacy onOutflowCreated). If so, it skips to avoid duplicates.
- *
  * Memory: 512MiB, Timeout: 60s
  *
  * @module entry/triggers/on_outflow_created
  */
 
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { getFirestore } from "firebase-admin/firestore";
 import { create_trigger_trace } from "../../observability";
 import {
   generate_outflow_periods_orchestrator,
@@ -90,30 +86,6 @@ export const on_outflow_created = onDocumentCreated(
     console.log(
       `[on_outflow_created] Trigger fired for outflow ${outflow_id}, user ${user_id}`
     );
-
-    // COEXISTENCE CHECK: Skip if legacy trigger already created periods
-    // This allows both triggers to be deployed during migration
-    console.log(
-      `[on_outflow_created] Checking for existing periods for outflow ${outflow_id}...`
-    );
-    const db = getFirestore();
-    const existing_periods = await db
-      .collection("outflow_periods")
-      .where("outflowId", "==", outflow_id)
-      .limit(1)
-      .select() // Only need to check existence, not data
-      .get();
-
-    console.log(
-      `[on_outflow_created] Coexistence check result: empty=${existing_periods.empty}, size=${existing_periods.size}`
-    );
-
-    if (!existing_periods.empty) {
-      console.log(
-        `[on_outflow_created] Periods already exist for outflow ${outflow_id} (legacy trigger). Skipping.`
-      );
-      return;
-    }
 
     // Create trace context with idempotency key
     // Use event.id to ensure trigger replays don't create duplicates
