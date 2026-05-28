@@ -13,6 +13,7 @@
  */
 
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { create_trigger_trace } from "../../observability";
 import {
   generate_outflow_periods_orchestrator,
@@ -86,6 +87,23 @@ export const on_outflow_created = onDocumentCreated(
     console.log(
       `[on_outflow_created] Trigger fired for outflow ${outflow_id}, user ${user_id}`
     );
+
+    // COEXISTENCE CHECK: Skip if periods already exist (prevents duplicate processing)
+    // This handles trigger retries and any race conditions
+    const db = getFirestore();
+    const existing_periods = await db
+      .collection("outflow_periods")
+      .where("outflowId", "==", outflow_id)
+      .limit(1)
+      .select() // Only need to check existence, not data
+      .get();
+
+    if (!existing_periods.empty) {
+      console.log(
+        `[on_outflow_created] Periods already exist for outflow ${outflow_id}. Skipping to prevent duplicates.`
+      );
+      return;
+    }
 
     // Create trace context with idempotency key
     // Use event.id to ensure trigger replays don't create duplicates

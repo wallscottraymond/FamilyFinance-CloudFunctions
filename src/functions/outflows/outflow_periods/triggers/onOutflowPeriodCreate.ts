@@ -13,7 +13,9 @@ import * as admin from 'firebase-admin';
 import { OutflowPeriod, Outflow } from '../../../../types';
 import { autoMatchSinglePeriod } from '../utils/autoMatchSinglePeriod';
 import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactionsToOccurrences';
-import { createOutflowPeriodSummary } from '../../outflow_summaries/crud/createOutflowPeriodSummary';
+// NOTE: createOutflowPeriodSummary removed - summary updates are handled by
+// the generate_outflow_periods_orchestrator AFTER all periods are created.
+// This prevents race conditions when many periods are created at once.
 
 /**
  * Triggered when an outflow_period is created
@@ -120,16 +122,13 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     }
     console.log('');
 
-    // Step 3: Update outflow summaries (FINAL STEP - non-critical)
-    console.log('[onOutflowPeriodCreate] Step 3: Updating outflow summaries...');
-    try {
-      await createOutflowPeriodSummary(outflowPeriodData, outflowPeriodId);
-      console.log('[onOutflowPeriodCreate] ✓ Summaries updated successfully');
-    } catch (summaryError) {
-      console.error('[onOutflowPeriodCreate] ⚠️  Summary update failed:', summaryError);
-      // Don't throw - summary failures shouldn't break the trigger
-      // Summaries can be recalculated via manual API call if needed
-    }
+    // NOTE: Summary updates are handled by the generate_outflow_periods_orchestrator
+    // AFTER all periods are created. This prevents race conditions when many periods
+    // are created at once. The centralized trigger (on_outflow_period_updated_summary)
+    // handles subsequent updates via the job queue.
+    console.log('[onOutflowPeriodCreate] ✓ Summary updates handled by orchestrator (not triggered here)');
+    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
+    console.log('');
 
   } catch (error) {
     console.error('');
