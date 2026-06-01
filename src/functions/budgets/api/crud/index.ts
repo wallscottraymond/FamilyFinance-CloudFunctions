@@ -1,10 +1,11 @@
 /**
  * Budget CRUD Operations Index
  *
- * Exports all budget Create, Read, Update, Delete functions.
+ * Create/Update/Delete are now handled by the v2 layered-architecture onCall
+ * functions (create_budget / update_budget / delete_budget in entry/callable).
+ * The legacy createBudget/updateBudget/deleteBudget handlers were removed
+ * (2026-06-01) — they wrote budgets WITHOUT the v2 cascade and were a footgun.
+ * Only the read (getBudget) remains here.
  */
 
-export { createBudget } from './createBudget';
 export { getBudget } from './getBudget';
-export { updateBudget } from './updateBudget';
-export { deleteBudget } from './deleteBudget';
