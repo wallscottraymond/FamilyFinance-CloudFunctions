@@ -224,6 +224,85 @@ export const budget_period_repo = {
   },
 
   /**
+   * Updates allocation fields IN PLACE on existing periods (max 500 per batch).
+   * Used when a budget's amount changes: recomputes allocatedAmount /
+   * originalAmount / remaining / dailyRate while preserving everything else on
+   * the period (userNotes, checklistItems, modifiedAmount, spent, etc.).
+   */
+  async update_allocations(
+    _ctx: TraceContext,
+    updates: Array<{
+      id: string;
+      allocated_amount: number;
+      daily_rate: number;
+      remaining: number;
+    }>
+  ): Promise<WriteResult[]> {
+    if (updates.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const results: WriteResult[] = [];
+    const chunks = chunk_for_batch(updates);
+
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      for (const u of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const update_data = {
+          allocatedAmount: u.allocated_amount,
+          originalAmount: u.allocated_amount,
+          remaining: u.remaining,
+          dailyRate: u.daily_rate,
+          lastCalculated: now,
+          updatedAt: now,
+        };
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(u.id), update_data);
+        results.push(
+          create_write_result("budget_period", u.id, "merge", { id: u.id }, update_data)
+        );
+      }
+      await batch.commit();
+    }
+    return results;
+  },
+
+  /**
+   * Updates the denormalized budgetName on the given periods (max 500 per
+   * batch). Used when a budget is renamed. Preserves all other period fields.
+   */
+  async update_names(
+    _ctx: TraceContext,
+    period_ids: string[],
+    budget_name: string
+  ): Promise<WriteResult[]> {
+    if (period_ids.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const results: WriteResult[] = [];
+    const chunks = chunk_for_batch(period_ids);
+
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const update_data = { budgetName: budget_name, updatedAt: now };
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(id), update_data);
+        results.push(
+          create_write_result("budget_period", id, "merge", { id }, update_data)
+        );
+      }
+      await batch.commit();
+    }
+    return results;
+  },
+
+  /**
    * Counts periods for a budget.
    */
   async count_by_budget_id(

@@ -19,6 +19,10 @@ export {
   compute_budget_periods,
   budget_cadence_to_instance,
   compute_period_generation_end,
+  ExistingPeriodForRealloc,
+  PeriodAllocationUpdate,
+  ReallocateBudgetPeriodsInput,
+  compute_reallocated_periods,
 } from "./period_generation.service";
 
 export {

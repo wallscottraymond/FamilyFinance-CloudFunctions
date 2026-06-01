@@ -10,6 +10,7 @@ import {
   compute_period_allocation,
   compute_daily_rate,
   compute_period_generation_end,
+  compute_reallocated_periods,
 } from "../period_generation.service";
 import {
   compute_create_transfer_plan,
@@ -137,6 +138,61 @@ describe("compute_period_generation_end", () => {
   it("falls back to 12 months for limited budgets without an end date", () => {
     const end = compute_period_generation_end(start, false, null);
     expect(end.toISOString()).toBe("2027-06-01T00:00:00.000Z");
+  });
+});
+
+describe("compute_reallocated_periods", () => {
+  const cutoff = Timestamp.fromDate(new Date("2026-06-01T00:00:00Z"));
+  const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
+
+  it("reallocates current+future, skips historical, preserves spent in remaining", () => {
+    const result = compute_reallocated_periods({
+      new_amount: 400,
+      budget_cadence: "monthly",
+      cutoff,
+      periods: [
+        // historical (ends before cutoff) — should be skipped
+        {
+          id: "past",
+          period_type: "monthly",
+          start_date: ts("2026-05-01T00:00:00Z"),
+          end_date: ts("2026-05-31T00:00:00Z"),
+          spent: 120,
+          rolled_over_amount: 0,
+        },
+        // current/future (ends on/after cutoff) — reallocated
+        {
+          id: "cur",
+          period_type: "monthly",
+          start_date: ts("2026-06-01T00:00:00Z"),
+          end_date: ts("2026-06-30T00:00:00Z"),
+          spent: 50,
+          rolled_over_amount: 0,
+        },
+      ],
+    });
+    expect(result.entities?.map((u) => u.id)).toEqual(["cur"]);
+    expect(result.entities?.[0].allocated_amount).toBe(400);
+    expect(result.entities?.[0].remaining).toBe(350); // 400 - 50 spent
+  });
+
+  it("includes rolled-over amount in remaining", () => {
+    const result = compute_reallocated_periods({
+      new_amount: 300,
+      budget_cadence: "monthly",
+      cutoff,
+      periods: [
+        {
+          id: "cur",
+          period_type: "monthly",
+          start_date: ts("2026-06-01T00:00:00Z"),
+          end_date: ts("2026-06-30T00:00:00Z"),
+          spent: 20,
+          rolled_over_amount: 25,
+        },
+      ],
+    });
+    expect(result.entities?.[0].remaining).toBe(305); // 300 + 25 - 20
   });
 });
 

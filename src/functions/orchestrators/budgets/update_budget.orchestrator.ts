@@ -90,11 +90,13 @@ export async function update_budget_orchestrator(
       from_budget_id: null as string | null,
     }));
 
-    // 5. Enqueue cascade (claims/releases + optional period regeneration)
+    // 5. Enqueue cascade (claims/releases + period reallocation + rename)
+    const name_changed = entity.name !== dependencies.existing.name;
     const needs_cascade =
       added_claims.length > 0 ||
       dependencies.removed_category_ids.length > 0 ||
-      dependencies.amount_changed;
+      dependencies.amount_changed ||
+      name_changed;
 
     if (needs_cascade) {
       const generation_end = compute_period_generation_end(
@@ -116,6 +118,7 @@ export async function update_budget_orchestrator(
         released_category_ids: dependencies.removed_category_ids,
         everything_else_budget_id: dependencies.everything_else_budget_id,
         regenerate_periods: dependencies.amount_changed,
+        name_changed,
       };
       await create_job("process_budget_updated", payload, { trace_id: ctx.trace_id });
     }

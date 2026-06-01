@@ -4,7 +4,9 @@
  * Runs asynchronously after a budget is updated. Performs:
  * 1. Category claims (added) — remove from prior owners.
  * 2. Category releases (removed) — return to Everything Else.
- * 3. Period regeneration when the amount changed (delete + regenerate).
+ * 3. Re-allocates existing periods IN PLACE when the amount changed (preserving
+ *    per-period user data: notes, checklist, modified amounts, and historical
+ *    periods).
  *
  * @module orchestrators/budgets/process_budget_updated
  */
@@ -19,7 +21,10 @@ import {
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
-import { compute_budget_periods } from "../../domain/budgets/period_generation.service";
+import {
+  compute_budget_periods,
+  compute_reallocated_periods,
+} from "../../domain/budgets/period_generation.service";
 import { enqueue_user_summary_updates_from_budget_periods } from "../../orchestrators/summaries";
 import { ProcessBudgetUpdatedPayload } from "../../types/budgets/update_budget.types";
 
@@ -61,23 +66,118 @@ export async function process_budget_updated_orchestrator(
     );
   }
 
-  // 3. Regenerate periods if the amount changed.
+  // 3. Re-allocate periods if the amount changed.
   if (payload.regenerate_periods) {
-    await regenerate_periods(ctx, payload);
+    await reallocate_periods(ctx, payload);
+  }
+
+  // 4. Propagate a renamed budget to its current+future periods.
+  if (payload.name_changed) {
+    await propagate_name(ctx, payload);
   }
 
   log_operation_success(span, payload.user_id);
 }
 
 /**
- * Deletes existing periods and regenerates them with the new amount.
+ * Updates the denormalized budgetName on current+future periods after a rename
+ * and recomputes their summaries. Historical periods are left unchanged.
  */
-async function regenerate_periods(
+async function propagate_name(
   ctx: TraceContext,
   payload: ProcessBudgetUpdatedPayload
 ): Promise<void> {
-  await budget_period_repo.delete_by_budget_id(ctx, payload.budget_id);
+  const existing = await budget_period_repo.get_by_budget_id(ctx, payload.budget_id);
+  const cutoff = start_of_today_utc().toMillis();
+  const ids = existing
+    .filter((p) => p.end_date.toMillis() >= cutoff)
+    .map((p) => p.id);
+  if (ids.length === 0) {
+    return;
+  }
 
+  await budget_period_repo.update_names(ctx, ids, payload.budget_name);
+
+  try {
+    await enqueue_user_summary_updates_from_budget_periods(ctx, payload.user_id, ids);
+  } catch (summary_error) {
+    console.error(
+      `[${ctx.trace_id}] process_budget_updated: name summary update failed (non-fatal):`,
+      summary_error
+    );
+  }
+}
+
+/**
+ * Start of today (UTC midnight) — periods ending on/after this are re-allocated.
+ */
+function start_of_today_utc(): Timestamp {
+  const now = new Date();
+  return Timestamp.fromDate(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  );
+}
+
+/**
+ * Re-allocates existing periods in place for the new amount, preserving
+ * per-period user data and historical periods. Falls back to generating fresh
+ * periods only if the budget has none yet (an anomaly — periods are created on
+ * budget creation).
+ */
+async function reallocate_periods(
+  ctx: TraceContext,
+  payload: ProcessBudgetUpdatedPayload
+): Promise<void> {
+  const existing = await budget_period_repo.get_by_budget_id(ctx, payload.budget_id);
+
+  if (existing.length === 0) {
+    await generate_fresh_periods(ctx, payload);
+    return;
+  }
+
+  const computed = compute_reallocated_periods({
+    new_amount: payload.amount,
+    budget_cadence: payload.cadence,
+    cutoff: start_of_today_utc(),
+    periods: existing.map((p) => ({
+      id: p.id,
+      period_type: p.period_type,
+      start_date: p.start_date,
+      end_date: p.end_date,
+      spent: p.spent,
+      rolled_over_amount: p.rolled_over_amount,
+    })),
+  });
+
+  const updates = computed.entities ?? [];
+  if (updates.length === 0) {
+    return;
+  }
+
+  await budget_period_repo.update_allocations(ctx, updates);
+
+  try {
+    await enqueue_user_summary_updates_from_budget_periods(
+      ctx,
+      payload.user_id,
+      updates.map((u) => u.id)
+    );
+  } catch (summary_error) {
+    console.error(
+      `[${ctx.trace_id}] process_budget_updated: summary update failed (non-fatal):`,
+      summary_error
+    );
+  }
+}
+
+/**
+ * Generates periods from source periods (no existing periods to preserve).
+ * Used only as a fallback when an amount-change update finds no periods.
+ */
+async function generate_fresh_periods(
+  ctx: TraceContext,
+  payload: ProcessBudgetUpdatedPayload
+): Promise<void> {
   const anchor = Timestamp.fromMillis(payload.start_ms);
   const generation_end = Timestamp.fromMillis(payload.generation_end_ms);
   const source_periods = await source_period_repo.get_overlapping(
@@ -111,8 +211,7 @@ async function regenerate_periods(
 
   await budget_period_repo.save_batch(ctx, computed.entities, payload.budget_name);
 
-  // Recompute user_summary documents for the regenerated periods. (The prior
-  // periods' removal is handled by the budget_period DELETE summary trigger.)
+  // Recompute user_summary documents for the freshly generated periods.
   const period_ids = computed.entities.map((p) => p.id);
   try {
     await enqueue_user_summary_updates_from_budget_periods(ctx, payload.user_id, period_ids);

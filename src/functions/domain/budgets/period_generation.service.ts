@@ -153,6 +153,98 @@ export function compute_budget_periods(
   return { entities };
 }
 
+/**
+ * An existing budget period as needed for re-allocation (pure input).
+ */
+export interface ExistingPeriodForRealloc {
+  id: string;
+  period_type: PeriodInstanceType;
+  start_date: Timestamp;
+  end_date: Timestamp;
+  spent: number;
+  rolled_over_amount: number;
+}
+
+/**
+ * A computed allocation update for one existing period.
+ */
+export interface PeriodAllocationUpdate {
+  id: string;
+  allocated_amount: number;
+  daily_rate: number;
+  remaining: number;
+}
+
+/**
+ * Pure input for re-allocating existing budget periods after an amount change.
+ */
+export interface ReallocateBudgetPeriodsInput {
+  new_amount: number;
+  budget_cadence: PeriodInstanceType;
+  periods: ExistingPeriodForRealloc[];
+  /** Only re-allocate periods that END on/after this cutoff (current + future). */
+  cutoff: Timestamp;
+}
+
+/**
+ * Recompute allocations for EXISTING periods after a budget's amount changes,
+ * in place. Mirrors the legacy `runUpdateBudgetPeriods`:
+ * - Only current + future periods (end_date >= cutoff) are re-allocated;
+ *   historical periods are left untouched.
+ * - Each period's allocated amount + daily rate are recomputed from the new
+ *   amount and the period's own dates/type; `remaining = allocated + rolled_over
+ *   - spent`.
+ *
+ * Returns one update per affected period (caller applies them in place,
+ * preserving notes / checklist / modifiedAmount). PURE FUNCTION.
+ */
+export function compute_reallocated_periods(
+  input: ReallocateBudgetPeriodsInput
+): DomainResult<PeriodAllocationUpdate> {
+  if (input.new_amount < 0) {
+    return { validation_errors: ["new_amount cannot be negative"] };
+  }
+
+  const cutoff_ms = input.cutoff.toMillis();
+  const updates: PeriodAllocationUpdate[] = [];
+
+  for (const period of input.periods) {
+    // Skip historical periods.
+    if (period.end_date.toMillis() < cutoff_ms) {
+      continue;
+    }
+
+    const start = period.start_date.toDate();
+    const end = period.end_date.toDate();
+
+    const allocation_result = compute_period_allocation({
+      budget_amount: input.new_amount,
+      budget_period_type: input.budget_cadence,
+      target_start: start,
+      target_end: end,
+      target_period_type: period.period_type,
+    });
+    if (allocation_result.validation_errors) {
+      return { validation_errors: allocation_result.validation_errors };
+    }
+    const allocated = allocation_result.entity ?? 0;
+
+    const days = count_days_inclusive(start, end);
+    const is_prime = period.period_type === input.budget_cadence;
+    const rate_result = compute_daily_rate(allocated, days, is_prime);
+    const daily_rate = rate_result.entity ?? 0;
+
+    updates.push({
+      id: period.id,
+      allocated_amount: allocated,
+      daily_rate,
+      remaining: allocated + period.rolled_over_amount - period.spent,
+    });
+  }
+
+  return { entities: updates };
+}
+
 const DAYS_IN_WEEK = 7;
 
 /** Decimal precision for prime (source-aligned) daily rates. */

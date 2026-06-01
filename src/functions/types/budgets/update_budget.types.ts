@@ -141,6 +141,8 @@ export interface ProcessBudgetUpdatedPayload {
   everything_else_budget_id: string | null;
   /** Regenerate budget periods (amount changed) */
   regenerate_periods: boolean;
+  /** The budget name changed — propagate budgetName to current+future periods */
+  name_changed: boolean;
 }
 
 // ============================================================================
