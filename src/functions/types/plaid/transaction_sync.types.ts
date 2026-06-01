@@ -127,6 +127,9 @@ export interface TransactionSyncDependencies {
 
   /** Existing pending transactions for this item (for migration lookup) */
   pending_transactions: Map<string, PendingTransactionInfo>;
+
+  /** Set of active (non-hidden) account IDs for filtering transactions */
+  active_account_ids: Set<string>;
 }
 
 /**

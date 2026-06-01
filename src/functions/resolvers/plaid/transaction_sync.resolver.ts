@@ -118,10 +118,20 @@ export async function resolve_transaction_sync_dependencies(
     item_data.plaidItemId
   );
 
+  // Step 5: Get active accounts for this item (filter out hidden accounts)
+  const accounts_snapshot = await db.collection("accounts")
+    .where("itemId", "==", item_data.plaidItemId)
+    .where("isActive", "==", true)
+    .get();
+
+  const active_account_ids = new Set<string>(
+    accounts_snapshot.docs.map(doc => doc.data().accountId || doc.id)
+  );
+
   console.log(
     `[${ctx.trace_id}] Resolved transaction sync dependencies: ` +
     `item=${input.item_id}, cursor=${item_data.cursor || "none"}, ` +
-    `pending=${pending_transactions.size}`
+    `pending=${pending_transactions.size}, active_accounts=${active_account_ids.size}`
   );
 
   return {
@@ -140,6 +150,7 @@ export async function resolve_transaction_sync_dependencies(
       group_ids,
     },
     pending_transactions,
+    active_account_ids,
   };
 }
 

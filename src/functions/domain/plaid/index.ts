@@ -45,3 +45,26 @@ export {
   normalize_amount,
   determine_transaction_type,
 } from "./transaction_sync.service";
+
+export {
+  aggregate_refresh_results,
+  create_refresh_failure_response,
+  create_balance_phase_result,
+  create_transaction_phase_result,
+  validate_refresh_request,
+} from "./refresh_plaid_data.service";
+
+export {
+  validate_update_link_token_request,
+  check_item_status_for_relink,
+  should_show_help_message,
+  get_update_link_token_error_message,
+} from "./update_link_token.service";
+
+export {
+  compute_pending_expiration_update,
+  compute_error_update,
+  compute_permission_revoked_update,
+  compute_login_repaired_update,
+  should_trigger_refresh,
+} from "./item_status_webhook.service";

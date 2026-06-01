@@ -18,7 +18,12 @@ import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as crypto from "crypto";
 import { generate_id } from "../../observability";
-import { webhook_balance_sync_orchestrator, sync_transactions_orchestrator } from "../../orchestrators/plaid";
+import {
+  webhook_balance_sync_orchestrator,
+  sync_transactions_orchestrator,
+  handle_item_error_orchestrator,
+  handle_login_repaired_orchestrator,
+} from "../../orchestrators/plaid";
 import { resolve_webhook_transaction_sync_dependencies } from "../../resolvers/plaid";
 import { PlaidWebhookType, PlaidWebhookCode } from "../../../types";
 
@@ -135,7 +140,8 @@ export const plaid_webhook = onRequest(
         webhook_type,
         webhook_code,
         plaid_item_id,
-        request_id
+        request_id,
+        req.body
       );
 
       // 6. RETURN SUCCESS
@@ -160,6 +166,19 @@ export const plaid_webhook = onRequest(
 );
 
 /**
+ * Webhook body type for item status webhooks.
+ */
+interface ItemStatusWebhookBody {
+  consent_expiration_time?: string;
+  error?: {
+    error_type: string;
+    error_code: string;
+    error_message: string;
+    display_message: string | null;
+  };
+}
+
+/**
  * Routes webhook to appropriate orchestrator based on type and code.
  */
 async function route_webhook(
@@ -168,7 +187,8 @@ async function route_webhook(
   webhook_type: string,
   webhook_code: string,
   plaid_item_id: string,
-  request_id?: string
+  request_id: string | undefined,
+  webhook_body: ItemStatusWebhookBody
 ): Promise<{ processed: boolean; message: string }> {
 
   // ITEM webhooks
@@ -205,12 +225,58 @@ async function route_webhook(
 
       case PlaidWebhookCode.ERROR:
       case PlaidWebhookCode.PENDING_EXPIRATION:
-      case PlaidWebhookCode.USER_PERMISSION_REVOKED:
-        // These are informational - log but no orchestrator needed
-        console.log(
-          `[${trace_id}] Item status webhook: ${webhook_code} for item ${plaid_item_id}`
-        );
-        return { processed: true, message: `Item status: ${webhook_code}` };
+      case PlaidWebhookCode.USER_PERMISSION_REVOKED: {
+        // Process item error/expiration webhooks
+        const error_result = await handle_item_error_orchestrator({
+          trace_id,
+          span_id,
+          input: {
+            plaid_item_id,
+            webhook_type,
+            webhook_code,
+            request_id,
+            consent_expiration_time: webhook_body.consent_expiration_time,
+            error: webhook_body.error,
+          },
+          user_id: "webhook",
+          idempotency_key: `webhook:item_error:${request_id || plaid_item_id}:${Date.now()}`,
+        });
+
+        if (error_result.skipped) {
+          return { processed: false, message: error_result.skip_reason || "Skipped" };
+        }
+
+        return {
+          processed: true,
+          message: `Item status updated: ${error_result.previous_status} -> ${error_result.new_status}`,
+        };
+      }
+
+      case PlaidWebhookCode.LOGIN_REPAIRED: {
+        // Process login repaired webhook - clear error state and refresh data
+        const repaired_result = await handle_login_repaired_orchestrator({
+          trace_id,
+          span_id,
+          input: {
+            plaid_item_id,
+            webhook_type,
+            webhook_code,
+            request_id,
+          },
+          user_id: "webhook",
+          idempotency_key: `webhook:login_repaired:${request_id || plaid_item_id}:${Date.now()}`,
+        });
+
+        if (repaired_result.skipped) {
+          return { processed: false, message: repaired_result.skip_reason || "Skipped" };
+        }
+
+        return {
+          processed: true,
+          message: `Login repaired: ${repaired_result.previous_status} -> ${repaired_result.new_status}` +
+                   (repaired_result.refresh_triggered ? " (refresh triggered)" : ""),
+        };
+      }
 
       default:
         console.log(

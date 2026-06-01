@@ -141,6 +141,10 @@ export interface User extends BaseDocument {
 
   preferences: UserPreferences;
   isActive: boolean;
+
+  // Initialization status (set after user_summaries and budgets are created)
+  isInitialized?: boolean;          // True after backend initialization completes
+  initializedAt?: Timestamp;        // When initialization completed
 }
 
 // Legacy enum - kept for backward compatibility
@@ -341,7 +345,8 @@ export interface Transaction extends BaseDocument {
 
   // === QUERY-CRITICAL FIELDS AT ROOT ===
   transactionId: string;          // Plaid transaction_id (used as Firestore document ID)
-  ownerId: string;                // User who owns this transaction (renamed from userId)
+  userId?: string;                // User ID (DEPRECATED: Use ownerId. Kept for backward compatibility with queries)
+  ownerId: string;                // User who owns this transaction (RBAC primary field)
   groupId: string | null;         // DEPRECATED: Use groupIds. Group this transaction belongs to (null = private)
   groupIds?: string[];            // NEW: Groups this transaction belongs to ([] = private)
   isPrivate?: boolean;            // NEW: Quick filter for private resources (groupIds.length === 0)
@@ -1257,6 +1262,7 @@ export enum PlaidWebhookCode {
   // ITEM webhooks
   ERROR = "ERROR",
   PENDING_EXPIRATION = "PENDING_EXPIRATION",
+  LOGIN_REPAIRED = "LOGIN_REPAIRED",
   USER_PERMISSION_REVOKED = "USER_PERMISSION_REVOKED",
   WEBHOOK_UPDATE_ACKNOWLEDGED = "WEBHOOK_UPDATE_ACKNOWLEDGED",
   NEW_ACCOUNTS_AVAILABLE = "NEW_ACCOUNTS_AVAILABLE",

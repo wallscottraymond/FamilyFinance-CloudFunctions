@@ -1,87 +1,130 @@
-import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+/**
+ * Inflow Period Summary Triggers
+ *
+ * Triggers that update user_summaries when inflow_periods change.
+ * Uses the 5-layer architecture orchestrator for proper summary updates.
+ *
+ * IMPORTANT: The CREATE trigger has been REMOVED to prevent race conditions.
+ * When inflow_periods are created in batch (e.g., new inflow generates ~50 periods),
+ * the orchestrator or batch operation should handle summary updates AFTER all periods are saved.
+ *
+ * The UPDATE and DELETE triggers remain to handle individual period changes.
+ *
+ * @module summaries/triggers/inflowPeriodSummaryTriggers
+ */
+
+import { onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { InflowPeriod } from "../../../types";
-import { updateUserPeriodSummary } from "../orchestration/updateUserPeriodSummary";
+import {
+  is_processed,
+  mark_processed,
+} from "../../repositories/infrastructure/trigger_processing.repository";
+import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import { v4 as uuid } from "uuid";
 
 /**
- * Trigger: Update user period summary when an inflow period is created
+ * NOTE: on_inflow_period_created_period_summary has been REMOVED.
  *
- * When a new inflow_period is created, this trigger recalculates the
- * user period summary for the corresponding period.
+ * Previously, this trigger fired for each inflow_period created, which caused
+ * race conditions when many periods were created at once (batch inflow creation).
+ *
+ * The summary update for new periods should be handled by:
+ * - The inflow creation orchestrator calling enqueue_user_summary_updates_from_inflow_periods()
+ * - This happens AFTER all periods are saved, ensuring complete data
  */
-export const onInflowPeriodCreatedPeriodSummary = onDocumentCreated(
-  "inflow_periods/{inflowPeriodId}",
-  async (event) => {
-    const inflowPeriod = event.data?.data() as InflowPeriod;
-
-    if (!inflowPeriod) {
-      console.error("[onInflowPeriodCreatedSummary] No inflow period data");
-      return;
-    }
-
-    console.log(
-      `[onInflowPeriodCreatedSummary] Inflow period created: ${inflowPeriod.id}`
-    );
-
-    try {
-      // Update the user period summary for this period
-      await updateUserPeriodSummary(
-        inflowPeriod.ownerId,
-        String(inflowPeriod.periodType), // Convert enum to string
-        inflowPeriod.sourcePeriodId,
-        false // Don't include detailed entries in triggers
-      );
-
-      console.log(
-        `[onInflowPeriodCreatedSummary] Successfully updated summary for period: ${inflowPeriod.sourcePeriodId}`
-      );
-    } catch (error) {
-      console.error(
-        `[onInflowPeriodCreatedSummary] Error updating summary:`,
-        error
-      );
-      // Don't throw - we don't want to fail the inflow period creation
-    }
-  }
-);
 
 /**
  * Trigger: Update user period summary when an inflow period is updated
  *
  * When an inflow_period is updated, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Uses the 5-layer architecture orchestrator for proper updates.
+ * Includes idempotency guard and debounce logic.
  */
-export const onInflowPeriodUpdatedPeriodSummary = onDocumentUpdated(
-  "inflow_periods/{inflowPeriodId}",
+export const on_inflow_period_updated_period_summary = onDocumentUpdated(
+  {
+    document: "inflow_periods/{inflowPeriodId}",
+    region: "us-central1",
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
   async (event) => {
-    const inflowPeriod = event.data?.after.data() as InflowPeriod;
+    const doc_id = event.params.inflowPeriodId;
 
-    if (!inflowPeriod) {
-      console.error("[onInflowPeriodUpdatedSummary] No inflow period data");
+    // Create trace context early for idempotency check
+    const trace_id = uuid();
+    const span_id = uuid();
+    const trace_ctx = { trace_id, span_id };
+
+    // 1. IDEMPOTENCY GUARD - Check if this exact event was already processed
+    const idempotency_key = `inflow_period_updated_summary:${doc_id}:${event.id}`;
+    const already_processed = await is_processed(trace_ctx, idempotency_key);
+
+    if (already_processed) {
+      console.log(
+        `[on_inflow_period_updated_period_summary] Skipping duplicate event: ${idempotency_key}`
+      );
       return;
     }
 
-    console.log(
-      `[onInflowPeriodUpdatedSummary] Inflow period updated: ${inflowPeriod.id}`
-    );
-
     try {
-      // Update the user period summary for this period
-      await updateUserPeriodSummary(
-        inflowPeriod.ownerId,
-        String(inflowPeriod.periodType), // Convert enum to string
-        inflowPeriod.sourcePeriodId,
-        false // Don't include detailed entries in triggers
+      const inflow_period = event.data?.after.data() as InflowPeriod;
+
+      if (!inflow_period) {
+        console.error("[on_inflow_period_updated_period_summary] No inflow period data");
+        return;
+      }
+
+      // Guard: Skip if ownerId is missing
+      if (!inflow_period.ownerId) {
+        console.error(
+          `[on_inflow_period_updated_period_summary] CRITICAL: ownerId is missing! Document: ${doc_id}`
+        );
+        return;
+      }
+
+      // Build summary ID for deduplication
+      const normalized_period_type = String(inflow_period.periodType).toLowerCase();
+      const summary_id = `${inflow_period.ownerId}_${normalized_period_type}_${inflow_period.sourcePeriodId}`;
+
+      console.log("[on_inflow_period_updated_period_summary] Enqueueing user summary update job");
+      console.log(`  - Document: ${doc_id}`);
+      console.log(`  - Summary ID: ${summary_id}`);
+
+      // 2. ENQUEUE JOB (with deduplication)
+      // The job queue will serialize updates and prevent race conditions
+      const job = await create_job_if_not_exists(
+        "update_user_summary",
+        {
+          user_id: inflow_period.ownerId,
+          period_type: String(inflow_period.periodType),
+          source_period_id: inflow_period.sourcePeriodId,
+          deduplication_key: summary_id,
+        },
+        {
+          trace_id,
+          // No delay - job is processed immediately by on_job_created trigger
+          // Deduplication prevents duplicates while a job is active
+        }
       );
 
-      console.log(
-        `[onInflowPeriodUpdatedSummary] Successfully updated summary for period: ${inflowPeriod.sourcePeriodId}`
-      );
+      if (job) {
+        console.log(
+          `[on_inflow_period_updated_period_summary] Enqueued job ${job.job_id} for summary ${summary_id}`
+        );
+      } else {
+        console.log(
+          `[on_inflow_period_updated_period_summary] Job already pending for summary ${summary_id}`
+        );
+      }
+
+      // 3. MARK AS PROCESSED
+      await mark_processed(trace_ctx, idempotency_key, doc_id, event.id);
     } catch (error) {
-      console.error(
-        `[onInflowPeriodUpdatedSummary] Error updating summary:`,
-        error
-      );
-      // Don't throw - we don't want to fail the inflow period update
+      console.error("[on_inflow_period_updated_period_summary] Error enqueueing job:", error);
+      // Don't throw - summary updates should not break period updates
+      // Don't mark as processed - allow retry on error
     }
   }
 );
@@ -91,39 +134,93 @@ export const onInflowPeriodUpdatedPeriodSummary = onDocumentUpdated(
  *
  * When an inflow_period is deleted, this trigger recalculates the
  * user period summary for the corresponding period.
+ *
+ * Uses the 5-layer architecture orchestrator for proper updates.
+ * Includes idempotency guard and debounce logic.
  */
-export const onInflowPeriodDeletedPeriodSummary = onDocumentDeleted(
-  "inflow_periods/{inflowPeriodId}",
+export const on_inflow_period_deleted_period_summary = onDocumentDeleted(
+  {
+    document: "inflow_periods/{inflowPeriodId}",
+    region: "us-central1",
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
   async (event) => {
-    const inflowPeriod = event.data?.data() as InflowPeriod;
+    const doc_id = event.params.inflowPeriodId;
 
-    if (!inflowPeriod) {
-      console.error("[onInflowPeriodDeletedSummary] No inflow period data");
+    // Create trace context early for idempotency check
+    const trace_id = uuid();
+    const span_id = uuid();
+    const trace_ctx = { trace_id, span_id };
+
+    // 1. IDEMPOTENCY GUARD - Check if this exact event was already processed
+    const idempotency_key = `inflow_period_deleted_summary:${doc_id}:${event.id}`;
+    const already_processed = await is_processed(trace_ctx, idempotency_key);
+
+    if (already_processed) {
+      console.log(
+        `[on_inflow_period_deleted_period_summary] Skipping duplicate event: ${idempotency_key}`
+      );
       return;
     }
 
-    console.log(
-      `[onInflowPeriodDeletedSummary] Inflow period deleted: ${inflowPeriod.id}`
-    );
-
     try {
-      // Update the user period summary for this period
-      await updateUserPeriodSummary(
-        inflowPeriod.ownerId,
-        String(inflowPeriod.periodType), // Convert enum to string
-        inflowPeriod.sourcePeriodId,
-        false // Don't include detailed entries in triggers
+      const inflow_period = event.data?.data() as InflowPeriod;
+
+      if (!inflow_period) {
+        console.error("[on_inflow_period_deleted_period_summary] No inflow period data");
+        return;
+      }
+
+      // Guard: Skip if ownerId is missing
+      if (!inflow_period.ownerId) {
+        console.error(
+          `[on_inflow_period_deleted_period_summary] CRITICAL: ownerId is missing! Document: ${doc_id}`
+        );
+        return;
+      }
+
+      // Build summary ID for deduplication
+      const normalized_period_type = String(inflow_period.periodType).toLowerCase();
+      const summary_id = `${inflow_period.ownerId}_${normalized_period_type}_${inflow_period.sourcePeriodId}`;
+
+      console.log("[on_inflow_period_deleted_period_summary] Enqueueing user summary update job after deletion");
+      console.log(`  - Document: ${doc_id}`);
+      console.log(`  - Summary ID: ${summary_id}`);
+
+      // 2. ENQUEUE JOB (with deduplication)
+      // The job queue will serialize updates and prevent race conditions
+      const job = await create_job_if_not_exists(
+        "update_user_summary",
+        {
+          user_id: inflow_period.ownerId,
+          period_type: String(inflow_period.periodType),
+          source_period_id: inflow_period.sourcePeriodId,
+          deduplication_key: summary_id,
+        },
+        {
+          trace_id,
+          // No delay - job is processed immediately by on_job_created trigger
+          // Deduplication prevents duplicates while a job is active
+        }
       );
 
-      console.log(
-        `[onInflowPeriodDeletedSummary] Successfully updated summary for period: ${inflowPeriod.sourcePeriodId}`
-      );
+      if (job) {
+        console.log(
+          `[on_inflow_period_deleted_period_summary] Enqueued job ${job.job_id} for summary ${summary_id}`
+        );
+      } else {
+        console.log(
+          `[on_inflow_period_deleted_period_summary] Job already pending for summary ${summary_id}`
+        );
+      }
+
+      // 3. MARK AS PROCESSED
+      await mark_processed(trace_ctx, idempotency_key, doc_id, event.id);
     } catch (error) {
-      console.error(
-        `[onInflowPeriodDeletedSummary] Error updating summary:`,
-        error
-      );
-      // Don't throw - we don't want to fail the inflow period deletion
+      console.error("[on_inflow_period_deleted_period_summary] Error enqueueing job:", error);
+      // Don't throw - summary updates should not break period deletion
+      // Don't mark as processed - allow retry on error
     }
   }
 );

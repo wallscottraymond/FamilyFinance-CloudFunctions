@@ -1,0 +1,186 @@
+/**
+ * Update Transaction Splits - Callable Cloud Function
+ *
+ * Callable version of updateTransaction for mobile app usage.
+ * Updates transaction splits with budget assignment and validation.
+ *
+ * Memory: 256MiB, Timeout: 30s
+ */
+
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Transaction, TransactionSplit } from "../../../../types";
+import { getDocument, updateDocument } from "../../../../utils/firestore";
+import * as admin from "firebase-admin";
+import { updateBudgetSpending } from "../../../../utils/budgetSpending";
+import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
+
+interface UpdateTransactionSplitsRequest {
+  transactionId: string;
+  splits: TransactionSplit[];
+  userNotes?: string;
+  isHidden?: boolean;
+  isRecurring?: boolean;
+}
+
+interface UpdateTransactionSplitsResponse {
+  success: boolean;
+  transaction?: Transaction;
+  message?: string;
+}
+
+/**
+ * Update transaction splits via callable function
+ *
+ * This function:
+ * 1. Validates user authentication and ownership
+ * 2. Validates and assigns splits to budgets
+ * 3. Updates the transaction in Firestore
+ * 4. Updates budget spending calculations
+ */
+export const updateTransactionSplits = onCall<
+  UpdateTransactionSplitsRequest,
+  Promise<UpdateTransactionSplitsResponse>
+>({
+  region: "us-central1",
+  memory: "256MiB",
+  timeoutSeconds: 30,
+}, async (request) => {
+  // Check authentication
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const userId = request.auth.uid;
+  const { transactionId, splits, userNotes, isHidden, isRecurring } = request.data;
+
+  // Validate required fields
+  if (!transactionId) {
+    throw new HttpsError("invalid-argument", "Transaction ID is required");
+  }
+
+  if (!splits || !Array.isArray(splits)) {
+    throw new HttpsError("invalid-argument", "Splits array is required");
+  }
+
+  try {
+    console.log(`[updateTransactionSplits] User ${userId} updating transaction ${transactionId} with ${splits.length} splits`);
+
+    // Get existing transaction
+    const existingTransaction = await getDocument<Transaction>("transactions", transactionId);
+    if (!existingTransaction) {
+      throw new HttpsError("not-found", "Transaction not found");
+    }
+
+    // Check ownership - user can only update their own transactions
+    if (existingTransaction.ownerId !== userId && existingTransaction.userId !== userId) {
+      console.log(`[updateTransactionSplits] Permission denied: user ${userId} does not own transaction ${transactionId}`);
+      console.log(`[updateTransactionSplits] Transaction ownerId: ${existingTransaction.ownerId}, userId: ${existingTransaction.userId}`);
+      throw new HttpsError("permission-denied", "Cannot update this transaction");
+    }
+
+    // Prepare update data - use Record type for flexibility with optional fields
+    const updateData: Record<string, any> = {
+      splits,
+      updatedAt: admin.firestore.Timestamp.now(),
+      updatedBy: userId,
+    };
+
+    // Add optional fields if provided
+    if (userNotes !== undefined) {
+      updateData.userNotes = userNotes;
+    }
+    if (isHidden !== undefined) {
+      updateData.isHidden = isHidden;
+    }
+    if (isRecurring !== undefined) {
+      updateData.isRecurring = isRecurring;
+    }
+
+    // Calculate split totals
+    const totalAllocated = splits.reduce((sum, split) => sum + Math.abs(split.amount || 0), 0);
+    updateData.isSplit = splits.length > 1;
+    updateData.totalAllocated = totalAllocated;
+
+    // Create temporary transaction for split assignment
+    const tempTransaction: Transaction = {
+      ...existingTransaction,
+      ...updateData,
+      splits: splits,
+    };
+
+    // Validate and assign splits to budgets using centralized utility
+    console.log(`[updateTransactionSplits] Validating and assigning ${splits.length} splits`);
+    const assignmentResult = await assignTransactionSplits(tempTransaction, userId);
+
+    if (assignmentResult.modified) {
+      console.log('[updateTransactionSplits] Splits modified during assignment:', assignmentResult.changes);
+    }
+
+    // Use the validated and assigned splits
+    updateData.splits = assignmentResult.transaction.splits;
+
+    // Ensure all splits have required fields
+    updateData.splits = updateData.splits.map((split: any, index: number) => {
+      const now = admin.firestore.Timestamp.now();
+      const splitId = split.splitId || split.id || `split_${Date.now()}_${index}`;
+      return {
+        ...split,
+        // Ensure ID exists (support both splitId and id field names)
+        splitId: splitId,
+        id: splitId,
+        // Ensure timestamps
+        createdAt: split.createdAt || now,
+        updatedAt: now,
+        // Ensure createdBy
+        createdBy: split.createdBy || userId,
+      };
+    });
+
+    console.log(`[updateTransactionSplits] Splits assigned - budgetIds: ${updateData.splits.map((s: any) => s.budgetId).join(', ')}`);
+
+    // Update transaction in Firestore (using Admin SDK - bypasses security rules)
+    const updatedTransaction = await updateDocument<Transaction>(
+      "transactions",
+      transactionId,
+      updateData as any
+    );
+
+    console.log(`[updateTransactionSplits] Transaction ${transactionId} updated successfully`);
+
+    // DEBUG: Log transaction details for budget spending
+    console.log(`[updateTransactionSplits] DEBUG - Budget spending prerequisites:`);
+    console.log(`  transactionStatus: ${updatedTransaction.transactionStatus} (needs "approved")`);
+    console.log(`  type: ${updatedTransaction.type} (needs "expense")`);
+    console.log(`  splits budgetIds: ${updatedTransaction.splits?.map((s: any) => s.budgetId).join(', ')}`);
+
+    // Update budget spending
+    try {
+      const budgetResult = await updateBudgetSpending({
+        oldTransaction: existingTransaction,
+        newTransaction: updatedTransaction,
+        userId: userId,
+        groupId: existingTransaction.groupId
+      });
+      console.log(`[updateTransactionSplits] Budget spending result:`, budgetResult);
+    } catch (budgetError) {
+      // Log error but don't fail the transaction update
+      console.error('[updateTransactionSplits] Budget spending update failed:', budgetError);
+    }
+
+    return {
+      success: true,
+      transaction: updatedTransaction,
+      message: "Transaction updated successfully"
+    };
+
+  } catch (error: any) {
+    console.error("[updateTransactionSplits] Error:", error);
+
+    // Re-throw HttpsErrors as-is
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+
+    throw new HttpsError("internal", "Failed to update transaction splits");
+  }
+});

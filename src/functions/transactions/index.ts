@@ -34,12 +34,73 @@
 export { createTransaction } from "./api/crud/createTransaction";
 export { getTransaction } from "./api/crud/getTransaction";
 export { updateTransaction } from "./api/crud/updateTransaction";
+export { updateTransactionSplits } from "./api/crud/updateTransactionSplits"; // Callable version for mobile
 export { deleteTransaction } from "./api/crud/deleteTransaction";
 export { approveTransaction } from "./api/crud/approveTransaction";
 
 // Query Operations
 // Note: getUserTransactions and getFamilyTransactions have been removed
 // Mobile app uses direct Firestore access for transaction queries
+
+// ===== UTIL Functions (snake_case - new architecture) =====
+export {
+  format_transactions,
+  formatTransactions
+} from "./utils/format_transactions";
+
+export {
+  match_categories_to_transactions,
+  matchCategoriesToTransactions
+} from "./utils/match_categories_to_transactions";
+
+export {
+  match_transaction_splits_to_source_periods,
+  matchTransactionSplitsToSourcePeriods
+} from "./utils/match_transaction_splits_to_source_periods";
+
+export {
+  match_transaction_splits_to_budgets,
+  matchTransactionSplitsToBudgets
+} from "./utils/match_transaction_splits_to_budgets";
+
+export {
+  match_transaction_splits_to_outflows,
+  matchTransactionSplitsToOutflows
+} from "./utils/match_transaction_splits_to_outflows";
+
+export {
+  match_transaction_to_budget,
+  matchTransactionToBudget
+} from "./utils/match_transaction_to_budget";
+
+export {
+  assign_transaction_splits,
+  assign_transaction_splits_batch,
+  assignTransactionSplits,
+  assignTransactionSplitsBatch
+} from "./utils/assign_transaction_splits";
+
+export {
+  validate_and_redistribute_splits,
+  validateAndRedistributeSplits
+} from "./utils/validate_and_redistribute_splits";
+
+export {
+  validate_and_fix_budget_ids,
+  is_valid_budget_id,
+  validateAndFixBudgetIds,
+  isValidBudgetId
+} from "./utils/validate_budget_ids";
+
+export {
+  build_transaction_data,
+  buildTransactionData
+} from "./utils/build_transaction_data";
+
+export {
+  batch_create_transactions,
+  batchCreateTransactions
+} from "./utils/batch_create_transactions";
 
 // ===== Orchestration Functions =====
 

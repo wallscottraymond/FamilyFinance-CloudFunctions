@@ -598,6 +598,78 @@ export const transaction_repo = {
   },
 
   /**
+   * Counts active transactions for a specific account.
+   *
+   * Used by resolvers to determine cascade scope for account removal.
+   *
+   * @param ctx - Trace context
+   * @param account_id - Plaid account ID
+   * @param user_id - User ID for scoping
+   * @returns Count of active transactions for the account
+   */
+  async count_by_account_id(
+    ctx: TraceContext,
+    account_id: string,
+    user_id: string
+  ): Promise<number> {
+    const db = getFirestore();
+
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("accountId", "==", account_id)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", true)
+      .count()
+      .get();
+
+    const count = snapshot.data().count;
+
+    console.log(
+      `[${ctx.trace_id}] count_by_account_id: account=${account_id}, count=${count}`
+    );
+
+    return count;
+  },
+
+  /**
+   * Gets transaction IDs for a specific account.
+   *
+   * Used by resolvers to get affected transaction IDs for cascade operations.
+   * Returns only IDs to minimize memory usage.
+   *
+   * @param ctx - Trace context
+   * @param account_id - Plaid account ID
+   * @param user_id - User ID for scoping
+   * @param limit - Maximum number of IDs to return (default 1000)
+   * @returns Array of transaction document IDs
+   */
+  async get_ids_by_account_id(
+    ctx: TraceContext,
+    account_id: string,
+    user_id: string,
+    limit: number = 1000
+  ): Promise<string[]> {
+    const db = getFirestore();
+
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("accountId", "==", account_id)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", true)
+      .select() // Select no fields, just get document IDs
+      .limit(limit)
+      .get();
+
+    const ids = snapshot.docs.map(doc => doc.id);
+
+    console.log(
+      `[${ctx.trace_id}] get_ids_by_account_id: account=${account_id}, found=${ids.length}`
+    );
+
+    return ids;
+  },
+
+  /**
    * Updates cursor on plaid_item document.
    *
    * NOTE: This updates the plaid_items collection, not transactions.
@@ -626,5 +698,79 @@ export const transaction_repo = {
     console.log(
       `[${ctx.trace_id}] update_plaid_item_cursor: item=${item_doc_id}, cursor=${cursor ? "updated" : "cleared"}`
     );
+  },
+
+  /**
+   * Reassigns every split that references one budget to another budget.
+   *
+   * Used by the delete cascade: splits pointing at a deleted budget are moved
+   * to the user's "Everything Else" budget. Operates on the stored split docs
+   * (camelCase) and writes back in batches. Idempotent: a transaction whose
+   * splits no longer reference `from_budget_id` is left unchanged.
+   *
+   * @param ctx - Trace context
+   * @param transaction_ids - Transaction document IDs to update
+   * @param from_budget_id - Budget being removed
+   * @param to_budget_id - Replacement budget (Everything Else)
+   * @param to_budget_name - Denormalized name for the replacement budget
+   * @returns Number of transactions actually modified
+   */
+  async reassign_splits_budget(
+    ctx: TraceContext,
+    transaction_ids: string[],
+    from_budget_id: string,
+    to_budget_id: string,
+    to_budget_name: string
+  ): Promise<number> {
+    if (transaction_ids.length === 0) {
+      return 0;
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    let modified = 0;
+    const chunks = chunk_for_batch(transaction_ids);
+
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      let batch_has_writes = false;
+
+      for (const id of chunk) {
+        const snap = await doc_ref(id).get();
+        if (!snap.exists) {
+          continue;
+        }
+        const data = snap.data() as { splits?: Array<Record<string, unknown>> };
+        const splits = data.splits ?? [];
+        let changed = false;
+
+        const next_splits = splits.map((split) => {
+          if (split.budgetId === from_budget_id) {
+            changed = true;
+            /* eslint-disable @typescript-eslint/naming-convention */
+            return { ...split, budgetId: to_budget_id, budgetName: to_budget_name };
+            /* eslint-enable @typescript-eslint/naming-convention */
+          }
+          return split;
+        });
+
+        if (changed) {
+          /* eslint-disable @typescript-eslint/naming-convention */
+          batch.update(doc_ref(id), { splits: next_splits, updatedAt: now });
+          /* eslint-enable @typescript-eslint/naming-convention */
+          batch_has_writes = true;
+          modified++;
+        }
+      }
+
+      if (batch_has_writes) {
+        await batch.commit();
+      }
+    }
+
+    console.log(
+      `[${ctx.trace_id}] reassign_splits_budget: ${modified}/${transaction_ids.length} ` +
+      `transactions moved from ${from_budget_id} to ${to_budget_id}`
+    );
+    return modified;
   },
 };

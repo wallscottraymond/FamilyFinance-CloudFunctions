@@ -30,6 +30,8 @@ import {
   findOverlappingPrimePeriods,
   calculatePrimeContributions,
 } from '../../utils/nonPrimePeriodGeneration';
+import { v4 as uuid } from 'uuid';
+import { enqueue_user_summary_updates_from_budget_periods } from '../../../orchestrators/summaries';
 
 /**
  * Scheduled function to extend recurring budget periods
@@ -367,6 +369,26 @@ export const extendRecurringBudgetPeriods = onSchedule({
             lastExtended: now,
           });
           console.log(`  ✅ Extended budget ${budget.id} with ${totalNewPeriods} new periods (${newPrimePeriods.length} prime, ${newNonPrimePeriods.length} non-prime)`);
+
+          // Update user_summary docs for the newly created periods. The
+          // budget_period CREATE summary trigger was removed, so the extension
+          // owns this — routes through the unified enqueue node (dedup'd jobs).
+          const newPeriodIds = [
+            ...newPrimePeriods.map(p => p.id!),
+            ...newNonPrimePeriods.map(p => p.id!),
+          ];
+          const summaryUserId = budget.access?.createdBy || budget.createdBy;
+          if (summaryUserId) {
+            try {
+              await enqueue_user_summary_updates_from_budget_periods(
+                { trace_id: uuid(), span_id: uuid() },
+                summaryUserId,
+                newPeriodIds
+              );
+            } catch (summaryError) {
+              console.error(`  ⚠️ Summary enqueue failed for budget ${budget.id} (non-fatal):`, summaryError);
+            }
+          }
         }
 
         totalPeriodsCreated += totalNewPeriods;

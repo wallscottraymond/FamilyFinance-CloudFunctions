@@ -23,9 +23,11 @@ import { corsMiddleware } from '../../../../middleware/cors';
 import { authenticateRequest, UserRole } from '../../../../utils/auth';
 import { validateRequest } from '../../../../utils/validation';
 import * as Joi from 'joi';
-import { exchangePublicToken } from '../../../../utils/plaidClient';
-import { createStandardPlaidClient } from '../../../../utils/plaidClientFactory';
-import { fetchPlaidAccounts, savePlaidItem, savePlaidAccounts, ProcessedAccount } from '../../../../utils/plaidAccounts';
+import { exchange_public_token, transform_token_exchange_response } from '../../../integrations/plaid';
+import { savePlaidItem, ProcessedAccount } from '../../../../utils/plaidAccounts';
+import { link_plaid_accounts_orchestrator } from '../../../orchestrators/accounts';
+import { generate_id } from '../../../observability';
+import { TraceContext } from '../../../types';
 
 // Define secrets for Firebase configuration
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
@@ -149,18 +151,17 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
 
     console.log('Exchanging public token for user:', user.uid, 'institution:', requestData.metadata.institution.name);
 
-    // Step 1: Create Plaid client and exchange token using centralized factory
-    const plaidClient = createStandardPlaidClient();
-    const { accessToken, itemId } = await exchangePublicToken(plaidClient, requestData.publicToken);
+    // Step 1: Exchange public token using new integration client
+    const raw_response = await exchange_public_token(requestData.publicToken);
+    const { access_token: accessToken, item_id: itemId } = transform_token_exchange_response(raw_response);
 
-    // Step 2: Fetch user's groupId for RBAC
+    // Step 2: Fetch user's groupIds for RBAC
     const { getDocument } = await import('../../../../utils/firestore');
     const userDoc = await getDocument('users', user.uid);
     const groupId = (userDoc as any)?.familyId || (userDoc as any)?.groupId || null;
+    const groupIds: string[] = groupId ? [groupId] : [];
 
-    // Step 3: Fetch and save account data with hybrid structure
-    const accounts = await fetchPlaidAccounts(plaidClient, accessToken, itemId);
-
+    // Step 3: Save Plaid item (stores encrypted access token)
     await savePlaidItem(
       itemId,
       user.uid,
@@ -169,17 +170,48 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
       accessToken
     );
 
-    await savePlaidAccounts(
-      accounts,
-      itemId,
+    // Step 4: Fetch and save accounts using new architecture
+    const trace: TraceContext = {
+      trace_id: generate_id(),
+      span_id: generate_id(),
+    };
+
+    const idempotency_key = `link_plaid_accounts:${user.uid}:${itemId}:${requestData.metadata.link_session_id}`;
+
+    const orchestrator_result = await link_plaid_accounts_orchestrator(
+      trace,
       user.uid,
-      requestData.metadata.institution.institution_id,
-      requestData.metadata.institution.name,
-      groupId
+      {
+        access_token: accessToken,
+        item_id: itemId,
+        institution: {
+          institution_id: requestData.metadata.institution.institution_id,
+          name: requestData.metadata.institution.name,
+        },
+        group_ids: groupIds,
+        idempotency_key,
+      }
     );
 
-    console.log('Plaid data saved to Firestore successfully');
+    console.log('Plaid accounts linked via new architecture:', {
+      accounts_linked: orchestrator_result.accounts_linked,
+      trace_id: trace.trace_id,
+    });
     console.log('✅ onPlaidItemCreated trigger will handle all sync operations');
+
+    // Map orchestrator result to legacy response format for backwards compatibility
+    // The frontend expects ProcessedAccount[] format
+    const accounts: ProcessedAccount[] = orchestrator_result.account_ids.map((id, index) => ({
+      id,
+      name: requestData.metadata.accounts[index]?.name || `Account ${index + 1}`,
+      type: requestData.metadata.accounts[index]?.type || 'unknown',
+      subtype: requestData.metadata.accounts[index]?.subtype || null,
+      currentBalance: 0, // Will be populated by balance sync trigger
+      availableBalance: null,
+      currencyCode: 'USD',
+      mask: null,
+      officialName: null,
+    }));
 
     // Prepare response
     const response: ExchangePlaidTokenResponse = {
@@ -196,7 +228,8 @@ async function handleTokenExchange(req: any, res: any): Promise<void> {
       userId: user.uid,
       itemId,
       institutionName: requestData.metadata.institution.name,
-      accountCount: accounts.length,
+      accountCount: orchestrator_result.accounts_linked,
+      trace_id: trace.trace_id,
       nextSteps: 'onPlaidItemCreated trigger will sync balances, transactions, and recurring transactions'
     });
 

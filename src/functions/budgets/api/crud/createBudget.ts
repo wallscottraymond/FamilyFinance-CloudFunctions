@@ -18,6 +18,7 @@ import {
 import {
   buildAccessControl
 } from "../../../../utils/documentStructure";
+import { claimCategories } from "../../utils/categoryTransfer";
 
 /**
  * Create a new budget
@@ -202,6 +203,28 @@ export const createBudget = onCall({
     const createdBudget = await createDocument<Budget>("budgets", finalBudget);
 
     console.log('✅ Budget created successfully:', createdBudget.id);
+
+    // Step 5: Transfer categories from their current owners (e.g., "Everything Else")
+    // This removes the categories from other budgets that currently own them
+    if (budgetData.categoryIds && budgetData.categoryIds.length > 0) {
+      console.log(`🔄 [createBudget] Transferring ${budgetData.categoryIds.length} categories to new budget`);
+      const transferResult = await claimCategories(
+        user.id!,
+        budgetData.categoryIds,
+        createdBudget.id!
+      );
+
+      if (transferResult.success) {
+        console.log(`✅ [createBudget] Category transfer complete:`, {
+          transferred: transferResult.transferred.length,
+          alreadyOwned: transferResult.alreadyOwned.length,
+        });
+      } else {
+        // Log but don't fail - the budget was created successfully
+        console.warn(`⚠️ [createBudget] Category transfer had issues:`, transferResult.errors);
+      }
+    }
+
     return createdBudget;
 
   } catch (error: any) {

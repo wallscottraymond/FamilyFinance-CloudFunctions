@@ -50,7 +50,10 @@ export { syncRecurringTransactionsCallable } from "./api/sync/syncRecurring";
 // ===== Orchestration Functions =====
 
 // Triggers
-export { onPlaidItemCreated } from "./orchestration/triggers/onPlaidItemCreated";
+// DEPRECATED: The old trigger is replaced by the architecture-compliant version
+// at src/functions/entry/triggers/on_plaid_item_created.trigger.ts
+// The new trigger is exported from entry/index.ts automatically.
+// export { onPlaidItemCreated } from "./orchestration/triggers/onPlaidItemCreated";
 
 // Webhooks
 export { plaidWebhook } from "./orchestration/webhooks/plaidWebhook";
@@ -66,7 +69,9 @@ export {
   fireTransactionWebhook,
   fireIncomeWebhook,
   fireItemWebhook,
-  getUserPlaidItems
+  getUserPlaidItems,
+  resetItemLogin,
+  clearItemError
 } from "./admin/testWebhooks";
 
 export { reprocessPlaidTransactions } from "./admin/migrateTransactionSplits";

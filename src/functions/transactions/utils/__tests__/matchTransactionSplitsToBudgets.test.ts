@@ -186,7 +186,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -237,7 +238,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -304,7 +306,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -413,7 +416,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -460,7 +464,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -484,7 +489,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -508,7 +514,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -533,7 +540,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -607,7 +615,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         },
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -666,7 +675,7 @@ describe('matchTransactionSplitsToBudgets', () => {
       expect(result[0].splits[0].budgetId).toBe('unassigned');
     });
 
-    it('should handle transaction with no category (falls back to Everything Else)', async () => {
+    it('should handle transaction with no category (remains unassigned)', async () => {
       const budgets = [
         createBudget('budget_food', 'Food Budget', new Date('2025-01-01'), {
           isOngoing: true,
@@ -674,7 +683,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 
@@ -687,8 +697,8 @@ describe('matchTransactionSplitsToBudgets', () => {
 
       const result = await matchTransactionSplitsToBudgets([transaction], mockUserId);
 
-      // Should fall back to Everything Else since no category to match
-      expect(result[0].splits[0].budgetId).toBe('budget_everything');
+      // Should remain unassigned since no category to match against any budget
+      expect(result[0].splits[0].budgetId).toBe('unassigned');
     });
   });
 
@@ -842,7 +852,8 @@ describe('matchTransactionSplitsToBudgets', () => {
         }),
         createBudget('budget_everything', 'Everything Else', new Date('2024-01-01'), {
           isOngoing: true,
-          isSystemEverythingElse: true
+          isSystemEverythingElse: true,
+          categoryIds: ['GENERAL_MERCHANDISE']
         })
       ];
 

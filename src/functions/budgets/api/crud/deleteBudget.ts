@@ -14,6 +14,7 @@ import {
   checkFamilyAccess
 } from "../../../../utils/auth";
 import { firebaseCors } from "../../../../middleware/cors";
+import { releaseCategories } from "../../utils/categoryTransfer";
 
 const db = admin.firestore();
 
@@ -166,6 +167,23 @@ export const deleteBudget = onRequest({
       }
 
       console.log(`[deleteBudget] Reassigned ${splitsReassigned} splits across ${transactionsUpdated} transactions`);
+
+      // Step 2.5: Release categories back to "Everything Else" budget
+      if (existingBudget.categoryIds && existingBudget.categoryIds.length > 0) {
+        console.log(`[deleteBudget] Releasing ${existingBudget.categoryIds.length} categories back to "Everything Else"`);
+        const releaseResult = await releaseCategories(
+          user.id!,
+          existingBudget.categoryIds,
+          budgetId
+        );
+
+        if (releaseResult.success) {
+          console.log(`[deleteBudget] Category release complete: ${releaseResult.transferred.length} categories returned`);
+        } else {
+          // Log but don't fail - budget deletion should continue
+          console.warn(`[deleteBudget] Category release had issues:`, releaseResult.errors);
+        }
+      }
 
       // Step 3: Delete all budget_periods for this budget
       console.log(`[deleteBudget] Deleting budget_periods...`);

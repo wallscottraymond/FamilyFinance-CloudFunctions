@@ -28,12 +28,13 @@ import {
   RemovedTransaction
 } from 'plaid';
 import { Timestamp } from 'firebase-admin/firestore';
-import { formatTransactions } from '../../../transactions/utils/formatTransactions';
-import { matchCategoriesToTransactions } from '../../../transactions/utils/matchCategoriesToTransactions';
-import { matchTransactionSplitsToSourcePeriods } from '../../../transactions/utils/matchTransactionSplitsToSourcePeriods';
-import { assignTransactionSplitsBatch } from '../../../transactions/utils/assignTransactionSplits';
-import { matchTransactionSplitsToOutflows } from '../../../transactions/utils/matchTransactionSplitsToOutflows';
-import { batchCreateTransactions } from '../../../transactions/utils/batchCreateTransactions';
+// Import pipeline utilities (snake_case versions - new architecture)
+import { format_transactions } from '../../../transactions/utils/format_transactions';
+import { match_categories_to_transactions } from '../../../transactions/utils/match_categories_to_transactions';
+import { match_transaction_splits_to_source_periods } from '../../../transactions/utils/match_transaction_splits_to_source_periods';
+import { assign_transaction_splits_batch } from '../../../transactions/utils/assign_transaction_splits';
+import { match_transaction_splits_to_outflows } from '../../../transactions/utils/match_transaction_splits_to_outflows';
+import { batch_create_transactions } from '../../../transactions/utils/batch_create_transactions';
 import {
   buildPlaidTransactionUpdate,
   buildTransactionDeletionUpdate
@@ -319,7 +320,7 @@ async function performTransactionSync(
         console.log(`🔄 [performTransactionSync] Processing ${data.added.length} added transactions through sequential pipeline`);
 
         // Step 1: Format transactions (pure Plaid → Transaction mapping with nulls)
-        const transactions = await formatTransactions(
+        const transactions = await format_transactions(
           data.added,
           itemId,
           userId,
@@ -329,25 +330,25 @@ async function performTransactionSync(
         console.log(`✅ Step 1/6: Formatted ${transactions.length} transactions`);
 
         // Step 2: Match transaction splits to categories (in-memory)
-        const withCategories = await matchCategoriesToTransactions(transactions, userId);
-        console.log(`✅ Step 2/6: Matched categories for ${withCategories.length} transaction splits`);
+        const with_categories = await match_categories_to_transactions(transactions, userId);
+        console.log(`✅ Step 2/6: Matched categories for ${with_categories.length} transaction splits`);
 
         // Step 3: Match transaction splits to source periods (in-memory) - maps monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId
-        const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
-        console.log(`✅ Step 3/6: Matched ${withPeriods.length} transaction splits to source periods (monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId)`);
+        const with_periods = await match_transaction_splits_to_source_periods(with_categories);
+        console.log(`✅ Step 3/6: Matched ${with_periods.length} transaction splits to source periods (monthlyPeriodId, weeklyPeriodId, biWeeklyPeriodId)`);
 
         // Step 4: CENTRALIZED SPLIT ASSIGNMENT - Validate budgetIds, redistribute amounts, match to budgets
-        const assignmentResults = await assignTransactionSplitsBatch(withPeriods, userId);
-        const withBudgets = assignmentResults.map(r => r.transaction);
-        const totalModified = assignmentResults.filter(r => r.modified).length;
-        console.log(`✅ Step 4/6: Assigned budget IDs for ${withBudgets.length} transaction splits (${totalModified} validated/modified)`);
+        const assignment_results = await assign_transaction_splits_batch(with_periods, userId);
+        const with_budgets = assignment_results.map(r => r.transaction);
+        const total_modified = assignment_results.filter(r => r.modified).length;
+        console.log(`✅ Step 4/6: Assigned budget IDs for ${with_budgets.length} transaction splits (${total_modified} validated/modified)`);
 
         // Step 5: Match outflow IDs to splits (in-memory)
-        const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, userId);
-        console.log(`✅ Step 5/6: Matched outflow IDs for ${final.length} transaction splits (${outflowUpdates.length} outflow updates)`);
+        const { transactions: final, outflow_updates } = await match_transaction_splits_to_outflows(with_budgets, userId);
+        console.log(`✅ Step 5/6: Matched outflow IDs for ${final.length} transaction splits (${outflow_updates.length} outflow updates)`);
 
         // Step 6: Batch create transactions (single atomic operation)
-        const count = await batchCreateTransactions(final, outflowUpdates);
+        const count = await batch_create_transactions(final, outflow_updates);
         console.log(`✅ Step 6/6: Created ${count} transactions in Firebase`);
 
         addedCount += count;
@@ -454,31 +455,31 @@ async function processModifiedTransactions(
       }
 
       // Step 1: Format transactions
-      const formattedTransactions = await formatTransactions(
+      const formatted_transactions = await format_transactions(
         materialChanges,
         itemId,
         userId,
         undefined,
         currency
       );
-      console.log(`✅ Step 1/6: Formatted ${formattedTransactions.length} modified transactions`);
+      console.log(`✅ Step 1/6: Formatted ${formatted_transactions.length} modified transactions`);
 
       // Step 2: Match categories
-      const withCategories = await matchCategoriesToTransactions(formattedTransactions, userId);
-      console.log(`✅ Step 2/6: Matched categories for ${withCategories.length} transaction splits`);
+      const with_categories = await match_categories_to_transactions(formatted_transactions, userId);
+      console.log(`✅ Step 2/6: Matched categories for ${with_categories.length} transaction splits`);
 
       // Step 3: Match source periods (CRITICAL - re-match period IDs)
-      const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
-      console.log(`✅ Step 3/6: Re-matched source periods for ${withPeriods.length} transaction splits`);
+      const with_periods = await match_transaction_splits_to_source_periods(with_categories);
+      console.log(`✅ Step 3/6: Re-matched source periods for ${with_periods.length} transaction splits`);
 
       // Step 4: CENTRALIZED SPLIT ASSIGNMENT - Validate budgetIds, redistribute amounts, match to budgets
-      const assignmentResults = await assignTransactionSplitsBatch(withPeriods, userId);
-      const withBudgets = assignmentResults.map(r => r.transaction);
-      const totalModified = assignmentResults.filter(r => r.modified).length;
-      console.log(`✅ Step 4/6: Re-matched budgets for ${withBudgets.length} transaction splits (${totalModified} validated/modified)`);
+      const assignment_results = await assign_transaction_splits_batch(with_periods, userId);
+      const with_budgets = assignment_results.map(r => r.transaction);
+      const total_modified = assignment_results.filter(r => r.modified).length;
+      console.log(`✅ Step 4/6: Re-matched budgets for ${with_budgets.length} transaction splits (${total_modified} validated/modified)`);
 
       // Step 5: Match outflows
-      const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, userId);
+      const { transactions: final, outflow_updates } = await match_transaction_splits_to_outflows(with_budgets, userId);
       console.log(`✅ Step 5/6: Re-matched outflows for ${final.length} transaction splits`);
 
       // Step 6: Update existing transactions (not create new ones)
@@ -512,17 +513,22 @@ async function processModifiedTransactions(
       }
 
       // Apply outflow updates if any
-      if (outflowUpdates.length > 0) {
+      if (outflow_updates.length > 0) {
         const { FieldValue } = await import('firebase-admin/firestore');
-        for (const update of outflowUpdates) {
-          const periodRef = db.collection('outflow_periods').doc(update.periodId);
+        for (const update of outflow_updates) {
+          const periodRef = db.collection('outflow_periods').doc(update.period_id);
           await periodRef.update({
-            transactionSplits: FieldValue.arrayUnion(update.transactionSplitRef),
+            transactionSplits: FieldValue.arrayUnion({
+              transactionId: update.transaction_split_ref.transaction_id,
+              splitId: update.transaction_split_ref.split_id,
+              amount: update.transaction_split_ref.amount,
+              paymentDate: update.transaction_split_ref.payment_date,
+            }),
             status: 'paid',
             updatedAt: Timestamp.now()
           });
         }
-        console.log(`✅ Applied ${outflowUpdates.length} outflow period updates for modified transactions`);
+        console.log(`✅ Applied ${outflow_updates.length} outflow period updates for modified transactions`);
       }
     }
 

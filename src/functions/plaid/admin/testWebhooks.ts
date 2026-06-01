@@ -454,6 +454,146 @@ export const fireItemWebhook = onCall(
 /**
  * Get user's Plaid items for webhook testing
  */
+/**
+ * Reset item login to force ITEM_LOGIN_REQUIRED error state
+ * Uses Plaid's /sandbox/item/reset_login endpoint
+ */
+export const resetItemLogin = onCall(
+  {
+    memory: '256MiB',
+    timeoutSeconds: 30,
+    secrets: [plaidClientId, plaidSecret],
+  },
+  async (request) => {
+    try {
+      // Authenticate user
+      const authResult = await authenticateRequest(request, UserRole.VIEWER);
+      const userId = authResult.user.uid;
+
+      const { itemId } = request.data;
+
+      if (!itemId) {
+        throw new HttpsError('invalid-argument', 'itemId is required');
+      }
+
+      // Get the access token for this item
+      const itemDoc = await findPlaidItem(userId, itemId);
+
+      if (!itemDoc) {
+        throw new HttpsError('not-found', 'Plaid item not found');
+      }
+
+      const itemData = itemDoc.data();
+      if (!itemData) {
+        throw new HttpsError('not-found', 'Plaid item data not found');
+      }
+      const accessToken = itemData.accessToken;
+
+      // Call Plaid sandbox reset_login
+      const client = getPlaidClient();
+      const response = await client.sandboxItemResetLogin({
+        access_token: accessToken,
+      });
+
+      console.log(`Reset login for item ${itemId}:`, response.data);
+
+      // Update the item status in Firestore to reflect the error state
+      // This simulates what would happen when the error webhook arrives
+      await db.collection('plaid_items').doc(itemId).update({
+        status: 'reauth',
+        error: 'ITEM_LOGIN_REQUIRED',
+        errorMessage: 'The login credentials for this item have been reset. Please re-authenticate.',
+        errorAt: new Date(),
+        requiresReauth: true,
+      });
+
+      return {
+        success: true,
+        message: `Successfully reset login for item ${itemId}. Item now requires re-authentication.`,
+        reset_login: response.data.reset_login,
+        item_id: itemId
+      };
+
+    } catch (error: any) {
+      console.error('Error resetting item login:', error);
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      // Check if this is a Plaid API error
+      if (error.response?.data?.error_code) {
+        const plaidError = error.response.data;
+        throw new HttpsError('failed-precondition',
+          `Plaid API Error: ${plaidError.error_code} - ${plaidError.error_message}`);
+      }
+
+      throw new HttpsError('internal', error.message || 'Failed to reset item login');
+    }
+  }
+);
+
+/**
+ * Clear item error state (simulates LOGIN_REPAIRED webhook)
+ * Manually restores an item to healthy status for testing
+ */
+export const clearItemError = onCall(
+  {
+    memory: '256MiB',
+    timeoutSeconds: 30,
+  },
+  async (request) => {
+    try {
+      // Authenticate user
+      const authResult = await authenticateRequest(request, UserRole.VIEWER);
+      const userId = authResult.user.uid;
+
+      const { itemId } = request.data;
+
+      if (!itemId) {
+        throw new HttpsError('invalid-argument', 'itemId is required');
+      }
+
+      // Get the item to verify ownership
+      const itemDoc = await findPlaidItem(userId, itemId);
+
+      if (!itemDoc) {
+        throw new HttpsError('not-found', 'Plaid item not found');
+      }
+
+      // Clear the error state
+      await db.collection('plaid_items').doc(itemId).update({
+        status: 'healthy',
+        error: null,
+        errorMessage: null,
+        errorAt: null,
+        requiresReauth: false,
+        consentExpiresAt: null,
+      });
+
+      console.log(`Cleared error state for item ${itemId}`);
+
+      return {
+        success: true,
+        message: `Successfully cleared error state for item ${itemId}. Item is now healthy.`,
+        item_id: itemId
+      };
+
+    } catch (error: any) {
+      console.error('Error clearing item error:', error);
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError('internal', error.message || 'Failed to clear item error');
+    }
+  }
+);
+
+/**
+ * Get user's Plaid items for webhook testing
+ */
 export const getUserPlaidItems = onCall(
   {
     memory: '256MiB',

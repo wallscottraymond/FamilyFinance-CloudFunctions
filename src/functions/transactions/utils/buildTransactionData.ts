@@ -103,7 +103,8 @@ export async function buildTransactionData(
     const transaction: Omit<FamilyTransaction, "id" | "createdAt" | "updatedAt"> = {
       // === ROOT-LEVEL QUERY FIELDS ===
       transactionId: plaidTransaction.transaction_id,
-      ownerId: userId,
+      userId,  // For backward compatibility with queries
+      ownerId: userId,  // RBAC owner field
       groupId: groupId || null,
       transactionDate,
       accountId: plaidTransaction.account_id,

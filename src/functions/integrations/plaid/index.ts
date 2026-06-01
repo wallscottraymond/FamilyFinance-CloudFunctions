@@ -13,11 +13,14 @@ export {
   PlaidAccountData,
   PlaidAccountsResult,
   PlaidInstitutionInfo,
+  RemoveItemResult,
   fetch_plaid_accounts,
   fetch_plaid_balances,
   create_link_token,
   exchange_public_token,
   sync_transactions,
+  fetch_recurring_transactions,
+  remove_item,
 } from "./plaid_client";
 
 // Transformer exports
@@ -50,3 +53,24 @@ export {
   get_changed_fields,
   map_plaid_category_to_internal,
 } from "./plaid_transaction_transformer";
+
+// Legacy transaction transformer (for pipeline output conversion)
+export {
+  transform_legacy_to_persistence,
+} from "./legacy_transaction_transformer";
+
+// Recurring transaction transformer exports
+export {
+  // Types
+  AppFrequency,
+  RecurringStatus,
+  RecurringSource,
+  RecurringTransformContext,
+  InflowForPersistence,
+  OutflowForPersistence,
+  // Transform functions
+  map_plaid_frequency_to_app,
+  transform_inflow_streams,
+  transform_outflow_streams,
+  calculate_next_due_date,
+} from "./plaid_recurring_transformer";

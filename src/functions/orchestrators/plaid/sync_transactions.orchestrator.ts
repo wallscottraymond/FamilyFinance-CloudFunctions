@@ -31,6 +31,7 @@ import { resolve_transaction_sync_dependencies } from "../../resolvers/plaid";
 import {
   identify_pending_migrations,
   extract_removed_transaction_ids,
+  transform_legacy_to_persistence,
 } from "../../integrations/plaid";
 import { sync_transactions } from "../../integrations/plaid";
 import {
@@ -39,15 +40,17 @@ import {
   aggregate_transaction_sync_results,
   should_continue_sync,
 } from "../../domain/plaid";
-import { transaction_repo } from "../../repositories";
+import {
+  transaction_repo,
+  outflow_period_repo,
+} from "../../repositories";
 
-// Import existing pipeline utilities
-import { formatTransactions } from "../../transactions/utils/formatTransactions";
-import { matchCategoriesToTransactions } from "../../transactions/utils/matchCategoriesToTransactions";
-import { matchTransactionSplitsToSourcePeriods } from "../../transactions/utils/matchTransactionSplitsToSourcePeriods";
-import { assignTransactionSplitsBatch } from "../../transactions/utils/assignTransactionSplits";
-import { matchTransactionSplitsToOutflows } from "../../transactions/utils/matchTransactionSplitsToOutflows";
-import { batchCreateTransactions } from "../../transactions/utils/batchCreateTransactions";
+// Import pipeline utilities (snake_case versions)
+import { format_transactions } from "../../transactions/utils/format_transactions";
+import { match_categories_to_transactions } from "../../transactions/utils/match_categories_to_transactions";
+import { match_transaction_splits_to_source_periods } from "../../transactions/utils/match_transaction_splits_to_source_periods";
+import { assign_transaction_splits_batch } from "../../transactions/utils/assign_transaction_splits";
+import { match_transaction_splits_to_outflows } from "../../transactions/utils/match_transaction_splits_to_outflows";
 
 /**
  * Orchestrates the transaction synchronization flow.
@@ -133,12 +136,32 @@ export async function sync_transactions_orchestrator(
       `has_more=${plaid_response.has_more}`
     );
 
-    // 2b. PROCESS ADDED TRANSACTIONS
-    if (plaid_response.added.length > 0) {
+    // 2b. FILTER OUT TRANSACTIONS FOR HIDDEN ACCOUNTS
+    // Silently discard transactions for accounts that have been hidden/removed
+    const filter_for_active_accounts = (
+      transactions: import("plaid").Transaction[]
+    ): import("plaid").Transaction[] => {
+      const filtered = transactions.filter(
+        txn => deps.active_account_ids.has(txn.account_id)
+      );
+      const discarded = transactions.length - filtered.length;
+      if (discarded > 0) {
+        console.log(
+          `[${ctx.trace_id}] Discarded ${discarded} transactions for hidden accounts`
+        );
+      }
+      return filtered;
+    };
+
+    const active_added = filter_for_active_accounts(plaid_response.added);
+    const active_modified = filter_for_active_accounts(plaid_response.modified);
+
+    // 2c. PROCESS ADDED TRANSACTIONS (only for active accounts)
+    if (active_added.length > 0) {
       try {
         const page_result = await process_added_transactions(
           ctx,
-          plaid_response.added,
+          active_added,
           deps,
           errors
         );
@@ -151,12 +174,12 @@ export async function sync_transactions_orchestrator(
       }
     }
 
-    // 2c. PROCESS MODIFIED TRANSACTIONS
-    if (plaid_response.modified.length > 0) {
+    // 2d. PROCESS MODIFIED TRANSACTIONS (only for active accounts)
+    if (active_modified.length > 0) {
       try {
         const modified_result = await process_modified_transactions(
           ctx,
-          plaid_response.modified,
+          active_modified,
           deps
         );
         total_modified += modified_result.updated;
@@ -167,7 +190,7 @@ export async function sync_transactions_orchestrator(
       }
     }
 
-    // 2d. PROCESS REMOVED TRANSACTIONS
+    // 2e. PROCESS REMOVED TRANSACTIONS
     if (plaid_response.removed.length > 0) {
       try {
         const removed_ids = extract_removed_transaction_ids(plaid_response.removed);
@@ -186,7 +209,7 @@ export async function sync_transactions_orchestrator(
       }
     }
 
-    // 2e. UPDATE PAGINATION STATE
+    // 2f. UPDATE PAGINATION STATE
     has_more = plaid_response.has_more;
     next_cursor = plaid_response.next_cursor;
     current_cursor = plaid_response.next_cursor;
@@ -274,7 +297,7 @@ async function process_added_transactions(
   if (new_transactions.length > 0) {
     try {
       // Step 1: Format transactions (Plaid -> internal structure)
-      const formatted = await formatTransactions(
+      const formatted = await format_transactions(
         new_transactions,
         deps.plaid_item.plaid_item_id,
         ctx.user_id,
@@ -284,29 +307,52 @@ async function process_added_transactions(
       console.log(`[${ctx.trace_id}] Step 1/6: Formatted ${formatted.length} transactions`);
 
       // Step 2: Match categories
-      const with_categories = await matchCategoriesToTransactions(formatted, ctx.user_id);
+      const with_categories = await match_categories_to_transactions(formatted, ctx.user_id);
       console.log(`[${ctx.trace_id}] Step 2/6: Matched categories`);
 
       // Step 3: Match source periods
-      const with_periods = await matchTransactionSplitsToSourcePeriods(with_categories);
+      const with_periods = await match_transaction_splits_to_source_periods(with_categories);
       console.log(`[${ctx.trace_id}] Step 3/6: Matched source periods`);
 
       // Step 4: Assign budgets (centralized split assignment)
-      const assignment_results = await assignTransactionSplitsBatch(with_periods, ctx.user_id);
+      const assignment_results = await assign_transaction_splits_batch(with_periods, ctx.user_id);
       const with_budgets = assignment_results.map(r => r.transaction);
       console.log(`[${ctx.trace_id}] Step 4/6: Assigned budgets`);
 
       // Step 5: Match outflows
-      const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(
+      const { transactions: final, outflow_updates } = await match_transaction_splits_to_outflows(
         with_budgets,
         ctx.user_id
       );
-      console.log(`[${ctx.trace_id}] Step 5/6: Matched outflows (${outflowUpdates.length} updates)`);
+      console.log(`[${ctx.trace_id}] Step 5/6: Matched outflows (${outflow_updates.length} updates)`);
 
-      // Step 6: Batch create
-      const create_count = await batchCreateTransactions(final, outflowUpdates);
-      created = create_count;
-      console.log(`[${ctx.trace_id}] Step 6/6: Created ${create_count} transactions`);
+      // Step 6a: Transform legacy format to new persistence format
+      const transactions_for_persistence = transform_legacy_to_persistence(
+        final,
+        ctx.user_id,
+        deps.user_context.group_ids
+      );
+      console.log(`[${ctx.trace_id}] Step 6a: Transformed ${transactions_for_persistence.length} transactions to persistence format`);
+
+      // Step 6b: Upsert transactions via new repository
+      const upsert_result = await transaction_repo.upsert_from_plaid_sync(
+        create_child_span(ctx),
+        transactions_for_persistence,
+        ctx.user_id,
+        deps.plaid_item.plaid_item_id
+      );
+      console.log(`[${ctx.trace_id}] Step 6b: Upserted transactions (created=${upsert_result.created}, updated=${upsert_result.updated})`);
+
+      // Step 6c: Update outflow periods via new repository
+      if (outflow_updates.length > 0) {
+        await outflow_period_repo.update_with_transaction_splits(
+          create_child_span(ctx),
+          outflow_updates
+        );
+        console.log(`[${ctx.trace_id}] Step 6c: Updated ${outflow_updates.length} outflow periods`);
+      }
+
+      created = upsert_result.created;
 
     } catch (error) {
       const error_msg = error instanceof Error ? error.message : "Unknown error";
@@ -443,8 +489,8 @@ async function process_modified_transactions(
 
   if (plaid_transactions.length > 0) {
     try {
-      // Use the existing pipeline for updates
-      const formatted = await formatTransactions(
+      // Use the pipeline for updates
+      const formatted = await format_transactions(
         plaid_transactions,
         deps.plaid_item.plaid_item_id,
         ctx.user_id,
@@ -452,20 +498,40 @@ async function process_modified_transactions(
         deps.user_context.currency
       );
 
-      const with_categories = await matchCategoriesToTransactions(formatted, ctx.user_id);
-      const with_periods = await matchTransactionSplitsToSourcePeriods(with_categories);
-      const assignment_results = await assignTransactionSplitsBatch(with_periods, ctx.user_id);
+      const with_categories = await match_categories_to_transactions(formatted, ctx.user_id);
+      const with_periods = await match_transaction_splits_to_source_periods(with_categories);
+      const assignment_results = await assign_transaction_splits_batch(with_periods, ctx.user_id);
       const with_budgets = assignment_results.map(r => r.transaction);
-      const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(
+      const { transactions: final, outflow_updates } = await match_transaction_splits_to_outflows(
         with_budgets,
         ctx.user_id
       );
 
-      // The batchCreateTransactions utility handles upserts
-      const update_count = await batchCreateTransactions(final, outflowUpdates);
-      updated = update_count;
+      // Transform to new persistence format
+      const transactions_for_persistence = transform_legacy_to_persistence(
+        final,
+        ctx.user_id,
+        deps.user_context.group_ids
+      );
 
-      console.log(`[${ctx.trace_id}] Updated ${update_count} modified transactions`);
+      // Upsert via new repository
+      const upsert_result = await transaction_repo.upsert_from_plaid_sync(
+        create_child_span(ctx),
+        transactions_for_persistence,
+        ctx.user_id,
+        deps.plaid_item.plaid_item_id
+      );
+
+      // Update outflow periods
+      if (outflow_updates.length > 0) {
+        await outflow_period_repo.update_with_transaction_splits(
+          create_child_span(ctx),
+          outflow_updates
+        );
+      }
+
+      updated = upsert_result.updated;
+      console.log(`[${ctx.trace_id}] Updated ${upsert_result.updated} modified transactions`);
 
     } catch (error) {
       const error_msg = error instanceof Error ? error.message : "Unknown error";

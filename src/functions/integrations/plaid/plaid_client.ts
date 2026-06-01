@@ -16,6 +16,7 @@ import {
   LinkTokenCreateResponse,
   ItemPublicTokenExchangeResponse,
   TransactionsSyncResponse,
+  TransactionsRecurringGetResponse,
   Products,
   CountryCode,
   DepositoryAccountSubtype,
@@ -348,4 +349,131 @@ export async function sync_transactions(
 
     return response.data; // Return RAW SDK type
   });
+}
+
+/**
+ * Fetches recurring transactions from Plaid.
+ *
+ * Returns the RAW Plaid SDK response (TransactionsRecurringGetResponse).
+ * The response includes:
+ * - inflow_streams: Recurring income (positive amounts)
+ * - outflow_streams: Recurring expenses (negative amounts)
+ * - updated_datetime: When Plaid last updated this data
+ * - request_id: Plaid request ID for debugging
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param account_ids - Optional specific account IDs to fetch recurring for
+ * @returns Raw Plaid TransactionsRecurringGetResponse
+ */
+export async function fetch_recurring_transactions(
+  access_token: string,
+  account_ids?: string[]
+): Promise<TransactionsRecurringGetResponse> {
+  const client = create_plaid_client();
+
+  return with_retry(async () => {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const response = await client.transactionsRecurringGet({
+      access_token,
+      account_ids: account_ids?.length ? account_ids : undefined,
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+
+    return response.data; // Return RAW SDK type
+  });
+}
+
+/**
+ * Result of removing a Plaid item.
+ */
+export interface RemoveItemResult {
+  /** Whether the removal was successful */
+  success: boolean;
+
+  /** Plaid request ID for debugging */
+  request_id: string;
+
+  /** Whether the item was already removed (idempotent case) */
+  already_removed: boolean;
+}
+
+/**
+ * Removes a Plaid item (disconnects the institution link).
+ *
+ * This removes the ENTIRE item, which includes ALL accounts linked
+ * to that institution. There is no Plaid API to remove a single account.
+ *
+ * After calling this:
+ * - The access_token becomes invalid
+ * - No more webhooks will be sent for this item
+ * - All accounts under this item should be soft-deleted locally
+ *
+ * This operation is idempotent - if the item is already removed,
+ * returns success with already_removed=true.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @returns Result indicating success/failure
+ */
+export async function remove_item(
+  access_token: string
+): Promise<RemoveItemResult> {
+  const client = create_plaid_client();
+
+  try {
+    const response = await with_retry(async () => {
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const result = await client.itemRemove({
+        access_token,
+      });
+      /* eslint-enable @typescript-eslint/naming-convention */
+
+      return result.data;
+    });
+
+    return {
+      success: true,
+      request_id: response.request_id,
+      already_removed: false,
+    };
+  } catch (error) {
+    // Handle "item not found" gracefully - it may already be removed
+    const plaid_error = error as {
+      response?: {
+        data?: {
+          error_code?: string;
+          request_id?: string;
+        };
+      };
+    };
+
+    const error_code = plaid_error.response?.data?.error_code;
+    const request_id = plaid_error.response?.data?.request_id || "unknown";
+
+    // ITEM_NOT_FOUND means it's already been removed - treat as success
+    if (error_code === "ITEM_NOT_FOUND") {
+      console.log(
+        `[plaid_client.remove_item] Item already removed (ITEM_NOT_FOUND), treating as success`
+      );
+      return {
+        success: true,
+        request_id,
+        already_removed: true,
+      };
+    }
+
+    // INVALID_ACCESS_TOKEN can also mean the item was removed
+    if (error_code === "INVALID_ACCESS_TOKEN") {
+      console.log(
+        `[plaid_client.remove_item] Invalid access token, item may already be removed`
+      );
+      return {
+        success: true,
+        request_id,
+        already_removed: true,
+      };
+    }
+
+    // Re-throw other errors
+    throw error;
+  }
 }

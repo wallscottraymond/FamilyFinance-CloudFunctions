@@ -1692,7 +1692,7 @@ outflows/
 
 **Purpose:** This section provides visual flow diagrams showing how data moves through the system and how functions interact.
 
-### Outflow Creation Flow
+### Outflow Creation Flow (5-Layer Architecture)
 
 ```
 User Action: Create Manual Bill
@@ -1701,25 +1701,75 @@ createManualOutflow (Callable)
     ↓
 Write to /outflows/{outflowId}
     ↓
-[TRIGGER] onOutflowCreated
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. ENTRY LAYER                                                  │
+│    [TRIGGER] on_outflow_created (entry/triggers/)               │
+│    - Validates outflow data exists                              │
+│    - Guards: inactive outflows skipped                          │
+│    - Extracts user_id (ownerId or userId)                       │
+│    - Creates trace context with idempotency key                 │
+└─────────────────────────────────────────────────────────────────┘
     ↓
-createOutflowPeriodsFromSource()
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. ORCHESTRATOR LAYER                                           │
+│    generate_outflow_periods_orchestrator (orchestrators/outflows/)│
+│    - Creates performance budget tracking                        │
+│    - Coordinates all layer calls in sequence                    │
+│    - Handles errors and logging                                 │
+└─────────────────────────────────────────────────────────────────┘
     ↓
-Query source_periods (3 months)
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. RESOLVER LAYER                                               │
+│    resolve_outflow_period_dependencies_from_doc (resolvers/outflows/)│
+│    - Maps camelCase Firestore doc → snake_case domain format    │
+│    - Queries source_periods collection (15 months forward)      │
+│    - Returns: { outflow, source_periods, dependency_result }    │
+│    - NO business logic validation (that's domain layer)         │
+└─────────────────────────────────────────────────────────────────┘
     ↓
-For each source period:
-    calculateAllOccurrencesInPeriod()
-        ↓
-    Generate OutflowOccurrence[]
-        ↓
-    Build period document with occurrences
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. DOMAIN LAYER (PURE - no I/O)                                 │
+│    compute_outflow_periods (domain/outflows/)                   │
+│    - Calculates payment cycles for each source period           │
+│    - Determines occurrences per period                          │
+│    - Computes withholding amounts and daily rates               │
+│    - Returns: DomainResult<OutflowPeriodForPersistence[]>       │
+│                                                                 │
+│    validate_outflow_periods (domain/outflows/)                  │
+│    - Validates business rules (is_active, required fields)      │
+│    - Returns: DomainResult with validation_errors if invalid    │
+└─────────────────────────────────────────────────────────────────┘
     ↓
-Batch write to /outflow_periods/
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. REPOSITORY LAYER                                             │
+│    outflow_period_repo.save_batch (repositories/)               │
+│    - Maps snake_case → camelCase for Firestore                  │
+│    - Batch writes in chunks of 500                              │
+│    - Creates audit entries for each period                      │
+│    - Returns: BatchWriteResult                                  │
+└─────────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 6. POST-PROCESSING (back in Orchestrator)                       │
+│    batchUpdateUserPeriodSummariesFromOutflowPeriods()           │
+│    - Updates user_summaries with new outflow counts             │
+│    - Ensures frontend sees updated data                         │
+└─────────────────────────────────────────────────────────────────┘
     ↓
 [TRIGGER] onOutflowPeriodCreate (for each period)
     ↓
-(Future: Summary creation)
+Summary updates via centralized triggers
 ```
+
+#### Layer Files Reference
+
+| Layer | File | Function |
+|-------|------|----------|
+| Entry | `entry/triggers/on_outflow_created.trigger.ts` | `on_outflow_created` |
+| Orchestrator | `orchestrators/outflows/generate_outflow_periods.orchestrator.ts` | `generate_outflow_periods_orchestrator` |
+| Resolver | `resolvers/outflows/outflow_period.resolver.ts` | `resolve_outflow_period_dependencies_from_doc` |
+| Domain | `domain/outflows/outflow_period.service.ts` | `compute_outflow_periods`, `validate_outflow_periods` |
+| Repository | `repositories/outflow_period.repo.ts` | `outflow_period_repo.save_batch` |
 
 ### Payment Assignment Flow
 

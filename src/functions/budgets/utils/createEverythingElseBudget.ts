@@ -9,7 +9,7 @@
  * - Cannot be deleted by users
  * - Amount is always $0 (calculated from spending)
  * - Name is editable, but other fields are not
- * - Lowest priority in transaction matching (fallback)
+ * - Owns ALL categories by default (transferred away when regular budgets are created)
  *
  * @module budgets/utils/createEverythingElseBudget
  */
@@ -17,6 +17,7 @@
 import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { Budget } from '../../../types';
 import { buildAccessControl } from '../../../utils/documentStructure';
+import { getActiveCategories } from './categoryOwnership';
 
 /**
  * Creates the "everything else" system budget for a user
@@ -42,7 +43,7 @@ import { buildAccessControl } from '../../../utils/documentStructure';
  * // - isSystemEverythingElse: true
  * // - name: 'Everything Else'
  * // - amount: 0
- * // - categoryIds: [] (catches all categories)
+ * // - categoryIds: [ALL_ACTIVE_CATEGORY_IDS]
  * ```
  */
 export async function createEverythingElseBudget(
@@ -73,8 +74,7 @@ export async function createEverythingElseBudget(
 
     if (!existingBudgetQuery.empty) {
       const existingBudget = existingBudgetQuery.docs[0];
-      console.log(`✅ Use
-      r ${userId} already has "everything else" budget: ${existingBudget.id}`);
+      console.log(`✅ User ${userId} already has "everything else" budget: ${existingBudget.id}`);
       return existingBudget.id;
     }
   } catch (error) {
@@ -87,6 +87,11 @@ export async function createEverythingElseBudget(
   const now = Timestamp.now();
   const groupIds: string[] = []; // Personal budget (not shared)
 
+  // Fetch all active categories - Everything Else owns ALL categories by default
+  const allCategories = await getActiveCategories();
+  const allCategoryIds = allCategories.map(c => c.id);
+  console.log(`📋 Populating "Everything Else" with ${allCategoryIds.length} categories`);
+
   const budgetData: Partial<Budget> = {
     // === ROOT-LEVEL QUERY FIELDS ===
     userId,
@@ -94,6 +99,11 @@ export async function createEverythingElseBudget(
     isActive: true,
     createdAt: now,
     updatedAt: now,
+
+    // === RBAC FIELDS (must match createBudget.ts structure) ===
+    createdBy: userId,
+    ownerId: userId,
+    isPrivate: true,
 
     // === NESTED ACCESS CONTROL ===
     access: buildAccessControl(userId, userId, groupIds),
@@ -105,7 +115,7 @@ export async function createEverythingElseBudget(
     name: 'Everything Else',
     amount: 0, // Always zero - calculated from spending
     currency: userCurrency,
-    categoryIds: [], // Empty = catches all categories
+    categoryIds: allCategoryIds, // Owns ALL categories by default
     period: 'monthly' as any, // Monthly tracking periods
     startDate: now,
     endDate: now, // Legacy field for compatibility

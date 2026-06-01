@@ -1,135 +1,37 @@
-import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
-import { getFirestore } from "firebase-admin/firestore";
+/**
+ * Budget Period Summary Triggers
+ *
+ * Triggers that update user_summaries when budget_periods change.
+ * Uses the 5-layer architecture orchestrator for proper summary updates.
+ *
+ * IMPORTANT: The CREATE trigger has been REMOVED to prevent race conditions.
+ * When budget_periods are created in batch (e.g., new budget generates ~78 periods),
+ * the orchestrator or batch operation should handle summary updates AFTER all periods are saved.
+ *
+ * The UPDATE and DELETE triggers remain to handle individual period changes.
+ *
+ * @module summaries/triggers/budgetPeriodSummaryTriggers
+ */
+
+import { onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { BudgetPeriodDocument } from "../../../types";
-import { updateUserPeriodSummary } from "../orchestration/updateUserPeriodSummary";
-
-const db = getFirestore();
-
-// Debounce interval in milliseconds (5 seconds)
-const SUMMARY_UPDATE_DEBOUNCE_MS = 5000;
-
-/**
- * Check if a user_summary document was recently updated
- *
- * This prevents cascading trigger storms when multiple budget_periods
- * are created/updated rapidly (e.g., when a budget is created, it generates
- * ~78 budget_period documents, which would trigger 78 summary updates).
- *
- * IMPORTANT: The summaryId format must match calculateUserPeriodSummary.ts
- * Format: {userId}_{periodType}_{sourcePeriodId}
- * Where periodType is always lowercase (e.g., "monthly", "weekly", "bi_monthly")
- *
- * @param userId - User ID
- * @param periodType - Period type (MONTHLY, BI_MONTHLY, WEEKLY)
- * @param sourcePeriodId - Source period ID
- * @returns true if summary was recently updated (within debounce window)
- */
-async function wasRecentlyUpdated(
-  userId: string,
-  periodType: string,
-  sourcePeriodId: string
-): Promise<boolean> {
-  try {
-    // IMPORTANT: Must match the ID format in calculateUserPeriodSummary.ts
-    // periodType should already be lowercase from source_periods, but normalize just in case
-    const normalizedPeriodType = periodType.toLowerCase();
-    const summaryId = `${userId}_${normalizedPeriodType}_${sourcePeriodId}`;
-    const summaryRef = db.collection("user_summaries").doc(summaryId);
-    const summarySnap = await summaryRef.get();
-
-    if (!summarySnap.exists) {
-      // Document doesn't exist yet, so it wasn't recently updated
-      return false;
-    }
-
-    const summaryData = summarySnap.data();
-    const lastRecalculated = summaryData?.lastRecalculated;
-
-    if (!lastRecalculated) {
-      // No lastRecalculated timestamp, allow update
-      return false;
-    }
-
-    const timeSinceLastUpdate = Date.now() - lastRecalculated.toMillis();
-
-    if (timeSinceLastUpdate < SUMMARY_UPDATE_DEBOUNCE_MS) {
-      console.log(
-        `[Debounce] Summary ${summaryId} was updated ${timeSinceLastUpdate}ms ago, skipping recalculation`
-      );
-      return true;
-    }
-
-    return false;
-  } catch (error) {
-    console.error("[Debounce] Error checking recent update:", error);
-    // On error, allow the update to proceed
-    return false;
-  }
-}
+import {
+  is_processed,
+  mark_processed,
+} from "../../repositories/infrastructure/trigger_processing.repository";
+import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import { v4 as uuid } from "uuid";
 
 /**
- * Trigger: Update user period summary when a budget period is created
+ * NOTE: on_budget_period_created_period_summary has been REMOVED.
  *
- * When a new budget_period is created, this trigger recalculates the
- * user period summary for the corresponding period.
+ * Previously, this trigger fired for each budget_period created, which caused
+ * race conditions when many periods were created at once (batch budget creation).
  *
- * Includes debounce logic to prevent rapid-fire updates during bulk operations.
+ * The summary update for new periods should be handled by:
+ * - The budget creation orchestrator calling enqueue_user_summary_updates_from_budget_periods()
+ * - This happens AFTER all periods are saved, ensuring complete data
  */
-export const onBudgetPeriodCreatedPeriodSummary = onDocumentCreated(
-  "budget_periods/{budgetPeriodId}",
-  async (event) => {
-    const budgetPeriod = event.data?.data() as BudgetPeriodDocument;
-
-    if (!budgetPeriod) {
-      console.error("[onBudgetPeriodCreatedSummary] No budget period data");
-      return;
-    }
-
-    console.log(
-      `[onBudgetPeriodCreatedPeriodSummary] Budget period created: ${budgetPeriod.id}`
-    );
-
-    // Check if userId exists
-    if (!budgetPeriod.userId) {
-      console.error("[onBudgetPeriodCreatedPeriodSummary] No userId found in budget period");
-      return;
-    }
-
-    try {
-      // Check if summary was recently updated (debounce)
-      const recentlyUpdated = await wasRecentlyUpdated(
-        budgetPeriod.userId,
-        String(budgetPeriod.periodType),
-        budgetPeriod.sourcePeriodId
-      );
-
-      if (recentlyUpdated) {
-        console.log(
-          `[onBudgetPeriodCreatedPeriodSummary] Skipping update due to recent recalculation`
-        );
-        return;
-      }
-
-      // Update the user period summary for this period
-      await updateUserPeriodSummary(
-        budgetPeriod.userId,
-        String(budgetPeriod.periodType), // Convert enum to string
-        budgetPeriod.sourcePeriodId,
-        false // Don't include detailed entries in triggers
-      );
-
-      console.log(
-        `[onBudgetPeriodCreatedSummary] Successfully updated summary for period: ${budgetPeriod.sourcePeriodId}`
-      );
-    } catch (error) {
-      console.error(
-        `[onBudgetPeriodCreatedSummary] Error updating summary:`,
-        error
-      );
-      // Don't throw - we don't want to fail the budget period creation
-    }
-  }
-);
 
 /**
  * Trigger: Update user period summary when a budget period is updated
@@ -137,60 +39,92 @@ export const onBudgetPeriodCreatedPeriodSummary = onDocumentCreated(
  * When a budget_period is updated, this trigger recalculates the
  * user period summary for the corresponding period.
  *
- * Includes debounce logic to prevent rapid-fire updates during bulk operations.
+ * Uses the 5-layer architecture orchestrator for proper updates.
+ * Includes idempotency guard and debounce logic.
  */
-export const onBudgetPeriodUpdatedPeriodSummary = onDocumentUpdated(
-  "budget_periods/{budgetPeriodId}",
+export const on_budget_period_updated_period_summary = onDocumentUpdated(
+  {
+    document: "budget_periods/{budgetPeriodId}",
+    region: "us-central1",
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
   async (event) => {
-    const budgetPeriod = event.data?.after.data() as BudgetPeriodDocument;
+    const doc_id = event.params.budgetPeriodId;
 
-    if (!budgetPeriod) {
-      console.error("[onBudgetPeriodUpdatedSummary] No budget period data");
-      return;
-    }
+    // Create trace context early for idempotency check
+    const trace_id = uuid();
+    const span_id = uuid();
+    const trace_ctx = { trace_id, span_id };
 
-    console.log(
-      `[onBudgetPeriodUpdatedPeriodSummary] Budget period updated: ${budgetPeriod.id}`
-    );
+    // 1. IDEMPOTENCY GUARD - Check if this exact event was already processed
+    const idempotency_key = `budget_period_updated_summary:${doc_id}:${event.id}`;
+    const already_processed = await is_processed(trace_ctx, idempotency_key);
 
-    // Check if userId exists
-    if (!budgetPeriod.userId) {
-      console.error("[onBudgetPeriodUpdatedPeriodSummary] No userId found in budget period");
+    if (already_processed) {
+      console.log(
+        `[on_budget_period_updated_period_summary] Skipping duplicate event: ${idempotency_key}`
+      );
       return;
     }
 
     try {
-      // Check if summary was recently updated (debounce)
-      const recentlyUpdated = await wasRecentlyUpdated(
-        budgetPeriod.userId,
-        String(budgetPeriod.periodType),
-        budgetPeriod.sourcePeriodId
-      );
+      const budget_period = event.data?.after.data() as BudgetPeriodDocument;
 
-      if (recentlyUpdated) {
-        console.log(
-          `[onBudgetPeriodUpdatedPeriodSummary] Skipping update due to recent recalculation`
+      if (!budget_period) {
+        console.error("[on_budget_period_updated_period_summary] No budget period data");
+        return;
+      }
+
+      // Guard: Skip if userId is missing
+      if (!budget_period.userId) {
+        console.error(
+          `[on_budget_period_updated_period_summary] CRITICAL: userId is missing! Document: ${doc_id}`
         );
         return;
       }
 
-      // Update the user period summary for this period
-      await updateUserPeriodSummary(
-        budgetPeriod.userId,
-        String(budgetPeriod.periodType), // Convert enum to string
-        budgetPeriod.sourcePeriodId,
-        false // Don't include detailed entries in triggers
+      // Build summary ID for deduplication
+      const normalized_period_type = String(budget_period.periodType).toLowerCase();
+      const summary_id = `${budget_period.userId}_${normalized_period_type}_${budget_period.sourcePeriodId}`;
+
+      console.log("[on_budget_period_updated_period_summary] Enqueueing user summary update job");
+      console.log(`  - Document: ${doc_id}`);
+      console.log(`  - Summary ID: ${summary_id}`);
+
+      // 2. ENQUEUE JOB (with deduplication)
+      // The job queue will serialize updates and prevent race conditions
+      const job = await create_job_if_not_exists(
+        "update_user_summary",
+        {
+          user_id: budget_period.userId,
+          period_type: String(budget_period.periodType),
+          source_period_id: budget_period.sourcePeriodId,
+          deduplication_key: summary_id,
+        },
+        {
+          trace_id,
+          // No delay - job is processed immediately by on_job_created trigger
+          // Deduplication prevents duplicates while a job is active
+        }
       );
 
-      console.log(
-        `[onBudgetPeriodUpdatedSummary] Successfully updated summary for period: ${budgetPeriod.sourcePeriodId}`
-      );
+      if (job) {
+        console.log(
+          `[on_budget_period_updated_period_summary] Enqueued job ${job.job_id} for summary ${summary_id}`
+        );
+      } else {
+        console.log(
+          `[on_budget_period_updated_period_summary] Job already pending for summary ${summary_id}`
+        );
+      }
+
+      // 3. MARK AS PROCESSED
+      await mark_processed(trace_ctx, idempotency_key, doc_id, event.id);
     } catch (error) {
-      console.error(
-        `[onBudgetPeriodUpdatedSummary] Error updating summary:`,
-        error
-      );
-      // Don't throw - we don't want to fail the budget period update
+      console.error("[on_budget_period_updated_period_summary] Error enqueueing job:", error);
+      // Don't throw - summary updates should not break period updates
+      // Don't mark as processed - allow retry on error
     }
   }
 );
@@ -201,60 +135,92 @@ export const onBudgetPeriodUpdatedPeriodSummary = onDocumentUpdated(
  * When a budget_period is deleted, this trigger recalculates the
  * user period summary for the corresponding period.
  *
- * Includes debounce logic to prevent rapid-fire updates during bulk operations.
+ * Uses the 5-layer architecture orchestrator for proper updates.
+ * Includes idempotency guard and debounce logic.
  */
-export const onBudgetPeriodDeletedPeriodSummary = onDocumentDeleted(
-  "budget_periods/{budgetPeriodId}",
+export const on_budget_period_deleted_period_summary = onDocumentDeleted(
+  {
+    document: "budget_periods/{budgetPeriodId}",
+    region: "us-central1",
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
   async (event) => {
-    const budgetPeriod = event.data?.data() as BudgetPeriodDocument;
+    const doc_id = event.params.budgetPeriodId;
 
-    if (!budgetPeriod) {
-      console.error("[onBudgetPeriodDeletedSummary] No budget period data");
-      return;
-    }
+    // Create trace context early for idempotency check
+    const trace_id = uuid();
+    const span_id = uuid();
+    const trace_ctx = { trace_id, span_id };
 
-    console.log(
-      `[onBudgetPeriodDeletedPeriodSummary] Budget period deleted: ${budgetPeriod.id}`
-    );
+    // 1. IDEMPOTENCY GUARD - Check if this exact event was already processed
+    const idempotency_key = `budget_period_deleted_summary:${doc_id}:${event.id}`;
+    const already_processed = await is_processed(trace_ctx, idempotency_key);
 
-    // Check if userId exists
-    if (!budgetPeriod.userId) {
-      console.error("[onBudgetPeriodDeletedPeriodSummary] No userId found in budget period");
+    if (already_processed) {
+      console.log(
+        `[on_budget_period_deleted_period_summary] Skipping duplicate event: ${idempotency_key}`
+      );
       return;
     }
 
     try {
-      // Check if summary was recently updated (debounce)
-      const recentlyUpdated = await wasRecentlyUpdated(
-        budgetPeriod.userId,
-        String(budgetPeriod.periodType),
-        budgetPeriod.sourcePeriodId
-      );
+      const budget_period = event.data?.data() as BudgetPeriodDocument;
 
-      if (recentlyUpdated) {
-        console.log(
-          `[onBudgetPeriodDeletedPeriodSummary] Skipping update due to recent recalculation`
+      if (!budget_period) {
+        console.error("[on_budget_period_deleted_period_summary] No budget period data");
+        return;
+      }
+
+      // Guard: Skip if userId is missing
+      if (!budget_period.userId) {
+        console.error(
+          `[on_budget_period_deleted_period_summary] CRITICAL: userId is missing! Document: ${doc_id}`
         );
         return;
       }
 
-      // Update the user period summary for this period
-      await updateUserPeriodSummary(
-        budgetPeriod.userId,
-        String(budgetPeriod.periodType), // Convert enum to string
-        budgetPeriod.sourcePeriodId,
-        false // Don't include detailed entries in triggers
+      // Build summary ID for deduplication
+      const normalized_period_type = String(budget_period.periodType).toLowerCase();
+      const summary_id = `${budget_period.userId}_${normalized_period_type}_${budget_period.sourcePeriodId}`;
+
+      console.log("[on_budget_period_deleted_period_summary] Enqueueing user summary update job after deletion");
+      console.log(`  - Document: ${doc_id}`);
+      console.log(`  - Summary ID: ${summary_id}`);
+
+      // 2. ENQUEUE JOB (with deduplication)
+      // The job queue will serialize updates and prevent race conditions
+      const job = await create_job_if_not_exists(
+        "update_user_summary",
+        {
+          user_id: budget_period.userId,
+          period_type: String(budget_period.periodType),
+          source_period_id: budget_period.sourcePeriodId,
+          deduplication_key: summary_id,
+        },
+        {
+          trace_id,
+          // No delay - job is processed immediately by on_job_created trigger
+          // Deduplication prevents duplicates while a job is active
+        }
       );
 
-      console.log(
-        `[onBudgetPeriodDeletedSummary] Successfully updated summary for period: ${budgetPeriod.sourcePeriodId}`
-      );
+      if (job) {
+        console.log(
+          `[on_budget_period_deleted_period_summary] Enqueued job ${job.job_id} for summary ${summary_id}`
+        );
+      } else {
+        console.log(
+          `[on_budget_period_deleted_period_summary] Job already pending for summary ${summary_id}`
+        );
+      }
+
+      // 3. MARK AS PROCESSED
+      await mark_processed(trace_ctx, idempotency_key, doc_id, event.id);
     } catch (error) {
-      console.error(
-        `[onBudgetPeriodDeletedSummary] Error updating summary:`,
-        error
-      );
-      // Don't throw - we don't want to fail the budget period deletion
+      console.error("[on_budget_period_deleted_period_summary] Error enqueueing job:", error);
+      // Don't throw - summary updates should not break period deletion
+      // Don't mark as processed - allow retry on error
     }
   }
 );

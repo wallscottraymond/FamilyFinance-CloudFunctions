@@ -4,13 +4,14 @@
  * Matches transaction splits to budgets based on date range AND category.
  * Operates in-memory on transaction arrays (no DB writes).
  *
- * Matching Priority:
- * 1. Regular budgets: Must match BOTH date range AND category
- * 2. "Everything Else" budget: Fallback for unmatched transactions
- * 3. Unassigned: Only if no "Everything Else" budget exists
+ * Matching Logic:
+ * - ALL budgets (including "Everything Else") match by date range AND category
+ * - "Everything Else" budget owns all unassigned categories, so it will naturally
+ *   match transactions that don't match any other budget's categories
+ * - First matching budget wins (no priority ordering)
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { db } from '../../../index';
 import { Transaction as FamilyTransaction, TransactionSplit } from '../../../types';
 
@@ -32,19 +33,13 @@ interface BudgetMatch {
  *
  * @param split - Transaction split with category information
  * @param budget - Budget with categoryIds array
- * @returns true if category matches or budget accepts all categories
+ * @returns true if category matches
  */
 function doesCategoryMatch(
   split: Pick<TransactionSplit, 'plaidPrimaryCategory' | 'internalPrimaryCategory'>,
-  budget: Pick<BudgetMatch, 'categoryIds' | 'isSystemEverythingElse'>
+  budget: Pick<BudgetMatch, 'categoryIds'>
 ): boolean {
-  // "Everything Else" budget accepts all categories
-  if (budget.isSystemEverythingElse) {
-    return true;
-  }
-
-  // Regular budget with no categories configured = no match
-  // (User hasn't set up category filtering for this budget)
+  // Budget with no categories configured = no match
   if (!budget.categoryIds || budget.categoryIds.length === 0) {
     return false;
   }
@@ -52,7 +47,7 @@ function doesCategoryMatch(
   // Determine which category to match against (prioritize user override)
   const categoryToMatch = split.internalPrimaryCategory || split.plaidPrimaryCategory;
 
-  // No category available on transaction - no match to category-specific budget
+  // No category available on transaction - no match
   if (!categoryToMatch) {
     return false;
   }
@@ -83,20 +78,31 @@ export async function matchTransactionSplitsToBudgets(
 
   try {
     // Query all active budgets for the user
-    const budgetsSnapshot = await db.collection('budgets')
-      .where('createdBy', '==', userId)
-      .where('isActive', '==', true)
-      .get();
+    // Try both 'createdBy' (new RBAC field) and 'userId' (legacy field) for backward compatibility
+    const [createdBySnapshot, userIdSnapshot] = await Promise.all([
+      db.collection('budgets')
+        .where('createdBy', '==', userId)
+        .where('isActive', '==', true)
+        .get(),
+      db.collection('budgets')
+        .where('userId', '==', userId)
+        .where('isActive', '==', true)
+        .get()
+    ]);
 
-    console.log(`💰 [matchTransactionSplitsToBudgets] Found ${budgetsSnapshot.size} active budgets for user`);
+    // Merge results, deduplicating by document ID
+    const budgetDocs = new Map<string, QueryDocumentSnapshot>();
+    createdBySnapshot.docs.forEach(doc => budgetDocs.set(doc.id, doc));
+    userIdSnapshot.docs.forEach(doc => budgetDocs.set(doc.id, doc));
 
-    // Separate "everything else" system budget from regular budgets
-    const regularBudgets: BudgetMatch[] = [];
-    let everythingElseBudget: BudgetMatch | null = null;
+    console.log(`💰 [matchTransactionSplitsToBudgets] Found ${budgetDocs.size} active budgets for user`);
 
-    budgetsSnapshot.docs.forEach(doc => {
+    // Build budget list - all budgets treated equally
+    const budgets: BudgetMatch[] = [];
+
+    budgetDocs.forEach((doc) => {
       const budgetData = doc.data();
-      const budget: BudgetMatch = {
+      budgets.push({
         id: doc.id,
         name: budgetData.name || 'General',
         startDate: budgetData.startDate ? (budgetData.startDate as Timestamp).toMillis() : null,
@@ -104,23 +110,15 @@ export async function matchTransactionSplitsToBudgets(
         isOngoing: budgetData.isOngoing !== false, // Default to ongoing if not specified
         categoryIds: budgetData.categoryIds || [],
         isSystemEverythingElse: budgetData.isSystemEverythingElse === true
-      };
-
-      // Separate system "everything else" budget from regular budgets
-      if (budget.isSystemEverythingElse) {
-        everythingElseBudget = budget;
-      } else {
-        regularBudgets.push(budget);
-      }
+      });
     });
 
-    console.log(`💰 [matchTransactionSplitsToBudgets] Regular budgets: ${regularBudgets.length}, Everything else budget: ${everythingElseBudget ? 'Yes' : 'No'}`);
-
-    // Log category info for regular budgets (for debugging)
-    if (regularBudgets.length > 0) {
-      console.log(`💰 [matchTransactionSplitsToBudgets] Budget categories:`, regularBudgets.map(b => ({
+    // Log budget info for debugging
+    if (budgets.length > 0) {
+      console.log(`💰 [matchTransactionSplitsToBudgets] Budget categories:`, budgets.map(b => ({
         name: b.name,
-        categoryIds: b.categoryIds
+        categoryCount: b.categoryIds.length,
+        isEverythingElse: b.isSystemEverythingElse
       })));
     }
 
@@ -135,10 +133,10 @@ export async function matchTransactionSplitsToBudgets(
 
       // Process EACH SPLIT independently (each split can have different category)
       transaction.splits = transaction.splits.map(split => {
-        // Step 1: Try regular budgets first (DATE + CATEGORY matching)
         let matchedBudget: BudgetMatch | null = null;
 
-        for (const budget of regularBudgets) {
+        // Find first budget that matches BOTH date range AND category
+        for (const budget of budgets) {
           if (!budget.startDate) continue;
 
           // Date range check
@@ -152,37 +150,24 @@ export async function matchTransactionSplitsToBudgets(
           // Skip if date doesn't match
           if (!isWithinDateRange) continue;
 
-          // Category check
+          // Category check - ALL budgets match by category now
           const categoryMatches = doesCategoryMatch(split, budget);
 
-          // BOTH date AND category must match for regular budgets
+          // BOTH date AND category must match
           if (categoryMatches) {
             matchedBudget = budget;
-            console.log(`💰 [matchTransactionSplitsToBudgets] Split matched to "${budget.name}" (date + category: ${split.internalPrimaryCategory || split.plaidPrimaryCategory})`);
+            if (budget.isSystemEverythingElse) {
+              everythingElseCount++;
+            }
             break; // Use first matching budget
           }
         }
 
-        // Step 2: Fallback to "everything else" budget if no regular budget matched
-        if (!matchedBudget && everythingElseBudget) {
-          // Check if "everything else" budget is within date range
-          const isAfterStart = !everythingElseBudget.startDate || txnDate >= everythingElseBudget.startDate;
-          let isWithinDateRange = isAfterStart;
-          if (!everythingElseBudget.isOngoing && everythingElseBudget.endDate) {
-            isWithinDateRange = isAfterStart && txnDate <= everythingElseBudget.endDate;
-          }
-
-          if (isWithinDateRange) {
-            matchedBudget = everythingElseBudget;
-            everythingElseCount++;
-            console.log(`💰 [matchTransactionSplitsToBudgets] Split assigned to "Everything Else" budget (category: ${split.internalPrimaryCategory || split.plaidPrimaryCategory})`);
-          }
-        }
-
-        // Step 3: Update split with budget info
+        // Update split with budget info
         if (matchedBudget) {
           transactionHasMatch = true;
           splitMatchedCount++;
+          console.log(`💰 [matchTransactionSplitsToBudgets] Split matched to "${matchedBudget.name}" (category: ${split.internalPrimaryCategory || split.plaidPrimaryCategory})`);
           return {
             ...split,
             budgetId: matchedBudget.id,
@@ -190,7 +175,7 @@ export async function matchTransactionSplitsToBudgets(
             updatedAt: Timestamp.now()
           };
         } else {
-          // No match found - remains 'unassigned' (graceful degradation)
+          // No match found - remains 'unassigned' (shouldn't happen if Everything Else has all categories)
           console.warn(`💰 [matchTransactionSplitsToBudgets] Split has no matching budget (category: ${split.internalPrimaryCategory || split.plaidPrimaryCategory})`);
           return split;
         }

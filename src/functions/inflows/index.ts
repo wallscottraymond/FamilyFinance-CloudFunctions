@@ -17,8 +17,21 @@
 
 // ===== Orchestration Functions =====
 
-// Triggers
-export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";
+// =============================================================================
+// DEPRECATED TRIGGERS - DO NOT USE
+// =============================================================================
+// These legacy triggers have been replaced by the 5-layer architecture:
+// - onInflowCreated → entry/triggers/on_inflow_created.trigger.ts
+// - onInflowUpdated → (pending migration)
+//
+// The new triggers use:
+// - Entry → Orchestrator → Resolver → Domain → Repository
+// - Proper idempotency handling
+// - Trace context for debugging
+// =============================================================================
+// export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";  // DEPRECATED
+
+// Keep onInflowUpdated until it's migrated to new architecture
 export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
 
 // Scheduled

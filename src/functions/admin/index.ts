@@ -11,6 +11,7 @@ export { verifyAccessControl } from "./verifyAccessControl";
 export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
 export { debugUserSummaryUpdate } from "./debugUserSummaryUpdate";
 export { fixBudgetPeriodUserIds } from "./fixBudgetPeriodUserIds";
+export { fix_account_plaid_ids } from "./fix_account_plaid_ids";
 export { makeUserAdmin } from "./makeUserAdmin";
 
 // Transaction splitting migration functions (DEPRECATED - stubbed out)

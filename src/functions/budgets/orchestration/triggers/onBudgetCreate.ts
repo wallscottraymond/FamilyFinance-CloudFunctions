@@ -30,6 +30,8 @@ import * as admin from 'firebase-admin';
 import { Budget } from '../../../../types';
 import { recalculateHistoricalTransactions } from '../../utils/recalculateHistoricalTransactions';
 import { generateBudgetPeriodsForNewBudget } from '../../utils/budgetPeriods';
+import { enqueue_user_summary_updates_from_budget_periods } from '../../../orchestrators/summaries';
+import { v4 as uuid } from 'uuid';
 
 /**
  * Triggered when a budget is created
@@ -68,17 +70,44 @@ export const onBudgetCreate = onDocumentCreated({
 
     console.log(`Successfully created ${result.count} budget periods for budget ${budgetId}`);
 
+    // Extract user ID (handle both new access structure and legacy)
+    const userId = budgetData.userId || budgetData.access?.createdBy;
+    if (!userId) {
+      console.error('❌ No userId found in budget document, skipping summary update and recalculation');
+      return;
+    }
+
+    // Update user_summaries for the newly created budget periods
+    // This is called AFTER all periods are saved to prevent race conditions
+    if (result.count > 0 && result.budgetPeriods.length > 0) {
+      try {
+        const period_ids = result.budgetPeriods
+          .map((p) => p.id)
+          .filter((id): id is string => id !== undefined);
+        console.log(`📊 Updating user summaries for ${period_ids.length} budget periods`);
+
+        const trace_context = {
+          trace_id: uuid(),
+          span_id: uuid(),
+        };
+
+        const summaries_updated = await enqueue_user_summary_updates_from_budget_periods(
+          trace_context,
+          userId,
+          period_ids
+        );
+
+        console.log(`✅ Updated ${summaries_updated} user summaries for budget periods`);
+      } catch (summaryError) {
+        // Log error but don't fail budget creation
+        console.error('❌ Error updating user summaries:', summaryError);
+      }
+    }
+
     // Recalculate spending from existing transactions that match budget categories
     // AND update transaction.splits[].budgetId for historical transactions
     try {
       console.log(`🔄 Starting historical transaction recalculation for new budget ${budgetId}`);
-
-      // Extract user ID (handle both new access structure and legacy)
-      const userId = budgetData.userId || budgetData.access?.createdBy;
-      if (!userId) {
-        console.error('❌ No userId found in budget document, skipping recalculation');
-        return;
-      }
 
       // Calculate end date based on budget type
       const endDate = budgetData.budgetType === 'recurring'

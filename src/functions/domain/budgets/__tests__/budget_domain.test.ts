@@ -1,0 +1,306 @@
+/**
+ * Budget Domain Service Unit Tests
+ *
+ * Pure functions — no mocks, no IO. Verifies business rules and determinism.
+ */
+
+import { Timestamp } from "firebase-admin/firestore";
+import {
+  count_days_inclusive,
+  compute_period_allocation,
+  compute_daily_rate,
+  compute_period_generation_end,
+} from "../period_generation.service";
+import {
+  compute_create_transfer_plan,
+  compute_update_transfer_plan,
+  compute_delete_transfer_plan,
+} from "../category_ownership.service";
+import { compute_create_budget } from "../create_budget.service";
+import { compute_update_budget } from "../update_budget.service";
+import { compute_delete_budget } from "../delete_budget.service";
+import { BudgetEntity } from "../../../types/budgets/budget_entity.types";
+import { CreateBudgetInput } from "../../../types/budgets/create_budget.types";
+
+const NOW = Timestamp.fromDate(new Date("2026-05-31T00:00:00.000Z"));
+
+function make_create_input(
+  overrides: Partial<CreateBudgetInput> = {}
+): CreateBudgetInput {
+  return {
+    name: "Groceries",
+    amount: 300,
+    category_ids: ["cat_food"],
+    period: "monthly",
+    budget_type: "recurring",
+    start_date: "2026-06-01T00:00:00.000Z",
+    alert_threshold: 80,
+    is_shared: false,
+    is_ongoing: true,
+    ...overrides,
+  };
+}
+
+function make_existing_budget(overrides: Partial<BudgetEntity> = {}): BudgetEntity {
+  return {
+    id: "budget_1",
+    user_id: "user_1",
+    group_ids: [],
+    is_active: true,
+    access: {
+      owner_id: "user_1",
+      created_by: "user_1",
+      group_ids: [],
+      is_private: true,
+    },
+    created_by: "user_1",
+    owner_id: "user_1",
+    is_private: true,
+    name: "Groceries",
+    amount: 300,
+    currency: "USD",
+    category_ids: ["cat_food"],
+    period: "monthly",
+    budget_type: "recurring",
+    start_date: Timestamp.fromDate(new Date("2026-06-01T00:00:00.000Z")),
+    end_date: Timestamp.fromDate(new Date("2026-07-01T00:00:00.000Z")),
+    spent: 50,
+    remaining: 250,
+    alert_threshold: 80,
+    is_ongoing: true,
+    is_system_everything_else: false,
+    created_at: NOW,
+    updated_at: NOW,
+    ...overrides,
+  };
+}
+
+describe("period_generation.service", () => {
+  it("counts inclusive days UTC-normalized", () => {
+    const start = new Date("2026-02-01T00:00:00Z");
+    const end = new Date("2026-02-28T23:59:59Z");
+    expect(count_days_inclusive(start, end)).toBe(28);
+  });
+
+  it("allocates 1:1 when cadences match", () => {
+    const result = compute_period_allocation({
+      budget_amount: 300,
+      budget_period_type: "monthly",
+      target_start: new Date("2026-06-01T00:00:00Z"),
+      target_end: new Date("2026-06-30T00:00:00Z"),
+      target_period_type: "monthly",
+    });
+    expect(result.entity).toBe(300);
+  });
+
+  it("allocates a weekly budget to a 7-day target", () => {
+    const result = compute_period_allocation({
+      budget_amount: 70,
+      budget_period_type: "weekly",
+      target_start: new Date("2026-06-01T00:00:00Z"),
+      target_end: new Date("2026-06-07T00:00:00Z"),
+      target_period_type: "monthly",
+    });
+    expect(result.entity).toBe(70);
+  });
+
+  it("uses 6-decimal precision for prime daily rates", () => {
+    const result = compute_daily_rate(100, 31, true);
+    expect(result.entity).toBeCloseTo(3.225806, 6);
+  });
+
+  it("uses 2-decimal precision for non-prime daily rates", () => {
+    const result = compute_daily_rate(100, 31, false);
+    expect(result.entity).toBe(3.23);
+  });
+
+  it("rejects zero period days", () => {
+    const result = compute_daily_rate(100, 0, true);
+    expect(result.validation_errors).toBeDefined();
+  });
+});
+
+describe("compute_period_generation_end", () => {
+  const start = new Date("2026-06-01T00:00:00Z");
+
+  it("generates 12 months ahead for ongoing budgets", () => {
+    const end = compute_period_generation_end(start, true, null);
+    expect(end.toISOString()).toBe("2027-06-01T00:00:00.000Z");
+  });
+
+  it("uses budget_end_date for limited budgets", () => {
+    const limit = new Date("2026-09-30T00:00:00Z");
+    const end = compute_period_generation_end(start, false, limit);
+    expect(end.toISOString()).toBe(limit.toISOString());
+  });
+
+  it("falls back to 12 months for limited budgets without an end date", () => {
+    const end = compute_period_generation_end(start, false, null);
+    expect(end.toISOString()).toBe("2027-06-01T00:00:00.000Z");
+  });
+});
+
+describe("category_ownership.service", () => {
+  it("claims all requested categories on create", () => {
+    const result = compute_create_transfer_plan(
+      ["a", "b"],
+      { a: "everything_else", b: null },
+      "budget_new"
+    );
+    expect(result.entity?.claims).toHaveLength(2);
+    expect(result.entity?.releases).toHaveLength(0);
+    expect(result.entity?.claims[0]).toEqual({
+      category_id: "a",
+      from_budget_id: "everything_else",
+      to_budget_id: "budget_new",
+    });
+  });
+
+  it("computes added/removed diff on update", () => {
+    const result = compute_update_transfer_plan(
+      ["a", "b"],
+      ["b", "c"],
+      { c: "everything_else" },
+      "budget_1",
+      "everything_else"
+    );
+    expect(result.entity?.claims.map((c) => c.category_id)).toEqual(["c"]);
+    expect(result.entity?.releases.map((r) => r.category_id)).toEqual(["a"]);
+  });
+
+  it("releases all owned categories on delete", () => {
+    const result = compute_delete_transfer_plan(
+      ["a", "b"],
+      "budget_1",
+      "everything_else"
+    );
+    expect(result.entity?.releases).toHaveLength(2);
+    expect(result.entity?.releases[0].to_budget_id).toBe("everything_else");
+  });
+});
+
+describe("compute_create_budget", () => {
+  it("creates a valid budget with remaining = amount", () => {
+    const result = compute_create_budget({
+      budget_id: "budget_new",
+      user_id: "user_1",
+      input: make_create_input(),
+      dependencies: {
+        currency: "USD",
+        group_ids: [],
+        existing_budget_count: 3,
+        category_owners: { cat_food: "everything_else" },
+        everything_else_budget_id: "everything_else",
+      },
+      now: NOW,
+    });
+    expect(result.entity?.remaining).toBe(300);
+    expect(result.entity?.spent).toBe(0);
+    expect(result.entity?.is_private).toBe(true);
+  });
+
+  it("enforces the 50-budget limit", () => {
+    const result = compute_create_budget({
+      budget_id: "budget_new",
+      user_id: "user_1",
+      input: make_create_input(),
+      dependencies: {
+        currency: "USD",
+        group_ids: [],
+        existing_budget_count: 50,
+        category_owners: {},
+        everything_else_budget_id: null,
+      },
+      now: NOW,
+    });
+    expect(result.validation_errors?.join()).toContain("budget limit");
+  });
+
+  it("requires a valid budget_end_date when not ongoing", () => {
+    const result = compute_create_budget({
+      budget_id: "budget_new",
+      user_id: "user_1",
+      input: make_create_input({ is_ongoing: false }),
+      dependencies: {
+        currency: "USD",
+        group_ids: [],
+        existing_budget_count: 0,
+        category_owners: {},
+        everything_else_budget_id: null,
+      },
+      now: NOW,
+    });
+    expect(result.validation_errors).toBeDefined();
+  });
+});
+
+describe("compute_update_budget", () => {
+  it("recomputes remaining when amount changes", () => {
+    const result = compute_update_budget({
+      user_id: "user_1",
+      input: { budget_id: "budget_1", amount: 400 },
+      dependencies: {
+        existing: make_existing_budget(),
+        added_category_ids: [],
+        removed_category_ids: [],
+        everything_else_budget_id: "everything_else",
+        amount_changed: true,
+      },
+      now: NOW,
+    });
+    // existing.spent = 50 → remaining = 350
+    expect(result.entity?.remaining).toBe(350);
+  });
+
+  it("rejects amount edits on the Everything Else budget", () => {
+    const result = compute_update_budget({
+      user_id: "user_1",
+      input: { budget_id: "ee", amount: 400 },
+      dependencies: {
+        existing: make_existing_budget({
+          id: "ee",
+          is_system_everything_else: true,
+        }),
+        added_category_ids: [],
+        removed_category_ids: [],
+        everything_else_budget_id: "ee",
+        amount_changed: true,
+      },
+      now: NOW,
+    });
+    expect(result.validation_errors?.join()).toContain("Everything Else");
+  });
+});
+
+describe("compute_delete_budget", () => {
+  it("cannot delete the Everything Else budget", () => {
+    const result = compute_delete_budget({
+      user_id: "user_1",
+      dependencies: {
+        existing: make_existing_budget({ is_system_everything_else: true }),
+        budget_period_ids: [],
+        affected_transaction_ids: [],
+        owned_category_ids: [],
+        everything_else_budget_id: "ee",
+      },
+      now: NOW,
+    });
+    expect(result.validation_errors?.join()).toContain("cannot be deleted");
+  });
+
+  it("flags cascade when periods or transactions exist", () => {
+    const result = compute_delete_budget({
+      user_id: "user_1",
+      dependencies: {
+        existing: make_existing_budget(),
+        budget_period_ids: ["p1", "p2"],
+        affected_transaction_ids: ["t1"],
+        owned_category_ids: ["cat_food"],
+        everything_else_budget_id: "ee",
+      },
+      now: NOW,
+    });
+    expect(result.entity?.requires_cascade).toBe(true);
+    expect(result.entity?.release_category_ids).toEqual(["cat_food"]);
+  });
+});

@@ -14,6 +14,7 @@ import {
   checkFamilyAccess 
 } from "../../../../utils/auth";
 import { firebaseCors } from "../../../../middleware/cors";
+import { claimCategories, releaseCategories } from "../../utils/categoryTransfer";
 
 /**
  * Update budget
@@ -102,6 +103,7 @@ export const updateBudget = onRequest({
       }
 
       // CRITICAL: Only allow name changes on system budget
+      // Categories are managed automatically for "Everything Else"
       if (existingBudget.isSystemEverythingElse) {
         const allowedFields = ['name', 'updatedAt'];
         const updateFields = Object.keys(updateData);
@@ -114,6 +116,42 @@ export const updateBudget = onRequest({
               `Only name can be changed on 'Everything Else' budget. Cannot edit: ${invalidFields.join(', ')}`
             )
           );
+        }
+      }
+
+      // Handle category changes for regular budgets
+      // Detect added/removed categories and transfer ownership accordingly
+      if (updateData.categoryIds !== undefined && !existingBudget.isSystemEverythingElse) {
+        const currentCategories = new Set(existingBudget.categoryIds || []);
+        const newCategories = new Set(updateData.categoryIds as string[]);
+
+        const addedCategories = [...newCategories].filter(c => !currentCategories.has(c));
+        const removedCategories = [...currentCategories].filter(c => !newCategories.has(c));
+
+        console.log(`[updateBudget] Category changes - added: ${addedCategories.length}, removed: ${removedCategories.length}`);
+
+        // Claim added categories (transfers from current owners)
+        if (addedCategories.length > 0) {
+          console.log(`[updateBudget] Claiming ${addedCategories.length} categories`);
+          const claimResult = await claimCategories(user.id!, addedCategories, budgetId);
+
+          if (claimResult.success) {
+            console.log(`[updateBudget] Claimed ${claimResult.transferred.length} categories`);
+          } else {
+            console.warn(`[updateBudget] Category claim had issues:`, claimResult.errors);
+          }
+        }
+
+        // Release removed categories (returns to Everything Else)
+        if (removedCategories.length > 0) {
+          console.log(`[updateBudget] Releasing ${removedCategories.length} categories`);
+          const releaseResult = await releaseCategories(user.id!, removedCategories, budgetId);
+
+          if (releaseResult.success) {
+            console.log(`[updateBudget] Released ${releaseResult.transferred.length} categories`);
+          } else {
+            console.warn(`[updateBudget] Category release had issues:`, releaseResult.errors);
+          }
         }
       }
 

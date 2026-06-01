@@ -54,7 +54,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
     splits: [{
       amount: 100,
       budgetId: 'unassigned',
-      categoryId: 'food',
+      plaidPrimaryCategory: 'FOOD_AND_DRINK',
+      internalPrimaryCategory: null,
       updatedAt: now
     }],
     createdAt: now,
@@ -74,7 +75,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               startDate: twoMonthsAgo,
               endDate: now,
               isOngoing: false,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -83,7 +85,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -107,7 +110,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'First Budget',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -116,7 +120,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Second Budget',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -125,7 +130,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -151,7 +157,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Groceries',
               startDate: Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60 * 1000), // Future date
               isOngoing: false,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -160,7 +167,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -187,7 +195,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               startDate: threeMonthsAgo,
               endDate: twoMonthsAgo, // Ended 2 months ago
               isOngoing: false,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -196,7 +205,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: threeMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -219,7 +229,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -282,7 +293,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Groceries',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -291,7 +303,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -300,7 +313,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Dining Out',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -325,7 +339,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
             data: () => ({
               name: 'Legacy Budget',
               startDate: twoMonthsAgo,
-              isOngoing: true
+              isOngoing: true,
+              categoryIds: ['FOOD_AND_DRINK']
               // isSystemEverythingElse field missing
             })
           }
@@ -354,7 +369,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               startDate: twoMonthsAgo,
               endDate: now,
               isOngoing: false,
-              isSystemEverythingElse: false
+              isSystemEverythingElse: false,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           },
           {
@@ -363,7 +379,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: threeMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -393,7 +410,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -433,7 +451,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK', 'TRANSPORTATION']
             })
           }
         ]
@@ -442,8 +461,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
       const transactionWithMultipleSplits = {
         ...createMockTransaction(oneMonthAgo),
         splits: [
-          { amount: 60, budgetId: 'unassigned', categoryId: 'food', updatedAt: now },
-          { amount: 40, budgetId: 'unassigned', categoryId: 'transport', updatedAt: now }
+          { amount: 60, budgetId: 'unassigned', plaidPrimaryCategory: 'FOOD_AND_DRINK', internalPrimaryCategory: null, updatedAt: now },
+          { amount: 40, budgetId: 'unassigned', plaidPrimaryCategory: 'TRANSPORTATION', internalPrimaryCategory: null, updatedAt: now }
         ]
       };
 
@@ -465,7 +484,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -474,7 +494,7 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
       const oldTimestamp = Timestamp.fromMillis(now.toMillis() - 10000);
       const transaction = {
         ...createMockTransaction(oneMonthAgo),
-        splits: [{ amount: 100, budgetId: 'unassigned', categoryId: 'food', updatedAt: oldTimestamp }]
+        splits: [{ amount: 100, budgetId: 'unassigned', plaidPrimaryCategory: 'FOOD_AND_DRINK', internalPrimaryCategory: null, updatedAt: oldTimestamp }]
       };
 
       const transactions = [transaction as any];
@@ -506,7 +526,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
           {
             id: 'budget-malformed',
             data: () => ({
-              name: 'Malformed Budget'
+              name: 'Malformed Budget',
+              categoryIds: ['FOOD_AND_DRINK']
               // Missing startDate and isOngoing
             })
           },
@@ -516,7 +537,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
@@ -543,7 +565,8 @@ describe('matchTransactionSplitsToBudgets - Everything Else Budget', () => {
               name: 'Everything Else',
               startDate: twoMonthsAgo,
               isOngoing: true,
-              isSystemEverythingElse: true
+              isSystemEverythingElse: true,
+              categoryIds: ['FOOD_AND_DRINK']
             })
           }
         ]
