@@ -10,9 +10,13 @@
  * timestamps those utilities stamp on the periods they write — if a sync
  * timestamp increased, this update was itself a sync, so we skip.
  *
- * This restores the note/checklist/modified-amount portion of the retired
- * legacy `onBudgetPeriodUpdated` trigger. It does NOT handle pause/resume or
- * rollover recalculation (tracked separately). It is safe alongside the v2
+ * Also handles period pause/resume (the "Pause This Period" toggle flips the
+ * period's `isActive`): redistributes the period's allocation to/from Everything
+ * Else via `handleBudgetPeriodPauseResume`.
+ *
+ * This restores the note/checklist/modified-amount + pause/resume portions of
+ * the retired legacy `onBudgetPeriodUpdated` trigger. It does NOT handle rollover
+ * recalculation (#6, depends on the spent pipeline). It is safe alongside the v2
  * period-generation cascade, which never writes these fields on an UPDATE.
  *
  * @module entry/triggers/on_budget_period_edited
@@ -26,6 +30,7 @@ import {
   syncChecklistToOverlappingPeriods,
   syncModifiedAmountToOverlappingPeriods,
 } from "../../budgets/utils/syncNotesToOverlappingPeriods";
+import { handleBudgetPeriodPauseResume } from "../../budgets/utils/handleBudgetPeriodPauseResume";
 
 export const on_budget_period_edited = onDocumentUpdated(
   {
@@ -64,8 +69,10 @@ export const on_budget_period_edited = onDocumentUpdated(
       JSON.stringify(bf.checklistItems ?? []) !== JSON.stringify(af.checklistItems ?? []);
     const modified_changed =
       bf.modifiedAmount !== af.modifiedAmount || before.isModified !== after.isModified;
+    // Period pause/resume — the "Pause This Period" toggle flips isActive.
+    const active_changed = before.isActive !== after.isActive;
 
-    if (!notes_changed && !checklist_changed && !modified_changed) {
+    if (!notes_changed && !checklist_changed && !modified_changed && !active_changed) {
       return;
     }
 
@@ -89,6 +96,13 @@ export const on_budget_period_edited = onDocumentUpdated(
           source,
           af.modifiedAmount as number | undefined
         );
+      }
+      if (active_changed) {
+        // Pausing redistributes this period's allocation to Everything Else;
+        // resuming restores it. The util writes allocatedAmount (not isActive),
+        // so it does not re-trigger this handler.
+        const is_pausing = before.isActive === true && after.isActive === false;
+        await handleBudgetPeriodPauseResume(db, period_id, after, is_pausing);
       }
     } catch (error) {
       // Non-fatal — a sync failure must not break the period edit.
