@@ -185,7 +185,22 @@ export const budget_period_repo = {
     for (const chunk of chunks) {
       const batch = db.batch();
       for (const period of chunk) {
-        const days = day_count(period.start_date, period.end_date);
+        const days = period.days_in_period ?? day_count(period.start_date, period.end_date);
+        // Map the prime/non-prime overlap breakdown to its camelCase document
+        // shape (consumed by the mobile non-prime editor). A period is prime when
+        // it has no breakdown entries (1:1 with the budget cadence).
+        const prime_breakdown = (period.prime_period_breakdown ?? []).map((b) => ({
+          /* eslint-disable @typescript-eslint/naming-convention */
+          primePeriodId: b.prime_period_id,
+          sourcePeriodId: b.source_period_id,
+          daysContributed: b.days_contributed,
+          dailyRate: b.daily_rate,
+          amountContributed: b.amount_contributed,
+          overlapStart: b.overlap_start,
+          overlapEnd: b.overlap_end,
+          /* eslint-enable @typescript-eslint/naming-convention */
+        }));
+        const is_prime = period.is_prime ?? prime_breakdown.length === 0;
         /* eslint-disable @typescript-eslint/naming-convention */
         const doc_data = {
           id: period.id,
@@ -205,6 +220,9 @@ export const budget_period_repo = {
           remaining: period.remaining,
           dailyRate: period.daily_rate,
           daysInPeriod: days,
+          isPrime: is_prime,
+          primePeriodIds: period.prime_period_ids ?? [],
+          primePeriodBreakdown: prime_breakdown,
           isModified: false,
           checklistItems: [],
           lastCalculated: now,
@@ -236,6 +254,9 @@ export const budget_period_repo = {
       allocated_amount: number;
       daily_rate: number;
       remaining: number;
+      is_prime?: boolean;
+      prime_period_ids?: string[];
+      prime_period_breakdown?: BudgetPeriodEntity["prime_period_breakdown"];
     }>
   ): Promise<WriteResult[]> {
     if (updates.length === 0) {
@@ -250,7 +271,7 @@ export const budget_period_repo = {
       const batch = db.batch();
       for (const u of chunk) {
         /* eslint-disable @typescript-eslint/naming-convention */
-        const update_data = {
+        const update_data: Record<string, unknown> = {
           allocatedAmount: u.allocated_amount,
           originalAmount: u.allocated_amount,
           remaining: u.remaining,
@@ -258,6 +279,26 @@ export const budget_period_repo = {
           lastCalculated: now,
           updatedAt: now,
         };
+        // Refresh the prime/non-prime overlap breakdown when recomputed, so it
+        // stays consistent with the new amount (kept off the document when the
+        // caller doesn't supply it, to avoid clobbering existing values).
+        if (u.is_prime !== undefined) {
+          update_data.isPrime = u.is_prime;
+        }
+        if (u.prime_period_ids !== undefined) {
+          update_data.primePeriodIds = u.prime_period_ids;
+        }
+        if (u.prime_period_breakdown !== undefined) {
+          update_data.primePeriodBreakdown = u.prime_period_breakdown.map((b) => ({
+            primePeriodId: b.prime_period_id,
+            sourcePeriodId: b.source_period_id,
+            daysContributed: b.days_contributed,
+            dailyRate: b.daily_rate,
+            amountContributed: b.amount_contributed,
+            overlapStart: b.overlap_start,
+            overlapEnd: b.overlap_end,
+          }));
+        }
         /* eslint-enable @typescript-eslint/naming-convention */
         batch.update(db.collection(COLLECTION).doc(u.id), update_data);
         results.push(

@@ -15,6 +15,7 @@ import { DomainResult } from "../../types";
 import {
   BudgetPeriodEntity,
   BudgetPeriodType,
+  PrimePeriodBreakdownEntry,
 } from "../../types/budgets/budget_entity.types";
 
 /**
@@ -88,11 +89,32 @@ export interface ComputeBudgetPeriodsInput {
 }
 
 /**
+ * A prime period reduced to what the overlap breakdown needs (pure helper).
+ */
+interface PrimePeriodForContribution {
+  /** budget_period id of the prime period (`${budget_id}_${source.id}`) */
+  id: string;
+  source_period_id: string;
+  start: Date;
+  end: Date;
+  daily_rate: number;
+}
+
+/**
  * Generates budget period entities from source periods.
  *
- * For each source period the amount is allocated by day-based math and a daily
- * rate is computed (6-decimal precision for prime periods that match the
- * budget cadence, 2-decimal for converted/non-prime periods).
+ * Runs in two passes to mirror the legacy prime/non-prime model:
+ *  1. PRIME periods (cadence === budget cadence) are allocated 1:1 with the
+ *     budget amount, with a 6-decimal daily rate.
+ *  2. NON-PRIME periods (other cadences) derive their allocation by summing the
+ *     daily rates of the prime periods they overlap, day by day. Each non-prime
+ *     period records a `prime_period_breakdown` (one entry per contributing
+ *     prime) so the mobile editor can explain the allocation, plus a 2-decimal
+ *     daily rate.
+ *
+ * This restores the `primePeriodBreakdown` / `isPrime` / `primePeriodIds` data
+ * that the legacy non-prime generator produced (and the mobile non-prime editor
+ * consumes), within the v2 pure-domain layer.
  *
  * PURE FUNCTION - all non-determinism (now) is injected.
  */
@@ -106,51 +128,219 @@ export function compute_budget_periods(
     return { validation_errors: ["budget_amount cannot be negative"] };
   }
 
-  const entities: BudgetPeriodEntity[] = [];
+  const make_base = (
+    source: SourcePeriodForGeneration,
+    allocated: number,
+    daily_rate: number
+  ): BudgetPeriodEntity => ({
+    id: `${input.budget_id}_${source.id}`,
+    budget_id: input.budget_id,
+    user_id: input.user_id,
+    group_ids: input.group_ids,
+    period_id: source.period_id,
+    period_type: source.period_type,
+    allocated_amount: allocated,
+    rolled_over_amount: 0,
+    effective_amount: allocated,
+    spent: 0,
+    remaining: allocated,
+    daily_rate,
+    start_date: source.start_date,
+    end_date: source.end_date,
+    is_active: true,
+    created_at: input.now,
+    updated_at: input.now,
+  });
 
+  // Pass 1: prime periods (cadence matches the budget) — allocated 1:1.
+  const prime_entities: BudgetPeriodEntity[] = [];
+  const primes_for_contrib: PrimePeriodForContribution[] = [];
   for (const source of input.source_periods) {
+    if (source.period_type !== input.budget_cadence) {
+      continue;
+    }
     const start = source.start_date.toDate();
     const end = source.end_date.toDate();
-
-    const allocation_result = compute_period_allocation({
-      budget_amount: input.budget_amount,
-      budget_period_type: input.budget_cadence,
-      target_start: start,
-      target_end: end,
-      target_period_type: source.period_type,
-    });
-    if (allocation_result.validation_errors) {
-      return { validation_errors: allocation_result.validation_errors };
-    }
-    const allocated = allocation_result.entity ?? 0;
-
+    const allocated = input.budget_amount;
     const days = count_days_inclusive(start, end);
-    const is_prime = source.period_type === input.budget_cadence;
-    const rate_result = compute_daily_rate(allocated, days, is_prime);
+    const rate_result = compute_daily_rate(allocated, days, true);
+    if (rate_result.validation_errors) {
+      return { validation_errors: rate_result.validation_errors };
+    }
     const daily_rate = rate_result.entity ?? 0;
 
-    entities.push({
-      id: `${input.budget_id}_${source.id}`,
-      budget_id: input.budget_id,
-      user_id: input.user_id,
-      group_ids: input.group_ids,
-      period_id: source.period_id,
-      period_type: source.period_type,
-      allocated_amount: allocated,
-      rolled_over_amount: 0,
-      effective_amount: allocated,
-      spent: 0,
-      remaining: allocated,
+    const entity = make_base(source, allocated, daily_rate);
+    entity.is_prime = true;
+    entity.days_in_period = days;
+    entity.prime_period_ids = [];
+    entity.prime_period_breakdown = [];
+    prime_entities.push(entity);
+    primes_for_contrib.push({
+      id: entity.id,
+      source_period_id: source.period_id,
+      start,
+      end,
       daily_rate,
-      start_date: source.start_date,
-      end_date: source.end_date,
-      is_active: true,
-      created_at: input.now,
-      updated_at: input.now,
     });
   }
 
-  return { entities };
+  // Pass 2: non-prime periods — allocation derived from overlapping primes.
+  const non_prime_entities: BudgetPeriodEntity[] = [];
+  for (const source of input.source_periods) {
+    if (source.period_type === input.budget_cadence) {
+      continue;
+    }
+    const start = source.start_date.toDate();
+    const end = source.end_date.toDate();
+
+    const overlapping = primes_for_contrib.filter(
+      (p) => p.start <= end && p.end >= start
+    );
+    const { total_amount, breakdown } = compute_prime_contributions(
+      start,
+      end,
+      overlapping
+    );
+    const allocated = round_to(total_amount, NON_PRIME_RATE_PRECISION);
+
+    const days = count_days_inclusive(start, end);
+    const rate_result = compute_daily_rate(allocated, days, false);
+    if (rate_result.validation_errors) {
+      return { validation_errors: rate_result.validation_errors };
+    }
+    const daily_rate = rate_result.entity ?? 0;
+
+    const entity = make_base(source, allocated, daily_rate);
+    entity.is_prime = false;
+    entity.days_in_period = days;
+    entity.prime_period_ids = overlapping.map((p) => p.id);
+    entity.prime_period_breakdown = breakdown;
+    non_prime_entities.push(entity);
+  }
+
+  return { entities: [...prime_entities, ...non_prime_entities] };
+}
+
+/**
+ * Sum the daily rates of the prime periods overlapping a non-prime period,
+ * day by day, building a per-prime contribution breakdown.
+ *
+ * Ported from the legacy `calculatePrimeContributions` (day-by-day SUMPRODUCT):
+ * for each UTC day in the target period, find the prime period containing it,
+ * add that prime's daily rate to the running total and to that prime's
+ * contribution. `amount_contributed` is rounded to 2 decimals per prime.
+ *
+ * PURE FUNCTION.
+ */
+export function compute_prime_contributions(
+  target_start: Date,
+  target_end: Date,
+  overlapping_primes: PrimePeriodForContribution[]
+): { total_amount: number; breakdown: PrimePeriodBreakdownEntry[] } {
+  if (overlapping_primes.length === 0) {
+    return { total_amount: 0, breakdown: [] };
+  }
+
+  // Map every UTC day covered by a prime to that prime (inclusive of bounds).
+  const primes_by_day = new Map<string, PrimePeriodForContribution>();
+  for (const prime of overlapping_primes) {
+    for (const key of utc_day_keys(prime.start, prime.end)) {
+      primes_by_day.set(key, prime);
+    }
+  }
+
+  interface Contribution {
+    prime: PrimePeriodForContribution;
+    days_contributed: number;
+    amount_contributed: number;
+    overlap_start: Date | null;
+    overlap_end: Date | null;
+  }
+  const contributions = new Map<string, Contribution>();
+  let total_amount = 0;
+
+  let cursor = Date.UTC(
+    target_start.getUTCFullYear(),
+    target_start.getUTCMonth(),
+    target_start.getUTCDate()
+  );
+  const end_utc = Date.UTC(
+    target_end.getUTCFullYear(),
+    target_end.getUTCMonth(),
+    target_end.getUTCDate()
+  );
+
+  while (cursor <= end_utc) {
+    const day = new Date(cursor);
+    const key = utc_day_key(day);
+    const prime = primes_by_day.get(key);
+    if (prime) {
+      total_amount += prime.daily_rate;
+      let c = contributions.get(prime.id);
+      if (!c) {
+        c = {
+          prime,
+          days_contributed: 0,
+          amount_contributed: 0,
+          overlap_start: null,
+          overlap_end: null,
+        };
+        contributions.set(prime.id, c);
+      }
+      c.days_contributed += 1;
+      c.amount_contributed += prime.daily_rate;
+      if (c.overlap_start === null) {
+        c.overlap_start = day;
+      }
+      c.overlap_end = day;
+    }
+    cursor += MS_PER_DAY;
+  }
+
+  const breakdown: PrimePeriodBreakdownEntry[] = [];
+  for (const c of contributions.values()) {
+    breakdown.push({
+      prime_period_id: c.prime.id,
+      source_period_id: c.prime.source_period_id,
+      days_contributed: c.days_contributed,
+      daily_rate: c.prime.daily_rate,
+      amount_contributed: round_to(c.amount_contributed, NON_PRIME_RATE_PRECISION),
+      overlap_start: Timestamp.fromDate(c.overlap_start ?? c.prime.start),
+      overlap_end: Timestamp.fromDate(c.overlap_end ?? c.prime.end),
+    });
+  }
+
+  return { total_amount, breakdown };
+}
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/** UTC `YYYY-MM-DD` key for a date. PURE. */
+function utc_day_key(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** All inclusive UTC day keys between two dates. PURE. */
+function utc_day_keys(start: Date, end: Date): string[] {
+  const keys: string[] = [];
+  let cursor = Date.UTC(
+    start.getUTCFullYear(),
+    start.getUTCMonth(),
+    start.getUTCDate()
+  );
+  const end_utc = Date.UTC(
+    end.getUTCFullYear(),
+    end.getUTCMonth(),
+    end.getUTCDate()
+  );
+  while (cursor <= end_utc) {
+    keys.push(utc_day_key(new Date(cursor)));
+    cursor += MS_PER_DAY;
+  }
+  return keys;
 }
 
 /**
@@ -158,11 +348,14 @@ export function compute_budget_periods(
  */
 export interface ExistingPeriodForRealloc {
   id: string;
+  period_id: string;
   period_type: PeriodInstanceType;
   start_date: Timestamp;
   end_date: Timestamp;
   spent: number;
   rolled_over_amount: number;
+  /** The period's current daily rate — retained for historical primes. */
+  daily_rate: number;
 }
 
 /**
@@ -173,6 +366,9 @@ export interface PeriodAllocationUpdate {
   allocated_amount: number;
   daily_rate: number;
   remaining: number;
+  is_prime?: boolean;
+  prime_period_ids?: string[];
+  prime_period_breakdown?: PrimePeriodBreakdownEntry[];
 }
 
 /**
@@ -206,32 +402,73 @@ export function compute_reallocated_periods(
   }
 
   const cutoff_ms = input.cutoff.toMillis();
-  const updates: PeriodAllocationUpdate[] = [];
+  const is_historical = (p: ExistingPeriodForRealloc): boolean =>
+    p.end_date.toMillis() < cutoff_ms;
 
+  // Pass 1: prime periods. Current+future primes get the new daily rate (and an
+  // update); historical primes keep their existing rate (no update) so they
+  // still contribute correctly to any boundary-spanning non-prime period.
+  const updates: PeriodAllocationUpdate[] = [];
+  const primes_for_contrib: PrimePeriodForContribution[] = [];
   for (const period of input.periods) {
-    // Skip historical periods.
-    if (period.end_date.toMillis() < cutoff_ms) {
+    if (period.period_type !== input.budget_cadence) {
       continue;
     }
+    const start = period.start_date.toDate();
+    const end = period.end_date.toDate();
+    const days = count_days_inclusive(start, end);
 
+    let effective_rate = period.daily_rate;
+    if (!is_historical(period)) {
+      const allocated = input.new_amount;
+      const rate_result = compute_daily_rate(allocated, days, true);
+      if (rate_result.validation_errors) {
+        return { validation_errors: rate_result.validation_errors };
+      }
+      effective_rate = rate_result.entity ?? 0;
+      updates.push({
+        id: period.id,
+        allocated_amount: allocated,
+        daily_rate: effective_rate,
+        remaining: allocated + period.rolled_over_amount - period.spent,
+        is_prime: true,
+        prime_period_ids: [],
+        prime_period_breakdown: [],
+      });
+    }
+    primes_for_contrib.push({
+      id: period.id,
+      source_period_id: period.period_id,
+      start,
+      end,
+      daily_rate: effective_rate,
+    });
+  }
+
+  // Pass 2: non-prime periods (current+future only) — re-derive allocation and
+  // breakdown from the (now updated) overlapping prime rates.
+  for (const period of input.periods) {
+    if (period.period_type === input.budget_cadence || is_historical(period)) {
+      continue;
+    }
     const start = period.start_date.toDate();
     const end = period.end_date.toDate();
 
-    const allocation_result = compute_period_allocation({
-      budget_amount: input.new_amount,
-      budget_period_type: input.budget_cadence,
-      target_start: start,
-      target_end: end,
-      target_period_type: period.period_type,
-    });
-    if (allocation_result.validation_errors) {
-      return { validation_errors: allocation_result.validation_errors };
-    }
-    const allocated = allocation_result.entity ?? 0;
+    const overlapping = primes_for_contrib.filter(
+      (p) => p.start <= end && p.end >= start
+    );
+    const { total_amount, breakdown } = compute_prime_contributions(
+      start,
+      end,
+      overlapping
+    );
+    const allocated = round_to(total_amount, NON_PRIME_RATE_PRECISION);
 
     const days = count_days_inclusive(start, end);
-    const is_prime = period.period_type === input.budget_cadence;
-    const rate_result = compute_daily_rate(allocated, days, is_prime);
+    const rate_result = compute_daily_rate(allocated, days, false);
+    if (rate_result.validation_errors) {
+      return { validation_errors: rate_result.validation_errors };
+    }
     const daily_rate = rate_result.entity ?? 0;
 
     updates.push({
@@ -239,6 +476,9 @@ export function compute_reallocated_periods(
       allocated_amount: allocated,
       daily_rate,
       remaining: allocated + period.rolled_over_amount - period.spent,
+      is_prime: false,
+      prime_period_ids: overlapping.map((p) => p.id),
+      prime_period_breakdown: breakdown,
     });
   }
 

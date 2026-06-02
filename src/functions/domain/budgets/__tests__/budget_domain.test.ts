@@ -11,6 +11,7 @@ import {
   compute_daily_rate,
   compute_period_generation_end,
   compute_reallocated_periods,
+  compute_budget_periods,
 } from "../period_generation.service";
 import {
   compute_create_transfer_plan,
@@ -121,6 +122,81 @@ describe("period_generation.service", () => {
   });
 });
 
+describe("compute_budget_periods — prime/non-prime breakdown", () => {
+  const ts = (iso: string): Timestamp => Timestamp.fromDate(new Date(iso));
+
+  // $300/month budget. Two prime monthly periods (June 30d, July 31d) and a
+  // weekly period straddling the boundary (Jun 28 – Jul 4).
+  const input = {
+    budget_id: "b1",
+    user_id: "u1",
+    group_ids: [],
+    budget_amount: 300,
+    budget_cadence: "monthly" as const,
+    now: NOW,
+    source_periods: [
+      {
+        id: "2026M06",
+        period_id: "2026M06",
+        period_type: "monthly" as const,
+        start_date: ts("2026-06-01T00:00:00Z"),
+        end_date: ts("2026-06-30T23:59:59Z"),
+      },
+      {
+        id: "2026M07",
+        period_id: "2026M07",
+        period_type: "monthly" as const,
+        start_date: ts("2026-07-01T00:00:00Z"),
+        end_date: ts("2026-07-31T23:59:59Z"),
+      },
+      {
+        id: "2026W27",
+        period_id: "2026W27",
+        period_type: "weekly" as const,
+        start_date: ts("2026-06-28T00:00:00Z"),
+        end_date: ts("2026-07-04T23:59:59Z"),
+      },
+    ],
+  };
+
+  it("allocates prime periods 1:1 with a 6-decimal daily rate", () => {
+    const { entities } = compute_budget_periods(input);
+    const june = entities!.find((e) => e.period_id === "2026M06")!;
+    expect(june.is_prime).toBe(true);
+    expect(june.allocated_amount).toBe(300);
+    expect(june.daily_rate).toBeCloseTo(10, 6); // 300 / 30
+    expect(june.prime_period_breakdown).toEqual([]);
+  });
+
+  it("derives the non-prime allocation from overlapping prime daily rates", () => {
+    const { entities } = compute_budget_periods(input);
+    const week = entities!.find((e) => e.period_id === "2026W27")!;
+    expect(week.is_prime).toBe(false);
+    // 3 days in June @ 10 + 4 days in July @ (300/31)
+    const expected = 3 * 10 + 4 * (300 / 31);
+    expect(week.allocated_amount).toBeCloseTo(expected, 2);
+    expect(week.prime_period_ids).toEqual(["b1_2026M06", "b1_2026M07"]);
+  });
+
+  it("builds a per-prime breakdown that accounts for every day", () => {
+    const { entities } = compute_budget_periods(input);
+    const week = entities!.find((e) => e.period_id === "2026W27")!;
+    const bd = week.prime_period_breakdown!;
+    expect(bd).toHaveLength(2);
+    const total_days = bd.reduce((s, b) => s + b.days_contributed, 0);
+    expect(total_days).toBe(7);
+    const june = bd.find((b) => b.prime_period_id === "b1_2026M06")!;
+    expect(june.days_contributed).toBe(3);
+    expect(june.amount_contributed).toBe(30);
+    const july = bd.find((b) => b.prime_period_id === "b1_2026M07")!;
+    expect(july.days_contributed).toBe(4);
+  });
+
+  it("is deterministic", () => {
+    expect(compute_budget_periods(input)).toEqual(compute_budget_periods(input));
+  });
+});
+
 describe("compute_period_generation_end", () => {
   const start = new Date("2026-06-01T00:00:00Z");
 
@@ -154,20 +230,24 @@ describe("compute_reallocated_periods", () => {
         // historical (ends before cutoff) — should be skipped
         {
           id: "past",
+          period_id: "2026M05",
           period_type: "monthly",
           start_date: ts("2026-05-01T00:00:00Z"),
           end_date: ts("2026-05-31T00:00:00Z"),
           spent: 120,
           rolled_over_amount: 0,
+          daily_rate: 9.677419,
         },
         // current/future (ends on/after cutoff) — reallocated
         {
           id: "cur",
+          period_id: "2026M06",
           period_type: "monthly",
           start_date: ts("2026-06-01T00:00:00Z"),
           end_date: ts("2026-06-30T00:00:00Z"),
           spent: 50,
           rolled_over_amount: 0,
+          daily_rate: 10,
         },
       ],
     });
@@ -184,15 +264,55 @@ describe("compute_reallocated_periods", () => {
       periods: [
         {
           id: "cur",
+          period_id: "2026M06",
           period_type: "monthly",
           start_date: ts("2026-06-01T00:00:00Z"),
           end_date: ts("2026-06-30T00:00:00Z"),
           spent: 20,
           rolled_over_amount: 25,
+          daily_rate: 10,
         },
       ],
     });
     expect(result.entities?.[0].remaining).toBe(305); // 300 + 25 - 20
+  });
+
+  it("refreshes the non-prime breakdown from the new prime rate", () => {
+    const result = compute_reallocated_periods({
+      new_amount: 600,
+      budget_cadence: "monthly",
+      cutoff,
+      periods: [
+        {
+          id: "jun",
+          period_id: "2026M06",
+          period_type: "monthly",
+          start_date: ts("2026-06-01T00:00:00Z"),
+          end_date: ts("2026-06-30T23:59:59Z"),
+          spent: 0,
+          rolled_over_amount: 0,
+          daily_rate: 10, // stale (was 300/30); should be recomputed to 20
+        },
+        {
+          id: "wk",
+          period_id: "2026W24",
+          period_type: "weekly",
+          start_date: ts("2026-06-08T00:00:00Z"),
+          end_date: ts("2026-06-14T23:59:59Z"),
+          spent: 0,
+          rolled_over_amount: 0,
+          daily_rate: 2.33, // stale
+        },
+      ],
+    });
+    const prime = result.entities?.find((u) => u.id === "jun")!;
+    expect(prime.daily_rate).toBeCloseTo(20, 6); // 600 / 30
+    const week = result.entities?.find((u) => u.id === "wk")!;
+    // 7 days entirely within June at the new $20/day rate.
+    expect(week.allocated_amount).toBeCloseTo(140, 2);
+    expect(week.prime_period_ids).toEqual(["jun"]);
+    expect(week.prime_period_breakdown).toHaveLength(1);
+    expect(week.prime_period_breakdown?.[0].days_contributed).toBe(7);
   });
 });
 

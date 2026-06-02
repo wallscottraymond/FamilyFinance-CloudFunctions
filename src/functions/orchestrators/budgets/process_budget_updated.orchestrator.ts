@@ -141,11 +141,13 @@ async function reallocate_periods(
     cutoff: start_of_today_utc(),
     periods: existing.map((p) => ({
       id: p.id,
+      period_id: p.period_id,
       period_type: p.period_type,
       start_date: p.start_date,
       end_date: p.end_date,
       spent: p.spent,
       rolled_over_amount: p.rolled_over_amount,
+      daily_rate: p.daily_rate,
     })),
   });
 

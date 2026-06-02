@@ -109,6 +109,26 @@ export interface BudgetEntity {
 }
 
 /**
+ * One prime period's contribution to a non-prime period's allocation.
+ *
+ * Non-prime periods (a weekly period under a monthly budget, etc.) derive their
+ * allocation by summing the daily rates of the prime periods they overlap. This
+ * records, per overlapping prime, how many days it contributed and the resulting
+ * amount — consumed by the mobile non-prime editor to explain the allocation.
+ *
+ * Stored on the period document (camelCase) as `primePeriodBreakdown`.
+ */
+export interface PrimePeriodBreakdownEntry {
+  prime_period_id: string; // budget_period id of the contributing prime
+  source_period_id: string; // the prime's source period id
+  days_contributed: number;
+  daily_rate: number; // the prime's daily rate (6-decimal)
+  amount_contributed: number; // days_contributed-weighted sum (2-decimal)
+  overlap_start: Timestamp;
+  overlap_end: Timestamp;
+}
+
+/**
  * Internal budget period entity. Instances the user interacts with daily.
  * Mapped to/from the `budget_periods` collection by the period repository.
  */
@@ -129,6 +149,17 @@ export interface BudgetPeriodEntity {
 
   start_date: Timestamp;
   end_date: Timestamp;
+
+  /**
+   * Prime/non-prime overlap breakdown. A period is "prime" when its cadence
+   * matches the budget's own cadence (allocated 1:1); non-prime periods derive
+   * their allocation from the overlapping prime periods. Optional because read
+   * paths (map_to_entity) and in-place reallocation don't always populate them.
+   */
+  is_prime?: boolean;
+  days_in_period?: number;
+  prime_period_ids?: string[];
+  prime_period_breakdown?: PrimePeriodBreakdownEntry[];
 
   is_active: boolean;
   created_at: Timestamp;

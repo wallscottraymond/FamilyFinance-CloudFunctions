@@ -53,10 +53,15 @@ async function seedBudget(id: string, userId: string, fields: Record<string, unk
   });
 }
 
-async function seedSourcePeriod(id: string, startISO: string, endISO: string) {
+async function seedSourcePeriod(
+  id: string,
+  startISO: string,
+  endISO: string,
+  type: 'monthly' | 'weekly' | 'bi_monthly' = 'monthly'
+) {
   await db.collection('source_periods').doc(id).set({
     periodId: id,
-    type: 'monthly',
+    type,
     startDate: Timestamp.fromDate(new Date(startISO)),
     endDate: Timestamp.fromDate(new Date(endISO)),
     year: 2026,
@@ -148,6 +153,57 @@ describe('Budget CRUD Cascades (emulator)', () => {
       const budget = (await db.collection('budgets').doc(budgetId).get()).data();
       expect(budget?.activePeriodRange?.startPeriod).toBeDefined();
     });
+
+    it('writes a prime/non-prime overlap breakdown for converted periods', async () => {
+      const userId = uid();
+      const budgetId = bid();
+      await seedBudget(budgetId, userId, { name: 'Groceries', amount: 300 });
+      // Unique Mar/Apr 2027 window so leftover source periods from sibling tests
+      // (source_periods are global + matched by date) don't bleed in.
+      // Two prime monthly periods + one weekly period straddling the boundary.
+      await seedSourcePeriod(`${budgetId}_2027M03`, '2027-03-01', '2027-03-31');
+      await seedSourcePeriod(`${budgetId}_2027M04`, '2027-04-01', '2027-04-30');
+      await seedSourcePeriod(
+        `${budgetId}_2027W13`,
+        '2027-03-29',
+        '2027-04-04',
+        'weekly'
+      );
+
+      await process_budget_created_orchestrator(ctx(), {
+        budget_id: budgetId,
+        user_id: userId,
+        group_ids: [],
+        budget_name: 'Groceries',
+        amount: 300,
+        cadence: 'monthly',
+        start_ms: new Date('2027-03-01').getTime(),
+        generation_end_ms: new Date('2027-05-01').getTime(),
+        is_recurring: true,
+        claims: [],
+        everything_else_budget_id: null,
+      });
+
+      const periods = await periodsFor(budgetId);
+      const monthlies = periods.filter((p) => p.periodType === 'monthly');
+      expect(monthlies).toHaveLength(2);
+      monthlies.forEach((m) => {
+        expect(m.isPrime).toBe(true);
+        expect(m.primePeriodBreakdown).toEqual([]);
+      });
+      const monthlyIds = (monthlies.map((m) => m.id) as string[]).sort();
+
+      const weekly = periods.find((p) => p.periodType === 'weekly')!;
+      expect(weekly.isPrime).toBe(false);
+      // The non-prime period references exactly the two overlapping prime periods.
+      expect([...(weekly.primePeriodIds as string[])].sort()).toEqual(monthlyIds);
+      expect(weekly.primePeriodBreakdown).toHaveLength(2);
+      const days = (weekly.primePeriodBreakdown as Array<{ daysContributed: number }>)
+        .reduce((s, b) => s + b.daysContributed, 0);
+      expect(days).toBe(7);
+      // 3 days @ 300/31 (March) + 4 days @ 10 (April)
+      expect(weekly.allocatedAmount).toBeCloseTo(3 * (300 / 31) + 4 * 10, 2);
+    });
   });
 
   describe('process_budget_updated — amount (in-place reallocation)', () => {
@@ -179,6 +235,16 @@ describe('Budget CRUD Cascades (emulator)', () => {
           checklistItems: [{ id: 'c1', name: 'milk', isChecked: true }],
           modifiedAmount: 150,
         }
+      );
+      // Current weekly (non-prime) fully inside the monthly period — its
+      // breakdown must be refreshed from the new monthly rate.
+      await seedPeriod(
+        `${budgetId}_wk`,
+        budgetId,
+        userId,
+        iso(daysFromNow(0)),
+        iso(daysFromNow(6)),
+        { periodType: 'weekly', allocatedAmount: 23, isPrime: false }
       );
 
       await process_budget_updated_orchestrator(ctx(), {
@@ -212,7 +278,15 @@ describe('Budget CRUD Cascades (emulator)', () => {
       expect(hist?.allocatedAmount).toBe(100);
       expect(hist?.userNotes).toBe('history note');
       // not deleted + recreated
-      expect((await periodsFor(budgetId)).length).toBe(2);
+      expect((await periodsFor(budgetId)).length).toBe(3);
+
+      // weekly non-prime breakdown refreshed from the new monthly rate
+      const wk = (await db.collection('budget_periods').doc(`${budgetId}_wk`).get()).data();
+      expect(wk?.isPrime).toBe(false);
+      expect(wk?.primePeriodIds).toEqual([`${budgetId}_cur`]);
+      expect(wk?.primePeriodBreakdown).toHaveLength(1);
+      // 7 days inside the 31-day monthly period at the new $400/period rate.
+      expect(wk?.allocatedAmount).toBeCloseTo((7 * 400) / 31, 2);
     });
   });
 
