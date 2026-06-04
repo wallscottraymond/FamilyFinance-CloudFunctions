@@ -43,6 +43,18 @@ import {
 import {
   ProcessBudgetDeletedPayload,
 } from "../../types/budgets/delete_budget.types";
+import {
+  assign_transaction_orchestrator,
+  AssignTransactionInput,
+} from "../../orchestrators/transactions/assign_transaction.orchestrator";
+import {
+  recompute_budget_spent_orchestrator,
+  RecomputeBudgetSpentInput,
+} from "../../orchestrators/budgets/recompute_budget_spent.orchestrator";
+import {
+  backfill_assignments_orchestrator,
+  BackfillAssignmentsInput,
+} from "../../orchestrators/transactions/backfill_assignments.orchestrator";
 
 /**
  * Job type handlers - same as in process_job_queue.scheduled.ts
@@ -107,6 +119,21 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
       payload as ProcessBudgetDeletedPayload
     );
   },
+
+  // Transaction Assignment Engine: assign one transaction's splits
+  assign_transaction: async (ctx, payload) => {
+    await assign_transaction_orchestrator(ctx, payload as AssignTransactionInput);
+  },
+
+  // Spend pipeline: recompute budget_period.spent for the touched budgets
+  recompute_budget_spent: async (ctx, payload) => {
+    await recompute_budget_spent_orchestrator(ctx, payload as RecomputeBudgetSpentInput);
+  },
+
+  // One-shot backfill: re-assign + full-recompute (self-fans per user)
+  backfill_assignments: async (ctx, payload) => {
+    await backfill_assignments_orchestrator(ctx, payload as BackfillAssignmentsInput);
+  },
 };
 
 /**
@@ -140,9 +167,13 @@ export const on_job_created = onDocumentCreated(
       return;
     }
 
-    console.log(
-      `[on_job_created] Processing job ${job_id} of type ${job_data.job_type}`
-    );
+    // Skip the routine per-job line for the highest-volume type (summary
+    // updates) to keep logs capturable; other types still log for tracing.
+    if (job_data.job_type !== "update_user_summary") {
+      console.log(
+        `[on_job_created] Processing job ${job_id} of type ${job_data.job_type}`
+      );
+    }
 
     try {
       // Claim the job atomically (prevents duplicate processing)
@@ -174,12 +205,9 @@ export const on_job_created = onDocumentCreated(
 
       await handler(job_ctx, claimed_job.payload);
 
-      // Mark as completed
+      // Mark as completed (success is intentionally not logged — high volume;
+      // failures below are logged. The orchestrators log their own outcomes.)
       await mark_job_completed(job_id);
-
-      console.log(
-        `[on_job_created] Job ${job_id} completed successfully`
-      );
     } catch (error) {
       console.error(
         `[on_job_created] Job ${job_id} failed:`,

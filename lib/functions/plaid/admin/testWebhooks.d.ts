@@ -48,6 +48,28 @@ export declare const fireItemWebhook: import("firebase-functions/v2/https").Call
 /**
  * Get user's Plaid items for webhook testing
  */
+/**
+ * Reset item login to force ITEM_LOGIN_REQUIRED error state
+ * Uses Plaid's /sandbox/item/reset_login endpoint
+ */
+export declare const resetItemLogin: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    success: boolean;
+    message: string;
+    reset_login: boolean;
+    item_id: any;
+}>, unknown>;
+/**
+ * Clear item error state (simulates LOGIN_REPAIRED webhook)
+ * Manually restores an item to healthy status for testing
+ */
+export declare const clearItemError: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
+    success: boolean;
+    message: string;
+    item_id: any;
+}>, unknown>;
+/**
+ * Get user's Plaid items for webhook testing
+ */
 export declare const getUserPlaidItems: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
     items: {

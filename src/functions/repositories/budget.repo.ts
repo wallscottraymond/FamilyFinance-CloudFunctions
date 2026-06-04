@@ -10,7 +10,7 @@
  * @module repositories/budget
  */
 
-import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   WriteResult,
   ReadOptions,
@@ -247,7 +247,9 @@ export const budget_repo = {
     if (!data.isActive && !options?.include_deleted) {
       return null;
     }
-    return map_to_entity(data);
+    // Always source the entity id from the doc ref — legacy-created docs (e.g.
+    // the Everything Else budget) don't denormalize an `id` field into data.
+    return map_to_entity({ ...data, id: doc.id });
   },
 
   /**
@@ -281,7 +283,12 @@ export const budget_repo = {
     for (const snap of [created_by_snap, user_id_snap]) {
       snap.docs.forEach((doc) => {
         if (!by_id.has(doc.id)) {
-          by_id.set(doc.id, map_to_entity(doc.data() as LegacyBudgetDoc));
+          // Source the id from the doc ref — legacy-created docs (Everything
+          // Else) don't store an `id` field in their data.
+          by_id.set(
+            doc.id,
+            map_to_entity({ ...(doc.data() as LegacyBudgetDoc), id: doc.id })
+          );
         }
       });
     }
@@ -323,13 +330,18 @@ export const budget_repo = {
     if (category_ids.length === 0) {
       return create_write_result("budget", id, "merge", { id }, { id });
     }
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const update_data = {
-      categoryIds: FieldValue.arrayRemove(...category_ids),
-      updatedAt: Timestamp.now(),
-    };
-    /* eslint-enable @typescript-eslint/naming-convention */
-    await doc_ref(id).update(update_data);
+    // Read-modify-REPLACE: recompute the full categoryIds array and set it,
+    // never a blind FieldValue.arrayRemove. Atomic within this one budget
+    // aggregate (the only guide-sanctioned use of a Firestore transaction).
+    const remove_set = new Set(category_ids);
+    await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(doc_ref(id));
+      const current = (snap.data()?.categoryIds as string[] | undefined) ?? [];
+      const next = current.filter((c) => !remove_set.has(c));
+      /* eslint-disable @typescript-eslint/naming-convention */
+      tx.update(doc_ref(id), { categoryIds: next, updatedAt: Timestamp.now() });
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
 
     record_audit_entry_async({
       user_id,
@@ -364,13 +376,16 @@ export const budget_repo = {
     if (category_ids.length === 0) {
       return create_write_result("budget", id, "merge", { id }, { id });
     }
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const update_data = {
-      categoryIds: FieldValue.arrayUnion(...category_ids),
-      updatedAt: Timestamp.now(),
-    };
-    /* eslint-enable @typescript-eslint/naming-convention */
-    await doc_ref(id).update(update_data);
+    // Read-modify-REPLACE: recompute the deduped categoryIds array and set it,
+    // never a blind FieldValue.arrayUnion. Atomic within this one budget aggregate.
+    await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(doc_ref(id));
+      const current = (snap.data()?.categoryIds as string[] | undefined) ?? [];
+      const next = [...new Set([...current, ...category_ids])];
+      /* eslint-disable @typescript-eslint/naming-convention */
+      tx.update(doc_ref(id), { categoryIds: next, updatedAt: Timestamp.now() });
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
 
     record_audit_entry_async({
       user_id,

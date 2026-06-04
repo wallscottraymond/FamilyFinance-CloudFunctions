@@ -142,11 +142,6 @@ export async function update_user_summary_orchestrator(
         budget_count = deps.budget_periods.length;
         inflow_count = deps.inflow_periods.length;
 
-        console.log(
-          `[${ctx.trace_id}] update_user_summary: computing summary - ` +
-            `outflows=${outflow_count}, budgets=${budget_count}, inflows=${inflow_count}`
-        );
-
         // COMPUTE SUMMARY (Domain Service - PURE)
         const now = Timestamp.now();
         const compute_result = compute_user_period_summary({
@@ -188,13 +183,8 @@ export async function update_user_summary_orchestrator(
       );
     }
 
-    // LOG SUCCESS
+    // LOG SUCCESS (structured span only — per-job console line removed for volume)
     log_operation_success(span, ctx.input.user_id);
-
-    console.log(
-      `[${ctx.trace_id}] update_user_summary: saved ${final_summary_id} ` +
-        `in ${perf.time_ms}ms (transactional)`
-    );
 
     // ASYNC DEBUG LOGGING
     fire_and_forget(() =>

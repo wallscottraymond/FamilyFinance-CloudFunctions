@@ -26,6 +26,10 @@ import {
   compute_reallocated_periods,
 } from "../../domain/budgets/period_generation.service";
 import { enqueue_user_summary_updates_from_budget_periods } from "../../orchestrators/summaries";
+import { create_job } from "../../infrastructure/job_queue";
+import {
+  resolve_updated_rehome_transaction_ids,
+} from "../../resolvers/budgets/budget_rehome.resolver";
 import { ProcessBudgetUpdatedPayload } from "../../types/budgets/update_budget.types";
 
 /**
@@ -76,7 +80,46 @@ export async function process_budget_updated_orchestrator(
     await propagate_name(ctx, payload);
   }
 
+  // 5. Re-home cascade: a category change moves splits between Everything Else
+  //    and this budget. Re-run assignment for the candidate transactions (those
+  //    currently on EE — may gain; or on this budget — may release) in range.
+  await rehome_changed_categories(ctx, payload);
+
   log_operation_success(span, payload.user_id);
+}
+
+/**
+ * Re-assign transactions affected by a category add/remove so spend moves
+ * Everything Else ⇄ this budget. No-op when no categories changed.
+ */
+async function rehome_changed_categories(
+  ctx: TraceContext,
+  payload: ProcessBudgetUpdatedPayload
+): Promise<void> {
+  const categories_changed =
+    payload.added_claims.length > 0 || payload.released_category_ids.length > 0;
+  const txn_ids = await resolve_updated_rehome_transaction_ids(
+    ctx,
+    payload.user_id,
+    payload.budget_id,
+    payload.everything_else_budget_id,
+    categories_changed,
+    payload.start_ms,
+    payload.generation_end_ms
+  );
+  for (const transaction_id of txn_ids) {
+    await create_job(
+      "assign_transaction",
+      { user_id: payload.user_id, transaction_id },
+      { trace_id: ctx.trace_id }
+    );
+  }
+  if (txn_ids.length > 0) {
+    console.log(
+      `[${ctx.trace_id}] process_budget_updated: re-homed ${txn_ids.length} ` +
+        `transactions for budget ${payload.budget_id}`
+    );
+  }
 }
 
 /**
@@ -197,6 +240,7 @@ async function generate_fresh_periods(
     group_ids: payload.group_ids,
     budget_amount: payload.amount,
     budget_cadence: payload.cadence,
+    category_ids: payload.category_ids,
     source_periods: source_periods.map((sp) => ({
       id: sp.id,
       period_id: sp.period_id,

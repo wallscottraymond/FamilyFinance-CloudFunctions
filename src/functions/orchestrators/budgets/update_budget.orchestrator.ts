@@ -109,6 +109,7 @@ export async function update_budget_orchestrator(
         user_id,
         group_ids: entity.group_ids,
         budget_name: entity.name,
+        category_ids: entity.category_ids,
         amount: entity.amount,
         cadence: budget_cadence_to_instance(entity.period),
         start_ms: entity.start_date.toMillis(),

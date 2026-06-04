@@ -30,7 +30,6 @@ import {
 } from "../../../../utils/validation";
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
-import { updateBudgetSpending } from "../../../../utils/budgetSpending";
 import { matchTransactionSplitsToSourcePeriods } from "../../utils/matchTransactionSplitsToSourcePeriods";
 import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
@@ -209,17 +208,9 @@ export const createTransaction = onRequest({
 
       const createdTransaction = await createDocument<Transaction>("transactions", transactionWithPeriods);
 
-      // Update budget spending based on transaction splits
-      try {
-        await updateBudgetSpending({
-          newTransaction: createdTransaction,
-          userId: user.id!,
-          groupId: createdTransaction.groupId
-        });
-      } catch (budgetError) {
-        // Log error but don't fail transaction creation
-        console.error('Budget spending update failed after transaction creation:', budgetError);
-      }
+      // Budget spend is owned by the Transaction Assignment Engine: the
+      // `on_transaction_written` trigger enqueues `assign_transaction`, which
+      // fans out `recompute_budget_spent` jobs. No inline increment here.
 
       return response.status(201).json(createSuccessResponse(createdTransaction));
 

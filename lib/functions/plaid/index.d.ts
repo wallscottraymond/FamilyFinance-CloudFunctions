@@ -36,11 +36,10 @@ export { removePlaidAccount } from "./api/crud/removePlaidAccount";
 export { syncBalancesCallable } from "./api/sync/syncBalances";
 export { syncTransactionsForItem as syncTransactionsCallable } from "./api/sync/syncTransactions";
 export { syncRecurringTransactionsCallable } from "./api/sync/syncRecurring";
-export { onPlaidItemCreated } from "./orchestration/triggers/onPlaidItemCreated";
 export { plaidWebhook } from "./orchestration/webhooks/plaidWebhook";
 export { processWebhookTransactionSync } from "./orchestration/webhookTransactionSync";
 export { plaidErrorHandler } from "./utils/plaidErrorHandler";
-export { fireTransactionWebhook, fireIncomeWebhook, fireItemWebhook, getUserPlaidItems } from "./admin/testWebhooks";
+export { fireTransactionWebhook, fireIncomeWebhook, fireItemWebhook, getUserPlaidItems, resetItemLogin, clearItemError } from "./admin/testWebhooks";
 export { reprocessPlaidTransactions } from "./admin/migrateTransactionSplits";
 /**
  * Function Overview:

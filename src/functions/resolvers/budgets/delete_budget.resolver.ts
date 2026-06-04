@@ -12,7 +12,6 @@
  * @module resolvers/budgets/delete_budget
  */
 
-import { getFirestore } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { NotFoundError } from "../../types/errors";
 import {
@@ -22,6 +21,7 @@ import {
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
+import { transaction_repo } from "../../repositories/transaction.repo";
 import { DeleteBudgetDependencies } from "../../types/budgets/delete_budget.types";
 
 /**
@@ -48,7 +48,7 @@ export async function resolve_delete_budget_dependencies(
   const [budget_period_ids, affected_transaction_ids, everything_else] =
     await Promise.all([
       budget_period_repo.get_ids_by_budget_id(ctx, budget_id),
-      find_transactions_referencing_budget(ctx, user_id, budget_id),
+      transaction_repo.get_ids_referencing_budget(ctx, user_id, budget_id),
       budget_repo.find_everything_else(ctx, user_id),
     ]);
 
@@ -61,43 +61,4 @@ export async function resolve_delete_budget_dependencies(
     owned_category_ids: existing.category_ids,
     everything_else_budget_id: everything_else?.id ?? null,
   };
-}
-
-/**
- * Finds active transactions with at least one split referencing the budget.
- * Queries by both ownerId and userId (legacy compatibility) and dedupes.
- */
-async function find_transactions_referencing_budget(
-  _ctx: TraceContext,
-  user_id: string,
-  budget_id: string
-): Promise<string[]> {
-  const db = getFirestore();
-
-  const [owner_snap, user_snap] = await Promise.all([
-    db
-      .collection("transactions")
-      .where("ownerId", "==", user_id)
-      .where("isActive", "==", true)
-      .get(),
-    db
-      .collection("transactions")
-      .where("userId", "==", user_id)
-      .where("isActive", "==", true)
-      .get(),
-  ]);
-
-  const matched = new Set<string>();
-  for (const snap of [owner_snap, user_snap]) {
-    snap.docs.forEach((doc) => {
-      /* eslint-disable @typescript-eslint/naming-convention */
-      const splits = (doc.data().splits ?? []) as Array<{ budgetId?: string }>;
-      /* eslint-enable @typescript-eslint/naming-convention */
-      if (splits.some((s) => s.budgetId === budget_id)) {
-        matched.add(doc.id);
-      }
-    });
-  }
-
-  return Array.from(matched);
 }

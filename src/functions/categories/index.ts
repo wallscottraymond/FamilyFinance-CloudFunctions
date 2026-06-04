@@ -2,7 +2,7 @@
  * Categories Functions Export
  */
 
-export { 
+export {
   getCategories,
   addCategory,
   updateCategory,

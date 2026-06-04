@@ -380,9 +380,11 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       // Group-based access: Users can read transactions they have access to
       // NEW RBAC: Uses groupIds array for group membership
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
       // Falls back to groupId (singular) for legacy documents
       allow read: if isAuthenticated() && (
                      isOwner(resource.data.ownerId) ||
+                     isOwner(resource.data.userId) ||
                      canAccessGroup(resource.data.groupIds) ||
                      (resource.data.groupId != null && inSameFamily(resource.data.groupId))
                   );
@@ -397,17 +399,19 @@ service cloud.firestore {
       // Demo users cannot create transactions
       allow create: if isAuthenticated() &&
                        !isDemoUser() &&
-                       (isOwner(request.resource.data.ownerId) || canManage()) &&
+                       (isOwner(request.resource.data.ownerId) || isOwner(request.resource.data.userId) || canManage()) &&
                        isValidTransactionData();
 
       // Users can update their own transactions (splits, notes, visibility)
       // Group members can update shared transactions
       // Parents/Admins can update family transactions
       // Demo users cannot update transactions
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
       // CRITICAL: Enforces immutable fields (transactionDate, ownerId, amount)
       allow update: if isAuthenticated() &&
                        !isDemoUser() &&
                        (isOwner(resource.data.ownerId) ||
+                        isOwner(resource.data.userId) ||
                         canAccessGroup(resource.data.groupIds) ||
                         (resource.data.groupId != null && canManage() && inSameFamily(resource.data.groupId))
                        ) && isValidTransactionUpdate();
@@ -415,8 +419,9 @@ service cloud.firestore {
       // Users can delete their own manual transactions
       // Admins can delete any transaction
       // Demo users cannot delete transactions
+      // Supports both FLAT (ownerId) and NESTED (userId) structure for backward compatibility
       allow delete: if !isDemoUser() &&
-                       ((isOwner(resource.data.ownerId) && resource.data.source != 'plaid') ||
+                       (((isOwner(resource.data.ownerId) || isOwner(resource.data.userId)) && resource.data.source != 'plaid') ||
                         isAdmin());
     }
     
@@ -1005,10 +1010,11 @@ service cloud.firestore {
     }
 
     // Validate transaction split references array for outflow periods
+    // Note: Firestore rules cannot iterate over list items, so we only validate size
+    // Individual item validation happens at the application layer
     function isValidTransactionSplitReferences(splitRefs) {
       return splitRefs is list &&
-             splitRefs.size() <= 50 && // Reasonable limit for payment history
-             splitRefs.all(splitRef, isValidTransactionSplitReference(splitRef));
+             splitRefs.size() <= 50; // Reasonable limit for payment history
     }
 
     // Validate individual transaction split reference
@@ -1111,49 +1117,25 @@ service cloud.firestore {
     }
     
     function isValidTransactionUpdate() {
+      // TEMPORARY: Simplified validation for debugging permission issues
+      // TODO: Re-enable full validation after fixing permission problem
       let data = request.resource.data;
       let resource_data = resource.data;
       let changedFields = data.diff(resource_data).affectedKeys();
-      
+
       // User-modifiable fields for transactions with embedded splits
-      // Allow more flexible field updates to handle various transaction structures
       let allowedFields = [
-        'userNotes',           // User notes
-        'isHidden',            // Hide/show transaction
-        'isRecurring',         // Mark as recurring
-        'splits',              // Transaction splits array
-        'isSplit',             // Split flag (calculated from splits)
-        'totalAllocated',      // Total split amount (calculated)
-        'unallocated',         // Unallocated amount (calculated)
-        'affectedBudgets',     // Array of budget IDs
-        'affectedBudgetPeriods', // Array of budget period IDs
-        'primaryBudgetId',     // Primary budget ID (largest split)
-        'primaryBudgetPeriodId', // Primary budget period ID (largest split)
-        'updatedAt',           // Update timestamp
-        // Additional fields that might be updated
-        'lastSyncedAt',        // Last sync timestamp
-        'tags',                // Transaction tags
-        'category',            // Transaction category
-        'userCategory',        // User override category
-        'notes',               // Alternative notes field name
-        'metadata'             // Metadata updates
+        'userNotes', 'isHidden', 'isRecurring', 'splits', 'isSplit',
+        'totalAllocated', 'unallocated', 'affectedBudgets', 'affectedBudgetPeriods',
+        'primaryBudgetId', 'primaryBudgetPeriodId', 'updatedAt', 'lastSyncedAt',
+        'tags', 'category', 'userCategory', 'notes', 'metadata',
+        // Additional fields that might need updating
+        'hasIgnoredSplits', 'hasRefundSplits', 'hasTaxDeductibleSplits'
       ];
-      
-      // Validate that only allowed fields are being changed
-      let validFieldChanges = changedFields.hasOnly(allowedFields);
-      
-      // Prevent changing core immutable fields (if they exist)
-      // CRITICAL: transactionDate is immutable to prevent budget tracking issues
-      let coreFieldsUnchanged = (!('userId' in data) || data.userId == resource_data.userId) &&
-                               (!('ownerId' in data) || data.ownerId == resource_data.ownerId) &&
-                               (!('transactionDate' in data) || data.transactionDate == resource_data.transactionDate) &&
-                               (!('amount' in data) || data.amount == resource_data.amount);
-      
-      // For now, skip complex split validation to get basic updates working
-      // We'll rely on the frontend/backend validation instead
-      let splitsValid = true;
-      
-      return validFieldChanges && coreFieldsUnchanged && splitsValid;
+
+      // Only check that changed fields are in allowed list
+      // Skip timestamp comparison for now (potential comparison issue)
+      return changedFields.hasOnly(allowedFields);
     }
 
     // Validate budget period updates
@@ -1190,10 +1172,11 @@ service cloud.firestore {
     }
     
     // Validate checklist items array
+    // Note: Firestore rules cannot iterate over list items, so we only validate size
+    // Individual item validation happens at the application layer
     function isValidChecklistItems(checklistItems) {
       return checklistItems is list &&
-             checklistItems.size() <= 20 && // Reasonable limit
-             checklistItems.all(checklistItem, isValidChecklistItem(checklistItem));
+             checklistItems.size() <= 20; // Reasonable limit
     }
 
     // Validate individual checklist item

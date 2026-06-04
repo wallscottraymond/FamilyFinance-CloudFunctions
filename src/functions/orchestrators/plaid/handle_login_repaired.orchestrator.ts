@@ -98,6 +98,7 @@ export async function handle_login_repaired_orchestrator(
       errorAt: null,
       requiresReauth: false,
       consentExpiresAt: null,
+      transientSince: null,
       updatedAt: FieldValue.serverTimestamp(),
     });
     /* eslint-enable @typescript-eslint/naming-convention */

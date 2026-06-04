@@ -4,10 +4,11 @@
  * Matches transaction splits to budgets based on date range AND category.
  * Operates in-memory on transaction arrays (no DB writes).
  *
- * Matching Priority:
- * 1. Regular budgets: Must match BOTH date range AND category
- * 2. "Everything Else" budget: Fallback for unmatched transactions
- * 3. Unassigned: Only if no "Everything Else" budget exists
+ * Matching Logic:
+ * - ALL budgets (including "Everything Else") match by date range AND category
+ * - "Everything Else" budget owns all unassigned categories, so it will naturally
+ *   match transactions that don't match any other budget's categories
+ * - First matching budget wins (no priority ordering)
  */
 import { Transaction as FamilyTransaction } from '../../../types';
 /**

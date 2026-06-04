@@ -17,6 +17,7 @@ import {
   BudgetPeriodType,
   PrimePeriodBreakdownEntry,
 } from "../../types/budgets/budget_entity.types";
+import { ProcessBudgetCreatedPayload } from "../../types/budgets/create_budget.types";
 
 /**
  * Period instance cadence (the types the user interacts with daily).
@@ -65,6 +66,73 @@ export function compute_period_generation_end(
 }
 
 /**
+ * Build a `process_budget_created` payload that SELF-PROVISIONS a budget's
+ * periods — no category claims, no Everything-Else re-homing. Used to generate
+ * periods for budgets created outside the v2 create flow (the legacy Everything
+ * Else budget) and to heal existing budgets that are missing their periods.
+ *
+ * `coverage_start` (optional) decouples the generation WINDOW START from the
+ * budget's nominal start so the Everything Else catch-all can cover imported
+ * HISTORICAL transactions (which Plaid dates before signup). The forward
+ * horizon (`generation_end_ms`) is still derived from `start` — so the window
+ * becomes [coverage_start, start + 12mo] rather than [start, start + 12mo].
+ *
+ * PURE FUNCTION.
+ */
+export function build_self_provision_budget_created_payload(args: {
+  budget_id: string;
+  user_id: string;
+  group_ids: string[];
+  budget_name: string;
+  category_ids: string[];
+  amount: number;
+  period: BudgetPeriodType;
+  start: Date;
+  is_ongoing: boolean;
+  budget_end_date: Date | null;
+  /** Backdated window start (e.g. EE history coverage); defaults to `start`. */
+  coverage_start?: Date | null;
+}): ProcessBudgetCreatedPayload {
+  const generation_end = compute_period_generation_end(
+    args.start,
+    args.is_ongoing,
+    args.budget_end_date
+  );
+  const window_start = args.coverage_start ?? args.start;
+  return {
+    budget_id: args.budget_id,
+    user_id: args.user_id,
+    group_ids: args.group_ids,
+    budget_name: args.budget_name,
+    category_ids: args.category_ids,
+    amount: args.amount,
+    cadence: budget_cadence_to_instance(args.period),
+    start_ms: window_start.getTime(),
+    generation_end_ms: generation_end.getTime(),
+    is_recurring: args.is_ongoing,
+    claims: [],
+    everything_else_budget_id: null,
+  };
+}
+
+/**
+ * Months of HISTORICAL coverage to generate for the Everything Else catch-all
+ * budget, so imported (Plaid) transactions dated before signup land in a period
+ * and contribute to spend. Matches Plaid's typical max import range.
+ */
+export const EE_HISTORY_BACKDATE_MONTHS = 24;
+
+/**
+ * Compute the backdated coverage-window start for the Everything Else budget:
+ * `reference` minus EE_HISTORY_BACKDATE_MONTHS. PURE.
+ */
+export function compute_ee_coverage_start(reference: Date): Date {
+  const start = new Date(reference.getTime());
+  start.setUTCMonth(start.getUTCMonth() - EE_HISTORY_BACKDATE_MONTHS);
+  return start;
+}
+
+/**
  * A source period as needed for generation (pure input).
  */
 export interface SourcePeriodForGeneration {
@@ -84,6 +152,8 @@ export interface ComputeBudgetPeriodsInput {
   group_ids: string[];
   budget_amount: number;
   budget_cadence: PeriodInstanceType;
+  /** Denormalized onto every generated period so it's self-contained. */
+  category_ids: string[];
   source_periods: SourcePeriodForGeneration[];
   now: Timestamp;
 }
@@ -137,6 +207,7 @@ export function compute_budget_periods(
     budget_id: input.budget_id,
     user_id: input.user_id,
     group_ids: input.group_ids,
+    category_ids: input.category_ids,
     period_id: source.period_id,
     period_type: source.period_type,
     allocated_amount: allocated,

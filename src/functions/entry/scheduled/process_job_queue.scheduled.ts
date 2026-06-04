@@ -44,6 +44,18 @@ import {
 import { ProcessBudgetCreatedPayload } from "../../types/budgets/create_budget.types";
 import { ProcessBudgetUpdatedPayload } from "../../types/budgets/update_budget.types";
 import { ProcessBudgetDeletedPayload } from "../../types/budgets/delete_budget.types";
+import {
+  assign_transaction_orchestrator,
+  AssignTransactionInput,
+} from "../../orchestrators/transactions/assign_transaction.orchestrator";
+import {
+  recompute_budget_spent_orchestrator,
+  RecomputeBudgetSpentInput,
+} from "../../orchestrators/budgets/recompute_budget_spent.orchestrator";
+import {
+  backfill_assignments_orchestrator,
+  BackfillAssignmentsInput,
+} from "../../orchestrators/transactions/backfill_assignments.orchestrator";
 
 /**
  * Maximum jobs to process per invocation.
@@ -114,6 +126,21 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
       ctx,
       payload as ProcessBudgetDeletedPayload
     );
+  },
+
+  // Transaction Assignment Engine + spend pipeline + backfill. Registered here
+  // (not just in on_job_created) so a retried/missed engine job is processed by
+  // the fallback worker instead of dead-lettering.
+  assign_transaction: async (ctx, payload) => {
+    await assign_transaction_orchestrator(ctx, payload as AssignTransactionInput);
+  },
+
+  recompute_budget_spent: async (ctx, payload) => {
+    await recompute_budget_spent_orchestrator(ctx, payload as RecomputeBudgetSpentInput);
+  },
+
+  backfill_assignments: async (ctx, payload) => {
+    await backfill_assignments_orchestrator(ctx, payload as BackfillAssignmentsInput);
   },
 };
 

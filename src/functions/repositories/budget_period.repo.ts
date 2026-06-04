@@ -31,6 +31,7 @@ interface LegacyBudgetPeriodDoc {
   budgetId: string;
   userId?: string;
   groupIds?: string[];
+  categoryIds?: string[];
   periodId: string;
   periodType: string;
   periodStart: Timestamp;
@@ -69,6 +70,7 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
     budget_id: doc.budgetId,
     user_id: doc.userId ?? "",
     group_ids: doc.groupIds ?? [],
+    category_ids: doc.categoryIds ?? [],
     period_id: doc.periodId,
     period_type: (doc.periodType as BudgetPeriodEntity["period_type"]) ?? "monthly",
     allocated_amount: allocated,
@@ -119,6 +121,22 @@ export const budget_period_repo = {
     return snapshot.docs.map((doc) =>
       map_to_entity(doc.data() as LegacyBudgetPeriodDoc)
     );
+  },
+
+  /**
+   * Gets the raw doc data + id for a set of period IDs (missing docs skipped).
+   * READ-ONLY — used by the summary resolver to group periods for recompute.
+   */
+  async get_by_ids(
+    _ctx: TraceContext,
+    period_ids: string[]
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const docs = await Promise.all(
+      period_ids.map((id) => getFirestore().collection(COLLECTION).doc(id).get())
+    );
+    return docs
+      .filter((doc) => doc.exists)
+      .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }));
   },
 
   /**
@@ -206,6 +224,7 @@ export const budget_period_repo = {
           id: period.id,
           budgetId: period.budget_id,
           budgetName: budget_name,
+          categoryIds: period.category_ids ?? [],
           userId: period.user_id,
           groupIds: period.group_ids,
           periodId: period.period_id,
@@ -234,6 +253,51 @@ export const budget_period_repo = {
         batch.set(db.collection(COLLECTION).doc(period.id), doc_data);
         results.push(
           create_write_result("budget_period", period.id, "replace", null, doc_data)
+        );
+      }
+      await batch.commit();
+    }
+    return results;
+  },
+
+  /**
+   * Recomputes SPENT fields IN PLACE on existing periods (max 500 per batch).
+   * Used by the spend pipeline (invalidation-based): writes `spent`,
+   * `pendingSpent`, and `remaining` while preserving everything else on the
+   * period (allocation, notes, checklist, etc.). NOT an increment.
+   */
+  async update_spent(
+    _ctx: TraceContext,
+    updates: Array<{
+      id: string;
+      spent: number;
+      pending_spent: number;
+      remaining: number;
+    }>
+  ): Promise<WriteResult[]> {
+    if (updates.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const results: WriteResult[] = [];
+    const chunks = chunk_for_batch(updates);
+
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      for (const u of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const update_data = {
+          spent: u.spent,
+          pendingSpent: u.pending_spent,
+          remaining: u.remaining,
+          lastCalculated: now,
+          updatedAt: now,
+        };
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(u.id), update_data);
+        results.push(
+          create_write_result("budget_period", u.id, "merge", { id: u.id }, update_data)
         );
       }
       await batch.commit();

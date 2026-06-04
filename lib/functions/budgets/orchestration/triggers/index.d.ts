@@ -1,11 +1,23 @@
 /**
  * Budget Trigger Functions Index
  *
- * Exports all Firestore trigger-based budget orchestration functions.
+ * ⚠️ RETIRED (2026-06): All legacy budget Firestore triggers were deleted as
+ * part of the Budget CRUD Architecture Migration. They fired on any write to
+ * `budgets` / `budget_periods` — including the new v2 orchestrators' writes —
+ * causing duplicate period generation and cascade conflicts.
+ *
+ * Their responsibilities are now owned by the v2 cascade job handlers
+ * (orchestrators/budgets/process_budget_{created,updated,deleted}):
+ *   - onBudgetCreate                      → process_budget_created
+ *   - onBudgetUpdatedReassignTransactions → process_budget_updated (category transfer)
+ *   - onBudgetUpdatedCascade              → process_budget_updated (amount reallocation + rename)
+ *     NOTE: budget-level isActive pause/resume (redistribute to Everything Else)
+ *     was NOT ported — see git history if that behavior is reintroduced.
+ *   - onBudgetDelete                      → process_budget_deleted. The legacy
+ *     EE auto-recreation was dropped; v2 BLOCKS Everything-Else deletion in the
+ *     domain layer (compute_delete_budget) instead.
+ *   - onBudgetPeriodUpdated               → note/checklist overlap sync, still
+ *     PENDING (#2). Core logic remains in utils/syncNotesToOverlappingPeriods.
  */
-export { onBudgetCreate } from './onBudgetCreate';
-export { onBudgetDelete } from './onBudgetDelete';
-export { onBudgetUpdatedReassignTransactions } from './onBudgetUpdate';
-export { onBudgetUpdatedCascade } from './onBudgetUpdatedCascade';
-export { onBudgetPeriodUpdated } from './onBudgetPeriodUpdated';
+export {};
 //# sourceMappingURL=index.d.ts.map

@@ -104,10 +104,11 @@ export {
 
 // ===== Orchestration Functions =====
 
-// Triggers
-export { onTransactionCreate } from "./orchestration/triggers/onTransactionCreate";
-export { onTransactionUpdate } from "./orchestration/triggers/onTransactionUpdate";
-export { onTransactionDelete } from "./orchestration/triggers/onTransactionDelete";
+// Triggers — REMOVED in the Transaction Assignment Engine cutover.
+// The legacy increment-model triggers (onTransactionCreate/Update/Delete →
+// updateBudgetSpending) are replaced by `on_transaction_written`
+// (entry/triggers/), which enqueues `assign_transaction` and fans out
+// invalidation-based `recompute_budget_spent` jobs.
 
 // ===== Development/Testing Functions =====
 // These functions are for local development only - they seed test data

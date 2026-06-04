@@ -21,6 +21,8 @@ export { Outflow, outflow_repo } from "./outflow.repo";
 export { budget_repo } from "./budget.repo";
 export { budget_period_repo } from "./budget_period.repo";
 export { source_period_repo, SourcePeriodEntity } from "./source_period.repo";
+export { user_repo } from "./user.repo";
+export { category_repo } from "./category.repo";
 
 // Plaid repositories
 export { link_token_event_repo } from "./plaid";

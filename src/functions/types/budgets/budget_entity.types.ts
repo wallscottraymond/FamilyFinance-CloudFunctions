@@ -137,6 +137,8 @@ export interface BudgetPeriodEntity {
   budget_id: string;
   user_id: string;
   group_ids: string[];
+  /** Denormalized from the parent budget so the period is self-contained. */
+  category_ids: string[];
   period_id: string; // e.g. "2025M03", "2025BM03A", "2025W12"
   period_type: PeriodInstanceCadence;
 

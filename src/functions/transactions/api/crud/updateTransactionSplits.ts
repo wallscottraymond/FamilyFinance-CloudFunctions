@@ -11,7 +11,6 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Transaction, TransactionSplit } from "../../../../types";
 import { getDocument, updateDocument } from "../../../../utils/firestore";
 import * as admin from "firebase-admin";
-import { updateBudgetSpending } from "../../../../utils/budgetSpending";
 import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 interface UpdateTransactionSplitsRequest {
@@ -120,6 +119,7 @@ export const updateTransactionSplits = onCall<
     updateData.splits = assignmentResult.transaction.splits;
 
     // Ensure all splits have required fields
+    const txn: any = existingTransaction;
     updateData.splits = updateData.splits.map((split: any, index: number) => {
       const now = admin.firestore.Timestamp.now();
       const splitId = split.splitId || split.id || `split_${Date.now()}_${index}`;
@@ -128,6 +128,18 @@ export const updateTransactionSplits = onCall<
         // Ensure ID exists (support both splitId and id field names)
         splitId: splitId,
         id: splitId,
+        // Inherit the category from the parent transaction when a (manually
+        // added) split doesn't carry one — the assignment engine matches a
+        // budget on the split's DETAILED category, so a category-less split
+        // would otherwise fall to "Everything Else".
+        plaidPrimaryCategory:
+          split.plaidPrimaryCategory ?? txn.plaidPrimaryCategory ?? null,
+        plaidDetailedCategory:
+          split.plaidDetailedCategory ?? txn.plaidDetailedCategory ?? null,
+        internalPrimaryCategory:
+          split.internalPrimaryCategory ?? txn.internalPrimaryCategory ?? null,
+        internalDetailedCategory:
+          split.internalDetailedCategory ?? txn.internalDetailedCategory ?? null,
         // Ensure timestamps
         createdAt: split.createdAt || now,
         updatedAt: now,
@@ -147,25 +159,9 @@ export const updateTransactionSplits = onCall<
 
     console.log(`[updateTransactionSplits] Transaction ${transactionId} updated successfully`);
 
-    // DEBUG: Log transaction details for budget spending
-    console.log(`[updateTransactionSplits] DEBUG - Budget spending prerequisites:`);
-    console.log(`  transactionStatus: ${updatedTransaction.transactionStatus} (needs "approved")`);
-    console.log(`  type: ${updatedTransaction.type} (needs "expense")`);
-    console.log(`  splits budgetIds: ${updatedTransaction.splits?.map((s: any) => s.budgetId).join(', ')}`);
-
-    // Update budget spending
-    try {
-      const budgetResult = await updateBudgetSpending({
-        oldTransaction: existingTransaction,
-        newTransaction: updatedTransaction,
-        userId: userId,
-        groupId: existingTransaction.groupId
-      });
-      console.log(`[updateTransactionSplits] Budget spending result:`, budgetResult);
-    } catch (budgetError) {
-      // Log error but don't fail the transaction update
-      console.error('[updateTransactionSplits] Budget spending update failed:', budgetError);
-    }
+    // Budget spend is owned by the Transaction Assignment Engine: the
+    // `on_transaction_written` trigger enqueues `assign_transaction`, which
+    // fans out `recompute_budget_spent` jobs. No inline increment here.
 
     return {
       success: true,

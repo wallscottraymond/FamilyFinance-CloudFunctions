@@ -598,6 +598,31 @@ export const transaction_repo = {
   },
 
   /**
+   * Writes the Transaction Assignment Engine's output: the updated splits array
+   * (with the engine-owned assignment fields applied) plus the denormalized
+   * `splitBudgetIds`. This is the engine's SINGLE write of split assignment.
+   *
+   * @param _ctx - Trace context
+   * @param doc_id - Transaction document ID
+   * @param updated_splits - The full splits array, with assignment fields applied
+   * @param split_budget_ids - Distinct budget ids across the splits (queryable)
+   */
+  async apply_split_assignments(
+    _ctx: TraceContext,
+    doc_id: string,
+    updated_splits: Array<Record<string, unknown>>,
+    split_budget_ids: string[]
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(doc_id).update({
+      splits: updated_splits,
+      splitBudgetIds: split_budget_ids,
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
    * Counts active transactions for a specific account.
    *
    * Used by resolvers to determine cascade scope for account removal.
@@ -670,6 +695,138 @@ export const transaction_repo = {
   },
 
   /**
+   * Gets all active transaction IDs owned by a user.
+   *
+   * Queries by `userId` (the field the assignment engine + spend recompute use,
+   * NOT `ownerId`) so the backfill's work-list matches exactly what
+   * `recompute_budget_spent` will sum. Returns only IDs to bound memory.
+   *
+   * @param ctx - Trace context
+   * @param user_id - User ID (matches the `userId` field)
+   * @param limit - Maximum number of IDs to return (default 5000)
+   * @returns Array of transaction document IDs
+   */
+  async get_ids_by_user_id(
+    ctx: TraceContext,
+    user_id: string,
+    limit: number = 5000
+  ): Promise<string[]> {
+    const db = getFirestore();
+
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("isActive", "==", true)
+      .select() // Document IDs only
+      .limit(limit)
+      .get();
+
+    const ids = snapshot.docs.map((doc) => doc.id);
+
+    console.log(
+      `[${ctx.trace_id}] get_ids_by_user_id: user=${user_id}, found=${ids.length}`
+    );
+
+    return ids;
+  },
+
+  /**
+   * Gets active transaction IDs that have at least one split assigned to a
+   * budget. Splits are nested maps, so this scans the user's active
+   * transactions (by ownerId AND userId, deduped) and filters in memory.
+   * Used by the delete cascade to re-run assignment on a deleted budget's txns.
+   *
+   * @param ctx - Trace context
+   * @param user_id - User ID
+   * @param budget_id - Budget whose referencing transactions to find
+   */
+  async get_ids_referencing_budget(
+    ctx: TraceContext,
+    user_id: string,
+    budget_id: string
+  ): Promise<string[]> {
+    const db = getFirestore();
+    const [owner_snap, user_snap] = await Promise.all([
+      db
+        .collection(COLLECTION)
+        .where("ownerId", "==", user_id)
+        .where("isActive", "==", true)
+        .get(),
+      db
+        .collection(COLLECTION)
+        .where("userId", "==", user_id)
+        .where("isActive", "==", true)
+        .get(),
+    ]);
+
+    const matched = new Set<string>();
+    for (const snap of [owner_snap, user_snap]) {
+      snap.docs.forEach((doc) => {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const splits = (doc.data().splits ?? []) as Array<{ budgetId?: string }>;
+        /* eslint-enable @typescript-eslint/naming-convention */
+        if (splits.some((s) => s.budgetId === budget_id)) {
+          matched.add(doc.id);
+        }
+      });
+    }
+
+    const ids = Array.from(matched);
+    console.log(
+      `[${ctx.trace_id}] get_ids_referencing_budget: budget=${budget_id}, found=${ids.length}`
+    );
+    return ids;
+  },
+
+  /**
+   * Gets one transaction's raw doc data + id, or null if missing/inactive.
+   * Returns the raw camelCase map so the assignment resolver can read-modify-
+   * write nested splits onto it.
+   */
+  async get_raw_by_id(
+    _ctx: TraceContext,
+    transaction_id: string
+  ): Promise<{ id: string; data: Record<string, unknown> } | null> {
+    const doc = await getFirestore()
+      .collection(COLLECTION)
+      .doc(transaction_id)
+      .get();
+    if (!doc.exists) {
+      return null;
+    }
+    const data = doc.data() as Record<string, unknown>;
+    if (data.isActive === false) {
+      return null;
+    }
+    return { id: doc.id, data };
+  },
+
+  /**
+   * Gets active transactions (raw doc data + id) whose `transactionDate` falls
+   * in [start_ms, end_ms]. Returns raw maps so callers (spend / re-home
+   * resolvers) can map nested splits themselves.
+   *
+   * Composite index: `transactions(userId, transactionDate)`.
+   */
+  async get_active_in_date_range(
+    _ctx: TraceContext,
+    user_id: string,
+    start_ms: number,
+    end_ms: number
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("transactionDate", ">=", Timestamp.fromMillis(start_ms))
+      .where("transactionDate", "<=", Timestamp.fromMillis(end_ms))
+      .get();
+    return snapshot.docs
+      .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }))
+      .filter((t) => t.data.isActive !== false);
+  },
+
+  /**
    * Updates cursor on plaid_item document.
    *
    * NOTE: This updates the plaid_items collection, not transactions.
@@ -700,77 +857,4 @@ export const transaction_repo = {
     );
   },
 
-  /**
-   * Reassigns every split that references one budget to another budget.
-   *
-   * Used by the delete cascade: splits pointing at a deleted budget are moved
-   * to the user's "Everything Else" budget. Operates on the stored split docs
-   * (camelCase) and writes back in batches. Idempotent: a transaction whose
-   * splits no longer reference `from_budget_id` is left unchanged.
-   *
-   * @param ctx - Trace context
-   * @param transaction_ids - Transaction document IDs to update
-   * @param from_budget_id - Budget being removed
-   * @param to_budget_id - Replacement budget (Everything Else)
-   * @param to_budget_name - Denormalized name for the replacement budget
-   * @returns Number of transactions actually modified
-   */
-  async reassign_splits_budget(
-    ctx: TraceContext,
-    transaction_ids: string[],
-    from_budget_id: string,
-    to_budget_id: string,
-    to_budget_name: string
-  ): Promise<number> {
-    if (transaction_ids.length === 0) {
-      return 0;
-    }
-    const db = getFirestore();
-    const now = Timestamp.now();
-    let modified = 0;
-    const chunks = chunk_for_batch(transaction_ids);
-
-    for (const chunk of chunks) {
-      const batch = db.batch();
-      let batch_has_writes = false;
-
-      for (const id of chunk) {
-        const snap = await doc_ref(id).get();
-        if (!snap.exists) {
-          continue;
-        }
-        const data = snap.data() as { splits?: Array<Record<string, unknown>> };
-        const splits = data.splits ?? [];
-        let changed = false;
-
-        const next_splits = splits.map((split) => {
-          if (split.budgetId === from_budget_id) {
-            changed = true;
-            /* eslint-disable @typescript-eslint/naming-convention */
-            return { ...split, budgetId: to_budget_id, budgetName: to_budget_name };
-            /* eslint-enable @typescript-eslint/naming-convention */
-          }
-          return split;
-        });
-
-        if (changed) {
-          /* eslint-disable @typescript-eslint/naming-convention */
-          batch.update(doc_ref(id), { splits: next_splits, updatedAt: now });
-          /* eslint-enable @typescript-eslint/naming-convention */
-          batch_has_writes = true;
-          modified++;
-        }
-      }
-
-      if (batch_has_writes) {
-        await batch.commit();
-      }
-    }
-
-    console.log(
-      `[${ctx.trace_id}] reassign_splits_budget: ${modified}/${transaction_ids.length} ` +
-      `transactions moved from ${from_budget_id} to ${to_budget_id}`
-    );
-    return modified;
-  },
 };

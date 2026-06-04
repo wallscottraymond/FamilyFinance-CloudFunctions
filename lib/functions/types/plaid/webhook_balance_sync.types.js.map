@@ -1,0 +1,1 @@
+{"version":3,"file":"webhook_balance_sync.types.js","sourceRoot":"","sources":["../../../../src/functions/types/plaid/webhook_balance_sync.types.ts"],"names":[],"mappings":";AAAA;;;;;;;GAOG;;;AAkFH,+EAA+E;AAC/E,YAAY;AACZ,+EAA+E;AAE/E;;;GAGG;AACU,QAAA,2BAA2B,GAAG;IACzC,wCAAwC;IACxC,SAAS,EAAE,EAAE;IAEb,yCAAyC;IACzC,UAAU,EAAE,EAAE;IAEd,wEAAwE;IACxE,WAAW,EAAE,KAAK;CACnB,CAAC"}

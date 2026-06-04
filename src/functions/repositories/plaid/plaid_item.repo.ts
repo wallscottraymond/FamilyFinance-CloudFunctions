@@ -18,6 +18,7 @@ import {
   PlaidItem,
   PlaidItemStatus,
 } from "../../types";
+import { TransientItemToRetry } from "../../types/plaid/transient_error_retry.types";
 import { record_audit_entry_async } from "../../audit";
 
 /**
@@ -171,6 +172,49 @@ export const plaid_item_repo = {
     return snapshot.docs.map((doc) =>
       map_to_entity(doc.data() as LegacyPlaidItemDoc)
     );
+  },
+
+  /**
+   * Gets all ACTIVE items currently in one of the given (transient) statuses,
+   * across all users. Used by the auto-retry scheduled job.
+   *
+   * Queries by `status in [...]` (single-field index — no composite index
+   * needed) and filters `isActive` in memory.
+   *
+   * @param ctx - Trace context
+   * @param statuses - Status values to match (max 10 for an `in` query)
+   * @returns Lightweight rows describing items to retry
+   */
+  async get_in_transient_state(
+    ctx: TraceContext,
+    statuses: string[]
+  ): Promise<TransientItemToRetry[]> {
+    if (statuses.length === 0) {
+      return [];
+    }
+    const db = get_db();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("status", "in", statuses)
+      .get();
+
+    const rows: TransientItemToRetry[] = [];
+    for (const doc of snapshot.docs) {
+      const legacy = doc.data() as LegacyPlaidItemDoc;
+      const raw = doc.data() as Record<string, unknown>;
+      if (raw.isActive === false) {
+        continue;
+      }
+      rows.push({
+        item_doc_id: doc.id,
+        plaid_item_id: legacy.plaidItemId,
+        user_id: legacy.userId,
+        status: legacy.status,
+        error_code: legacy.error ?? null,
+        transient_since: (raw.transientSince as Timestamp | null) ?? null,
+      });
+    }
+    return rows;
   },
 
   /**

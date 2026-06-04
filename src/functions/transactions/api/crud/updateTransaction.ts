@@ -19,7 +19,6 @@ import {
 } from "../../../../utils/auth";
 import { validateRequest, updateTransactionSchema } from "../../../../utils/validation";
 import { firebaseCors } from "../../../../middleware/cors";
-import { updateBudgetSpending } from "../../../../utils/budgetSpending";
 import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 /**
@@ -137,18 +136,9 @@ export const updateTransaction = onRequest({
         updateDataForFirestore
       );
 
-      // Update budget spending based on transaction changes
-      try {
-        await updateBudgetSpending({
-          oldTransaction: existingTransaction,
-          newTransaction: updatedTransaction,
-          userId: user.id!,
-          groupId: existingTransaction.groupId
-        });
-      } catch (budgetError) {
-        // Log error but don't fail transaction update
-        console.error('Budget spending update failed after transaction update:', budgetError);
-      }
+      // Budget spend is owned by the Transaction Assignment Engine: the
+      // `on_transaction_written` trigger enqueues `assign_transaction`, which
+      // fans out `recompute_budget_spent` jobs. No inline increment here.
 
       return response.status(200).json(createSuccessResponse(updatedTransaction));
 

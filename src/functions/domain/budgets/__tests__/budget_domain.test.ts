@@ -133,6 +133,7 @@ describe("compute_budget_periods — prime/non-prime breakdown", () => {
     group_ids: [],
     budget_amount: 300,
     budget_cadence: "monthly" as const,
+    category_ids: [],
     now: NOW,
     source_periods: [
       {

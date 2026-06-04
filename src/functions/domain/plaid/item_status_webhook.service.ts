@@ -12,8 +12,21 @@ import {
   ItemStatusUpdate,
   ItemStatusValues,
   REAUTH_ERROR_CODES,
+  TRANSIENT_ERROR_CODES,
+  RATE_LIMIT_ERROR_CODES,
   ERROR_CODE_MESSAGES,
 } from "../../types/plaid/item_status_webhook.types";
+
+/**
+ * Whether an error code is a transient/rate-limit failure that should be
+ * retried silently rather than surfaced to the user. PURE.
+ */
+export function is_transient_error_code(error_code: string): boolean {
+  return (
+    TRANSIENT_ERROR_CODES.includes(error_code) ||
+    RATE_LIMIT_ERROR_CODES.includes(error_code)
+  );
+}
 
 /**
  * Computes the status update for a PENDING_EXPIRATION webhook.
@@ -44,6 +57,7 @@ export function compute_pending_expiration_update(
     error_at: Timestamp.now(),
     requires_reauth: true,
     consent_expires_at,
+    is_transient: false,
   };
 }
 
@@ -60,28 +74,48 @@ export function compute_error_update(
   error_code: string,
   error_message?: string
 ): ItemStatusUpdate {
-  const requires_reauth = REAUTH_ERROR_CODES.includes(error_code);
-
-  // Map error code to status
-  let status: string;
-  if (error_code === "ITEM_LOGIN_REQUIRED" || requires_reauth) {
-    status = ItemStatusValues.ITEM_LOGIN_REQUIRED;
-  } else {
-    status = ItemStatusValues.ITEM_LOGIN_REQUIRED; // Default to reauth required
-  }
-
-  // Get user-friendly message
   const user_message = ERROR_CODE_MESSAGES[error_code] ||
     error_message ||
     "There was an issue with your bank connection. Please try reconnecting.";
 
+  // Transient failures (institution down, rate limited, internal error) are NOT
+  // the user's fault and recover on their own. Mark them silent so the
+  // auto-retry job handles them in the background instead of surfacing a
+  // "Reconnect" prompt immediately.
+  if (RATE_LIMIT_ERROR_CODES.includes(error_code)) {
+    return {
+      status: ItemStatusValues.RATE_LIMITED,
+      error_code,
+      error_message: user_message,
+      error_at: Timestamp.now(),
+      requires_reauth: false,
+      consent_expires_at: null,
+      is_transient: true,
+    };
+  }
+  if (TRANSIENT_ERROR_CODES.includes(error_code)) {
+    return {
+      status: ItemStatusValues.TEMPORARY_ERROR,
+      error_code,
+      error_message: user_message,
+      error_at: Timestamp.now(),
+      requires_reauth: false,
+      consent_expires_at: null,
+      is_transient: true,
+    };
+  }
+
+  // Everything else is treated as requiring re-authentication and is surfaced
+  // to the user immediately.
+  const requires_reauth = REAUTH_ERROR_CODES.includes(error_code);
   return {
-    status,
+    status: ItemStatusValues.ITEM_LOGIN_REQUIRED,
     error_code,
     error_message: user_message,
     error_at: Timestamp.now(),
     requires_reauth,
     consent_expires_at: null,
+    is_transient: false,
   };
 }
 
@@ -101,6 +135,32 @@ export function compute_login_repaired_update(): ItemStatusUpdate {
     error_at: null,
     requires_reauth: false,
     consent_expires_at: null,
+    is_transient: false,
+  };
+}
+
+/**
+ * Computes the status update that ESCALATES a transient error to the user after
+ * it has persisted past the surface threshold. The connection has been failing
+ * silently for too long, so we surface it as needing a reconnect (reusing the
+ * existing reauth UI — update mode is the available user action).
+ *
+ * PURE FUNCTION - no IO, deterministic.
+ *
+ * @param original_error_code - The transient error code that persisted
+ * @returns Status update to apply
+ */
+export function compute_escalation_update(
+  original_error_code: string | null
+): ItemStatusUpdate {
+  return {
+    status: ItemStatusValues.ITEM_LOGIN_REQUIRED,
+    error_code: original_error_code ?? "PERSISTENT_CONNECTION_ERROR",
+    error_message: ERROR_CODE_MESSAGES.PERSISTENT_CONNECTION_ERROR,
+    error_at: Timestamp.now(),
+    requires_reauth: true,
+    consent_expires_at: null,
+    is_transient: false,
   };
 }
 
@@ -119,6 +179,7 @@ export function compute_permission_revoked_update(): ItemStatusUpdate {
     error_at: Timestamp.now(),
     requires_reauth: false, // Can't re-auth if permission is revoked
     consent_expires_at: null,
+    is_transient: false,
   };
 }
 

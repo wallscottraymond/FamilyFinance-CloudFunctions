@@ -518,4 +518,45 @@ export const outflow_period_repo = {
       status: new_status,
     });
   },
+
+  /**
+   * Gets the raw doc data + id for a set of period IDs (missing docs skipped).
+   * READ-ONLY — used by the summary resolver to group periods for recompute.
+   */
+  async get_by_ids(
+    _ctx: TraceContext,
+    period_ids: string[]
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const docs = await Promise.all(
+      period_ids.map((id) => getFirestore().collection(COLLECTION).doc(id).get())
+    );
+    return docs
+      .filter((doc) => doc.exists)
+      .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }));
+  },
+
+  /**
+   * Gets outflow periods (raw doc data + id) whose `expectedDueDate` falls in
+   * [start_ms, end_ms]. READ-ONLY — used by the recurring-match resolver to load
+   * bill candidates around a transaction date.
+   *
+   * Composite index: `outflow_periods(userId, expectedDueDate)`.
+   */
+  async get_in_due_window(
+    _ctx: TraceContext,
+    user_id: string,
+    start_ms: number,
+    end_ms: number
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("expectedDueDate", ">=", Timestamp.fromMillis(start_ms))
+      .where("expectedDueDate", "<=", Timestamp.fromMillis(end_ms))
+      .get();
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    }));
+  },
 };

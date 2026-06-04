@@ -17,7 +17,6 @@ import {
   checkFamilyAccess
 } from "../../../../utils/auth";
 import { firebaseCors } from "../../../../middleware/cors";
-import { updateBudgetSpending } from "../../../../utils/budgetSpending";
 
 /**
  * Delete transaction
@@ -73,18 +72,10 @@ export const deleteTransaction = onRequest({
         );
       }
 
-      // Update budget spending (reverse the spending) BEFORE deleting
-      try {
-        await updateBudgetSpending({
-          oldTransaction: existingTransaction,
-          newTransaction: undefined, // Indicates deletion
-          userId: user.id!,
-          groupId: existingTransaction.groupId
-        });
-      } catch (budgetError) {
-        // Log error but don't fail transaction deletion
-        console.error('Budget spending update failed before transaction deletion:', budgetError);
-      }
+      // Budget spend is owned by the Transaction Assignment Engine: deleting
+      // the transaction fires `on_transaction_written`, which enqueues
+      // `assign_transaction` and fans out `recompute_budget_spent` jobs that
+      // drop the now-removed splits' spend. No inline reversal here.
 
       // Delete transaction
       await deleteDocument("transactions", transactionId);

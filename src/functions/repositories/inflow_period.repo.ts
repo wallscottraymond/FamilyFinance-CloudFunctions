@@ -339,6 +339,22 @@ export const inflow_period_repo = {
   },
 
   /**
+   * Gets the raw doc data + id for a set of period IDs (missing docs skipped).
+   * READ-ONLY — used by the summary resolver to group periods for recompute.
+   */
+  async get_by_ids(
+    _ctx: TraceContext,
+    period_ids: string[]
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const docs = await Promise.all(
+      period_ids.map((id) => getFirestore().collection(COLLECTION).doc(id).get())
+    );
+    return docs
+      .filter((doc) => doc.exists)
+      .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }));
+  },
+
+  /**
    * Deletes all inflow periods for an inflow.
    *
    * Used when regenerating periods or soft-deleting an inflow.

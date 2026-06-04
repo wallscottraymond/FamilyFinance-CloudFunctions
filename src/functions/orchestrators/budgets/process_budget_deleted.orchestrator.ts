@@ -20,6 +20,7 @@ import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { resolve_budget_periods_for_summary } from "../../resolvers/summaries";
 import { enqueue_user_summary_updates_by_type } from "../summaries";
+import { create_job } from "../../infrastructure/job_queue";
 import { ProcessBudgetDeletedPayload } from "../../types/budgets/delete_budget.types";
 
 /**
@@ -31,6 +32,14 @@ export async function process_budget_deleted_orchestrator(
 ): Promise<void> {
   const span = create_span(ctx, "orchestrator", "process_budget_deleted");
   log_operation_start(span, payload.user_id);
+
+  // Diagnostic: the reassign-to-EE + EE recompute below is gated on these.
+  console.log(
+    `[${ctx.trace_id}] process_budget_deleted: budget=${payload.budget_id} ` +
+      `affected_txns=${payload.affected_transaction_ids.length} ` +
+      `ee=${payload.everything_else_budget_id ?? "none"} ` +
+      `periods=${payload.budget_period_ids.length}`
+  );
 
   // Resolve the period IDs to delete (from the payload, or query if absent).
   const period_ids =
@@ -58,23 +67,27 @@ export async function process_budget_deleted_orchestrator(
     await budget_period_repo.delete_by_ids(ctx, period_ids);
   }
 
-  // 2. Reassign transaction splits to Everything Else.
-  if (
-    payload.everything_else_budget_id &&
-    payload.affected_transaction_ids.length > 0
-  ) {
-    const everything_else = await budget_repo.get_by_id(
-      ctx,
-      payload.everything_else_budget_id
-    );
-    await transaction_repo.reassign_splits_budget(
-      ctx,
-      payload.affected_transaction_ids,
-      payload.budget_id,
-      payload.everything_else_budget_id,
-      everything_else?.name ?? "Everything Else"
+  // 2. Re-assign the deleted budget's transactions through the ENGINE so each
+  //    split lands on the CORRECT budget (another budget that owns the category,
+  //    else Everything Else) and the engine's fan-out recomputes spend. Re-query
+  //    authoritatively — the budget doc + periods are already gone, but the
+  //    splits still reference its id until the engine reassigns them.
+  const affected = await transaction_repo.get_ids_referencing_budget(
+    ctx,
+    payload.user_id,
+    payload.budget_id
+  );
+  for (const transaction_id of affected) {
+    await create_job(
+      "assign_transaction",
+      { user_id: payload.user_id, transaction_id },
+      { trace_id: ctx.trace_id }
     );
   }
+  console.log(
+    `[${ctx.trace_id}] process_budget_deleted: re-assigned ${affected.length} ` +
+      `transactions off deleted budget ${payload.budget_id} (engine)`
+  );
 
   // 3. Release the deleted budget's categories back to Everything Else.
   if (

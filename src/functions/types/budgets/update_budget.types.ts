@@ -126,6 +126,8 @@ export interface ProcessBudgetUpdatedPayload {
   user_id: string;
   group_ids: string[];
   budget_name: string;
+  /** Denormalized onto every generated budget_period (self-contained periods). */
+  category_ids: string[];
   amount: number;
   cadence: "weekly" | "monthly";
   /** Generation anchor (budget start) in epoch ms */

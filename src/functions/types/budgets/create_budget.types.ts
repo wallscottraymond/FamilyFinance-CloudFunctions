@@ -155,6 +155,8 @@ export interface ProcessBudgetCreatedPayload {
   user_id: string;
   group_ids: string[];
   budget_name: string;
+  /** Denormalized onto every generated budget_period (self-contained periods). */
+  category_ids: string[];
   amount: number;
   /** Budget cadence mapped to a period instance base (weekly | monthly) */
   cadence: "weekly" | "monthly";

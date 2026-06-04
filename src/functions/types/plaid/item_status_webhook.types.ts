@@ -134,6 +134,13 @@ export interface ItemStatusUpdate {
 
   /** Consent expiration time (for PENDING_EXPIRATION) */
   consent_expires_at: Timestamp | null;
+
+  /**
+   * Whether this is a transient error (institution down, rate limited, etc.)
+   * that should be retried silently in the background rather than surfaced to
+   * the user immediately. Drives the auto-retry scheduled job.
+   */
+  is_transient: boolean;
 }
 
 // ============================================================================
@@ -163,6 +170,15 @@ export const ItemStatusValues = {
   USER_PERMISSION_REVOKED: "user_permission_revoked",
   /** Item was removed */
   REMOVED: "removed",
+  /**
+   * Transient failure (institution down, internal error, maintenance). Retried
+   * silently by the auto-retry job; NOT surfaced to the user during the silent
+   * window. Escalates to ITEM_LOGIN_REQUIRED if it persists past the surface
+   * threshold.
+   */
+  TEMPORARY_ERROR: "temporary_error",
+  /** Temporarily rate limited by Plaid/the institution. Retried silently. */
+  RATE_LIMITED: "rate_limited",
 } as const;
 
 /**
@@ -179,6 +195,28 @@ export const REAUTH_ERROR_CODES = [
 ];
 
 /**
+ * Transient error codes — the institution/API is temporarily unavailable. These
+ * are NOT the user's fault and re-authentication won't help; they recover on
+ * their own. The auto-retry job retries them silently and only surfaces an
+ * error if they persist past the surface threshold.
+ */
+export const TRANSIENT_ERROR_CODES = [
+  "INSTITUTION_DOWN",
+  "INSTITUTION_NOT_RESPONDING",
+  "INSTITUTION_NOT_AVAILABLE",
+  "INTERNAL_SERVER_ERROR",
+  "PLANNED_MAINTENANCE",
+];
+
+/**
+ * Rate-limit error codes — back off and retry silently.
+ */
+export const RATE_LIMIT_ERROR_CODES = [
+  "RATE_LIMIT_EXCEEDED",
+  "INSTITUTION_RATE_LIMIT",
+];
+
+/**
  * User-friendly error messages for different error codes.
  */
 export const ERROR_CODE_MESSAGES: Record<string, string> = {
@@ -188,5 +226,14 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   ITEM_LOCKED: "Your account is locked. Please visit your bank's website to unlock it, then reconnect here.",
   PENDING_EXPIRATION: "Your bank connection will expire soon. Please reconnect to maintain access.",
   USER_PERMISSION_REVOKED: "You have revoked access to this bank connection.",
+  INSTITUTION_DOWN: "Your bank is temporarily unavailable. We'll keep retrying.",
+  INSTITUTION_NOT_RESPONDING: "Your bank isn't responding right now. We'll keep retrying.",
+  INSTITUTION_NOT_AVAILABLE: "Your bank is temporarily unavailable. We'll keep retrying.",
+  INTERNAL_SERVER_ERROR: "Temporary problem syncing this connection. We'll keep retrying.",
+  PLANNED_MAINTENANCE: "Your bank is undergoing maintenance. We'll keep retrying.",
+  RATE_LIMIT_EXCEEDED: "This connection is rate limited. We'll keep retrying.",
+  INSTITUTION_RATE_LIMIT: "This connection is rate limited. We'll keep retrying.",
+  // Shown if a transient problem persists past the surface threshold.
+  PERSISTENT_CONNECTION_ERROR: "We've had trouble reaching your bank. Please reconnect.",
   /* eslint-enable @typescript-eslint/naming-convention */
 };

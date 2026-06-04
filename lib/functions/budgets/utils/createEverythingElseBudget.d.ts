@@ -9,7 +9,7 @@
  * - Cannot be deleted by users
  * - Amount is always $0 (calculated from spending)
  * - Name is editable, but other fields are not
- * - Lowest priority in transaction matching (fallback)
+ * - Owns ALL categories by default (transferred away when regular budgets are created)
  *
  * @module budgets/utils/createEverythingElseBudget
  */
@@ -38,7 +38,7 @@ import { Firestore } from 'firebase-admin/firestore';
  * // - isSystemEverythingElse: true
  * // - name: 'Everything Else'
  * // - amount: 0
- * // - categoryIds: [] (catches all categories)
+ * // - categoryIds: [ALL_ACTIVE_CATEGORY_IDS]
  * ```
  */
 export declare function createEverythingElseBudget(db: Firestore, userId: string, userCurrency?: string): Promise<string>;

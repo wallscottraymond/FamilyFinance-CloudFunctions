@@ -18,6 +18,12 @@ import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { Budget } from '../../../types';
 import { buildAccessControl } from '../../../utils/documentStructure';
 import { getActiveCategories } from './categoryOwnership';
+import { create_job } from '../../infrastructure/job_queue';
+import { generate_id } from '../../observability';
+import {
+  build_self_provision_budget_created_payload,
+  compute_ee_coverage_start,
+} from '../../domain/budgets';
 
 /**
  * Creates the "everything else" system budget for a user
@@ -132,6 +138,37 @@ export async function createEverythingElseBudget(
   try {
     const budgetRef = await db.collection('budgets').add(budgetData);
     console.log(`✅ Created "everything else" budget for user ${userId}: ${budgetRef.id}`);
+
+    // Generate the budget's periods + summaries via the v2 cascade. Without
+    // this the EE budget has no budget_periods, so it never renders in the app
+    // and the assignment engine has nowhere to record spend. Non-blocking:
+    // a failure here is recoverable via the assignment backfill's heal pass.
+    try {
+      const cascade_payload = build_self_provision_budget_created_payload({
+        budget_id: budgetRef.id,
+        user_id: userId,
+        group_ids: groupIds,
+        budget_name: 'Everything Else',
+        category_ids: allCategoryIds,
+        amount: 0,
+        period: 'monthly',
+        start: now.toDate(),
+        is_ongoing: true,
+        budget_end_date: null,
+        // Backdate the window so imported (historical) transactions land in a
+        // period and contribute to spend.
+        coverage_start: compute_ee_coverage_start(now.toDate()),
+      });
+      await create_job('process_budget_created', cascade_payload, {
+        trace_id: generate_id(),
+      });
+    } catch (cascadeError) {
+      console.error(
+        `❌ Failed to enqueue period generation for EE budget ${budgetRef.id}:`,
+        cascadeError
+      );
+    }
+
     return budgetRef.id;
   } catch (error) {
     console.error(`❌ Error creating "everything else" budget for user ${userId}:`, error);

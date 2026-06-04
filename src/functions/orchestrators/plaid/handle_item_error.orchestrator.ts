@@ -17,6 +17,7 @@ import {
   ItemStatusWebhookInput,
   ItemStatusWebhookResponse,
   ITEM_STATUS_WEBHOOK_BUDGET,
+  ItemStatusValues,
 } from "../../types/plaid/item_status_webhook.types";
 import {
   create_span,
@@ -125,6 +126,24 @@ export async function handle_item_error_orchestrator(
 
     if (status_update.consent_expires_at) {
       update_data.consentExpiresAt = status_update.consent_expires_at;
+    }
+
+    // Transient errors are retried silently by the scheduled auto-retry job.
+    // Anchor `transientSince` (the surface-window clock) the FIRST time the item
+    // enters a transient state, and reset retry bookkeeping. Repeated transient
+    // webhooks must NOT move the anchor, or the 24h surface window never elapses.
+    if (status_update.is_transient) {
+      const was_transient =
+        deps.current_status === ItemStatusValues.TEMPORARY_ERROR ||
+        deps.current_status === ItemStatusValues.RATE_LIMITED;
+      if (!was_transient) {
+        update_data.transientSince = FieldValue.serverTimestamp();
+        update_data.retryCount = 0;
+        update_data.lastRetryAt = null;
+      }
+    } else {
+      // Surfaced/cleared states are no longer transient — drop the anchor.
+      update_data.transientSince = null;
     }
     /* eslint-enable @typescript-eslint/naming-convention */
 

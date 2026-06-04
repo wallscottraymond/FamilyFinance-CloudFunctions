@@ -23,6 +23,10 @@ import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { compute_budget_periods } from "../../domain/budgets/period_generation.service";
 import { enqueue_user_summary_updates_from_budget_periods } from "../../orchestrators/summaries";
+import { create_job } from "../../infrastructure/job_queue";
+import {
+  resolve_created_rehome_transaction_ids,
+} from "../../resolvers/budgets/budget_rehome.resolver";
 import { ProcessBudgetCreatedPayload } from "../../types/budgets/create_budget.types";
 
 /**
@@ -48,7 +52,44 @@ export async function process_budget_created_orchestrator(
   // 2. Generate budget periods from source periods in the budget's range.
   await generate_periods(ctx, payload);
 
+  // 3. Re-home cascade: existing transactions on Everything Else within this
+  //    budget's range may now match it (it owns the claimed categories) — re-run
+  //    assignment so their spend moves EE → this budget. Idempotent: a split
+  //    that doesn't match no-ops.
+  await rehome_claimed_transactions(ctx, payload);
+
   log_operation_success(span, payload.user_id);
+}
+
+/**
+ * Enqueue re-assignment of transactions currently on Everything Else that fall
+ * in the new budget's range, so the engine can move the ones now claimed by it.
+ */
+async function rehome_claimed_transactions(
+  ctx: TraceContext,
+  payload: ProcessBudgetCreatedPayload
+): Promise<void> {
+  const txn_ids = await resolve_created_rehome_transaction_ids(
+    ctx,
+    payload.user_id,
+    payload.budget_id,
+    payload.everything_else_budget_id,
+    payload.start_ms,
+    payload.generation_end_ms
+  );
+  for (const transaction_id of txn_ids) {
+    await create_job(
+      "assign_transaction",
+      { user_id: payload.user_id, transaction_id },
+      { trace_id: ctx.trace_id }
+    );
+  }
+  if (txn_ids.length > 0) {
+    console.log(
+      `[${ctx.trace_id}] process_budget_created: re-homed ${txn_ids.length} ` +
+        `transactions for budget ${payload.budget_id}`
+    );
+  }
 }
 
 /**
@@ -105,6 +146,7 @@ async function generate_periods(
     group_ids: payload.group_ids,
     budget_amount: payload.amount,
     budget_cadence: payload.cadence,
+    category_ids: payload.category_ids,
     source_periods: source_periods.map((sp) => ({
       id: sp.id,
       period_id: sp.period_id,
@@ -137,6 +179,16 @@ async function generate_periods(
 
   // Write back period-range metadata (legacy parity).
   await write_back_period_range(ctx, payload, computed.entities, generation_end);
+
+  // Periods now exist — recompute spend from any already-assigned splits. This
+  // closes the race where transactions were assigned to this budget BEFORE its
+  // periods existed (the assignment fan-out recompute found no periods and
+  // wrote nothing). Full recompute (no transaction_date_ms → every period).
+  await create_job(
+    "recompute_budget_spent",
+    { user_id: payload.user_id, budget_ids: [payload.budget_id] },
+    { trace_id: ctx.trace_id }
+  );
 }
 
 /**

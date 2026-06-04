@@ -105,6 +105,8 @@ export interface User extends BaseDocument {
     role: UserRole;
     preferences: UserPreferences;
     isActive: boolean;
+    isInitialized?: boolean;
+    initializedAt?: Timestamp;
 }
 export declare enum UserRole {
     ADMIN = "admin",
@@ -262,6 +264,7 @@ export interface Transaction extends BaseDocument {
     createdAt: Timestamp;
     updatedAt: Timestamp;
     transactionId: string;
+    userId?: string;
     ownerId: string;
     groupId: string | null;
     groupIds?: string[];
@@ -999,6 +1002,7 @@ export declare enum PlaidWebhookCode {
     TRANSACTIONS_REMOVED = "TRANSACTIONS_REMOVED",
     ERROR = "ERROR",
     PENDING_EXPIRATION = "PENDING_EXPIRATION",
+    LOGIN_REPAIRED = "LOGIN_REPAIRED",
     USER_PERMISSION_REVOKED = "USER_PERMISSION_REVOKED",
     WEBHOOK_UPDATE_ACKNOWLEDGED = "WEBHOOK_UPDATE_ACKNOWLEDGED",
     NEW_ACCOUNTS_AVAILABLE = "NEW_ACCOUNTS_AVAILABLE",

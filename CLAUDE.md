@@ -2,6 +2,18 @@
 
 > **Firebase Cloud Functions Backend** - Node.js 20, TypeScript, Firestore
 
+## Architecture Guide
+
+> **IMPORTANT:** Before implementing ANY new function, read the [Layered Architecture Guide](src/functions/architecture/CLAUDE.md).
+
+The architecture guide defines:
+- The 5-layer structure (Entry → Orchestrator → Resolver → Domain → Repository)
+- Templates for each layer
+- Type definitions
+- Edge case handling
+- Testing requirements
+- Complete checklist
+
 ## Quick Reference
 
 ### Commands

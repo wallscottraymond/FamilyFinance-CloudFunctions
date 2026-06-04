@@ -30,11 +30,20 @@
 export { createTransaction } from "./api/crud/createTransaction";
 export { getTransaction } from "./api/crud/getTransaction";
 export { updateTransaction } from "./api/crud/updateTransaction";
+export { updateTransactionSplits } from "./api/crud/updateTransactionSplits";
 export { deleteTransaction } from "./api/crud/deleteTransaction";
 export { approveTransaction } from "./api/crud/approveTransaction";
-export { onTransactionCreate } from "./orchestration/triggers/onTransactionCreate";
-export { onTransactionUpdate } from "./orchestration/triggers/onTransactionUpdate";
-export { onTransactionDelete } from "./orchestration/triggers/onTransactionDelete";
+export { format_transactions, formatTransactions } from "./utils/format_transactions";
+export { match_categories_to_transactions, matchCategoriesToTransactions } from "./utils/match_categories_to_transactions";
+export { match_transaction_splits_to_source_periods, matchTransactionSplitsToSourcePeriods } from "./utils/match_transaction_splits_to_source_periods";
+export { match_transaction_splits_to_budgets, matchTransactionSplitsToBudgets } from "./utils/match_transaction_splits_to_budgets";
+export { match_transaction_splits_to_outflows, matchTransactionSplitsToOutflows } from "./utils/match_transaction_splits_to_outflows";
+export { match_transaction_to_budget, matchTransactionToBudget } from "./utils/match_transaction_to_budget";
+export { assign_transaction_splits, assign_transaction_splits_batch, assignTransactionSplits, assignTransactionSplitsBatch } from "./utils/assign_transaction_splits";
+export { validate_and_redistribute_splits, validateAndRedistributeSplits } from "./utils/validate_and_redistribute_splits";
+export { validate_and_fix_budget_ids, is_valid_budget_id, validateAndFixBudgetIds, isValidBudgetId } from "./utils/validate_budget_ids";
+export { build_transaction_data, buildTransactionData } from "./utils/build_transaction_data";
+export { batch_create_transactions, batchCreateTransactions } from "./utils/batch_create_transactions";
 export { createTestTransactions } from "./dev/createTestTransactions";
 export { createTestTransactionsByCategory } from "./dev/createTestTransactionsByCategory";
 /**
