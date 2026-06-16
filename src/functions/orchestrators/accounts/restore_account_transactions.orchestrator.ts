@@ -21,7 +21,6 @@ import {
   log_async_debug,
 } from "../../observability";
 import { transaction_repo } from "../../repositories";
-import { getFirestore } from "firebase-admin/firestore";
 
 /**
  * Performance budget for restore_account_transactions job.
@@ -85,12 +84,15 @@ export async function restore_account_transactions_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
-    // 1. Get hidden transaction IDs for this account
+    // 1. Get hidden transaction IDs for this account. Account removal set them
+    //    to isActive: false, so we MUST include soft-deleted rows here or the
+    //    query comes back empty and nothing gets restored.
     const transaction_ids = await transaction_repo.get_ids_by_account_id(
       ctx,
       input.plaid_account_id,
       input.user_id,
-      BATCH_SIZE * 10 // Allow larger batches for restore
+      BATCH_SIZE * 10, // Allow larger batches for restore
+      { include_deleted: true }
     );
     perf.reads++;
 
@@ -105,32 +107,23 @@ export async function restore_account_transactions_orchestrator(
       `[${ctx.trace_id}] Restoring ${transaction_ids.length} transactions for account ${input.plaid_account_id}`
     );
 
-    // 2. Batch update transactions to unhide them
-    const db = getFirestore();
-    let restored_count = 0;
-
-    for (let i = 0; i < transaction_ids.length; i += BATCH_SIZE) {
-      const batch_ids = transaction_ids.slice(i, i + BATCH_SIZE);
-      const batch = db.batch();
-
-      for (const tx_id of batch_ids) {
-        const doc_ref = db.collection("transactions").doc(tx_id);
-        batch.update(doc_ref, {
-          isHidden: false,
-          // Note: We don't change excludeFromBudgets here
-          // That's a user choice that persists across hide/restore
-        });
+    // 2. Reactivate + unhide via the repo. Account removal set isActive: false
+    //    and the hide markers, so restore must reverse both. We don't touch
+    //    excludeFromBudgets — that's a user choice that persists across
+    //    hide/restore.
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const restored_count = await transaction_repo.set_fields_by_ids(
+      ctx,
+      transaction_ids,
+      {
+        isActive: true,
+        isHidden: false,
+        hiddenReason: null,
+        hiddenAt: null,
       }
-
-      await batch.commit();
-      restored_count += batch_ids.length;
-      perf.writes++;
-
-      console.log(
-        `[${ctx.trace_id}] Restored batch ${Math.floor(i / BATCH_SIZE) + 1}: ` +
-        `${batch_ids.length} transactions`
-      );
-    }
+    );
+    /* eslint-enable @typescript-eslint/naming-convention */
+    perf.writes += Math.ceil(restored_count / BATCH_SIZE);
 
     log_operation_success(span, input.user_id);
 

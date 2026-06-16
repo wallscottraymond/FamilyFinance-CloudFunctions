@@ -31,7 +31,7 @@ import {
   create_item_failure_result,
   aggregate_balance_sync_results,
 } from "../../domain/plaid/balance_sync.service";
-import { fetch_plaid_balances } from "../../integrations/plaid";
+import { fetch_plaid_balances, plaid_accounts_to_data } from "../../integrations/plaid";
 import { account_repo } from "../../repositories/account.repo";
 import { ACCOUNT_EVENTS } from "../../events/account.events";
 
@@ -95,10 +95,12 @@ export async function sync_balances_orchestrator(
 
     while (retry_count <= max_retries) {
       try {
-        plaid_result = await fetch_plaid_balances(
+        const raw = await fetch_plaid_balances(
           item.access_token,
           ctx.input.account_ids // Optional filter
         );
+        // Integration client returns RAW SDK accounts — transform to domain.
+        plaid_result = { ...raw, accounts: plaid_accounts_to_data(raw.accounts) };
         break; // Success, exit retry loop
       } catch (error) {
         retry_count++;

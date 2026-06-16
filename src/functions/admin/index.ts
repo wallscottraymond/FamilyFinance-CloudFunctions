@@ -7,6 +7,7 @@ export { verifyUTCPeriods } from "./verifyUTCPeriods";
 export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdmin";
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
+export { auditTransactionAssignments } from "./auditTransactionAssignments";
 export { verifyAccessControl } from "./verifyAccessControl";
 export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
 export { debugUserSummaryUpdate } from "./debugUserSummaryUpdate";

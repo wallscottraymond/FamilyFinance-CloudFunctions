@@ -10,7 +10,7 @@
  * @module repositories/transaction
  */
 import { Timestamp } from "firebase-admin/firestore";
-import { WriteResult, TraceContext } from "../types";
+import { WriteResult, TraceContext, ReadOptions } from "../types";
 import { TransactionForPersistence, TransactionSplitForPersistence, PendingTransactionInfo } from "../types/plaid";
 /**
  * Legacy Firestore document structure (camelCase).
@@ -68,6 +68,7 @@ interface LegacySplitDoc {
     weeklyPeriodId: string | null;
     biWeeklyPeriodId: string | null;
     outflowId?: string | null;
+    inflowId?: string | null;
     plaidPrimaryCategory: string;
     plaidDetailedCategory: string;
     internalPrimaryCategory: string | null;
@@ -115,6 +116,14 @@ export declare const transaction_repo: {
             action: "created" | "updated";
         }>;
     }>;
+    /**
+     * Loads full transaction docs by their PLAID transaction ids (the membership
+     * list a recurring outflow/inflow carries in `transactionIds`). Queries by
+     * `transactionId` (globally unique → no composite index) and filters to the
+     * owner in memory. Batched via Firestore `in` (≤30 per query). Used by the
+     * recurring reconciliation resolver.
+     */
+    get_by_plaid_transaction_ids(ctx: TraceContext, user_id: string, plaid_transaction_ids: string[]): Promise<LegacyTransactionDoc[]>;
     /**
      * Updates specific fields on a transaction.
      *
@@ -203,9 +212,29 @@ export declare const transaction_repo: {
      * @param account_id - Plaid account ID
      * @param user_id - User ID for scoping
      * @param limit - Maximum number of IDs to return (default 1000)
+     * @param options - Read options. `include_deleted: true` drops the
+     *   `isActive == true` filter so soft-deleted/hidden transactions are
+     *   returned too (needed by the account-restore flow, which must find the
+     *   transactions that account removal set to `isActive: false`).
      * @returns Array of transaction document IDs
      */
-    get_ids_by_account_id(ctx: TraceContext, account_id: string, user_id: string, limit?: number): Promise<string[]>;
+    get_ids_by_account_id(ctx: TraceContext, account_id: string, user_id: string, limit?: number, options?: ReadOptions): Promise<string[]>;
+    /**
+     * Hides up to 500 active transactions for a removed account (one page). The
+     * caller decides `exclude_from_budgets` (a removal-mode choice); the repo only
+     * persists the computed hide fields. Idempotent. Returns the count hidden and
+     * whether a full page came back (more may remain).
+     */
+    hide_for_account(ctx: TraceContext, account_id: string, user_id: string, exclude_from_budgets: boolean): Promise<{
+        hidden: number;
+        has_more: boolean;
+    }>;
+    /**
+     * Batch-applies a fixed set of fields to the given transaction IDs (chunked).
+     * Generic persistence helper — no business logic; the caller computes `fields`.
+     * Returns the number of docs written.
+     */
+    set_fields_by_ids(ctx: TraceContext, ids: string[], fields: Record<string, unknown>): Promise<number>;
     /**
      * Gets all active transaction IDs owned by a user.
      *
@@ -250,17 +279,6 @@ export declare const transaction_repo: {
         id: string;
         data: Record<string, unknown>;
     }>>;
-    /**
-     * Updates cursor on plaid_item document.
-     *
-     * NOTE: This updates the plaid_items collection, not transactions.
-     * Included here for convenience in the sync orchestrator.
-     *
-     * @param ctx - Trace context
-     * @param item_doc_id - Plaid item document ID
-     * @param cursor - New cursor value
-     */
-    update_plaid_item_cursor(ctx: TraceContext, item_doc_id: string, cursor: string | null): Promise<void>;
 };
 export {};
 //# sourceMappingURL=transaction.repo.d.ts.map

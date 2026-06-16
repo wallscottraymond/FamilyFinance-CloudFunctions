@@ -13,8 +13,9 @@
  * @module orchestrators/plaid/retry_transient_item_errors
  */
 
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
+import { plaid_item_repo } from "../../repositories/plaid";
 import {
   create_span,
   log_operation_start,
@@ -76,7 +77,6 @@ export async function retry_transient_item_errors_orchestrator(
   const span = create_span(ctx, "orchestrator", "retry_transient_item_errors");
   log_operation_start(span, "system");
 
-  const db = getFirestore();
   const response: RetryTransientErrorsResponse = {
     processed: 0,
     recovered: 0,
@@ -105,12 +105,12 @@ export async function retry_transient_item_errors_orchestrator(
         surface_after_ms: SURFACE_AFTER_MS,
       });
 
-      const item_ref = db.collection("plaid_items").doc(item.item_doc_id);
+      const now = Timestamp.fromMillis(now_ms);
 
       /* eslint-disable @typescript-eslint/naming-convention */
       if (action === "recovered") {
         const update = compute_login_repaired_update();
-        await item_ref.update({
+        await plaid_item_repo.apply_field_update(ctx, item.item_doc_id, {
           status: update.status,
           error: null,
           errorMessage: null,
@@ -119,13 +119,12 @@ export async function retry_transient_item_errors_orchestrator(
           consentExpiresAt: null,
           transientSince: null,
           retryCount: 0,
-          lastRetryAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
+          lastRetryAt: now,
         });
         response.recovered++;
       } else if (action === "escalate") {
-        const update = compute_escalation_update(item.error_code);
-        await item_ref.update({
+        const update = compute_escalation_update(now, item.error_code);
+        await plaid_item_repo.apply_field_update(ctx, item.item_doc_id, {
           status: update.status,
           error: update.error_code,
           errorMessage: update.error_message,
@@ -133,22 +132,20 @@ export async function retry_transient_item_errors_orchestrator(
           requiresReauth: true,
           consentExpiresAt: null,
           transientSince: null,
-          lastRetryAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
+          lastRetryAt: now,
         });
         response.escalated++;
       } else {
-        // keep_waiting — stay silent; bump retry bookkeeping. Start the
-        // surface clock if it was never anchored.
+        // keep_waiting — stay silent; bump retry bookkeeping (computed +1, not a
+        // blind increment). Start the surface clock if it was never anchored.
         const patch: Record<string, unknown> = {
-          retryCount: FieldValue.increment(1),
-          lastRetryAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
+          retryCount: item.retry_count + 1,
+          lastRetryAt: now,
         };
         if (transient_since_ms === null) {
-          patch.transientSince = FieldValue.serverTimestamp();
+          patch.transientSince = now;
         }
-        await item_ref.update(patch);
+        await plaid_item_repo.apply_field_update(ctx, item.item_doc_id, patch);
         response.still_waiting++;
       }
       /* eslint-enable @typescript-eslint/naming-convention */

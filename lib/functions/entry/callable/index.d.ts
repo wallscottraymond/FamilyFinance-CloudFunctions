@@ -18,4 +18,5 @@ export { refresh_plaid_data } from "./refresh_plaid_data.entry";
 export { sync_transactions } from "./sync_transactions.entry";
 export { sync_recurring } from "./sync_recurring.entry";
 export { backfill_transaction_assignments, } from "./backfill_transaction_assignments.entry";
+export { backfill_recurring_reconciliation, } from "./backfill_recurring_reconciliation.entry";
 //# sourceMappingURL=index.d.ts.map

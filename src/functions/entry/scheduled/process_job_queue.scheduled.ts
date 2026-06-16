@@ -49,6 +49,10 @@ import {
   AssignTransactionInput,
 } from "../../orchestrators/transactions/assign_transaction.orchestrator";
 import {
+  assign_transactions_batch_orchestrator,
+  AssignTransactionsBatchInput,
+} from "../../orchestrators/transactions/assign_transactions_batch.orchestrator";
+import {
   recompute_budget_spent_orchestrator,
   RecomputeBudgetSpentInput,
 } from "../../orchestrators/budgets/recompute_budget_spent.orchestrator";
@@ -56,6 +60,22 @@ import {
   backfill_assignments_orchestrator,
   BackfillAssignmentsInput,
 } from "../../orchestrators/transactions/backfill_assignments.orchestrator";
+import {
+  reconcile_recurring_periods_orchestrator,
+  ReconcileRecurringPeriodInput,
+} from "../../orchestrators/recurring/reconcile_recurring_periods.orchestrator";
+import {
+  backfill_recurring_reconciliation_orchestrator,
+  BackfillRecurringReconciliationInput,
+} from "../../orchestrators/recurring/backfill_recurring_reconciliation.orchestrator";
+import {
+  regenerate_recurring_occurrences_orchestrator,
+  RegenerateRecurringOccurrencesInput,
+} from "../../orchestrators/recurring/regenerate_recurring_occurrences.orchestrator";
+import {
+  assign_recurring_transactions_orchestrator,
+  AssignRecurringTransactionsInput,
+} from "../../orchestrators/recurring/assign_recurring_transactions.orchestrator";
 
 /**
  * Maximum jobs to process per invocation.
@@ -135,12 +155,47 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
     await assign_transaction_orchestrator(ctx, payload as AssignTransactionInput);
   },
 
+  assign_transactions_batch: async (ctx, payload) => {
+    await assign_transactions_batch_orchestrator(
+      ctx,
+      payload as AssignTransactionsBatchInput
+    );
+  },
+
   recompute_budget_spent: async (ctx, payload) => {
     await recompute_budget_spent_orchestrator(ctx, payload as RecomputeBudgetSpentInput);
   },
 
   backfill_assignments: async (ctx, payload) => {
     await backfill_assignments_orchestrator(ctx, payload as BackfillAssignmentsInput);
+  },
+
+  reconcile_recurring_period: async (ctx, payload) => {
+    await reconcile_recurring_periods_orchestrator(
+      ctx,
+      payload as ReconcileRecurringPeriodInput
+    );
+  },
+
+  backfill_recurring_reconciliation: async (ctx, payload) => {
+    await backfill_recurring_reconciliation_orchestrator(
+      ctx,
+      payload as BackfillRecurringReconciliationInput
+    );
+  },
+
+  regenerate_recurring_occurrences: async (ctx, payload) => {
+    await regenerate_recurring_occurrences_orchestrator(
+      ctx,
+      payload as RegenerateRecurringOccurrencesInput
+    );
+  },
+
+  assign_recurring_transactions: async (ctx, payload) => {
+    await assign_recurring_transactions_orchestrator(
+      ctx,
+      payload as AssignRecurringTransactionsInput
+    );
   },
 };
 

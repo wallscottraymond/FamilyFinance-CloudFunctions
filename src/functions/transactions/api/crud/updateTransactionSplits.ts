@@ -123,6 +123,19 @@ export const updateTransactionSplits = onCall<
     updateData.splits = updateData.splits.map((split: any, index: number) => {
       const now = admin.firestore.Timestamp.now();
       const splitId = split.splitId || split.id || `split_${Date.now()}_${index}`;
+
+      // The split-edit UI sends the user's chosen category as `categoryId`
+      // (the detailed Plaid enum, e.g. FOOD_AND_DRINK_GROCERIES) but does NOT
+      // write the `internalDetailedCategory` field the assignment engine matches
+      // on. Treat an explicit categoryId as the internalDetailedCategory
+      // override so editing a split's category actually re-homes it.
+      const chosenCategory =
+        typeof split.categoryId === "string" &&
+        split.categoryId.trim() !== "" &&
+        split.categoryId.toLowerCase() !== "other"
+          ? split.categoryId
+          : null;
+
       return {
         ...split,
         // Ensure ID exists (support both splitId and id field names)
@@ -138,8 +151,13 @@ export const updateTransactionSplits = onCall<
           split.plaidDetailedCategory ?? txn.plaidDetailedCategory ?? null,
         internalPrimaryCategory:
           split.internalPrimaryCategory ?? txn.internalPrimaryCategory ?? null,
+        // Chosen category (UI categoryId) wins → re-homes on edit; else keep the
+        // split's existing override, else inherit the parent transaction's.
         internalDetailedCategory:
-          split.internalDetailedCategory ?? txn.internalDetailedCategory ?? null,
+          chosenCategory ??
+          split.internalDetailedCategory ??
+          txn.internalDetailedCategory ??
+          null,
         // Ensure timestamps
         createdAt: split.createdAt || now,
         updatedAt: now,

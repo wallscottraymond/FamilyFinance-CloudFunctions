@@ -26,6 +26,15 @@ import { record_audit_entry_async } from "../audit";
 const COLLECTION = "budgets";
 
 /**
+ * Safety cap on the per-field budget queries in `get_by_user_id`. A real user
+ * has at most a few hundred budgets; this bounds the scan so a runaway/abusive
+ * account can't turn an assignment read into a full-collection scan. If a query
+ * ever hits the cap we log a warning (silent truncation would read as "all
+ * budgets" when it isn't).
+ */
+const MAX_BUDGETS_PER_USER = 1000;
+
+/**
  * Legacy Firestore document structure (camelCase).
  * NOTE: camelCase is intentional - this interfaces with existing documents.
  */
@@ -271,13 +280,25 @@ export const budget_repo = {
       if (!include_deleted) {
         q = q.where("isActive", "==", true);
       }
-      return q;
+      return q.limit(MAX_BUDGETS_PER_USER);
     };
 
     const [created_by_snap, user_id_snap] = await Promise.all([
       build("createdBy").get(),
       build("userId").get(),
     ]);
+
+    for (const [field, snap] of [
+      ["createdBy", created_by_snap],
+      ["userId", user_id_snap],
+    ] as const) {
+      if (snap.size >= MAX_BUDGETS_PER_USER) {
+        console.warn(
+          `[budget_repo.get_by_user_id] user=${user_id} hit the ${MAX_BUDGETS_PER_USER} ` +
+            `budget cap on "${field}" — results may be truncated`
+        );
+      }
+    }
 
     const by_id = new Map<string, BudgetEntity>();
     for (const snap of [created_by_snap, user_id_snap]) {

@@ -14,6 +14,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   WriteResult,
   TraceContext,
+  ReadOptions,
   create_write_result,
   chunk_for_batch,
 } from "../types";
@@ -91,6 +92,7 @@ interface LegacySplitDoc {
   weeklyPeriodId: string | null;
   biWeeklyPeriodId: string | null;
   outflowId?: string | null;
+  inflowId?: string | null;
   plaidPrimaryCategory: string;
   plaidDetailedCategory: string;
   internalPrimaryCategory: string | null;
@@ -355,6 +357,42 @@ export const transaction_repo = {
     );
 
     return { created, updated, results };
+  },
+
+  /**
+   * Loads full transaction docs by their PLAID transaction ids (the membership
+   * list a recurring outflow/inflow carries in `transactionIds`). Queries by
+   * `transactionId` (globally unique → no composite index) and filters to the
+   * owner in memory. Batched via Firestore `in` (≤30 per query). Used by the
+   * recurring reconciliation resolver.
+   */
+  async get_by_plaid_transaction_ids(
+    ctx: TraceContext,
+    user_id: string,
+    plaid_transaction_ids: string[]
+  ): Promise<LegacyTransactionDoc[]> {
+    if (plaid_transaction_ids.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const out: LegacyTransactionDoc[] = [];
+    for (let i = 0; i < plaid_transaction_ids.length; i += 30) {
+      const chunk = plaid_transaction_ids.slice(i, i + 30);
+      const snapshot = await db
+        .collection(COLLECTION)
+        .where("transactionId", "in", chunk)
+        .get();
+      for (const doc of snapshot.docs) {
+        const data = doc.data() as LegacyTransactionDoc;
+        if (data.ownerId === user_id) {
+          out.push(data);
+        }
+      }
+    }
+    console.log(
+      `[${ctx.trace_id}] get_by_plaid_transaction_ids: requested=${plaid_transaction_ids.length}, found=${out.length}`
+    );
+    return out;
   },
 
   /**
@@ -666,21 +704,31 @@ export const transaction_repo = {
    * @param account_id - Plaid account ID
    * @param user_id - User ID for scoping
    * @param limit - Maximum number of IDs to return (default 1000)
+   * @param options - Read options. `include_deleted: true` drops the
+   *   `isActive == true` filter so soft-deleted/hidden transactions are
+   *   returned too (needed by the account-restore flow, which must find the
+   *   transactions that account removal set to `isActive: false`).
    * @returns Array of transaction document IDs
    */
   async get_ids_by_account_id(
     ctx: TraceContext,
     account_id: string,
     user_id: string,
-    limit: number = 1000
+    limit: number = 1000,
+    options?: ReadOptions
   ): Promise<string[]> {
     const db = getFirestore();
 
-    const snapshot = await db
+    let query = db
       .collection(COLLECTION)
       .where("accountId", "==", account_id)
-      .where("ownerId", "==", user_id)
-      .where("isActive", "==", true)
+      .where("ownerId", "==", user_id);
+
+    if (!options?.include_deleted) {
+      query = query.where("isActive", "==", true);
+    }
+
+    const snapshot = await query
       .select() // Select no fields, just get document IDs
       .limit(limit)
       .get();
@@ -692,6 +740,88 @@ export const transaction_repo = {
     );
 
     return ids;
+  },
+
+  /**
+   * Hides up to 500 active transactions for a removed account (one page). The
+   * caller decides `exclude_from_budgets` (a removal-mode choice); the repo only
+   * persists the computed hide fields. Idempotent. Returns the count hidden and
+   * whether a full page came back (more may remain).
+   */
+  async hide_for_account(
+    ctx: TraceContext,
+    account_id: string,
+    user_id: string,
+    exclude_from_budgets: boolean
+  ): Promise<{ hidden: number; has_more: boolean }> {
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("accountId", "==", account_id)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", true)
+      .limit(500)
+      .get();
+
+    if (snapshot.empty) {
+      return { hidden: 0, has_more: false };
+    }
+
+    let hidden = 0;
+    const chunks = chunk_for_batch(snapshot.docs.map((d) => d.id));
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const update_data: Record<string, unknown> = {
+          isActive: false,
+          isHidden: true,
+          hiddenAt: now,
+          hiddenReason: "account_removed",
+          updatedAt: now,
+        };
+        if (exclude_from_budgets) {
+          update_data.excludeFromBudgets = true;
+        }
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), update_data);
+        hidden++;
+      }
+      await batch.commit();
+    }
+
+    console.log(
+      `[${ctx.trace_id}] hide_for_account: account=${account_id}, hidden=${hidden}`
+    );
+    return { hidden, has_more: snapshot.size === 500 };
+  },
+
+  /**
+   * Batch-applies a fixed set of fields to the given transaction IDs (chunked).
+   * Generic persistence helper — no business logic; the caller computes `fields`.
+   * Returns the number of docs written.
+   */
+  async set_fields_by_ids(
+    ctx: TraceContext,
+    ids: string[],
+    fields: Record<string, unknown>
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const db = getFirestore();
+    let written = 0;
+    for (const chunk of chunk_for_batch(ids)) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        batch.update(doc_ref(id), fields);
+        written++;
+      }
+      await batch.commit();
+    }
+    console.log(`[${ctx.trace_id}] set_fields_by_ids: written=${written}`);
+    return written;
   },
 
   /**
@@ -826,35 +956,5 @@ export const transaction_repo = {
       .filter((t) => t.data.isActive !== false);
   },
 
-  /**
-   * Updates cursor on plaid_item document.
-   *
-   * NOTE: This updates the plaid_items collection, not transactions.
-   * Included here for convenience in the sync orchestrator.
-   *
-   * @param ctx - Trace context
-   * @param item_doc_id - Plaid item document ID
-   * @param cursor - New cursor value
-   */
-  async update_plaid_item_cursor(
-    ctx: TraceContext,
-    item_doc_id: string,
-    cursor: string | null
-  ): Promise<void> {
-    const db = getFirestore();
-    const now = Timestamp.now();
-
-    await db.collection("plaid_items").doc(item_doc_id).update({
-      cursor,
-      /* eslint-disable @typescript-eslint/naming-convention */
-      lastSyncedAt: now,
-      updatedAt: now,
-      /* eslint-enable @typescript-eslint/naming-convention */
-    });
-
-    console.log(
-      `[${ctx.trace_id}] update_plaid_item_cursor: item=${item_doc_id}, cursor=${cursor ? "updated" : "cleared"}`
-    );
-  },
-
+  // (cursor writes belong to the plaid_items aggregate → plaid_item_repo.update_cursor)
 };

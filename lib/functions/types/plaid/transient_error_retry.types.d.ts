@@ -40,6 +40,8 @@ export interface TransientItemToRetry {
     error_code: string | null;
     /** When the item first entered the transient state (the surface-window anchor) */
     transient_since: Timestamp | null;
+    /** How many silent retries have run so far (drives the computed +1 bump). */
+    retry_count: number;
 }
 /** What to do with a transient item after a retry probe. */
 export type RetryAction = "recovered" | "keep_waiting" | "escalate";

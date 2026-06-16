@@ -9,7 +9,7 @@
  * @module resolvers/plaid/webhook_balance_sync
  */
 
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import {
   WebhookBalanceSyncInput,
@@ -119,40 +119,5 @@ export async function resolve_webhook_balance_sync_dependencies(
   };
 }
 
-/**
- * Records webhook as processed.
- * Called after successful processing to prevent duplicates.
- *
- * @param ctx - Trace context
- * @param input - Webhook input
- * @param success - Whether processing succeeded
- * @param message - Processing result message
- */
-export async function record_webhook_processed(
-  ctx: TraceContext,
-  input: WebhookBalanceSyncInput,
-  success: boolean,
-  message: string
-): Promise<void> {
-  const db = getFirestore();
-
-  try {
-    await db.collection("plaid_webhooks").add({
-      webhookType: input.webhook_type,
-      webhookCode: input.webhook_code,
-      itemId: input.plaid_item_id,
-      requestId: input.request_id || "",
-      processingStatus: success ? "completed" : "failed",
-      processedAt: Timestamp.now(),
-      createdAt: Timestamp.now(),
-      traceId: ctx.trace_id,
-      result: message,
-    });
-  } catch (error) {
-    // Log but don't fail - webhook recording is not critical
-    console.error(
-      `[${ctx.trace_id}] Failed to record webhook processing:`,
-      error
-    );
-  }
-}
+// Recording a processed webhook is a WRITE and now lives in
+// `repositories/plaid/plaid_webhook.repo.ts` (`plaid_webhook_repo.record_processed`).

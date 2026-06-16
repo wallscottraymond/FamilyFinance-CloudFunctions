@@ -13,31 +13,35 @@ import {
 } from "../item_status_webhook.service";
 import { ItemStatusValues } from "../../../types/plaid/item_status_webhook.types";
 import { SURFACE_AFTER_MS } from "../../../types/plaid/transient_error_retry.types";
+import { Timestamp } from "firebase-admin/firestore";
+
+// Injected time (these domain functions are deterministic — time is a param).
+const NOW = Timestamp.fromMillis(1_700_000_000_000);
 
 describe("compute_error_update — transient classification", () => {
   it("classifies institution-down as a silent transient error", () => {
-    const u = compute_error_update("INSTITUTION_DOWN");
+    const u = compute_error_update(NOW, "INSTITUTION_DOWN");
     expect(u.status).toBe(ItemStatusValues.TEMPORARY_ERROR);
     expect(u.requires_reauth).toBe(false);
     expect(u.is_transient).toBe(true);
   });
 
   it("classifies rate limits as a silent rate_limited error", () => {
-    const u = compute_error_update("RATE_LIMIT_EXCEEDED");
+    const u = compute_error_update(NOW, "RATE_LIMIT_EXCEEDED");
     expect(u.status).toBe(ItemStatusValues.RATE_LIMITED);
     expect(u.requires_reauth).toBe(false);
     expect(u.is_transient).toBe(true);
   });
 
   it("treats login-required as a surfaced reauth error", () => {
-    const u = compute_error_update("ITEM_LOGIN_REQUIRED");
+    const u = compute_error_update(NOW, "ITEM_LOGIN_REQUIRED");
     expect(u.status).toBe(ItemStatusValues.ITEM_LOGIN_REQUIRED);
     expect(u.requires_reauth).toBe(true);
     expect(u.is_transient).toBe(false);
   });
 
   it("defaults an unknown error to surfaced (non-transient)", () => {
-    const u = compute_error_update("SOMETHING_NEW");
+    const u = compute_error_update(NOW, "SOMETHING_NEW");
     expect(u.is_transient).toBe(false);
     expect(u.status).toBe(ItemStatusValues.ITEM_LOGIN_REQUIRED);
   });
@@ -99,7 +103,7 @@ describe("decide_retry_action", () => {
 
 describe("compute_escalation_update", () => {
   it("surfaces as reauth, preserving the original error code", () => {
-    const u = compute_escalation_update("INSTITUTION_DOWN");
+    const u = compute_escalation_update(NOW, "INSTITUTION_DOWN");
     expect(u.status).toBe(ItemStatusValues.ITEM_LOGIN_REQUIRED);
     expect(u.requires_reauth).toBe(true);
     expect(u.is_transient).toBe(false);
@@ -107,7 +111,7 @@ describe("compute_escalation_update", () => {
   });
 
   it("falls back to a generic code when none is given", () => {
-    const u = compute_escalation_update(null);
+    const u = compute_escalation_update(NOW, null);
     expect(u.error_code).toBe("PERSISTENT_CONNECTION_ERROR");
   });
 });

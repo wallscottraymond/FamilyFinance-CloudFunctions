@@ -28,3 +28,6 @@ export { sync_recurring } from "./sync_recurring.entry";
 export {
   backfill_transaction_assignments,
 } from "./backfill_transaction_assignments.entry";
+export {
+  backfill_recurring_reconciliation,
+} from "./backfill_recurring_reconciliation.entry";

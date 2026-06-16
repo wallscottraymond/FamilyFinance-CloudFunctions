@@ -42,15 +42,14 @@ import {
 } from "../../domain/plaid";
 import {
   transaction_repo,
-  outflow_period_repo,
 } from "../../repositories";
+import { plaid_item_repo } from "../../repositories/plaid";
 
 // Import pipeline utilities (snake_case versions)
 import { format_transactions } from "../../transactions/utils/format_transactions";
 import { match_categories_to_transactions } from "../../transactions/utils/match_categories_to_transactions";
 import { match_transaction_splits_to_source_periods } from "../../transactions/utils/match_transaction_splits_to_source_periods";
 import { assign_transaction_splits_batch } from "../../transactions/utils/assign_transaction_splits";
-import { match_transaction_splits_to_outflows } from "../../transactions/utils/match_transaction_splits_to_outflows";
 
 /**
  * Orchestrates the transaction synchronization flow.
@@ -222,7 +221,7 @@ export async function sync_transactions_orchestrator(
 
   // 3. UPDATE CURSOR
   try {
-    await transaction_repo.update_plaid_item_cursor(
+    await plaid_item_repo.update_cursor(
       create_child_span(ctx),
       deps.plaid_item.doc_id,
       next_cursor
@@ -319,12 +318,10 @@ async function process_added_transactions(
       const with_budgets = assignment_results.map(r => r.transaction);
       console.log(`[${ctx.trace_id}] Step 4/6: Assigned budgets`);
 
-      // Step 5: Match outflows
-      const { transactions: final, outflow_updates } = await match_transaction_splits_to_outflows(
-        with_budgets,
-        ctx.user_id
-      );
-      console.log(`[${ctx.trace_id}] Step 5/6: Matched outflows (${outflow_updates.length} updates)`);
+      // Step 5: (legacy outflow matcher removed 2026-06-13) — the engine sets
+      // split.outflow_id via on_transaction_written after upsert, and the reconcile
+      // engine updates outflow-period paid/received status. No inline matching here.
+      const final = with_budgets;
 
       // Step 6a: Transform legacy format to new persistence format
       const transactions_for_persistence = transform_legacy_to_persistence(
@@ -342,15 +339,6 @@ async function process_added_transactions(
         deps.plaid_item.plaid_item_id
       );
       console.log(`[${ctx.trace_id}] Step 6b: Upserted transactions (created=${upsert_result.created}, updated=${upsert_result.updated})`);
-
-      // Step 6c: Update outflow periods via new repository
-      if (outflow_updates.length > 0) {
-        await outflow_period_repo.update_with_transaction_splits(
-          create_child_span(ctx),
-          outflow_updates
-        );
-        console.log(`[${ctx.trace_id}] Step 6c: Updated ${outflow_updates.length} outflow periods`);
-      }
 
       created = upsert_result.created;
 
@@ -502,10 +490,9 @@ async function process_modified_transactions(
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
       const assignment_results = await assign_transaction_splits_batch(with_periods, ctx.user_id);
       const with_budgets = assignment_results.map(r => r.transaction);
-      const { transactions: final, outflow_updates } = await match_transaction_splits_to_outflows(
-        with_budgets,
-        ctx.user_id
-      );
+      // (legacy outflow matcher removed 2026-06-13) — engine sets outflow_id via
+      // on_transaction_written; reconcile updates outflow-period status.
+      const final = with_budgets;
 
       // Transform to new persistence format
       const transactions_for_persistence = transform_legacy_to_persistence(
@@ -521,14 +508,6 @@ async function process_modified_transactions(
         ctx.user_id,
         deps.plaid_item.plaid_item_id
       );
-
-      // Update outflow periods
-      if (outflow_updates.length > 0) {
-        await outflow_period_repo.update_with_transaction_splits(
-          create_child_span(ctx),
-          outflow_updates
-        );
-      }
 
       updated = upsert_result.updated;
       console.log(`[${ctx.trace_id}] Updated ${upsert_result.updated} modified transactions`);

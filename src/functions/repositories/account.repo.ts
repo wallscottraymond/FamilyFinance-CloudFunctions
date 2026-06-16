@@ -377,17 +377,30 @@ export const account_repo = {
 
     for (const chunk of chunks) {
       const batch = db.batch();
-      const before_states: Map<string, LegacyAccountDoc | null> = new Map();
 
-      // Get before states and prepare batch
       for (const entity of chunk) {
         if (!entity.id) {
           throw new Error("Account ID is required");
         }
+      }
 
-        const before_doc = await doc_ref(entity.id).get();
-        const before = before_doc.exists ? (before_doc.data() as LegacyAccountDoc) : null;
-        before_states.set(entity.id, before);
+      // Read all before-states for the chunk in a single round-trip (getAll)
+      // instead of one awaited .get() per entity inside the loop.
+      const before_docs = await db.getAll(
+        ...chunk.map((entity) => doc_ref(entity.id as string))
+      );
+      const before_states: Map<string, LegacyAccountDoc | null> = new Map();
+      chunk.forEach((entity, i) => {
+        const before_doc = before_docs[i];
+        before_states.set(
+          entity.id as string,
+          before_doc.exists ? (before_doc.data() as LegacyAccountDoc) : null
+        );
+      });
+
+      // Prepare batch
+      for (const entity of chunk) {
+        const before = before_states.get(entity.id as string) ?? null;
 
         const entity_to_save: Account = {
           ...entity,

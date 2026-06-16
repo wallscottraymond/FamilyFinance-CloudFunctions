@@ -36,6 +36,52 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 ```
 
+## Testing & Firestore Access
+
+> ⚠️ **`dev` and `default` are the SAME project** (`family-budget-app-cb59b`, see
+> `.firebaserc`) — there is no separate dev database, and it has deployed
+> triggers. Treat the live DB as production.
+
+### Reading live Firestore (READ-ONLY)
+
+To verify real state (e.g. after driving the app), use the read-only inspector.
+It only reads (`get`/`where`/`limit`/`orderBy`/`select`/`count`) — no write path.
+
+```bash
+node scripts/inspect-firestore.js <collection> [--id <docId>] \
+  [--where field=value]... [--limit N] [--order field[:desc]] [--select f1,f2] [--count] [--json]
+
+# examples
+node scripts/inspect-firestore.js accounts --where userId=<uid> --limit 10
+node scripts/inspect-firestore.js transactions --where accountId=<acct> --where isHidden=true --count
+node scripts/inspect-firestore.js plaid_items --id <docId>
+```
+
+Credentials: service-account key at `~/google-service-account-key.json` (or
+`GOOGLE_APPLICATION_CREDENTIALS`). **Never commit keys** — they are gitignored.
+
+### Integration tests (WRITE — emulator ONLY)
+
+Anything that writes/mutates/deletes MUST run on the Firestore emulator, never
+the live project (writes there fire real triggers and corrupt live data).
+
+```bash
+# unit (pure domain logic, no emulator)
+npm test                      # jest --selectProjects unit
+
+# emulator integration (cascade, restore, etc.)
+firebase emulators:exec --only firestore "npm run test:emulator"
+firebase emulators:exec --only firestore \
+  "npx jest --selectProjects emulator --testPathPattern <name>"
+```
+
+Seed coherent graphs with the factory instead of hand-seeding:
+`__emulator_tests__/helpers/seedAccountGraph.ts` →
+`seedAccountGraph(db, { accounts, txnsPerAccount, outflows, inflows })`.
+
+If real *write*-path integration testing is ever needed, stand up a SEPARATE dev
+Firebase project first.
+
 ## Critical Rules
 
 ### ALWAYS

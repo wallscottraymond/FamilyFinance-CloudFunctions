@@ -13,7 +13,10 @@ export * from "./functions/transactions";
 export * from "./functions/budgets";
 export * from "./functions/categories"; // Categories management functions
 export * from "./functions/admin";
-export * from "./functions/plaid"; // Plaid integration functions
+// Legacy `functions/plaid` module removed — Plaid is now fully handled by the v2
+// 5-layer graph (entry/http/plaid_webhook, entry/callable/{create_link_token,
+// link_plaid_account,refresh_plaid_data,sync_transactions,sync_recurring},
+// orchestrators/plaid/*, integrations/plaid/*).
 export * from "./functions/outflows"; // Outflow management functions
 export * from "./functions/inflows"; // Inflow management and period generation
 export * from "./functions/summaries"; // Period-centric summary system (API + triggers)

@@ -39,6 +39,7 @@ import {
 } from "../../infrastructure/idempotency_store";
 import {
   fetch_plaid_accounts,
+  plaid_accounts_to_data,
   transform_plaid_accounts_to_domain,
   PlaidInstitutionInfo,
 } from "../../integrations/plaid";
@@ -153,8 +154,13 @@ export async function link_plaid_accounts_orchestrator(
     }
     key_claimed = true;
 
-    // 3. Fetch accounts from Plaid (Integration Client)
-    const plaid_result = await fetch_plaid_accounts(input.access_token);
+    // 3. Fetch accounts from Plaid (Integration Client returns RAW SDK accounts),
+    //    then transform to the domain shape.
+    const raw_accounts = await fetch_plaid_accounts(input.access_token);
+    const plaid_result = {
+      ...raw_accounts,
+      accounts: plaid_accounts_to_data(raw_accounts.accounts),
+    };
     perf.reads++; // Count external API call as read
 
     if (plaid_result.accounts.length === 0) {

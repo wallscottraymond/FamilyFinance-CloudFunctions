@@ -7,22 +7,15 @@
  * @module resolvers/plaid/link_token
  */
 
-import { getFirestore } from "firebase-admin/firestore";
 import {
   TraceContext,
   LinkTokenDependencies,
   ResolveLinkTokenInput,
   LINK_TOKEN_CACHE_TTL_HOURS,
 } from "../../types";
-import { link_token_event_repo } from "../../repositories/plaid";
+import { link_token_event_repo, plaid_item_repo } from "../../repositories/plaid";
+import { user_repo } from "../../repositories/user.repo";
 import { create_span, log_operation_start, log_operation_success } from "../../observability";
-
-/**
- * Gets the Firestore instance.
- */
-function get_db() {
-  return getFirestore();
-}
 
 /**
  * Resolves dependencies for link token creation.
@@ -44,8 +37,6 @@ export async function resolve_link_token_dependencies(
   const span = create_span(ctx, "resolver", "resolve_link_token_dependencies");
   log_operation_start(span, input.user_id);
 
-  const db = get_db();
-
   // 1. Check for cached token first
   const cached = await link_token_event_repo.get_valid_token(
     ctx,
@@ -54,43 +45,29 @@ export async function resolve_link_token_dependencies(
     { max_age_hours: LINK_TOKEN_CACHE_TTL_HOURS }
   );
 
-  // 2. Fetch user profile from Firestore
-  // Note: Using direct Firestore query until user_repo is migrated
-  const user_doc = await db.collection("users").doc(input.user_id).get();
-  const user_data = user_doc.exists ? user_doc.data() : null;
+  // 2. Fetch user profile
+  const user = await user_repo.get_by_id(ctx, input.user_id);
+  const user_data = user?.data ?? null;
 
-  // 3. Count existing Plaid items for this user
-  // Note: Using direct Firestore query until plaid_item_repo is migrated
-  const items_snapshot = await db
-    .collection("plaid_items")
-    .where("userId", "==", input.user_id)
-    .where("isActive", "==", true)
-    .get();
+  // 3. Existing active Plaid items for this user
+  const active_items = await plaid_item_repo.get_by_user_id(ctx, input.user_id);
 
-  // 4. Validate access token if provided (update mode)
+  // 4. Validate access token if provided (update mode): the user must have at
+  //    least one active item.
   let access_token_valid = true;
   if (input.access_token) {
-    // Look up the item by encrypted access token
-    // Note: This is a simplification - in practice, you'd look up by item_id
-    // and verify the access_token matches
-    const item_snapshot = await db
-      .collection("plaid_items")
-      .where("userId", "==", input.user_id)
-      .where("isActive", "==", true)
-      .limit(1)
-      .get();
-
-    // For update mode, we just verify the user has at least one active item
-    // The access_token provided should be a decrypted token from a valid item
-    access_token_valid = !item_snapshot.empty;
+    access_token_valid = active_items.length > 0;
   }
 
   log_operation_success(span, input.user_id);
 
   return {
-    user_display_name: user_data?.displayName || user_data?.name || "Family Finance User",
-    user_email: user_data?.email || null,
-    existing_item_count: items_snapshot.size,
+    user_display_name:
+      (user_data?.displayName as string) ||
+      (user_data?.name as string) ||
+      "Family Finance User",
+    user_email: (user_data?.email as string) || null,
+    existing_item_count: active_items.length,
     access_token_valid,
     cached_token: cached?.link_token || null,
     cached_expiration: cached?.expiration || null,

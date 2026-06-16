@@ -13,7 +13,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "expectedDueDate", "order": "ASCENDING" }
+        { "fieldPath": "firstDueDateInPeriod", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "firstDueDateInPeriod", "order": "ASCENDING" }
       ]
     },
     {

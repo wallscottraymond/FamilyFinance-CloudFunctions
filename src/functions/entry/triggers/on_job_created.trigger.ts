@@ -48,6 +48,10 @@ import {
   AssignTransactionInput,
 } from "../../orchestrators/transactions/assign_transaction.orchestrator";
 import {
+  assign_transactions_batch_orchestrator,
+  AssignTransactionsBatchInput,
+} from "../../orchestrators/transactions/assign_transactions_batch.orchestrator";
+import {
   recompute_budget_spent_orchestrator,
   RecomputeBudgetSpentInput,
 } from "../../orchestrators/budgets/recompute_budget_spent.orchestrator";
@@ -55,6 +59,22 @@ import {
   backfill_assignments_orchestrator,
   BackfillAssignmentsInput,
 } from "../../orchestrators/transactions/backfill_assignments.orchestrator";
+import {
+  reconcile_recurring_periods_orchestrator,
+  ReconcileRecurringPeriodInput,
+} from "../../orchestrators/recurring/reconcile_recurring_periods.orchestrator";
+import {
+  backfill_recurring_reconciliation_orchestrator,
+  BackfillRecurringReconciliationInput,
+} from "../../orchestrators/recurring/backfill_recurring_reconciliation.orchestrator";
+import {
+  regenerate_recurring_occurrences_orchestrator,
+  RegenerateRecurringOccurrencesInput,
+} from "../../orchestrators/recurring/regenerate_recurring_occurrences.orchestrator";
+import {
+  assign_recurring_transactions_orchestrator,
+  AssignRecurringTransactionsInput,
+} from "../../orchestrators/recurring/assign_recurring_transactions.orchestrator";
 
 /**
  * Job type handlers - same as in process_job_queue.scheduled.ts
@@ -125,6 +145,15 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
     await assign_transaction_orchestrator(ctx, payload as AssignTransactionInput);
   },
 
+  // Transaction Assignment Engine (bulk): assign many of a user's transactions
+  // with the shared context resolved once (used by the backfill).
+  assign_transactions_batch: async (ctx, payload) => {
+    await assign_transactions_batch_orchestrator(
+      ctx,
+      payload as AssignTransactionsBatchInput
+    );
+  },
+
   // Spend pipeline: recompute budget_period.spent for the touched budgets
   recompute_budget_spent: async (ctx, payload) => {
     await recompute_budget_spent_orchestrator(ctx, payload as RecomputeBudgetSpentInput);
@@ -133,6 +162,38 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   // One-shot backfill: re-assign + full-recompute (self-fans per user)
   backfill_assignments: async (ctx, payload) => {
     await backfill_assignments_orchestrator(ctx, payload as BackfillAssignmentsInput);
+  },
+
+  // Recurring reconciliation: recompute a recurring doc's period paid/received status
+  reconcile_recurring_period: async (ctx, payload) => {
+    await reconcile_recurring_periods_orchestrator(
+      ctx,
+      payload as ReconcileRecurringPeriodInput
+    );
+  },
+
+  // Recurring reconciliation backfill (self-fans per user → per recurring doc)
+  backfill_recurring_reconciliation: async (ctx, payload) => {
+    await backfill_recurring_reconciliation_orchestrator(
+      ctx,
+      payload as BackfillRecurringReconciliationInput
+    );
+  },
+
+  // Regenerate a recurring doc's period occurrence data, then reconcile (B).
+  regenerate_recurring_occurrences: async (ctx, payload) => {
+    await regenerate_recurring_occurrences_orchestrator(
+      ctx,
+      payload as RegenerateRecurringOccurrencesInput
+    );
+  },
+
+  // Re-assign a newly-created recurring item's transactions (set split outflow/inflow id).
+  assign_recurring_transactions: async (ctx, payload) => {
+    await assign_recurring_transactions_orchestrator(
+      ctx,
+      payload as AssignRecurringTransactionsInput
+    );
   },
 };
 

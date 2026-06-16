@@ -7,7 +7,6 @@
  * @module resolvers/plaid/link_plaid_account
  */
 
-import { getFirestore } from "firebase-admin/firestore";
 import {
   TraceContext,
   LinkAccountDependencies,
@@ -15,6 +14,7 @@ import {
 } from "../../types";
 import { create_span, log_operation_start, log_operation_success } from "../../observability";
 import { plaid_item_repo } from "../../repositories/plaid";
+import { user_repo } from "../../repositories/user.repo";
 
 /**
  * Resolves dependencies for linking a Plaid account.
@@ -35,13 +35,14 @@ export async function resolve_link_account_dependencies(
   log_operation_start(span, input.user_id);
 
   // 1. Fetch user profile for group IDs
-  // Note: Using direct Firestore until user_repo is migrated
-  const db = getFirestore();
-  const user_doc = await db.collection("users").doc(input.user_id).get();
-  const user_data = user_doc.exists ? user_doc.data() : null;
+  const user = await user_repo.get_by_id(ctx, input.user_id);
+  const user_data = user?.data ?? null;
 
   // Extract group IDs from user profile
-  const group_id = user_data?.familyId || user_data?.groupId || null;
+  const group_id =
+    (user_data?.familyId as string | undefined) ||
+    (user_data?.groupId as string | undefined) ||
+    null;
   const group_ids: string[] = group_id ? [group_id] : [];
 
   // 2. Check if institution is already linked (via repository)

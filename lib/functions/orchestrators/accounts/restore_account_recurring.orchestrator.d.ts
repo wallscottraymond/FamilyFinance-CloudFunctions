@@ -28,6 +28,10 @@ export interface RestoreAccountRecurringResult {
     outflows_restored: number;
     /** Number of inflows restored */
     inflows_restored: number;
+    /** Number of outflow periods restored */
+    outflow_periods_restored: number;
+    /** Number of inflow periods restored */
+    inflow_periods_restored: number;
 }
 /**
  * Orchestrates restoring recurring items for a restored account.

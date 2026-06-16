@@ -85,6 +85,10 @@ export interface TransactionAssignmentResult {
   splits: AssignedSplit[];
   /** Budgets whose contribution may have changed (old ∪ new) — fan-out scope. */
   touched_budget_ids: string[];
+  /** Recurring outflow docs whose period status may have changed (old ∪ new). */
+  touched_outflow_ids: string[];
+  /** Recurring inflow docs whose period status may have changed (old ∪ new). */
+  touched_inflow_ids: string[];
   /** False → no engine-owned field changed (skip the write). */
   changed: boolean;
   /** True → a split has no Everything Else budget to fall to (missing-EE ERROR). */
@@ -105,11 +109,15 @@ export function compute_transaction_assignment(
 
   const assigned: AssignedSplit[] = [];
   const touched = new Set<string>();
+  const touched_outflow = new Set<string>();
+  const touched_inflow = new Set<string>();
   let changed = false;
   let any_unassigned = false;
 
   for (const split of splits) {
     touched.add(split.budget_id); // before
+    if (split.outflow_id) touched_outflow.add(split.outflow_id); // before
+    if (split.inflow_id) touched_inflow.add(split.inflow_id); // before
 
     let budget_id: string;
     let source: "category" | "manual";
@@ -175,6 +183,8 @@ export function compute_transaction_assignment(
       any_unassigned = true;
     }
     touched.add(budget_id); // after
+    if (outflow_id) touched_outflow.add(outflow_id); // after
+    if (inflow_id) touched_inflow.add(inflow_id); // after
 
     const next: AssignedSplit = {
       split_id: split.split_id,
@@ -197,6 +207,8 @@ export function compute_transaction_assignment(
   return {
     splits: assigned,
     touched_budget_ids: [...touched],
+    touched_outflow_ids: [...touched_outflow],
+    touched_inflow_ids: [...touched_inflow],
     changed,
     any_unassigned,
   };

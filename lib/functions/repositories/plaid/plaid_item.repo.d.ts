@@ -27,6 +27,23 @@ export declare const plaid_item_repo: {
      */
     get_by_id(ctx: TraceContext, id: string): Promise<PlaidItem | null>;
     /**
+     * Gets one item's raw doc data + id by DOCUMENT id (resolvers read raw fields
+     * like `accessToken`/`cursor`). Null when the doc doesn't exist.
+     */
+    get_raw_by_id(_ctx: TraceContext, id: string): Promise<{
+        id: string;
+        data: Record<string, unknown>;
+    } | null>;
+    /**
+     * Gets the active item matching Plaid's EXTERNAL item id (`plaidItemId`),
+     * returning the raw doc + id (resolvers map their own dependency shape).
+     * Null when no active item matches.
+     */
+    get_active_raw_by_plaid_item_id(_ctx: TraceContext, plaid_item_id: string): Promise<{
+        id: string;
+        data: Record<string, unknown>;
+    } | null>;
+    /**
      * Gets all Plaid items for a user.
      *
      * @param ctx - Trace context
@@ -80,7 +97,7 @@ export declare const plaid_item_repo: {
      * @param id - Plaid item ID
      * @param cursor - New cursor value
      */
-    update_cursor(ctx: TraceContext, id: string, cursor: string): Promise<void>;
+    update_cursor(ctx: TraceContext, id: string, cursor: string | null): Promise<void>;
     /**
      * Updates the status of a Plaid item.
      *
@@ -90,6 +107,18 @@ export declare const plaid_item_repo: {
      * @param error - Error message (if status indicates error)
      */
     update_status(ctx: TraceContext, id: string, status: PlaidItemStatus, error?: string | null): Promise<void>;
+    /**
+     * Persists a pre-computed set of camelCase status fields onto a Plaid item.
+     * The caller (orchestrator) computes ALL values; the repo only writes them
+     * (always stamping `updatedAt`). Used by the item-error, login-repaired, and
+     * transient-retry status updates so those orchestrators never touch Firestore
+     * directly. No business logic here.
+     *
+     * @param ctx - Trace context
+     * @param id - Plaid item document ID
+     * @param fields - Pre-computed camelCase fields to merge onto the item
+     */
+    apply_field_update(ctx: TraceContext, id: string, fields: Record<string, unknown>): Promise<void>;
     /**
      * Updates the last synced timestamp for a Plaid item.
      *

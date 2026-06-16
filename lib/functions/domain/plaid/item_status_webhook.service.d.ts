@@ -6,6 +6,7 @@
  *
  * @module domain/plaid/item_status_webhook
  */
+import { Timestamp } from "firebase-admin/firestore";
 import { ItemStatusUpdate } from "../../types/plaid/item_status_webhook.types";
 /**
  * Whether an error code is a transient/rate-limit failure that should be
@@ -20,7 +21,7 @@ export declare function is_transient_error_code(error_code: string): boolean;
  * @param consent_expiration_time - ISO timestamp when consent expires
  * @returns Status update to apply
  */
-export declare function compute_pending_expiration_update(consent_expiration_time?: string): ItemStatusUpdate;
+export declare function compute_pending_expiration_update(now: Timestamp, consent_expiration_time?: string): ItemStatusUpdate;
 /**
  * Computes the status update for an ERROR webhook.
  *
@@ -30,7 +31,7 @@ export declare function compute_pending_expiration_update(consent_expiration_tim
  * @param error_message - The Plaid error message
  * @returns Status update to apply
  */
-export declare function compute_error_update(error_code: string, error_message?: string): ItemStatusUpdate;
+export declare function compute_error_update(now: Timestamp, error_code: string, error_message?: string): ItemStatusUpdate;
 /**
  * Computes the status update for a LOGIN_REPAIRED webhook.
  * This clears the error state and sets status back to healthy.
@@ -51,7 +52,7 @@ export declare function compute_login_repaired_update(): ItemStatusUpdate;
  * @param original_error_code - The transient error code that persisted
  * @returns Status update to apply
  */
-export declare function compute_escalation_update(original_error_code: string | null): ItemStatusUpdate;
+export declare function compute_escalation_update(now: Timestamp, original_error_code: string | null): ItemStatusUpdate;
 /**
  * Computes the status update for a USER_PERMISSION_REVOKED webhook.
  *
@@ -59,7 +60,7 @@ export declare function compute_escalation_update(original_error_code: string | 
  *
  * @returns Status update to apply
  */
-export declare function compute_permission_revoked_update(): ItemStatusUpdate;
+export declare function compute_permission_revoked_update(now: Timestamp): ItemStatusUpdate;
 /**
  * Determines if a status change should trigger a data refresh.
  *

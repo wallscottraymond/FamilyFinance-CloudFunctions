@@ -12,6 +12,7 @@ import {
   UserRole
 } from '../../types';
 import { authenticateRequest } from '../../utils/auth';
+import { invalidate_category_cache } from '../repositories/category.repo';
 
 interface GetCategoriesRequest {
   type?: 'Income' | 'Outflow' | 'All';
@@ -171,7 +172,12 @@ export const addCategory = onCall<AddCategoryRequest, Promise<CategoryResponse>>
     };
     
     const docRef = await db.collection('categories').add(category);
-    
+
+    // Drop the assignment engine's active-category cache so the new category is
+    // matchable immediately on this instance (other instances fall back to the
+    // short TTL).
+    invalidate_category_cache();
+
     const createdCategory: Category = {
       id: docRef.id,
       ...category,
@@ -243,14 +249,18 @@ export const updateCategory = onCall<UpdateCategoryRequest, Promise<CategoryResp
     };
     
     await categoryRef.update(updateData);
-    
+
+    // Drop the assignment engine's active-category cache so merchant/keyword rule
+    // changes take effect immediately on this instance (others fall back to TTL).
+    invalidate_category_cache();
+
     // Return updated category
     const updatedDoc = await categoryRef.get();
     const updatedCategory: Category = {
       id: categoryId,
       ...updatedDoc.data() as Omit<Category, 'id'>,
     };
-    
+
     console.log(`[updateCategory] Successfully updated category: ${categoryId}`);
     
     return {
@@ -295,7 +305,11 @@ export const toggleCategoryStatus = onCall<ToggleCategoryRequest, Promise<Catego
       isActive,
       updatedAt: now,
     });
-    
+
+    // Drop the assignment engine's active-category cache so an (in)activation is
+    // reflected immediately on this instance (others fall back to the short TTL).
+    invalidate_category_cache();
+
     // Return updated category
     const updatedDoc = await categoryRef.get();
     

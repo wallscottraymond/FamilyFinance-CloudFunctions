@@ -44,29 +44,36 @@ export interface ResolvedAssignment {
 }
 
 /**
- * Resolve the assignment context for a transaction.
- *
- * @returns The resolved context, or null if the transaction is missing/inactive.
+ * The transaction-INDEPENDENT slice of the assignment context: a user's real
+ * budgets, the Everything Else fallback id, budget id→name, and the category
+ * rules. These depend only on `user_id`, so when assigning many of a user's
+ * transactions they can be resolved ONCE and reused — avoiding the per-transaction
+ * re-read of budgets and the categories collection (the main read amplification).
  */
-export async function resolve_assignment_context(
+export interface SharedAssignmentContext {
+  real_budgets: BudgetForMatch[];
+  budget_names: Record<string, string>;
+  everything_else_budget_id: string | null;
+  category_rules: CategoryRule[];
+}
+
+/**
+ * Resolve the transaction-independent shared context for a user (budgets +
+ * categories). Loaded once per batch; pass into `resolve_assignment_context` to
+ * skip the per-transaction re-reads.
+ */
+export async function resolve_shared_assignment_context(
   ctx: TraceContext,
-  user_id: string,
-  transaction_id: string
-): Promise<ResolvedAssignment | null> {
-  const span = create_span(ctx, "resolver", "resolve_assignment_context");
-  log_operation_start(span, user_id);
-
-  const txn = await transaction_repo.get_raw_by_id(ctx, transaction_id);
-  if (!txn) {
-    return null;
-  }
-  const data = txn.data;
-
-  const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
-  const raw_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
+  user_id: string
+): Promise<SharedAssignmentContext> {
+  // Budgets (per-user) and category rules (cached reference data) are
+  // independent — fetch concurrently.
+  const [budgets, category_docs] = await Promise.all([
+    budget_repo.get_by_user_id(ctx, user_id),
+    category_repo.get_active_cached(ctx),
+  ]);
 
   // Real budgets (+ the Everything Else id for the structural fallback).
-  const budgets = await budget_repo.get_by_user_id(ctx, user_id);
   const real_budgets: BudgetForMatch[] = [];
   const budget_names: Record<string, string> = {};
   let everything_else_budget_id: string | null = null;
@@ -86,24 +93,88 @@ export async function resolve_assignment_context(
     });
   }
 
-  // Source periods overlapping the transaction date.
+  // Category rules (merchants / keywords). The category DOC ID (= the detailed
+  // Plaid enum) is the match vocabulary, so a merchant/keyword upgrade yields a
+  // value that matches a budget's `categoryIds`.
+  const category_rules: CategoryRule[] = category_docs.map(({ id, data: c }) => ({
+    category: id,
+    merchants: (c.merchants as string[]) ?? [],
+    keywords: (c.keywords as string[]) ?? [],
+  }));
+
+  return {
+    real_budgets,
+    budget_names,
+    everything_else_budget_id,
+    category_rules,
+  };
+}
+
+/**
+ * Resolve the assignment context for a transaction.
+ *
+ * @param shared - Optional pre-resolved shared context (budgets + categories).
+ *   When provided (batch path), the per-transaction budget/category reads are
+ *   skipped; only the transaction doc, its overlapping source periods, and its
+ *   recurring matches are read.
+ * @returns The resolved context, or null if the transaction is missing/inactive.
+ */
+export async function resolve_assignment_context(
+  ctx: TraceContext,
+  user_id: string,
+  transaction_id: string,
+  shared?: SharedAssignmentContext
+): Promise<ResolvedAssignment | null> {
+  const span = create_span(ctx, "resolver", "resolve_assignment_context");
+  log_operation_start(span, user_id);
+
+  const txn = await transaction_repo.get_raw_by_id(ctx, transaction_id);
+  if (!txn) {
+    return null;
+  }
+  const data = txn.data;
+
+  const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
+  const raw_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
+  const txn_merchant_name = (data.merchantName as string | null) ?? null;
+  const txn_type = (data.type as string) ?? "expense";
+
+  // Transaction-independent context: reuse the caller's shared slice (batch) or
+  // resolve it now (single-item path). Run it concurrently with the two
+  // transaction-DEPENDENT reads (source periods + recurring matches), which only
+  // need data already in hand.
   const anchor = Timestamp.fromMillis(txn_date_ms);
-  const periods = await source_period_repo.get_overlapping(ctx, anchor, anchor);
+  const [resolved_shared, periods, recurring_by_split] = await Promise.all([
+    shared
+      ? Promise.resolve(shared)
+      : resolve_shared_assignment_context(ctx, user_id),
+    source_period_repo.get_overlapping(ctx, anchor, anchor),
+    resolve_recurring_matches(
+      ctx,
+      user_id,
+      txn_type,
+      txn_merchant_name,
+      txn_date_ms,
+      raw_splits.map((s) => ({
+        split_id: s.splitId as string,
+        amount: (s.amount as number) ?? 0,
+      }))
+    ),
+  ]);
+
+  const {
+    real_budgets,
+    budget_names,
+    everything_else_budget_id,
+    category_rules,
+  } = resolved_shared;
+
+  // Source periods overlapping the transaction date.
   const source_periods: SourcePeriodForMatch[] = periods.map((p) => ({
     id: p.id,
     type: p.period_type,
     start_ms: p.start_date.toMillis(),
     end_ms: p.end_date.toMillis(),
-  }));
-
-  // Category rules (merchants / keywords). The category DOC ID (= the detailed
-  // Plaid enum) is the match vocabulary, so a merchant/keyword upgrade yields a
-  // value that matches a budget's `categoryIds`.
-  const category_docs = await category_repo.get_active(ctx);
-  const category_rules: CategoryRule[] = category_docs.map(({ id, data: c }) => ({
-    category: id,
-    merchants: (c.merchants as string[]) ?? [],
-    keywords: (c.keywords as string[]) ?? [],
   }));
 
   // The engine matches budgets on the DETAILED Plaid category: category doc ids
@@ -125,22 +196,6 @@ export async function resolve_assignment_context(
     weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,
     bi_weekly_period_id: (s.biWeeklyPeriodId as string | null) ?? null,
   }));
-
-  const txn_merchant_name = (data.merchantName as string | null) ?? null;
-  const txn_type = (data.type as string) ?? "expense";
-
-  // Recurring (bill) matches → outflow_id per split. Inflow deferred.
-  const recurring_by_split = await resolve_recurring_matches(
-    ctx,
-    user_id,
-    txn_type,
-    txn_merchant_name,
-    txn_date_ms,
-    raw_splits.map((s) => ({
-      split_id: s.splitId as string,
-      amount: (s.amount as number) ?? 0,
-    }))
-  );
 
   const context: AssignmentContext = {
     txn_date_ms,

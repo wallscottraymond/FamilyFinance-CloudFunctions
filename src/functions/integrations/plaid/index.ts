@@ -10,7 +10,6 @@
 
 // Client exports
 export {
-  PlaidAccountData,
   PlaidAccountsResult,
   PlaidInstitutionInfo,
   RemoveItemResult,
@@ -25,8 +24,10 @@ export {
 
 // Transformer exports
 export {
+  PlaidAccountData,
   AccountForPersistence,
   TransformContext,
+  plaid_accounts_to_data,
   transform_plaid_accounts_to_domain,
   transform_plaid_balances_to_updates,
   get_account_category,

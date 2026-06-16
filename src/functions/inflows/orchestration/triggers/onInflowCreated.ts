@@ -29,7 +29,8 @@ import {
   SourcePeriod,
   PlaidRecurringFrequency
 } from '../../../../types';
-import { alignTransactionsToInflowPeriods } from '../../inflow_periods/utils/alignTransactionsToInflowPeriods';
+import { create_job } from '../../../infrastructure/job_queue';
+import { generate_id } from '../../../observability';
 import { predictNextPayment } from '../../inflow_periods/utils/predictNextPayment';
 import { calculateAllOccurrencesInPeriod as calculateOccurrencesUtil } from '../../inflow_periods/utils/calculateAllOccurrencesInPeriod';
 
@@ -264,31 +265,28 @@ export const onInflowCreated = onDocumentCreated({
 
     console.log(`Successfully created ${inflowPeriods.length} inflow periods for inflow ${inflowId}`);
 
-    // STEP 4: Align historical transactions to periods
+    // STEP 4: Reconcile the new periods against the inflow's transactions.
+    // (Replaces legacy alignTransactionsToInflowPeriods 2026-06-13.) Periods now
+    // exist, so enqueueing the reconcile job here closes the create→reconcile race.
     const transactionIds = inflowData.transactionIds || [];
     if (transactionIds.length > 0) {
-      console.log(`[onInflowCreated] STEP 4: Aligning ${transactionIds.length} historical transactions`);
-
       try {
-        const alignmentResult = await alignTransactionsToInflowPeriods(
-          db,
-          inflowId,
-          inflowData,
-          inflowPeriods.map(p => p.id!)
+        await create_job(
+          'reconcile_recurring_period',
+          {
+            recurring_id: inflowId,
+            recurring_type: 'inflow',
+            user_id: inflowData.ownerId || inflowData.userId,
+            trace_id: generate_id(),
+          },
+          { trace_id: generate_id() }
         );
-
-        console.log('[onInflowCreated] Transaction alignment complete:');
-        console.log(`  - Transactions processed: ${alignmentResult.transactionsProcessed}`);
-        console.log(`  - Transactions matched: ${alignmentResult.transactionsMatched}`);
-        console.log(`  - Periods updated: ${alignmentResult.periodsUpdated}`);
-        if (alignmentResult.errors.length > 0) {
-          console.warn(`  - Errors: ${alignmentResult.errors.join(', ')}`);
-        }
-      } catch (alignError) {
-        console.error('[onInflowCreated] Transaction alignment error (non-fatal):', alignError);
+        console.log(`[onInflowCreated] STEP 4: Enqueued reconcile for inflow ${inflowId}`);
+      } catch (reconcileError) {
+        console.error('[onInflowCreated] reconcile enqueue error (non-fatal):', reconcileError);
       }
     } else {
-      console.log('[onInflowCreated] No historical transactions to align');
+      console.log('[onInflowCreated] No historical transactions to reconcile');
     }
 
     // STEP 5: Update prediction information

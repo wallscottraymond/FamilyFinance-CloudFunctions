@@ -62,6 +62,12 @@ export interface Inflow {
  */
 export declare const inflow_repo: {
     /**
+     * Reactivates (un-soft-deletes) the given inflow IDs in batches. The caller
+     * decides which IDs to restore; the repo only persists isActive/restoredAt.
+     * Returns the number of docs written.
+     */
+    restore_by_ids(ctx: TraceContext, ids: string[]): Promise<number>;
+    /**
      * Gets an inflow by ID.
      */
     get_by_id(_ctx: TraceContext, id: string, options?: ReadOptions): Promise<Inflow | null>;

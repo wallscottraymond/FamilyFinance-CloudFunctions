@@ -24,10 +24,10 @@ import {
 } from "../../types/plaid";
 import {
   resolve_webhook_balance_sync_dependencies,
-  record_webhook_processed,
 } from "../../resolvers/plaid/webhook_balance_sync.resolver";
-import { fetch_plaid_balances } from "../../integrations/plaid";
+import { fetch_plaid_balances, plaid_accounts_to_data } from "../../integrations/plaid";
 import { account_repo } from "../../repositories/account.repo";
+import { plaid_webhook_repo } from "../../repositories/plaid";
 import { ACCOUNT_EVENTS } from "../../events/account.events";
 
 /**
@@ -77,7 +77,7 @@ export async function webhook_balance_sync_orchestrator(
     console.warn(`[${ctx.trace_id}] Item not found for webhook`);
 
     // Record webhook as failed
-    await record_webhook_processed(
+    await plaid_webhook_repo.record_processed(
       ctx,
       ctx.input,
       false,
@@ -97,7 +97,9 @@ export async function webhook_balance_sync_orchestrator(
   // 2. FETCH ACCOUNTS/BALANCES FROM PLAID
   let plaid_result;
   try {
-    plaid_result = await fetch_plaid_balances(deps.item.access_token);
+    const raw = await fetch_plaid_balances(deps.item.access_token);
+    // Integration client returns RAW SDK accounts — transform to domain here.
+    plaid_result = { ...raw, accounts: plaid_accounts_to_data(raw.accounts) };
   } catch (error) {
     const error_msg = error instanceof Error ? error.message : "Unknown error";
     console.error(
@@ -106,7 +108,7 @@ export async function webhook_balance_sync_orchestrator(
     );
 
     // Record webhook as failed
-    await record_webhook_processed(
+    await plaid_webhook_repo.record_processed(
       ctx,
       ctx.input,
       false,
@@ -127,7 +129,7 @@ export async function webhook_balance_sync_orchestrator(
     console.log(`[${ctx.trace_id}] No accounts returned from Plaid`);
 
     // Record webhook as completed (success but no accounts)
-    await record_webhook_processed(
+    await plaid_webhook_repo.record_processed(
       ctx,
       ctx.input,
       true,
@@ -197,7 +199,7 @@ export async function webhook_balance_sync_orchestrator(
     );
 
     // Record webhook as failed
-    await record_webhook_processed(
+    await plaid_webhook_repo.record_processed(
       ctx,
       ctx.input,
       false,
@@ -235,7 +237,7 @@ export async function webhook_balance_sync_orchestrator(
   );
 
   // 6. RECORD WEBHOOK as processed
-  await record_webhook_processed(
+  await plaid_webhook_repo.record_processed(
     ctx,
     ctx.input,
     true,

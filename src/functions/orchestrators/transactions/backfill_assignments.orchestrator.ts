@@ -69,6 +69,10 @@ const RECOMPUTE_DELAY_SECONDS = 180;
  * sockets at once. Each create_job is a single Firestore write. */
 const ENQUEUE_CHUNK = 50;
 
+/** Transactions per `assign_transactions_batch` job. Each job resolves shared
+ * context once and processes its slice within the job timeout. */
+const ASSIGN_BATCH_SIZE = 100;
+
 async function enqueue_chunked(
   thunks: Array<() => Promise<unknown>>
 ): Promise<void> {
@@ -112,12 +116,19 @@ export async function backfill_assignments_orchestrator(
       input.user_id
     );
 
-    // 1. Re-assign every transaction's splits.
+    // 1. Re-assign every transaction's splits, in batches. Each batch job
+    //    resolves the shared context (budgets + categories) ONCE and reuses it
+    //    across its transactions — instead of one job per transaction each
+    //    re-reading budgets + the categories collection.
+    const assign_batches: string[][] = [];
+    for (let i = 0; i < transaction_ids.length; i += ASSIGN_BATCH_SIZE) {
+      assign_batches.push(transaction_ids.slice(i, i + ASSIGN_BATCH_SIZE));
+    }
     await enqueue_chunked(
-      transaction_ids.map((transaction_id) => (): Promise<unknown> =>
+      assign_batches.map((batch_ids) => (): Promise<unknown> =>
         create_job(
-          "assign_transaction",
-          { user_id: input.user_id, transaction_id },
+          "assign_transactions_batch",
+          { user_id: input.user_id, transaction_ids: batch_ids },
           { trace_id: ctx.trace_id }
         )
       )

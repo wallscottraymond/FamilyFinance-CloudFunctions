@@ -31,6 +31,7 @@ import {
 import {
   compute_transaction_assignment,
 } from "../../domain/transactions/compute_transaction_assignment.service";
+import { merge_assignment_onto_raw_splits } from "./merge_assignment";
 import { transaction_repo } from "../../repositories/transaction.repo";
 
 /** Input: assign all splits of one transaction. */
@@ -111,33 +112,9 @@ export async function assign_transaction_orchestrator(
     // 4. Merge the assignment onto the raw split maps + denormalize the matched
     //    budget's name. `name_changed` heals a drifted `budgetName` (the app
     //    defaults new splits to "General") even when the assignment is unchanged.
-    const by_id = new Map(result.splits.map((s) => [s.split_id, s]));
     const now = Timestamp.now();
-    let name_changed = false;
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const updated_splits = resolved.raw_splits.map((raw) => {
-      const a = by_id.get(raw.splitId as string);
-      if (!a) {
-        return raw;
-      }
-      const budget_name = resolved.budget_names[a.budget_id];
-      if (budget_name !== undefined && raw.budgetName !== budget_name) {
-        name_changed = true;
-      }
-      return {
-        ...raw,
-        budgetId: a.budget_id,
-        budgetName: budget_name ?? raw.budgetName,
-        budgetAssignmentSource: a.budget_assignment_source,
-        outflowId: a.outflow_id,
-        inflowId: a.inflow_id,
-        monthlyPeriodId: a.monthly_period_id,
-        weeklyPeriodId: a.weekly_period_id,
-        biWeeklyPeriodId: a.bi_weekly_period_id,
-        updatedAt: now,
-      };
-    });
-    /* eslint-enable @typescript-eslint/naming-convention */
+    const { updated_splits, name_changed, split_budget_ids } =
+      merge_assignment_onto_raw_splits(resolved, result, now);
 
     // 5. Skip-if-unchanged (loop prevention). A budgetName-only drift still
     //    writes (display heal) but does NOT fan out a recompute (spend unmoved).
@@ -152,7 +129,6 @@ export async function assign_transaction_orchestrator(
     }
 
     // 6. Single write.
-    const split_budget_ids = [...new Set(result.splits.map((s) => s.budget_id))];
     await transaction_repo.apply_split_assignments(
       ctx,
       resolved.transaction_doc_id,
@@ -173,6 +149,33 @@ export async function assign_transaction_orchestrator(
         },
         { trace_id: ctx.trace_id }
       );
+
+      // Recurring reconciliation fan-out (before ∪ after) — a set / cleared /
+      // moved link reconciles the OLD recurring doc too (RPR Phase 5c).
+      for (const outflow_id of result.touched_outflow_ids) {
+        await create_job(
+          "reconcile_recurring_period",
+          {
+            recurring_id: outflow_id,
+            recurring_type: "outflow",
+            user_id: input.user_id,
+            trace_id: ctx.trace_id,
+          },
+          { trace_id: ctx.trace_id }
+        );
+      }
+      for (const inflow_id of result.touched_inflow_ids) {
+        await create_job(
+          "reconcile_recurring_period",
+          {
+            recurring_id: inflow_id,
+            recurring_type: "inflow",
+            user_id: input.user_id,
+            trace_id: ctx.trace_id,
+          },
+          { trace_id: ctx.trace_id }
+        );
+      }
     }
 
     log_operation_success(span, input.user_id);

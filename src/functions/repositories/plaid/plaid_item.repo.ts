@@ -149,6 +149,43 @@ export const plaid_item_repo = {
   },
 
   /**
+   * Gets one item's raw doc data + id by DOCUMENT id (resolvers read raw fields
+   * like `accessToken`/`cursor`). Null when the doc doesn't exist.
+   */
+  async get_raw_by_id(
+    _ctx: TraceContext,
+    id: string
+  ): Promise<{ id: string; data: Record<string, unknown> } | null> {
+    const doc = await doc_ref(id).get();
+    if (!doc.exists) {
+      return null;
+    }
+    return { id: doc.id, data: doc.data() as Record<string, unknown> };
+  },
+
+  /**
+   * Gets the active item matching Plaid's EXTERNAL item id (`plaidItemId`),
+   * returning the raw doc + id (resolvers map their own dependency shape).
+   * Null when no active item matches.
+   */
+  async get_active_raw_by_plaid_item_id(
+    _ctx: TraceContext,
+    plaid_item_id: string
+  ): Promise<{ id: string; data: Record<string, unknown> } | null> {
+    const snapshot = await get_db()
+      .collection(COLLECTION)
+      .where("plaidItemId", "==", plaid_item_id)
+      .where("isActive", "==", true)
+      .limit(1)
+      .get();
+    if (snapshot.empty) {
+      return null;
+    }
+    const doc = snapshot.docs[0];
+    return { id: doc.id, data: doc.data() as Record<string, unknown> };
+  },
+
+  /**
    * Gets all Plaid items for a user.
    *
    * @param ctx - Trace context
@@ -212,6 +249,7 @@ export const plaid_item_repo = {
         status: legacy.status,
         error_code: legacy.error ?? null,
         transient_since: (raw.transientSince as Timestamp | null) ?? null,
+        retry_count: (raw.retryCount as number | undefined) ?? 0,
       });
     }
     return rows;
@@ -354,7 +392,7 @@ export const plaid_item_repo = {
   async update_cursor(
     ctx: TraceContext,
     id: string,
-    cursor: string
+    cursor: string | null
   ): Promise<void> {
     /* eslint-disable @typescript-eslint/naming-convention */
     await doc_ref(id).update({
@@ -386,6 +424,31 @@ export const plaid_item_repo = {
       updatedAt: FieldValue.serverTimestamp(),
     });
     /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
+   * Persists a pre-computed set of camelCase status fields onto a Plaid item.
+   * The caller (orchestrator) computes ALL values; the repo only writes them
+   * (always stamping `updatedAt`). Used by the item-error, login-repaired, and
+   * transient-retry status updates so those orchestrators never touch Firestore
+   * directly. No business logic here.
+   *
+   * @param ctx - Trace context
+   * @param id - Plaid item document ID
+   * @param fields - Pre-computed camelCase fields to merge onto the item
+   */
+  async apply_field_update(
+    ctx: TraceContext,
+    id: string,
+    fields: Record<string, unknown>
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      ...fields,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    console.log(`[${ctx.trace_id}] plaid_item_repo.apply_field_update: item ${id}`);
   },
 
   /**

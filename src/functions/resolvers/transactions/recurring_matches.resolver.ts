@@ -2,14 +2,16 @@
  * Recurring Matches Resolver
  *
  * READ-ONLY: for a transaction, find which of its splits match a recurring bill
- * (outflow) — producing the `outflow_id` the assignment engine puts on the
- * split. Loads candidate outflow periods in a window around the transaction
- * date and runs the pure `match_recurring` scorer per split.
+ * (outflow) or recurring income (inflow) — producing the `outflow_id` / `inflow_id`
+ * the assignment engine puts on the split. Loads candidate periods in a window
+ * around the transaction date and runs the pure `match_recurring` scorer per split.
  *
- * Inflow (income) matching is deferred to Recurring-Period-Reconciliation (the
- * inflow-period reconciliation is new); `inflow_id` stays null for now.
+ * - `expense` transactions → outflow (bill) candidates → `outflow_id`
+ * - `income` transactions  → inflow (income) candidates → `inflow_id`
+ * - `transfer` → neither.
  *
- * Composite index: `outflow_periods(userId ASC, expectedDueDate ASC)`.
+ * Composite indexes: `outflow_periods(userId, firstDueDateInPeriod)`,
+ * `inflow_periods(userId, firstDueDateInPeriod)`.
  *
  * @module resolvers/transactions/recurring_matches
  */
@@ -17,6 +19,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { outflow_period_repo } from "../../repositories/outflow_period.repo";
+import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import {
   match_recurring,
   RecurringCandidate,
@@ -30,11 +33,75 @@ export type RecurringBySplit = Record<
   { outflow_id: string | null; inflow_id: string | null }
 >;
 
+function ms(value: unknown): number | null {
+  return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+/** Outflow (bill) period candidates around the transaction date. */
+async function load_outflow_candidates(
+  ctx: TraceContext,
+  user_id: string,
+  txn_date_ms: number
+): Promise<RecurringCandidate[]> {
+  const docs = await outflow_period_repo.get_in_due_window(
+    ctx,
+    user_id,
+    txn_date_ms - WINDOW_MS,
+    txn_date_ms + WINDOW_MS
+  );
+  return docs.map(({ id, data: d }) => {
+    const meta = (d.metadata as Record<string, unknown>) ?? {};
+    const splits_on_period = (d.transactionSplits as unknown[]) ?? [];
+    return {
+      period_id: id,
+      recurring_id: d.outflowId as string,
+      merchant_name:
+        (d.merchantName as string | null) ??
+        (meta.outflowMerchantName as string | null) ??
+        null,
+      // A single transaction settles ONE occurrence, so score against the
+      // per-occurrence amount (fall back to the period total / amount due).
+      expected_amount:
+        (d.amountPerOccurrence as number) ??
+        (d.expectedAmount as number) ??
+        (d.totalAmountDue as number) ??
+        0,
+      due_date_ms: ms(d.firstDueDateInPeriod),
+      is_settled: splits_on_period.length > 0,
+    };
+  });
+}
+
+/** Inflow (income) period candidates around the transaction date. */
+async function load_inflow_candidates(
+  ctx: TraceContext,
+  user_id: string,
+  txn_date_ms: number
+): Promise<RecurringCandidate[]> {
+  const docs = await inflow_period_repo.get_in_due_window(
+    ctx,
+    user_id,
+    txn_date_ms - WINDOW_MS,
+    txn_date_ms + WINDOW_MS
+  );
+  return docs.map(({ id, data: d }) => {
+    const transaction_ids = (d.transactionIds as unknown[]) ?? [];
+    return {
+      period_id: id,
+      recurring_id: d.inflowId as string,
+      merchant_name:
+        (d.merchant as string | null) ?? (d.payee as string | null) ?? null,
+      expected_amount: (d.expectedAmount as number) ?? 0,
+      due_date_ms: ms(d.firstDueDateInPeriod),
+      is_settled: transaction_ids.length > 0,
+    };
+  });
+}
+
 /**
- * Resolve the recurring (bill) matches for a transaction's splits.
+ * Resolve the recurring (bill/income) matches for a transaction's splits.
  *
- * @param splits - The splits (split_id + amount) to match
- * @param txn_type - Transaction type; only `expense` matches outflows
+ * @param txn_type - Transaction type: `expense` → outflows, `income` → inflows.
  */
 export async function resolve_recurring_matches(
   ctx: TraceContext,
@@ -49,36 +116,15 @@ export async function resolve_recurring_matches(
     out[s.split_id] = { outflow_id: null, inflow_id: null };
   }
 
-  // Only expenses match bills (transfers/income don't).
-  if (txn_type !== "expense") {
-    return out;
+  const is_income = txn_type === "income";
+  const is_expense = txn_type === "expense";
+  if (!is_income && !is_expense) {
+    return out; // transfers match nothing
   }
 
-  // Load candidate outflow periods in a window around the transaction date.
-  const period_docs = await outflow_period_repo.get_in_due_window(
-    ctx,
-    user_id,
-    txn_date_ms - WINDOW_MS,
-    txn_date_ms + WINDOW_MS
-  );
-
-  const candidates: RecurringCandidate[] = period_docs.map(({ id, data: d }) => {
-    const meta = (d.metadata as Record<string, unknown>) ?? {};
-    const splits_on_period = (d.transactionSplits as unknown[]) ?? [];
-    return {
-      period_id: id,
-      recurring_id: d.outflowId as string,
-      merchant_name:
-        (d.merchantName as string | null) ??
-        (meta.outflowMerchantName as string | null) ??
-        null,
-      expected_amount: (d.amountDue as number) ?? 0,
-      due_date_ms: d.expectedDueDate
-        ? (d.expectedDueDate as Timestamp).toMillis()
-        : null,
-      is_settled: splits_on_period.length > 0,
-    };
-  });
+  const candidates = is_expense
+    ? await load_outflow_candidates(ctx, user_id, txn_date_ms)
+    : await load_inflow_candidates(ctx, user_id, txn_date_ms);
 
   if (candidates.length === 0) {
     return out;
@@ -86,12 +132,21 @@ export async function resolve_recurring_matches(
 
   for (const s of splits) {
     const result = match_recurring(
-      { merchant_name: txn_merchant_name, amount: s.amount, date_ms: txn_date_ms },
+      {
+        merchant_name: txn_merchant_name,
+        // Match on magnitude so the amount score works regardless of the income
+        // (negative) vs expense (positive) sign convention.
+        amount: Math.abs(s.amount),
+        date_ms: txn_date_ms,
+      },
       candidates
     );
     if (result.matched) {
-      out[s.split_id] = { outflow_id: result.recurring_id, inflow_id: null };
+      out[s.split_id] = is_expense
+        ? { outflow_id: result.recurring_id, inflow_id: null }
+        : { outflow_id: null, inflow_id: result.recurring_id };
     }
   }
+
   return out;
 }

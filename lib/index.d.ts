@@ -7,7 +7,6 @@ export * from "./functions/transactions";
 export * from "./functions/budgets";
 export * from "./functions/categories";
 export * from "./functions/admin";
-export * from "./functions/plaid";
 export * from "./functions/outflows";
 export * from "./functions/inflows";
 export * from "./functions/summaries";

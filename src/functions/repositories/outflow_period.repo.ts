@@ -7,7 +7,7 @@
  * @module repositories/outflow_period
  */
 
-import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   WriteResult,
   BatchWriteResult,
@@ -16,6 +16,7 @@ import {
   chunk_for_batch,
 } from "../types";
 import { record_audit_entry_async } from "../audit";
+import { ReconciliationResult } from "../domain/recurring/period_reconciliation.service";
 
 /**
  * Firestore collection name.
@@ -369,63 +370,83 @@ export const outflow_period_repo = {
     const now = Timestamp.now();
     const results: WriteResult[] = [];
 
-    // Process in batches to respect Firestore limits
-    const chunks = chunk_for_batch(updates);
+    // Idempotent read-modify-REPLACE per period (never a blind FieldValue.
+    // arrayUnion — a webhook/trigger replay would double-record the payment).
+    // Each period is its own aggregate, so one transaction per period.
+    for (const update of updates) {
+      const ref = db.collection(COLLECTION).doc(update.period_id);
 
-    for (const chunk of chunks) {
-      const batch = db.batch();
+      // Convert snake_case domain format to camelCase Firestore format
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const transaction_split_ref_firestore = {
+        transactionId: update.transaction_split_ref.transaction_id,
+        splitId: update.transaction_split_ref.split_id,
+        amount: update.transaction_split_ref.amount,
+        paymentDate: update.transaction_split_ref.payment_date,
+      };
+      /* eslint-enable @typescript-eslint/naming-convention */
 
-      for (const update of chunk) {
-        const ref = db.collection(COLLECTION).doc(update.period_id);
-
-        // Convert snake_case domain format to camelCase Firestore format
+      const applied = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) {
+          return false;
+        }
         /* eslint-disable @typescript-eslint/naming-convention */
-        const transaction_split_ref_firestore = {
-          transactionId: update.transaction_split_ref.transaction_id,
-          splitId: update.transaction_split_ref.split_id,
-          amount: update.transaction_split_ref.amount,
-          paymentDate: update.transaction_split_ref.payment_date,
-        };
-
-        const update_data = {
-          transactionSplits: FieldValue.arrayUnion(transaction_split_ref_firestore),
+        const existing = (snap.data()?.transactionSplits ?? []) as Array<{
+          transactionId?: string;
+          splitId?: string;
+        }>;
+        /* eslint-enable @typescript-eslint/naming-convention */
+        // Drop any prior ref for the same (transaction, split), then append once.
+        const deduped = existing.filter(
+          (s) =>
+            !(
+              s.transactionId === transaction_split_ref_firestore.transactionId &&
+              s.splitId === transaction_split_ref_firestore.splitId
+            )
+        );
+        const next = [...deduped, transaction_split_ref_firestore];
+        /* eslint-disable @typescript-eslint/naming-convention */
+        tx.update(ref, {
+          transactionSplits: next,
           status: "paid",
           updatedAt: now,
-        };
-        /* eslint-enable @typescript-eslint/naming-convention */
-
-        batch.update(ref, update_data);
-
-        results.push(
-          create_write_result("outflow_period", update.period_id, "merge", null, {
-            transactionSplitRef: transaction_split_ref_firestore,
-            status: "paid",
-          })
-        );
-
-        // Audit entry (async, non-blocking)
-        record_audit_entry_async({
-          user_id: "system",
-          action: "update",
-          entity_type: "outflow_period",
-          entity_id: update.period_id,
-          before: null,
-          after: {
-            transactionSplitRef: transaction_split_ref_firestore,
-            status: "paid",
-          },
-          trace_id: ctx.trace_id,
-          metadata: {
-            source: "api",
-            context: {
-              plaid_sync: true,
-              transaction_id: update.transaction_split_ref.transaction_id,
-            },
-          },
         });
+        /* eslint-enable @typescript-eslint/naming-convention */
+        return true;
+      });
+
+      if (!applied) {
+        continue;
       }
 
-      await batch.commit();
+      results.push(
+        create_write_result("outflow_period", update.period_id, "merge", null, {
+          transactionSplitRef: transaction_split_ref_firestore,
+          status: "paid",
+        })
+      );
+
+      // Audit entry (async, non-blocking)
+      record_audit_entry_async({
+        user_id: "system",
+        action: "update",
+        entity_type: "outflow_period",
+        entity_id: update.period_id,
+        before: null,
+        after: {
+          transactionSplitRef: transaction_split_ref_firestore,
+          status: "paid",
+        },
+        trace_id: ctx.trace_id,
+        metadata: {
+          source: "api",
+          context: {
+            plaid_sync: true,
+            transaction_id: update.transaction_split_ref.transaction_id,
+          },
+        },
+      });
     }
 
     console.log(
@@ -469,12 +490,14 @@ export const outflow_period_repo = {
 
     const data = doc.data();
     /* eslint-disable @typescript-eslint/naming-convention */
-    const transactionSplits = data?.transactionSplits || [];
+    const transactionSplits = (data?.transactionSplits || []) as Array<{
+      transactionId: string;
+      splitId: string;
+    }>;
 
     // Find the specific split reference to remove
     const split_ref_to_remove = transactionSplits.find(
-      (s: { transactionId: string; splitId: string }) =>
-        s.transactionId === transaction_id && s.splitId === split_id
+      (s) => s.transactionId === transaction_id && s.splitId === split_id
     );
 
     if (!split_ref_to_remove) {
@@ -484,11 +507,14 @@ export const outflow_period_repo = {
       return null;
     }
 
-    // Note: new_status is computed by orchestrator/domain layer, not here
-    // Repository only persists what's computed elsewhere
+    // Read-modify-REPLACE (never a blind FieldValue.arrayRemove): write back the
+    // filtered array. new_status is computed by orchestrator/domain, not here.
+    const next_splits = transactionSplits.filter(
+      (s) => !(s.transactionId === transaction_id && s.splitId === split_id)
+    );
 
     await ref.update({
-      transactionSplits: FieldValue.arrayRemove(split_ref_to_remove),
+      transactionSplits: next_splits,
       status: new_status,
       updatedAt: now,
     });
@@ -536,11 +562,12 @@ export const outflow_period_repo = {
   },
 
   /**
-   * Gets outflow periods (raw doc data + id) whose `expectedDueDate` falls in
+   * Gets outflow periods (raw doc data + id) whose `firstDueDateInPeriod` falls in
    * [start_ms, end_ms]. READ-ONLY — used by the recurring-match resolver to load
-   * bill candidates around a transaction date.
+   * bill candidates around a transaction date. (Only DUE periods have a non-null
+   * `firstDueDateInPeriod`, which is exactly the candidate set we want.)
    *
-   * Composite index: `outflow_periods(userId, expectedDueDate)`.
+   * Composite index: `outflow_periods(userId, firstDueDateInPeriod)`.
    */
   async get_in_due_window(
     _ctx: TraceContext,
@@ -551,12 +578,198 @@ export const outflow_period_repo = {
     const snapshot = await getFirestore()
       .collection(COLLECTION)
       .where("userId", "==", user_id)
-      .where("expectedDueDate", ">=", Timestamp.fromMillis(start_ms))
-      .where("expectedDueDate", "<=", Timestamp.fromMillis(end_ms))
+      .where("firstDueDateInPeriod", ">=", Timestamp.fromMillis(start_ms))
+      .where("firstDueDateInPeriod", "<=", Timestamp.fromMillis(end_ms))
       .get();
     return snapshot.docs.map((doc) => ({
       id: doc.id,
       data: doc.data() as Record<string, unknown>,
     }));
+  },
+
+  /**
+   * Soft-deletes (or restores) every outflow period for an account in one shot.
+   * Sets `isActive` to `is_active` on all periods whose `accountId` matches and
+   * whose current state differs (idempotent — re-running is a no-op).
+   *
+   * Used by the account-removal cascade (`is_active = false`) and the restore
+   * flow (`is_active = true`). Queries by `accountId` only (single-field index)
+   * and filters in memory to avoid a composite index; period counts per account
+   * are bounded (hundreds), and writes are chunked into batches of ≤500.
+   *
+   * @returns number of periods updated
+   */
+  async set_active_by_account_id(
+    ctx: TraceContext,
+    account_id: string,
+    is_active: boolean
+  ): Promise<number> {
+    const db = getFirestore();
+    const now = Timestamp.now();
+
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("accountId", "==", account_id)
+      .get();
+
+    const ids = snapshot.docs
+      .filter((doc) => doc.get("isActive") !== is_active)
+      .map((doc) => doc.id);
+
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    let updated = 0;
+    for (const chunk of chunk_for_batch(ids)) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(id), {
+          isActive: is_active,
+          updatedAt: now,
+        });
+        /* eslint-enable @typescript-eslint/naming-convention */
+        updated++;
+      }
+      await batch.commit();
+    }
+
+    console.log(
+      `[${ctx.trace_id}] outflow_period.set_active_by_account_id: ` +
+      `account=${account_id}, is_active=${is_active}, updated=${updated}`
+    );
+    return updated;
+  },
+
+  /**
+   * Returns the period ids for a recurring outflow (mirror of
+   * `inflow_period_repo.get_by_inflow_id`). The resolver loads the docs via
+   * `get_by_ids` and filters active in memory.
+   */
+  async get_by_outflow_id(ctx: TraceContext, outflow_id: string): Promise<string[]> {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("outflowId", "==", outflow_id)
+      .select()
+      .get();
+    console.log(
+      `[${ctx.trace_id}] outflow_period_repo.get_by_outflow_id: found=${snapshot.size}`
+    );
+    return snapshot.docs.map((doc) => doc.id);
+  },
+
+  /**
+   * Persists reconciliation status (Recurring-Period-Reconciliation Phase 3d).
+   * Writes the `reconciliation` map + the denormalized legacy `isPaid`/`amountPaid`
+   * fields in place, batched, **NOT** `increment` (invalidation model). The
+   * orchestrator is responsible for NOT passing inactive periods.
+   */
+  async update_reconciliation(
+    _ctx: TraceContext,
+    results: ReconciliationResult[]
+  ): Promise<WriteResult[]> {
+    if (results.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const write_results: WriteResult[] = [];
+
+    for (const chunk of chunk_for_batch(results)) {
+      const batch = db.batch();
+      for (const r of chunk) {
+        const is_complete = r.status === "complete" || r.status === "over";
+        const occurrences_unpaid = Math.max(0, r.occurrences_expected - r.occurrences_paid);
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const update_data = {
+          reconciliation: {
+            status: r.status,
+            matchedAmount: r.matched_amount,
+            pendingAmount: r.pending_amount,
+            expectedAmount: r.expected_amount,
+            occurrencesExpected: r.occurrences_expected,
+            occurrencesPaid: r.occurrences_paid,
+            occurrences: r.occurrences.map((o) => ({
+              dueDate: Timestamp.fromMillis(o.due_date_ms),
+              paid: o.paid,
+              transactionId: o.transaction_id,
+              amount: o.amount,
+            })),
+            matchedSplits: r.matched_splits.map((s) => ({
+              transactionId: s.transaction_id,
+              splitId: s.split_id,
+              amount: s.amount,
+              isPending: s.is_pending,
+            })),
+            lastReconciledAt: now,
+          },
+          // Denormalized legacy fields (kept readable through the FE cutover).
+          isPaid: is_complete,
+          isFullyPaid: is_complete,
+          isPartiallyPaid: r.status === "partial",
+          amountPaid: r.matched_amount,
+          // Dollar amounts the user_summary / tiles read (paid vs expected).
+          totalAmountDue: r.expected_amount,
+          totalAmountPaid: r.matched_amount,
+          totalAmountUnpaid: Math.max(0, r.expected_amount - r.matched_amount),
+          numberOfOccurrencesInPeriod: r.occurrences_expected,
+          numberOfOccurrencesPaid: r.occurrences_paid,
+          numberOfOccurrencesUnpaid: occurrences_unpaid,
+          updatedAt: now,
+        };
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(r.period_id), update_data);
+        write_results.push(
+          create_write_result("outflow_period", r.period_id, "merge", { id: r.period_id }, update_data)
+        );
+      }
+      await batch.commit();
+    }
+
+    return write_results;
+  },
+
+  /**
+   * Merge-update ONLY the generation-derived occurrence fields on existing periods
+   * (Recurring-Period-Reconciliation B — occurrence regeneration). Preserves the
+   * payment/reconciliation state (`reconciliation`, `isPaid`, `transactionSplits`):
+   * uses `batch.update`, so callers MUST pass only periods that already exist.
+   */
+  async update_occurrence_fields(
+    _ctx: TraceContext,
+    entities: OutflowPeriodForPersistence[]
+  ): Promise<WriteResult[]> {
+    if (entities.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const write_results: WriteResult[] = [];
+
+    for (const chunk of chunk_for_batch(entities)) {
+      const batch = db.batch();
+      for (const e of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const update_data = {
+          numberOfOccurrencesInPeriod: e.number_of_occurrences_in_period,
+          occurrenceDueDates: e.occurrence_due_dates,
+          amountPerOccurrence: e.amount_per_occurrence,
+          expectedAmount: e.expected_amount,
+          firstDueDateInPeriod: e.first_due_date_in_period,
+          isDuePeriod: e.is_due_period,
+          updatedAt: now,
+        };
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(e.id), update_data);
+        write_results.push(
+          create_write_result("outflow_period", e.id, "merge", { id: e.id }, update_data)
+        );
+      }
+      await batch.commit();
+    }
+
+    return write_results;
   },
 };

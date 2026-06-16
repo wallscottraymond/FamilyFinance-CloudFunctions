@@ -12,7 +12,6 @@ export { resolve_initial_sync_dependencies } from "./initial_sync.resolver";
 export { resolve_balance_sync_dependencies } from "./balance_sync.resolver";
 export {
   resolve_webhook_balance_sync_dependencies,
-  record_webhook_processed,
 } from "./webhook_balance_sync.resolver";
 
 export {

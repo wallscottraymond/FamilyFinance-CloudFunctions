@@ -7,12 +7,13 @@
  * @module orchestrators/plaid/handle_item_error
  */
 
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   OrchestratorContext,
   create_performance_metrics,
   is_budget_exceeded,
 } from "../../types";
+import { plaid_item_repo } from "../../repositories/plaid";
 import {
   ItemStatusWebhookInput,
   ItemStatusWebhookResponse,
@@ -78,23 +79,26 @@ export async function handle_item_error_orchestrator(
     // 2. DOMAIN SERVICE: Compute status update based on webhook code
     // =========================================================================
     let status_update;
+    const now = Timestamp.now();
 
     switch (ctx.input.webhook_code) {
       case "PENDING_EXPIRATION":
         status_update = compute_pending_expiration_update(
+          now,
           ctx.input.consent_expiration_time
         );
         break;
 
       case "ERROR":
         status_update = compute_error_update(
+          now,
           ctx.input.error?.error_code || "UNKNOWN_ERROR",
           ctx.input.error?.error_message
         );
         break;
 
       case "USER_PERMISSION_REVOKED":
-        status_update = compute_permission_revoked_update();
+        status_update = compute_permission_revoked_update(now);
         break;
 
       default:
@@ -109,11 +113,8 @@ export async function handle_item_error_orchestrator(
     }
 
     // =========================================================================
-    // 3. REPOSITORY: Update item status
+    // 3. REPOSITORY: Update item status (computed here, persisted by the repo)
     // =========================================================================
-    const db = getFirestore();
-    const item_ref = db.collection("plaid_items").doc(deps.item_doc_id);
-
     /* eslint-disable @typescript-eslint/naming-convention */
     const update_data: Record<string, unknown> = {
       status: status_update.status,
@@ -121,7 +122,6 @@ export async function handle_item_error_orchestrator(
       errorMessage: status_update.error_message,
       errorAt: status_update.error_at,
       requiresReauth: status_update.requires_reauth,
-      updatedAt: FieldValue.serverTimestamp(),
     };
 
     if (status_update.consent_expires_at) {
@@ -137,7 +137,7 @@ export async function handle_item_error_orchestrator(
         deps.current_status === ItemStatusValues.TEMPORARY_ERROR ||
         deps.current_status === ItemStatusValues.RATE_LIMITED;
       if (!was_transient) {
-        update_data.transientSince = FieldValue.serverTimestamp();
+        update_data.transientSince = now;
         update_data.retryCount = 0;
         update_data.lastRetryAt = null;
       }
@@ -147,7 +147,7 @@ export async function handle_item_error_orchestrator(
     }
     /* eslint-enable @typescript-eslint/naming-convention */
 
-    await item_ref.update(update_data);
+    await plaid_item_repo.apply_field_update(ctx, deps.item_doc_id, update_data);
     perf.writes++;
 
     // Check performance budget

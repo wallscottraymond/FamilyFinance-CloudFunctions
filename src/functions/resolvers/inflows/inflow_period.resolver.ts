@@ -7,9 +7,9 @@
  * @module resolvers/inflows/inflow_period
  */
 
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext, DependencyResult, no_dependencies } from "../../types";
-import { inflow_repo, Inflow } from "../../repositories";
+import { inflow_repo, Inflow, source_period_repo } from "../../repositories";
 import {
   InflowForPeriodGeneration,
   SourcePeriodForGeneration,
@@ -114,26 +114,18 @@ export async function resolve_inflow_period_dependencies(
   );
 
   // 3. Query source periods within the date range
-  const db = getFirestore();
-  /* eslint-disable @typescript-eslint/naming-convention */
-  const snapshot = await db
-    .collection("source_periods")
-    .where("startDate", ">=", Timestamp.fromDate(start_date))
-    .where("startDate", "<=", Timestamp.fromDate(end_date))
-    .orderBy("startDate", "asc")
-    .get();
-  /* eslint-enable @typescript-eslint/naming-convention */
-
-  const source_periods: SourcePeriodForGeneration[] = snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      period_id: data.periodId ?? doc.id,
-      type: data.type,
-      start_date: data.startDate,
-      end_date: data.endDate,
-    };
-  });
+  const periods = await source_period_repo.get_by_start_date_range(
+    ctx,
+    Timestamp.fromDate(start_date),
+    Timestamp.fromDate(end_date)
+  );
+  const source_periods: SourcePeriodForGeneration[] = periods.map((p) => ({
+    id: p.id,
+    period_id: p.period_id,
+    type: p.period_type,
+    start_date: p.start_date,
+    end_date: p.end_date,
+  }));
 
   console.log(
     `[${ctx.trace_id}] resolve_inflow_period_dependencies: found ${source_periods.length} source periods`
@@ -224,26 +216,18 @@ export async function resolve_inflow_period_dependencies_from_doc(
   );
 
   // Query source periods
-  const db = getFirestore();
-  /* eslint-disable @typescript-eslint/naming-convention */
-  const snapshot = await db
-    .collection("source_periods")
-    .where("startDate", ">=", Timestamp.fromDate(start_date))
-    .where("startDate", "<=", Timestamp.fromDate(end_date))
-    .orderBy("startDate", "asc")
-    .get();
-  /* eslint-enable @typescript-eslint/naming-convention */
-
-  const source_periods: SourcePeriodForGeneration[] = snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      period_id: data.periodId ?? doc.id,
-      type: data.type,
-      start_date: data.startDate,
-      end_date: data.endDate,
-    };
-  });
+  const periods = await source_period_repo.get_by_start_date_range(
+    ctx,
+    Timestamp.fromDate(start_date),
+    Timestamp.fromDate(end_date)
+  );
+  const source_periods: SourcePeriodForGeneration[] = periods.map((p) => ({
+    id: p.id,
+    period_id: p.period_id,
+    type: p.period_type,
+    start_date: p.start_date,
+    end_date: p.end_date,
+  }));
 
   console.log(
     `[${ctx.trace_id}] resolve_inflow_period_dependencies_from_doc: found ${source_periods.length} source periods`

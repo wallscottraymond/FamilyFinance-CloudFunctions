@@ -6,30 +6,15 @@
  *
  * @module integrations/plaid/plaid_client
  */
-import { LinkTokenCreateResponse, ItemPublicTokenExchangeResponse, TransactionsSyncResponse, TransactionsRecurringGetResponse } from "plaid";
+import { AccountBase, LinkTokenCreateResponse, ItemPublicTokenExchangeResponse, TransactionsSyncResponse, TransactionsRecurringGetResponse } from "plaid";
 import { PlaidCreateLinkTokenInput } from "../../types/plaid";
 /**
- * Raw account data from Plaid API.
- */
-export interface PlaidAccountData {
-    account_id: string;
-    name: string;
-    official_name: string | null;
-    type: string;
-    subtype: string | null;
-    mask: string | null;
-    balances: {
-        current: number | null;
-        available: number | null;
-        limit: number | null;
-        iso_currency_code: string | null;
-    };
-}
-/**
- * Result of fetching accounts from Plaid.
+ * Result of fetching accounts from Plaid. `accounts` are the RAW Plaid SDK
+ * objects (`AccountBase`) — map them to domain via the transformer
+ * `plaid_accounts_to_data`. The client never maps data itself.
  */
 export interface PlaidAccountsResult {
-    accounts: PlaidAccountData[];
+    accounts: AccountBase[];
     item_id: string;
     request_id: string;
 }

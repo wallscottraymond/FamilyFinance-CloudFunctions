@@ -284,6 +284,32 @@ function doc_ref(id: string): FirebaseFirestore.DocumentReference {
  */
 export const outflow_repo = {
   /**
+   * Reactivates (un-soft-deletes) the given outflow IDs in batches. The caller
+   * decides which IDs to restore; the repo only persists isActive/restoredAt.
+   * Returns the number of docs written.
+   */
+  async restore_by_ids(ctx: TraceContext, ids: string[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    let restored = 0;
+    for (const chunk of chunk_for_batch(ids)) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), { isActive: true, restoredAt: now });
+        /* eslint-enable @typescript-eslint/naming-convention */
+        restored++;
+      }
+      await batch.commit();
+    }
+    console.log(`[${ctx.trace_id}] outflow_repo.restore_by_ids: restored=${restored}`);
+    return restored;
+  },
+
+  /**
    * Gets an outflow by ID.
    */
   async get_by_id(

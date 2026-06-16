@@ -93,6 +93,10 @@ export interface OutflowEntry {
   unpaidCount: number;             // Count of unpaid occurrences
   itemCount: number;               // Total occurrences in period
 
+  // === RECONCILIATION (4-state, for the tile status chip) ===
+  reconciliationStatus?: "none" | "partial" | "complete" | "over"; // from period.reconciliation.status
+  pendingAmount?: number;          // posted-pending amount (reconciliation.pendingAmount)
+
   // === GROUPING ===
   groupId: string;                 // Group association
 }
@@ -228,6 +232,10 @@ export interface InflowEntry {
   dollarProgressPercentage: number;  // ($ received / $ expected) × 100
   isFullyReceived: boolean;        // Whether received >= expected
   isPending: boolean;              // Whether totalPending > 0
+
+  // === RECONCILIATION (4-state, for the tile status chip) ===
+  reconciliationStatus?: "none" | "partial" | "complete" | "over"; // from period.reconciliation.status
+  pendingAmount?: number;          // posted-pending amount (reconciliation.pendingAmount)
 
   // === OCCURRENCE TRACKING ===
   occurrenceCount: number;         // Total occurrences in period

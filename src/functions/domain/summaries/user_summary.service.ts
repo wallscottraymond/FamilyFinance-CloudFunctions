@@ -75,6 +75,28 @@ function determine_confidence_level(
 // ============================================================================
 
 /**
+ * Reads the period's reconciliation 4-state status + pending amount for the tile
+ * chip. The `reconciliation` map is on the Firestore doc but not the TS period
+ * type, so read it loosely; fall back to the legacy paid flags for periods that
+ * have never been reconciled (those can't produce `over`, which is fine).
+ */
+function read_reconciliation(period: {
+  isFullyPaid?: boolean;
+  isPartiallyPaid?: boolean;
+}): { status: "none" | "partial" | "complete" | "over"; pendingAmount: number } {
+  const rec = (period as {
+    reconciliation?: {
+      status?: "none" | "partial" | "complete" | "over";
+      pendingAmount?: number;
+    };
+  }).reconciliation;
+  const status =
+    rec?.status ??
+    (period.isFullyPaid ? "complete" : period.isPartiallyPaid ? "partial" : "none");
+  return { status, pendingAmount: rec?.pendingAmount ?? 0 };
+}
+
+/**
  * Computes outflow entries from outflow periods.
  * PURE: No I/O, deterministic.
  */
@@ -115,6 +137,10 @@ function compute_outflow_entries(outflow_periods: OutflowPeriod[]): OutflowEntry
       fullyPaidCount: period.numberOfOccurrencesPaid || 0,
       unpaidCount: period.numberOfOccurrencesUnpaid || 0,
       itemCount: period.numberOfOccurrencesInPeriod || 1,
+
+      // === RECONCILIATION ===
+      reconciliationStatus: read_reconciliation(period).status,
+      pendingAmount: read_reconciliation(period).pendingAmount,
 
       // === GROUPING ===
       groupId: period.groupId || "",
@@ -283,6 +309,10 @@ function compute_inflow_entries(inflow_periods: InflowPeriod[], now: Date): Infl
       dollarProgressPercentage: dollar_progress_percentage,
       isFullyReceived: period.isFullyPaid || false,
       isPending: pending_amount > 0,
+
+      // === RECONCILIATION ===
+      reconciliationStatus: read_reconciliation(period).status,
+      pendingAmount: read_reconciliation(period).pendingAmount,
 
       // === OCCURRENCE TRACKING ===
       occurrenceCount: occurrence_count,

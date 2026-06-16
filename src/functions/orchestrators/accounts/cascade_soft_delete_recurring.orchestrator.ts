@@ -22,6 +22,8 @@ import {
 } from "../../observability";
 import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
+import { outflow_period_repo } from "../../repositories/outflow_period.repo";
+import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 
 /**
  * Performance budget for cascade operation.
@@ -63,6 +65,12 @@ export interface CascadeSoftDeleteRecurringResult {
 
   /** Number of inflows soft-deleted */
   inflows_deleted: number;
+
+  /** Number of outflow periods soft-deleted */
+  outflow_periods_deleted: number;
+
+  /** Number of inflow periods soft-deleted */
+  inflow_periods_deleted: number;
 
   /** Whether the operation completed successfully */
   success: boolean;
@@ -132,6 +140,26 @@ export async function cascade_soft_delete_recurring_orchestrator(
       }
     }
 
+    // Soft-delete the periods belonging to this account. Periods carry their own
+    // `accountId`, so we deactivate by account in one shot (rather than per
+    // recurring id) — this also catches periods whose parent was already
+    // soft-deleted. Without this the periods stay `isActive: true` and keep
+    // showing on the period views after the account is removed.
+    const outflow_periods_deleted =
+      await outflow_period_repo.set_active_by_account_id(
+        ctx,
+        input.plaid_account_id,
+        false
+      );
+    const inflow_periods_deleted =
+      await inflow_period_repo.set_active_by_account_id(
+        ctx,
+        input.plaid_account_id,
+        false
+      );
+    perf.reads += 2;
+    perf.writes += outflow_periods_deleted + inflow_periods_deleted;
+
     log_operation_success(span, input.user_id);
 
     // Async debug logging
@@ -146,6 +174,8 @@ export async function cascade_soft_delete_recurring_orchestrator(
           plaid_account_id: input.plaid_account_id,
           outflows_deleted,
           inflows_deleted,
+          outflow_periods_deleted,
+          inflow_periods_deleted,
           outflows_requested: input.outflow_ids.length,
           inflows_requested: input.inflow_ids.length,
           perf_reads: perf.reads,
@@ -157,12 +187,15 @@ export async function cascade_soft_delete_recurring_orchestrator(
     console.log(
       `[${ctx.trace_id}] cascade_soft_delete_recurring: ` +
       `outflows=${outflows_deleted}/${input.outflow_ids.length}, ` +
-      `inflows=${inflows_deleted}/${input.inflow_ids.length}`
+      `inflows=${inflows_deleted}/${input.inflow_ids.length}, ` +
+      `outflow_periods=${outflow_periods_deleted}, inflow_periods=${inflow_periods_deleted}`
     );
 
     return {
       outflows_deleted,
       inflows_deleted,
+      outflow_periods_deleted,
+      inflow_periods_deleted,
       success: true,
     };
   } catch (error) {

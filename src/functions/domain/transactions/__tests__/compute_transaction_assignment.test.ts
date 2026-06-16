@@ -156,6 +156,27 @@ describe("compute_transaction_assignment", () => {
     expect(r.touched_budget_ids.sort()).toEqual([EE, "b_groceries"].sort());
   });
 
+  it("touched_outflow_ids is before ∪ after (recurring link moved)", () => {
+    // Split currently linked to o_old; the matcher now links it to o_new.
+    const r = compute_transaction_assignment(
+      [split({ split_id: "s1", outflow_id: "o_old" })],
+      ctx({ recurring_by_split: { s1: { outflow_id: "o_new", inflow_id: null } } })
+    );
+    expect(r.splits[0].outflow_id).toBe("o_new");
+    expect(r.touched_outflow_ids.sort()).toEqual(["o_new", "o_old"].sort());
+  });
+
+  it("touched_outflow_ids keeps the OLD doc when a link is cleared (un-match)", () => {
+    // Split was on o_old; no recurring match now → outflow_id cleared, but o_old
+    // must still reconcile (drop the stale payment). RPR Phase 5c.
+    const r = compute_transaction_assignment(
+      [split({ split_id: "s1", outflow_id: "o_old" })],
+      ctx() // recurring_by_split empty → no match
+    );
+    expect(r.splits[0].outflow_id).toBeNull();
+    expect(r.touched_outflow_ids).toEqual(["o_old"]);
+  });
+
   it("multi-split: per-split, only the matching split re-homes", () => {
     const r = compute_transaction_assignment(
       [

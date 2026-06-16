@@ -29,7 +29,7 @@ import {
   should_show_help_message,
 } from "../../domain/plaid/update_link_token.service";
 import { create_link_token, transform_link_token_response } from "../../integrations/plaid";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { relink_attempt_repo } from "../../repositories/plaid";
 
 /**
  * Orchestrates update link token creation.
@@ -188,18 +188,12 @@ async function log_relink_attempt(
   error_code: string | null
 ): Promise<void> {
   try {
-    const db = getFirestore();
-    const attempt_ref = db.collection("relink_attempts").doc();
-
-    await attempt_ref.set({
-      id: attempt_ref.id,
+    await relink_attempt_repo.create(ctx, {
       user_id: ctx.user_id,
-      item_id: ctx.input.item_id,
+      item_id: ctx.input.item_id ?? null,
       error_code,
       trace_id: ctx.trace_id,
       success: null, // Will be updated when relink completes
-      created_at: Timestamp.now(),
-      completed_at: null,
     });
   } catch (error) {
     // Log but don't fail the main operation

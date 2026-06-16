@@ -23,14 +23,4 @@ import { WebhookBalanceSyncInput, WebhookBalanceSyncDependencies } from "../../t
  * @returns Dependencies for the orchestrator
  */
 export declare function resolve_webhook_balance_sync_dependencies(ctx: TraceContext, input: WebhookBalanceSyncInput): Promise<WebhookBalanceSyncDependencies>;
-/**
- * Records webhook as processed.
- * Called after successful processing to prevent duplicates.
- *
- * @param ctx - Trace context
- * @param input - Webhook input
- * @param success - Whether processing succeeded
- * @param message - Processing result message
- */
-export declare function record_webhook_processed(ctx: TraceContext, input: WebhookBalanceSyncInput, success: boolean, message: string): Promise<void>;
 //# sourceMappingURL=webhook_balance_sync.resolver.d.ts.map

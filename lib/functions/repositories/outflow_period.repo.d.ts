@@ -8,6 +8,7 @@
  */
 import { Timestamp } from "firebase-admin/firestore";
 import { WriteResult, BatchWriteResult, TraceContext } from "../types";
+import { ReconciliationResult } from "../domain/recurring/period_reconciliation.service";
 /**
  * Outflow period update structure (snake_case - domain format).
  * Matches the output from match_transaction_splits_to_outflows.
@@ -139,15 +140,49 @@ export declare const outflow_period_repo: {
         data: Record<string, unknown>;
     }>>;
     /**
-     * Gets outflow periods (raw doc data + id) whose `expectedDueDate` falls in
+     * Gets outflow periods (raw doc data + id) whose `firstDueDateInPeriod` falls in
      * [start_ms, end_ms]. READ-ONLY — used by the recurring-match resolver to load
-     * bill candidates around a transaction date.
+     * bill candidates around a transaction date. (Only DUE periods have a non-null
+     * `firstDueDateInPeriod`, which is exactly the candidate set we want.)
      *
-     * Composite index: `outflow_periods(userId, expectedDueDate)`.
+     * Composite index: `outflow_periods(userId, firstDueDateInPeriod)`.
      */
     get_in_due_window(_ctx: TraceContext, user_id: string, start_ms: number, end_ms: number): Promise<Array<{
         id: string;
         data: Record<string, unknown>;
     }>>;
+    /**
+     * Soft-deletes (or restores) every outflow period for an account in one shot.
+     * Sets `isActive` to `is_active` on all periods whose `accountId` matches and
+     * whose current state differs (idempotent — re-running is a no-op).
+     *
+     * Used by the account-removal cascade (`is_active = false`) and the restore
+     * flow (`is_active = true`). Queries by `accountId` only (single-field index)
+     * and filters in memory to avoid a composite index; period counts per account
+     * are bounded (hundreds), and writes are chunked into batches of ≤500.
+     *
+     * @returns number of periods updated
+     */
+    set_active_by_account_id(ctx: TraceContext, account_id: string, is_active: boolean): Promise<number>;
+    /**
+     * Returns the period ids for a recurring outflow (mirror of
+     * `inflow_period_repo.get_by_inflow_id`). The resolver loads the docs via
+     * `get_by_ids` and filters active in memory.
+     */
+    get_by_outflow_id(ctx: TraceContext, outflow_id: string): Promise<string[]>;
+    /**
+     * Persists reconciliation status (Recurring-Period-Reconciliation Phase 3d).
+     * Writes the `reconciliation` map + the denormalized legacy `isPaid`/`amountPaid`
+     * fields in place, batched, **NOT** `increment` (invalidation model). The
+     * orchestrator is responsible for NOT passing inactive periods.
+     */
+    update_reconciliation(_ctx: TraceContext, results: ReconciliationResult[]): Promise<WriteResult[]>;
+    /**
+     * Merge-update ONLY the generation-derived occurrence fields on existing periods
+     * (Recurring-Period-Reconciliation B — occurrence regeneration). Preserves the
+     * payment/reconciliation state (`reconciliation`, `isPaid`, `transactionSplits`):
+     * uses `batch.update`, so callers MUST pass only periods that already exist.
+     */
+    update_occurrence_fields(_ctx: TraceContext, entities: OutflowPeriodForPersistence[]): Promise<WriteResult[]>;
 };
 //# sourceMappingURL=outflow_period.repo.d.ts.map

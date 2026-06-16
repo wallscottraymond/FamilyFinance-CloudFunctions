@@ -43,28 +43,12 @@ const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 
 /**
- * Raw account data from Plaid API.
- */
-export interface PlaidAccountData {
-  account_id: string;
-  name: string;
-  official_name: string | null;
-  type: string;
-  subtype: string | null;
-  mask: string | null;
-  balances: {
-    current: number | null;
-    available: number | null;
-    limit: number | null;
-    iso_currency_code: string | null;
-  };
-}
-
-/**
- * Result of fetching accounts from Plaid.
+ * Result of fetching accounts from Plaid. `accounts` are the RAW Plaid SDK
+ * objects (`AccountBase`) — map them to domain via the transformer
+ * `plaid_accounts_to_data`. The client never maps data itself.
  */
 export interface PlaidAccountsResult {
-  accounts: PlaidAccountData[];
+  accounts: AccountBase[];
   item_id: string;
   request_id: string;
 }
@@ -78,9 +62,20 @@ export interface PlaidInstitutionInfo {
 }
 
 /**
- * Creates a configured Plaid API client.
+ * Memoized client — the config (env + secrets) is constant for the life of an
+ * instance, so build the PlaidApi once and reuse it across warm invocations
+ * instead of reconstructing Configuration + PlaidApi on every call.
+ */
+let cached_client: PlaidApi | null = null;
+
+/**
+ * Returns the configured Plaid API client, building it on first use.
  */
 function create_plaid_client(): PlaidApi {
+  if (cached_client) {
+    return cached_client;
+  }
+
   const env = PLAID_ENV.value();
   const plaid_env = env === "production"
     ? PlaidEnvironments.production
@@ -100,7 +95,8 @@ function create_plaid_client(): PlaidApi {
     },
   });
 
-  return new PlaidApi(configuration);
+  cached_client = new PlaidApi(configuration);
+  return cached_client;
 }
 
 /**
@@ -157,25 +153,9 @@ export async function fetch_plaid_accounts(
     });
   });
 
-  const accounts: PlaidAccountData[] = response.data.accounts.map(
-    (account: AccountBase) => ({
-      account_id: account.account_id,
-      name: account.name,
-      official_name: account.official_name,
-      type: account.type,
-      subtype: account.subtype,
-      mask: account.mask,
-      balances: {
-        current: account.balances.current,
-        available: account.balances.available,
-        limit: account.balances.limit,
-        iso_currency_code: account.balances.iso_currency_code,
-      },
-    })
-  );
-
+  // Return RAW Plaid SDK accounts — mapping happens in the transformer.
   return {
-    accounts,
+    accounts: response.data.accounts,
     item_id: response.data.item.item_id,
     request_id: response.data.request_id,
   };
@@ -203,25 +183,9 @@ export async function fetch_plaid_balances(
     });
   });
 
-  const accounts: PlaidAccountData[] = response.data.accounts.map(
-    (account: AccountBase) => ({
-      account_id: account.account_id,
-      name: account.name,
-      official_name: account.official_name,
-      type: account.type,
-      subtype: account.subtype,
-      mask: account.mask,
-      balances: {
-        current: account.balances.current,
-        available: account.balances.available,
-        limit: account.balances.limit,
-        iso_currency_code: account.balances.iso_currency_code,
-      },
-    })
-  );
-
+  // Return RAW Plaid SDK accounts — mapping happens in the transformer.
   return {
-    accounts,
+    accounts: response.data.accounts,
     item_id: response.data.item.item_id,
     request_id: response.data.request_id,
   };

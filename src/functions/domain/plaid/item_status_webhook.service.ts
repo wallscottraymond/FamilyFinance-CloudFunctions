@@ -37,6 +37,7 @@ export function is_transient_error_code(error_code: string): boolean {
  * @returns Status update to apply
  */
 export function compute_pending_expiration_update(
+  now: Timestamp,
   consent_expiration_time?: string
 ): ItemStatusUpdate {
   let consent_expires_at: Timestamp | null = null;
@@ -54,7 +55,7 @@ export function compute_pending_expiration_update(
     status: ItemStatusValues.PENDING_EXPIRATION,
     error_code: "PENDING_EXPIRATION",
     error_message: ERROR_CODE_MESSAGES.PENDING_EXPIRATION,
-    error_at: Timestamp.now(),
+    error_at: now,
     requires_reauth: true,
     consent_expires_at,
     is_transient: false,
@@ -71,6 +72,7 @@ export function compute_pending_expiration_update(
  * @returns Status update to apply
  */
 export function compute_error_update(
+  now: Timestamp,
   error_code: string,
   error_message?: string
 ): ItemStatusUpdate {
@@ -87,7 +89,7 @@ export function compute_error_update(
       status: ItemStatusValues.RATE_LIMITED,
       error_code,
       error_message: user_message,
-      error_at: Timestamp.now(),
+      error_at: now,
       requires_reauth: false,
       consent_expires_at: null,
       is_transient: true,
@@ -98,7 +100,7 @@ export function compute_error_update(
       status: ItemStatusValues.TEMPORARY_ERROR,
       error_code,
       error_message: user_message,
-      error_at: Timestamp.now(),
+      error_at: now,
       requires_reauth: false,
       consent_expires_at: null,
       is_transient: true,
@@ -112,7 +114,7 @@ export function compute_error_update(
     status: ItemStatusValues.ITEM_LOGIN_REQUIRED,
     error_code,
     error_message: user_message,
-    error_at: Timestamp.now(),
+    error_at: now,
     requires_reauth,
     consent_expires_at: null,
     is_transient: false,
@@ -151,13 +153,14 @@ export function compute_login_repaired_update(): ItemStatusUpdate {
  * @returns Status update to apply
  */
 export function compute_escalation_update(
+  now: Timestamp,
   original_error_code: string | null
 ): ItemStatusUpdate {
   return {
     status: ItemStatusValues.ITEM_LOGIN_REQUIRED,
     error_code: original_error_code ?? "PERSISTENT_CONNECTION_ERROR",
     error_message: ERROR_CODE_MESSAGES.PERSISTENT_CONNECTION_ERROR,
-    error_at: Timestamp.now(),
+    error_at: now,
     requires_reauth: true,
     consent_expires_at: null,
     is_transient: false,
@@ -171,12 +174,12 @@ export function compute_escalation_update(
  *
  * @returns Status update to apply
  */
-export function compute_permission_revoked_update(): ItemStatusUpdate {
+export function compute_permission_revoked_update(now: Timestamp): ItemStatusUpdate {
   return {
     status: ItemStatusValues.USER_PERMISSION_REVOKED,
     error_code: "USER_PERMISSION_REVOKED",
     error_message: ERROR_CODE_MESSAGES.USER_PERMISSION_REVOKED,
-    error_at: Timestamp.now(),
+    error_at: now,
     requires_reauth: false, // Can't re-auth if permission is revoked
     consent_expires_at: null,
     is_transient: false,

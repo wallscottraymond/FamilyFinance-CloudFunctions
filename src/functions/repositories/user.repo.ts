@@ -23,4 +23,19 @@ export const user_repo = {
     console.log(`[${ctx.trace_id}] user_repo.get_all_ids: found=${ids.length}`);
     return ids;
   },
+
+  /**
+   * Gets one user's raw doc data + id (resolvers read various profile fields:
+   * familyId/groupId, etc.). Null when the user doc doesn't exist.
+   */
+  async get_by_id(
+    _ctx: TraceContext,
+    user_id: string
+  ): Promise<{ id: string; data: Record<string, unknown> } | null> {
+    const doc = await getFirestore().collection(COLLECTION).doc(user_id).get();
+    if (!doc.exists) {
+      return null;
+    }
+    return { id: doc.id, data: doc.data() as Record<string, unknown> };
+  },
 };

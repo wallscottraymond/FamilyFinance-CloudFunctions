@@ -2,14 +2,16 @@
  * Recurring Matches Resolver
  *
  * READ-ONLY: for a transaction, find which of its splits match a recurring bill
- * (outflow) — producing the `outflow_id` the assignment engine puts on the
- * split. Loads candidate outflow periods in a window around the transaction
- * date and runs the pure `match_recurring` scorer per split.
+ * (outflow) or recurring income (inflow) — producing the `outflow_id` / `inflow_id`
+ * the assignment engine puts on the split. Loads candidate periods in a window
+ * around the transaction date and runs the pure `match_recurring` scorer per split.
  *
- * Inflow (income) matching is deferred to Recurring-Period-Reconciliation (the
- * inflow-period reconciliation is new); `inflow_id` stays null for now.
+ * - `expense` transactions → outflow (bill) candidates → `outflow_id`
+ * - `income` transactions  → inflow (income) candidates → `inflow_id`
+ * - `transfer` → neither.
  *
- * Composite index: `outflow_periods(userId ASC, expectedDueDate ASC)`.
+ * Composite indexes: `outflow_periods(userId, firstDueDateInPeriod)`,
+ * `inflow_periods(userId, firstDueDateInPeriod)`.
  *
  * @module resolvers/transactions/recurring_matches
  */
@@ -20,10 +22,9 @@ export type RecurringBySplit = Record<string, {
     inflow_id: string | null;
 }>;
 /**
- * Resolve the recurring (bill) matches for a transaction's splits.
+ * Resolve the recurring (bill/income) matches for a transaction's splits.
  *
- * @param splits - The splits (split_id + amount) to match
- * @param txn_type - Transaction type; only `expense` matches outflows
+ * @param txn_type - Transaction type: `expense` → outflows, `income` → inflows.
  */
 export declare function resolve_recurring_matches(ctx: TraceContext, user_id: string, txn_type: string, txn_merchant_name: string | null, txn_date_ms: number, splits: Array<{
     split_id: string;

@@ -7,7 +7,7 @@
  * @module repository/infrastructure/quota
  */
 
-import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 
 /**
@@ -88,14 +88,16 @@ export async function increment_reads(
   const today = get_today_string();
   const doc_ref = db.collection(COLLECTIONS.TRACKING).doc(today);
 
-  await doc_ref.set(
-    {
-      date: today,
-      reads: FieldValue.increment(count),
-      updated_at: Timestamp.now(),
-    },
-    { merge: true }
-  );
+  // Read-modify-REPLACE (no blind FieldValue.increment) — atomic via transaction.
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(doc_ref);
+    const current = (snap.data()?.reads as number | undefined) ?? 0;
+    tx.set(
+      doc_ref,
+      { date: today, reads: current + count, updated_at: Timestamp.now() },
+      { merge: true }
+    );
+  });
 }
 
 /**
@@ -112,14 +114,16 @@ export async function increment_writes(
   const today = get_today_string();
   const doc_ref = db.collection(COLLECTIONS.TRACKING).doc(today);
 
-  await doc_ref.set(
-    {
-      date: today,
-      writes: FieldValue.increment(count),
-      updated_at: Timestamp.now(),
-    },
-    { merge: true }
-  );
+  // Read-modify-REPLACE (no blind FieldValue.increment) — atomic via transaction.
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(doc_ref);
+    const current = (snap.data()?.writes as number | undefined) ?? 0;
+    tx.set(
+      doc_ref,
+      { date: today, writes: current + count, updated_at: Timestamp.now() },
+      { merge: true }
+    );
+  });
 }
 
 /**

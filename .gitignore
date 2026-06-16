@@ -82,3 +82,12 @@ database-debug.log
 
 # Firebase Emulator Data
 emulator-data/
+
+# Service-account keys / credentials — NEVER commit these
+serviceAccount.json
+serviceAccountKey.json
+*service-account*.json
+*-service-account-key.json
+google-service-account-key.json
+*.serviceaccount.json
+application_default_credentials.json

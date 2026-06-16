@@ -20,8 +20,12 @@ import {
   fire_and_forget,
   log_async_debug,
 } from "../../observability";
-import { outflow_repo, inflow_repo } from "../../repositories";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import {
+  outflow_repo,
+  inflow_repo,
+  outflow_period_repo,
+  inflow_period_repo,
+} from "../../repositories";
 
 /**
  * Performance budget for restore_account_recurring job.
@@ -64,6 +68,12 @@ export interface RestoreAccountRecurringResult {
 
   /** Number of inflows restored */
   inflows_restored: number;
+
+  /** Number of outflow periods restored */
+  outflow_periods_restored: number;
+
+  /** Number of inflow periods restored */
+  inflow_periods_restored: number;
 }
 
 /**
@@ -89,83 +99,58 @@ export async function restore_account_recurring_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
-    const db = getFirestore();
-    let outflows_restored = 0;
-    let inflows_restored = 0;
-
-    // 1. Get soft-deleted outflows for this account
+    // 1. Get soft-deleted outflows for this account, restore via the repo.
     const outflows = await outflow_repo.get_by_account_id(
       ctx,
       input.plaid_account_id,
       { include_deleted: true }
     );
     perf.reads++;
+    const deleted_outflow_ids = outflows
+      .filter((o) => !o.is_active)
+      .map((o) => o.id);
+    const outflows_restored = await outflow_repo.restore_by_ids(
+      ctx,
+      deleted_outflow_ids
+    );
+    perf.writes += Math.ceil(outflows_restored / BATCH_SIZE);
 
-    // Filter to only inactive (soft-deleted) outflows
-    const deleted_outflows = outflows.filter(o => !o.is_active);
-
-    if (deleted_outflows.length > 0) {
-      console.log(
-        `[${ctx.trace_id}] Restoring ${deleted_outflows.length} outflows for account ${input.plaid_account_id}`
-      );
-
-      // Batch restore outflows
-      for (let i = 0; i < deleted_outflows.length; i += BATCH_SIZE) {
-        const batch_items = deleted_outflows.slice(i, i + BATCH_SIZE);
-        const batch = db.batch();
-
-        for (const outflow of batch_items) {
-          const doc_ref = db.collection("outflows").doc(outflow.id);
-          batch.update(doc_ref, {
-            isActive: true,
-            restoredAt: Timestamp.now(),
-          });
-        }
-
-        await batch.commit();
-        outflows_restored += batch_items.length;
-        perf.writes++;
-      }
-    }
-
-    // 2. Get soft-deleted inflows for this account
+    // 2. Get soft-deleted inflows for this account, restore via the repo.
     const inflows = await inflow_repo.get_by_account_id(
       ctx,
       input.plaid_account_id,
       { include_deleted: true }
     );
     perf.reads++;
+    const deleted_inflow_ids = inflows
+      .filter((i) => !i.is_active)
+      .map((i) => i.id);
+    const inflows_restored = await inflow_repo.restore_by_ids(
+      ctx,
+      deleted_inflow_ids
+    );
+    perf.writes += Math.ceil(inflows_restored / BATCH_SIZE);
 
-    // Filter to only inactive (soft-deleted) inflows
-    const deleted_inflows = inflows.filter(i => !i.is_active);
-
-    if (deleted_inflows.length > 0) {
-      console.log(
-        `[${ctx.trace_id}] Restoring ${deleted_inflows.length} inflows for account ${input.plaid_account_id}`
+    // 3. Reactivate the account's periods (mirror of the removal cascade, which
+    //    soft-deletes them by accountId).
+    const outflow_periods_restored =
+      await outflow_period_repo.set_active_by_account_id(
+        ctx,
+        input.plaid_account_id,
+        true
       );
-
-      // Batch restore inflows
-      for (let i = 0; i < deleted_inflows.length; i += BATCH_SIZE) {
-        const batch_items = deleted_inflows.slice(i, i + BATCH_SIZE);
-        const batch = db.batch();
-
-        for (const inflow of batch_items) {
-          const doc_ref = db.collection("inflows").doc(inflow.id);
-          batch.update(doc_ref, {
-            isActive: true,
-            restoredAt: Timestamp.now(),
-          });
-        }
-
-        await batch.commit();
-        inflows_restored += batch_items.length;
-        perf.writes++;
-      }
-    }
+    const inflow_periods_restored =
+      await inflow_period_repo.set_active_by_account_id(
+        ctx,
+        input.plaid_account_id,
+        true
+      );
+    perf.reads += 2;
+    perf.writes += outflow_periods_restored + inflow_periods_restored;
 
     log_operation_success(span, input.user_id);
 
-    // 3. Async debug logging
+    // 4. Async debug logging
     fire_and_forget(() =>
       log_async_debug({
         trace_id: ctx.trace_id,
@@ -177,6 +162,8 @@ export async function restore_account_recurring_orchestrator(
           account_id: input.plaid_account_id,
           outflows_restored,
           inflows_restored,
+          outflow_periods_restored,
+          inflow_periods_restored,
           perf_reads: perf.reads,
           perf_writes: perf.writes,
         },
@@ -186,13 +173,16 @@ export async function restore_account_recurring_orchestrator(
     console.log(
       `[${ctx.trace_id}] restore_account_recurring: ` +
       `account=${input.plaid_account_id}, ` +
-      `outflows=${outflows_restored}, inflows=${inflows_restored}`
+      `outflows=${outflows_restored}, inflows=${inflows_restored}, ` +
+      `outflow_periods=${outflow_periods_restored}, inflow_periods=${inflow_periods_restored}`
     );
 
     return {
       success: true,
       outflows_restored,
       inflows_restored,
+      outflow_periods_restored,
+      inflow_periods_restored,
     };
   } catch (error) {
     log_operation_error(

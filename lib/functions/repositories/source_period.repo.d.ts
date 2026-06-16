@@ -39,6 +39,11 @@ export declare const source_period_repo: {
      * query `startDate >= anchor - 31d` (31d ≥ the longest source period) and
      * `startDate <= end`, then drop any period that already ended before `anchor`.
      */
+    /**
+     * Gets all source periods whose `startDate` falls in [start, end] (every
+     * type), ordered by startDate. Used by period-generation resolvers.
+     */
+    get_by_start_date_range(_ctx: TraceContext, start: Timestamp, end: Timestamp): Promise<SourcePeriodEntity[]>;
     get_overlapping(_ctx: TraceContext, anchor: Timestamp, end: Timestamp): Promise<SourcePeriodEntity[]>;
 };
 //# sourceMappingURL=source_period.repo.d.ts.map

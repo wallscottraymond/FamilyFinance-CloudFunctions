@@ -54,7 +54,7 @@ import {
   RecurringSyncInput,
 } from "./sync_recurring.orchestrator";
 import { TransactionSyncInput } from "../../types/plaid";
-import { fetch_plaid_balances } from "../../integrations/plaid";
+import { fetch_plaid_balances, plaid_accounts_to_data } from "../../integrations/plaid";
 
 /**
  * Orchestrates the complete initial sync when a Plaid item is created.
@@ -335,8 +335,13 @@ async function execute_accounts_phase(
       `[${ctx.trace_id}] PHASE 1: Syncing accounts for item ${ctx.input.plaid_item_id}`
     );
 
-    // 1. Fetch accounts from Plaid using integration client
-    const plaid_result = await fetch_plaid_balances(deps.plaid_item.access_token);
+    // 1. Fetch accounts from Plaid using integration client (RAW SDK accounts),
+    //    then transform to the domain shape.
+    const raw_accounts = await fetch_plaid_balances(deps.plaid_item.access_token);
+    const plaid_result = {
+      ...raw_accounts,
+      accounts: plaid_accounts_to_data(raw_accounts.accounts),
+    };
     perf.reads++; // External API call
 
     console.log(

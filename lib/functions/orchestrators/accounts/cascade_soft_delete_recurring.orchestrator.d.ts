@@ -30,6 +30,10 @@ export interface CascadeSoftDeleteRecurringResult {
     outflows_deleted: number;
     /** Number of inflows soft-deleted */
     inflows_deleted: number;
+    /** Number of outflow periods soft-deleted */
+    outflow_periods_deleted: number;
+    /** Number of inflow periods soft-deleted */
+    inflow_periods_deleted: number;
     /** Whether the operation completed successfully */
     success: boolean;
 }

@@ -7,13 +7,12 @@
  * @module orchestrators/accounts/cascade_hide_transactions
  */
 
-import { getFirestore, Timestamp, WriteBatch } from "firebase-admin/firestore";
 import {
   TraceContext,
   PerformanceBudget,
   create_performance_metrics,
-  chunk_for_batch,
 } from "../../types";
+import { transaction_repo } from "../../repositories/transaction.repo";
 import {
   create_span,
   log_operation_start,
@@ -85,21 +84,21 @@ export async function cascade_hide_transactions_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
-    const db = getFirestore();
-    const now = Timestamp.now();
+    // Control-flow decision: delete-history removal also drops the txns from
+    // budgets. The repo persists the computed hide fields (one page of ≤500).
+    const exclude_from_budgets = input.removal_mode === "delete_history";
 
-    // Query transactions for this account that are not already hidden
-    const query = db
-      .collection("transactions")
-      .where("accountId", "==", input.plaid_account_id)
-      .where("ownerId", "==", input.user_id)
-      .where("isActive", "==", true)
-      .limit(500); // Process in batches of 500
-
-    const snapshot = await query.get();
+    const { hidden: total_hidden, has_more } =
+      await transaction_repo.hide_for_account(
+        ctx,
+        input.plaid_account_id,
+        input.user_id,
+        exclude_from_budgets
+      );
     perf.reads++;
+    perf.writes += total_hidden;
 
-    if (snapshot.empty) {
+    if (total_hidden === 0) {
       log_operation_success(span, input.user_id);
       return {
         transactions_hidden: 0,
@@ -107,45 +106,6 @@ export async function cascade_hide_transactions_orchestrator(
         success: true,
       };
     }
-
-    // Determine if we should exclude from budgets
-    const exclude_from_budgets = input.removal_mode === "delete_history";
-
-    // Update transactions in batches
-    const doc_ids = snapshot.docs.map(doc => doc.id);
-    const chunks = chunk_for_batch(doc_ids);
-    let total_hidden = 0;
-
-    for (const chunk of chunks) {
-      const batch: WriteBatch = db.batch();
-
-      for (const doc_id of chunk) {
-        const doc_ref = db.collection("transactions").doc(doc_id);
-
-        /* eslint-disable @typescript-eslint/naming-convention */
-        const update_data: Record<string, unknown> = {
-          isActive: false,
-          isHidden: true,
-          hiddenAt: now,
-          hiddenReason: "account_removed",
-          updatedAt: now,
-        };
-
-        if (exclude_from_budgets) {
-          update_data.excludeFromBudgets = true;
-        }
-        /* eslint-enable @typescript-eslint/naming-convention */
-
-        batch.update(doc_ref, update_data);
-        total_hidden++;
-      }
-
-      await batch.commit();
-      perf.writes += chunk.length;
-    }
-
-    // Check if there might be more transactions
-    const has_more = snapshot.size === 500;
 
     log_operation_success(span, input.user_id);
 

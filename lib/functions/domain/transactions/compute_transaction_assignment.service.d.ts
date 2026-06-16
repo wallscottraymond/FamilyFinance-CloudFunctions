@@ -72,6 +72,10 @@ export interface TransactionAssignmentResult {
     splits: AssignedSplit[];
     /** Budgets whose contribution may have changed (old ∪ new) — fan-out scope. */
     touched_budget_ids: string[];
+    /** Recurring outflow docs whose period status may have changed (old ∪ new). */
+    touched_outflow_ids: string[];
+    /** Recurring inflow docs whose period status may have changed (old ∪ new). */
+    touched_inflow_ids: string[];
     /** False → no engine-owned field changed (skip the write). */
     changed: boolean;
     /** True → a split has no Everything Else budget to fall to (missing-EE ERROR). */

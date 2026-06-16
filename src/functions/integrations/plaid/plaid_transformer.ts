@@ -8,8 +8,51 @@
  */
 
 import { Timestamp } from "firebase-admin/firestore";
+import { AccountBase } from "plaid";
 import { DomainResult } from "../../types";
-import { PlaidAccountData, PlaidInstitutionInfo } from "./plaid_client";
+import { PlaidInstitutionInfo } from "./plaid_client";
+
+/**
+ * Account data in the snake_case domain-input shape the downstream
+ * transformers + `account_repo` consume. Produced by `plaid_accounts_to_data`
+ * from the RAW Plaid SDK `AccountBase` (the client never maps).
+ */
+export interface PlaidAccountData {
+  account_id: string;
+  name: string;
+  official_name: string | null;
+  type: string;
+  subtype: string | null;
+  mask: string | null;
+  balances: {
+    current: number | null;
+    available: number | null;
+    limit: number | null;
+    iso_currency_code: string | null;
+  };
+}
+
+/**
+ * PURE: map raw Plaid SDK accounts to the domain-input shape. No IO.
+ */
+export function plaid_accounts_to_data(
+  accounts: AccountBase[]
+): PlaidAccountData[] {
+  return accounts.map((account) => ({
+    account_id: account.account_id,
+    name: account.name,
+    official_name: account.official_name,
+    type: account.type,
+    subtype: account.subtype,
+    mask: account.mask,
+    balances: {
+      current: account.balances.current,
+      available: account.balances.available,
+      limit: account.balances.limit,
+      iso_currency_code: account.balances.iso_currency_code,
+    },
+  }));
+}
 
 /**
  * Account entity ready for persistence.

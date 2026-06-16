@@ -8,6 +8,7 @@
  */
 import { Timestamp } from "firebase-admin/firestore";
 import { WriteResult, BatchWriteResult, TraceContext } from "../types";
+import { ReconciliationResult } from "../domain/recurring/period_reconciliation.service";
 /**
  * Inflow period entity for persistence (snake_case - domain format).
  */
@@ -109,5 +110,43 @@ export declare const inflow_period_repo: {
      * Used when regenerating periods or soft-deleting an inflow.
      */
     delete_by_inflow_id(ctx: TraceContext, inflow_id: string, user_id: string): Promise<WriteResult[]>;
+    /**
+     * Soft-deletes (or restores) every inflow period for an account in one shot.
+     * Sets `isActive` to `is_active` on all periods whose `accountId` matches and
+     * whose current state differs (idempotent — re-running is a no-op).
+     *
+     * Used by the account-removal cascade (`is_active = false`) and the restore
+     * flow (`is_active = true`). Queries by `accountId` only (single-field index)
+     * and filters in memory to avoid a composite index; period counts per account
+     * are bounded (hundreds), and writes are chunked into batches of ≤500.
+     *
+     * @returns number of periods updated
+     */
+    set_active_by_account_id(ctx: TraceContext, account_id: string, is_active: boolean): Promise<number>;
+    /**
+     * Inflow periods whose `firstDueDateInPeriod` falls in [start_ms, end_ms].
+     * READ-ONLY — used by the recurring-match resolver to load income candidates
+     * (mirror of `outflow_period_repo.get_in_due_window`).
+     * Composite index: `inflow_periods(userId, firstDueDateInPeriod)`.
+     */
+    get_in_due_window(_ctx: TraceContext, user_id: string, start_ms: number, end_ms: number): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
+     * Persists reconciliation status (Recurring-Period-Reconciliation Phase 3d).
+     * Writes the `reconciliation` map + the denormalized legacy `isPaid`/`amountPaid`
+     * fields in place, batched, **NOT** `increment` (invalidation model). The
+     * orchestrator is responsible for NOT passing inactive periods. (Inflow reuses
+     * the existing `isPaid` field for "received"; richer status lives in `reconciliation`.)
+     */
+    update_reconciliation(_ctx: TraceContext, results: ReconciliationResult[]): Promise<WriteResult[]>;
+    /**
+     * Merge-update ONLY the generation-derived occurrence fields on existing periods
+     * (Recurring-Period-Reconciliation B — occurrence regeneration). Preserves the
+     * payment/reconciliation state: uses `batch.update`, so callers MUST pass only
+     * periods that already exist.
+     */
+    update_occurrence_fields(_ctx: TraceContext, entities: InflowPeriodForPersistence[]): Promise<WriteResult[]>;
 };
 //# sourceMappingURL=inflow_period.repo.d.ts.map

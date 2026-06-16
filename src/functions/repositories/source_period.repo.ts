@@ -83,6 +83,26 @@ export const source_period_repo = {
    * query `startDate >= anchor - 31d` (31d ≥ the longest source period) and
    * `startDate <= end`, then drop any period that already ended before `anchor`.
    */
+  /**
+   * Gets all source periods whose `startDate` falls in [start, end] (every
+   * type), ordered by startDate. Used by period-generation resolvers.
+   */
+  async get_by_start_date_range(
+    _ctx: TraceContext,
+    start: Timestamp,
+    end: Timestamp
+  ): Promise<SourcePeriodEntity[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("startDate", ">=", start)
+      .where("startDate", "<=", end)
+      .orderBy("startDate", "asc")
+      .get();
+    return snapshot.docs.map((doc) =>
+      map_to_entity(doc.id, doc.data() as LegacySourcePeriodDoc)
+    );
+  },
+
   async get_overlapping(
     _ctx: TraceContext,
     anchor: Timestamp,

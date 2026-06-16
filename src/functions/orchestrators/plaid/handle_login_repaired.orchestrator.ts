@@ -7,12 +7,12 @@
  * @module orchestrators/plaid/handle_login_repaired
  */
 
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import {
   OrchestratorContext,
   create_performance_metrics,
   is_budget_exceeded,
 } from "../../types";
+import { plaid_item_repo } from "../../repositories/plaid";
 import {
   ItemStatusWebhookInput,
   ItemStatusWebhookResponse,
@@ -85,13 +85,10 @@ export async function handle_login_repaired_orchestrator(
     );
 
     // =========================================================================
-    // 3. REPOSITORY: Update item status
+    // 3. REPOSITORY: Update item status (clear error state)
     // =========================================================================
-    const db = getFirestore();
-    const item_ref = db.collection("plaid_items").doc(deps.item_doc_id);
-
     /* eslint-disable @typescript-eslint/naming-convention */
-    await item_ref.update({
+    await plaid_item_repo.apply_field_update(ctx, deps.item_doc_id, {
       status: status_update.status,
       error: null,
       errorMessage: null,
@@ -99,7 +96,6 @@ export async function handle_login_repaired_orchestrator(
       requiresReauth: false,
       consentExpiresAt: null,
       transientSince: null,
-      updatedAt: FieldValue.serverTimestamp(),
     });
     /* eslint-enable @typescript-eslint/naming-convention */
     perf.writes++;

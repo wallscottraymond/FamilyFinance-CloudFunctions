@@ -15,6 +15,7 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { getFirestore } from "firebase-admin/firestore";
 import { create_trigger_trace } from "../../observability";
+import { create_job } from "../../infrastructure/job_queue";
 import {
   generate_outflow_periods_orchestrator,
   GenerateOutflowPeriodsContext,
@@ -143,6 +144,35 @@ export const on_outflow_created = onDocumentCreated(
         console.log(
           `[on_outflow_created] Successfully generated ${result.periods_created} periods for outflow ${outflow_id}`
         );
+
+        // Now that periods exist, (1) re-assign the outflow's transactions so
+        // their splits carry `outflowId` (budget recurring-exclusion needs this —
+        // they were synced before this outflow/its periods existed), and
+        // (2) reconcile the periods' "paid" status from the transaction membership.
+        // Both enqueued AFTER period generation (Recurring-Period-Reconciliation).
+        const transaction_ids = outflow_data.transactionIds as string[] | undefined;
+        if (transaction_ids && transaction_ids.length > 0) {
+          await create_job(
+            "assign_recurring_transactions",
+            {
+              recurring_id: outflow_id,
+              recurring_type: "outflow",
+              user_id,
+              trace_id: trace.trace_id,
+            },
+            { trace_id: trace.trace_id }
+          );
+          await create_job(
+            "reconcile_recurring_period",
+            {
+              recurring_id: outflow_id,
+              recurring_type: "outflow",
+              user_id,
+              trace_id: trace.trace_id,
+            },
+            { trace_id: trace.trace_id }
+          );
+        }
       } else {
         console.error(
           `[on_outflow_created] Failed to generate periods for outflow ${outflow_id}:`,

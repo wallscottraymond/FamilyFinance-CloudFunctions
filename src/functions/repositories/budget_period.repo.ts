@@ -131,10 +131,26 @@ export const budget_period_repo = {
     _ctx: TraceContext,
     period_ids: string[]
   ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
-    const docs = await Promise.all(
-      period_ids.map((id) => getFirestore().collection(COLLECTION).doc(id).get())
+    if (period_ids.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const collection = db.collection(COLLECTION);
+    // Bulk-read via getAll (one round-trip per chunk) instead of one .get() per
+    // id. Chunked so a very large period set stays within a reasonable per-call
+    // size; chunks run concurrently.
+    const GET_ALL_CHUNK = 300;
+    const chunks: string[][] = [];
+    for (let i = 0; i < period_ids.length; i += GET_ALL_CHUNK) {
+      chunks.push(period_ids.slice(i, i + GET_ALL_CHUNK));
+    }
+    const snapshot_groups = await Promise.all(
+      chunks.map((chunk) =>
+        db.getAll(...chunk.map((id) => collection.doc(id)))
+      )
     );
-    return docs
+    return snapshot_groups
+      .flat()
       .filter((doc) => doc.exists)
       .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }));
   },

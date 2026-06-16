@@ -7,8 +7,8 @@
  * @module resolvers/plaid/item_status_webhook
  */
 
-import { getFirestore } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
+import { plaid_item_repo } from "../../repositories/plaid";
 import {
   ResolveItemStatusWebhookInput,
   ItemStatusWebhookDependencies,
@@ -25,17 +25,13 @@ export async function resolve_item_status_webhook_dependencies(
   ctx: TraceContext,
   input: ResolveItemStatusWebhookInput
 ): Promise<ItemStatusWebhookDependencies> {
-  const db = getFirestore();
-
   // Look up item by Plaid's item ID (stored as plaidItemId)
-  const items_snapshot = await db
-    .collection("plaid_items")
-    .where("plaidItemId", "==", input.plaid_item_id)
-    .where("isActive", "==", true)
-    .limit(1)
-    .get();
+  const item = await plaid_item_repo.get_active_raw_by_plaid_item_id(
+    ctx,
+    input.plaid_item_id
+  );
 
-  if (items_snapshot.empty) {
+  if (!item) {
     console.log(
       `[${ctx.trace_id}] No active item found for Plaid item ID: ${input.plaid_item_id}`
     );
@@ -50,19 +46,18 @@ export async function resolve_item_status_webhook_dependencies(
     };
   }
 
-  const item_doc = items_snapshot.docs[0];
-  const item_data = item_doc.data();
+  const item_data = item.data;
 
   console.log(
-    `[${ctx.trace_id}] Found item ${item_doc.id} for Plaid item ID: ${input.plaid_item_id}`
+    `[${ctx.trace_id}] Found item ${item.id} for Plaid item ID: ${input.plaid_item_id}`
   );
 
   return {
     item_found: true,
-    item_doc_id: item_doc.id,
-    user_id: item_data.userId,
-    current_status: item_data.status || "good",
+    item_doc_id: item.id,
+    user_id: item_data.userId as string,
+    current_status: (item_data.status as string) || "good",
     is_active: item_data.isActive !== false,
-    institution_name: item_data.institutionName || null,
+    institution_name: (item_data.institutionName as string) || null,
   };
 }
