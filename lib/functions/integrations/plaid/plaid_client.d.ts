@@ -33,6 +33,16 @@ export interface PlaidInstitutionInfo {
  */
 export declare function fetch_plaid_accounts(access_token: string): Promise<PlaidAccountsResult>;
 /**
+ * Fetches an institution's optional metadata (logo, primary color, url) by id.
+ * Used at link time to capture the institution logo (a base64 PNG). Best-effort —
+ * callers should tolerate a null logo and never fail the link on this.
+ */
+export declare function get_institution_by_id(institution_id: string): Promise<{
+    logo: string | null;
+    primary_color: string | null;
+    url: string | null;
+}>;
+/**
  * Fetches account balances from Plaid (for balance refresh).
  *
  * @param access_token - Decrypted Plaid access token

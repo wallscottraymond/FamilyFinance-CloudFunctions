@@ -15,6 +15,7 @@ export {
   RemoveItemResult,
   fetch_plaid_accounts,
   fetch_plaid_balances,
+  get_institution_by_id,
   create_link_token,
   exchange_public_token,
   sync_transactions,

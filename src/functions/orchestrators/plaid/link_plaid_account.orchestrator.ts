@@ -42,7 +42,11 @@ import {
 } from "../../infrastructure/idempotency_store";
 import { resolve_link_account_dependencies } from "../../resolvers/plaid";
 import { validate_link_account_request, validate_plaid_item_for_creation } from "../../domain/plaid";
-import { exchange_public_token, transform_token_exchange_response } from "../../integrations/plaid";
+import {
+  exchange_public_token,
+  transform_token_exchange_response,
+  get_institution_by_id,
+} from "../../integrations/plaid";
 import { plaid_item_repo } from "../../repositories/plaid";
 import { create_event_emitter, PLAID_EVENTS, PlaidItemCreatedPayload } from "../../events";
 import { encryptAccessToken } from "../../../utils/encryption";
@@ -182,6 +186,18 @@ export async function link_plaid_account_orchestrator(
     const now = Timestamp.now();
     const encrypted_token = encryptAccessToken(exchange_result.access_token);
 
+    // Capture the institution logo at link time (best-effort — never fail the link).
+    let institution_logo: string | null = null;
+    try {
+      const institution = await get_institution_by_id(ctx.input.institution_id);
+      institution_logo = institution.logo;
+    } catch (logo_error) {
+      console.warn(
+        `[${ctx.trace_id}] Could not fetch institution logo for ${ctx.input.institution_id}:`,
+        logo_error instanceof Error ? logo_error.message : logo_error
+      );
+    }
+
     const plaid_item: PlaidItem = {
       id: exchange_result.item_id,
       plaid_item_id: exchange_result.item_id,
@@ -189,7 +205,7 @@ export async function link_plaid_account_orchestrator(
       group_ids: deps.group_ids,
       institution_id: ctx.input.institution_id,
       institution_name: ctx.input.institution_name,
-      institution_logo: null,
+      institution_logo,
       access_token: encrypted_token,
       cursor: null,
       products: ["transactions"],

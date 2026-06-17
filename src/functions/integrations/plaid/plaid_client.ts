@@ -162,6 +162,34 @@ export async function fetch_plaid_accounts(
 }
 
 /**
+ * Fetches an institution's optional metadata (logo, primary color, url) by id.
+ * Used at link time to capture the institution logo (a base64 PNG). Best-effort —
+ * callers should tolerate a null logo and never fail the link on this.
+ */
+export async function get_institution_by_id(
+  institution_id: string
+): Promise<{ logo: string | null; primary_color: string | null; url: string | null }> {
+  const client = create_plaid_client();
+
+  const response = await with_retry(async () => {
+    return client.institutionsGetById({
+      /* eslint-disable @typescript-eslint/naming-convention */
+      institution_id,
+      country_codes: [CountryCode.Us],
+      options: { include_optional_metadata: true },
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
+  });
+
+  const institution = response.data.institution;
+  return {
+    logo: institution.logo ?? null,
+    primary_color: institution.primary_color ?? null,
+    url: institution.url ?? null,
+  };
+}
+
+/**
  * Fetches account balances from Plaid (for balance refresh).
  *
  * @param access_token - Decrypted Plaid access token
