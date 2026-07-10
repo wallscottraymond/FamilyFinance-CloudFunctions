@@ -18,6 +18,9 @@ export interface RolloverChainResult {
     periodsByType: {
         [key in PeriodType]?: number;
     };
+    /** IDs of the periods whose rollover/remaining actually changed — used by the
+     *  real-time recompute orchestrator to refresh only the affected summaries. */
+    updatedPeriodIds: string[];
     errors: string[];
 }
 /**

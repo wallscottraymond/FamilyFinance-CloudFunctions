@@ -31,6 +31,9 @@ export interface RolloverChainResult {
   periodsByType: {
     [key in PeriodType]?: number;
   };
+  /** IDs of the periods whose rollover/remaining actually changed — used by the
+   *  real-time recompute orchestrator to refresh only the affected summaries. */
+  updatedPeriodIds: string[];
   errors: string[];
 }
 
@@ -53,6 +56,7 @@ export async function recalculateRolloverChain(
     success: true,
     periodsUpdated: 0,
     periodsByType: {},
+    updatedPeriodIds: [],
     errors: [],
   };
 
@@ -106,9 +110,10 @@ export async function recalculateRolloverChain(
     // If rollover is disabled, clear rollover amounts
     if (!rolloverSettings.enabled) {
       console.log('[recalculateRolloverChain] Rollover disabled, clearing rollover amounts');
-      const clearedCount = await clearRolloverAmounts(db, budgetId, periodTypes);
-      result.periodsUpdated = clearedCount;
-      console.log(`[recalculateRolloverChain] Cleared rollover from ${clearedCount} periods`);
+      const clearedIds = await clearRolloverAmounts(db, budgetId, periodTypes);
+      result.updatedPeriodIds = clearedIds;
+      result.periodsUpdated = clearedIds.length;
+      console.log(`[recalculateRolloverChain] Cleared rollover from ${clearedIds.length} periods`);
       return result;
     }
 
@@ -205,6 +210,7 @@ export async function recalculateRolloverChain(
 
           batchCount++;
           result.periodsUpdated++;
+          result.updatedPeriodIds.push(currentPeriod.id!);
           result.periodsByType[periodType] = (result.periodsByType[periodType] || 0) + 1;
 
           // Update local period data for next iteration
@@ -251,16 +257,16 @@ async function clearRolloverAmounts(
   db: admin.firestore.Firestore,
   budgetId: string,
   periodTypes?: PeriodType[]
-): Promise<number> {
+): Promise<string[]> {
   let query = db.collection('budget_periods')
     .where('budgetId', '==', budgetId)
     .where('isActive', '==', true);
 
   const snapshot = await query.get();
-  if (snapshot.empty) return 0;
+  if (snapshot.empty) return [];
 
   const batch = db.batch();
-  let count = 0;
+  const clearedIds: string[] = [];
 
   snapshot.forEach(doc => {
     const period = doc.data() as BudgetPeriodDocument;
@@ -284,15 +290,15 @@ async function clearRolloverAmounts(
         rolloverCalculatedAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
-      count++;
+      clearedIds.push(doc.id);
     }
   });
 
-  if (count > 0) {
+  if (clearedIds.length > 0) {
     await batch.commit();
   }
 
-  return count;
+  return clearedIds;
 }
 
 /**

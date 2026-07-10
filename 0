@@ -1,0 +1,4 @@
+🔑 Using service-account key: /Users/scottwall/google-service-account-key.json
+📖 READ-ONLY · project=family-budget-app-cb59b · collection=budget_periods
+
+❌ inspect-firestore failed: Invalid --where expression: "spent"

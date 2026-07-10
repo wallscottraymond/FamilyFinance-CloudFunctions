@@ -56,6 +56,10 @@ import {
   RecomputeBudgetSpentInput,
 } from "../../orchestrators/budgets/recompute_budget_spent.orchestrator";
 import {
+  recompute_budget_rollover_orchestrator,
+  RecomputeBudgetRolloverInput,
+} from "../../orchestrators/budgets/recompute_budget_rollover.orchestrator";
+import {
   backfill_assignments_orchestrator,
   BackfillAssignmentsInput,
 } from "../../orchestrators/transactions/backfill_assignments.orchestrator";
@@ -157,6 +161,14 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   // Spend pipeline: recompute budget_period.spent for the touched budgets
   recompute_budget_spent: async (ctx, payload) => {
     await recompute_budget_spent_orchestrator(ctx, payload as RecomputeBudgetSpentInput);
+  },
+
+  // Rollover (real-time): recompute a budget's rollover chain after its spend changed
+  recalculate_rollover: async (ctx, payload) => {
+    await recompute_budget_rollover_orchestrator(
+      ctx,
+      payload as RecomputeBudgetRolloverInput
+    );
   },
 
   // One-shot backfill: re-assign + full-recompute (self-fans per user)

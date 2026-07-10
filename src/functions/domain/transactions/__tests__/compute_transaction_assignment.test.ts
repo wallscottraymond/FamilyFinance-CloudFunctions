@@ -177,6 +177,28 @@ describe("compute_transaction_assignment", () => {
     expect(r.touched_outflow_ids).toEqual(["o_old"]);
   });
 
+  it("touched_inflow_ids is before ∪ after (recurring income link moved)", () => {
+    // Split currently linked to i_old; the matcher now links it to i_new — both
+    // recurring income docs must reconcile (received status moves).
+    const r = compute_transaction_assignment(
+      [split({ split_id: "s1", inflow_id: "i_old" })],
+      ctx({ recurring_by_split: { s1: { outflow_id: null, inflow_id: "i_new" } } })
+    );
+    expect(r.splits[0].inflow_id).toBe("i_new");
+    expect(r.touched_inflow_ids.sort()).toEqual(["i_new", "i_old"].sort());
+  });
+
+  it("touched_inflow_ids keeps the OLD doc when an income link is cleared (un-match)", () => {
+    // Split was on i_old; no recurring match now → inflow_id cleared, but i_old
+    // must still reconcile (drop the stale received). Inflow parity of RPR 5c.
+    const r = compute_transaction_assignment(
+      [split({ split_id: "s1", inflow_id: "i_old" })],
+      ctx() // recurring_by_split empty → no match
+    );
+    expect(r.splits[0].inflow_id).toBeNull();
+    expect(r.touched_inflow_ids).toEqual(["i_old"]);
+  });
+
   it("multi-split: per-split, only the matching split re-homes", () => {
     const r = compute_transaction_assignment(
       [

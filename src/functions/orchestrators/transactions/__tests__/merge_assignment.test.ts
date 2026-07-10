@@ -51,6 +51,10 @@ function result(splits: AssignedSplit[]): TransactionAssignmentResult {
   return {
     splits,
     touched_budget_ids: [...new Set(splits.map((s) => s.budget_id))],
+    // The merge only consumes budget fields; the recurring fan-out sets are
+    // irrelevant here (empty is fine).
+    touched_outflow_ids: [],
+    touched_inflow_ids: [],
     changed: true,
     any_unassigned: false,
   };

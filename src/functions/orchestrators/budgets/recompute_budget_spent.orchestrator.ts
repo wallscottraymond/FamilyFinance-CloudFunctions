@@ -20,9 +20,11 @@ import {
   log_operation_error,
 } from "../../observability";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
+import { budget_repo } from "../../repositories/budget.repo";
 import { compute_budget_spent } from "../../domain/budgets/budget_spend.service";
 import { resolve_spend_splits } from "../../resolvers/budgets/budget_spend.resolver";
 import { enqueue_user_summary_updates_from_budget_periods } from "../summaries";
+import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 
 /** Payload from the assignment engine's fan-out. */
 export interface RecomputeBudgetSpentInput {
@@ -108,6 +110,32 @@ export async function recompute_budget_spent_orchestrator(
 
       await budget_period_repo.update_spent(ctx, updates);
       periods_updated += updates.length;
+
+      // Real-time rollover (the other half of the daily `calculateDailyRollover`
+      // catch-up): a spend change invalidates this budget's rollover chain. Only
+      // budgets with rollover ENABLED need it, so gate on a single budget read
+      // and enqueue an async chain recompute (deduped per budget). The chain
+      // writes rolledOverAmount/remaining — never spent — so it cannot re-enter
+      // this pipeline. Non-fatal: a rollover hiccup must not fail the spend recompute.
+      try {
+        const budget = await budget_repo.get_by_id(ctx, budget_id);
+        if (budget?.rollover_enabled) {
+          await create_job_if_not_exists(
+            "recalculate_rollover",
+            {
+              user_id: input.user_id,
+              budget_id,
+              deduplication_key: budget_id,
+            },
+            { trace_id: ctx.trace_id }
+          );
+        }
+      } catch (rollover_error) {
+        console.error(
+          `[${ctx.trace_id}] recompute_budget_spent: rollover enqueue failed (non-fatal):`,
+          rollover_error
+        );
+      }
     }
 
     // Refresh the summaries the app renders.
