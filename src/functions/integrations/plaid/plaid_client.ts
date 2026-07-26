@@ -267,6 +267,11 @@ export async function create_link_token(
       },
     },
     webhook: process.env.PLAID_WEBHOOK_URL || undefined,
+    // OAuth return (iOS Universal Link). Must be HTTPS + exact-match a URI
+    // registered in the Plaid Dashboard. Server-authoritative (like webhook):
+    // never trust a client-supplied redirect. Absent ⇒ OAuth disabled (non-OAuth
+    // banks still link normally).
+    redirect_uri: process.env.PLAID_REDIRECT_URI || undefined,
   };
 
   // Update mode: use access_token instead of products
