@@ -17,6 +17,7 @@ import { Timestamp } from "firebase-admin/firestore";
 export type BudgetPeriodType =
   | "weekly"
   | "monthly"
+  | "bi_monthly"
   | "quarterly"
   | "yearly"
   | "custom";
@@ -32,6 +33,8 @@ export type BudgetType = "recurring" | "limited";
  * source periods, which only come in these three types (mirrors PeriodType).
  */
 export type PeriodInstanceCadence = "weekly" | "monthly" | "bi_monthly";
+// NOTE: `bi_monthly` is a first-class PRIME budget cadence as of the
+// Per-Period-Everything-Else Phase 0 (2026-07-27) — see budget_cadence_to_instance.
 
 /**
  * Rollover strategy for carrying surplus/deficit between periods.
@@ -166,4 +169,15 @@ export interface BudgetPeriodEntity {
   is_active: boolean;
   created_at: Timestamp;
   updated_at: Timestamp;
+}
+
+/**
+ * A budget's outstanding spread-rollover debt for one period type — the sum of
+ * `pendingRolloverDeduction` (and max `pendingRolloverPeriods`) across its active
+ * periods of that type. Captured on delete to transfer the debt to Everything Else.
+ */
+export interface PendingRolloverByType {
+  period_type: string;
+  amount: number;
+  periods: number;
 }

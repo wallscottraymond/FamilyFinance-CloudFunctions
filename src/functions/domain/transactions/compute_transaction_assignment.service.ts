@@ -21,8 +21,12 @@
 import {
   match_budget,
   BudgetForMatch,
+  PeriodLens,
   UNASSIGNED_BUDGET_ID,
 } from "./match_budget.service";
+
+/** The three period lenses, in a stable order. */
+export const PERIOD_LENSES: PeriodLens[] = ["monthly", "weekly", "bi_monthly"];
 import { match_category, CategoryRule } from "./match_category.service";
 import {
   match_source_periods,
@@ -32,8 +36,15 @@ import {
 /** A split as it currently stands, with the fields the engine reads + owns. */
 export interface SplitForAssignment {
   split_id: string;
+  /** The manual-pin signal: when `budget_assignment_source === "manual"`, this is
+   *  the globally-pinned budget id. Also the legacy single-budget field. */
   budget_id: string;
   budget_assignment_source: "category" | "manual";
+  /** Prior per-lens assignments (for touched-set + skip-if-unchanged). Fall back
+   *  to `budget_id` (monthly) for pre-migration docs that lack them. */
+  monthly_budget_id?: string;
+  weekly_budget_id?: string;
+  bi_weekly_budget_id?: string;
   internal_match_category: string | null;
   plaid_match_category: string;
   outflow_id: string | null;
@@ -54,8 +65,13 @@ export interface AssignmentContext {
   txn_date_ms: number;
   txn_merchant_name: string | null;
   txn_name: string | null;
+  /** True for income transactions. Income NEVER auto-assigns to a budget (B1) —
+   *  it stays unassigned unless the user manually pins it. */
+  txn_is_income: boolean;
+  /** All real budgets across every cadence; the engine filters per lens. */
   real_budgets: BudgetForMatch[];
-  everything_else_budget_id: string | null;
+  /** The Everything Else budget id PER LENS (null for a lens with no EE budget). */
+  everything_else_budget_ids: Record<PeriodLens, string | null>;
   category_rules: CategoryRule[];
   source_periods: SourcePeriodForMatch[];
   /** Recurring match per split id (empty = no recurring match). */
@@ -65,16 +81,22 @@ export interface AssignmentContext {
 /** The computed assignment for one split (the engine-owned fields only). */
 export interface AssignedSplit {
   split_id: string;
-  budget_id: string;
+  /** Per-lens budget assignment — the split is placed INDEPENDENTLY per cadence. */
+  monthly_budget_id: string;
+  weekly_budget_id: string;
+  bi_weekly_budget_id: string;
+  /** All three share the same source (global manual pin, else category). */
   budget_assignment_source: "category" | "manual";
+  /** LEGACY alias = monthly_budget_id (kept until callers read the lens fields). */
+  budget_id: string;
   outflow_id: string | null;
   inflow_id: string | null;
   monthly_period_id: string | null;
   weekly_period_id: string | null;
   bi_weekly_period_id: string | null;
-  /** Why this assignment was made — for per-split decision logging. */
+  /** Why this assignment was made — for per-split decision logging (monthly lens). */
   reason: {
-    budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual";
+    budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded";
     tie: boolean;
     recurring: "outflow" | "inflow" | "manual_detached" | "none";
   };
@@ -115,11 +137,20 @@ export function compute_transaction_assignment(
   let any_unassigned = false;
 
   for (const split of splits) {
-    touched.add(split.budget_id); // before
+    // Before-state: prior per-lens assignments (fall back to the legacy monthly
+    // `budget_id` for pre-migration docs). Union of before ∪ after = fan-out scope.
+    const before_monthly = split.monthly_budget_id ?? split.budget_id;
+    const before_weekly = split.weekly_budget_id ?? split.budget_id;
+    const before_bi_weekly = split.bi_weekly_budget_id ?? split.budget_id;
+    touched.add(before_monthly);
+    touched.add(before_weekly);
+    touched.add(before_bi_weekly);
     if (split.outflow_id) touched_outflow.add(split.outflow_id); // before
     if (split.inflow_id) touched_inflow.add(split.inflow_id); // before
 
-    let budget_id: string;
+    let monthly_id: string;
+    let weekly_id: string;
+    let bi_weekly_id: string;
     let source: "category" | "manual";
     let outflow_id: string | null;
     let inflow_id: string | null;
@@ -127,17 +158,19 @@ export function compute_transaction_assignment(
     let tie = false;
     let recurring_reason: AssignedSplit["reason"]["recurring"];
 
-    // A manual pin is only honored while its budget still EXISTS. If the pinned
-    // budget was deleted, the pin is stale → fall through to category matching
-    // so the split re-homes (otherwise a "forced" split survives the delete).
+    // A manual pin is GLOBAL — it forces ALL THREE lenses onto the pinned budget.
+    // Honored only while that budget still EXISTS (a real budget of any cadence, or
+    // any lens's Everything Else). A stale pin (budget deleted) falls through to
+    // per-lens category matching so the split re-homes.
     const pin_budget_valid =
-      split.budget_id === context.everything_else_budget_id ||
-      context.real_budgets.some((b) => b.id === split.budget_id);
+      context.real_budgets.some((b) => b.id === split.budget_id) ||
+      PERIOD_LENSES.some(
+        (lens) => context.everything_else_budget_ids[lens] === split.budget_id
+      );
 
     if (split.budget_assignment_source === "manual" && pin_budget_valid) {
-      // Manual pin is authoritative: keep the budget, DETACH recurring.
       source = "manual";
-      budget_id = split.budget_id;
+      monthly_id = weekly_id = bi_weekly_id = split.budget_id;
       outflow_id = null;
       inflow_id = null;
       budget_reason = "manual";
@@ -164,32 +197,59 @@ export function compute_transaction_assignment(
       inflow_id = recurring.inflow_id;
       recurring_reason = outflow_id ? "outflow" : inflow_id ? "inflow" : "none";
 
-      // 3. Budget (real budgets, else Everything Else structural fallback).
-      const budget = match_budget(
-        {
+      // 3. Budget PER LENS: each cadence is matched INDEPENDENTLY against the real
+      //    budgets of THAT cadence, else that lens's Everything Else fallback.
+      //    EXCEPT income (B1): unassigned in every lens; recurring inflow above
+      //    still applies so income tracking works.
+      if (context.txn_is_income) {
+        monthly_id = weekly_id = bi_weekly_id = UNASSIGNED_BUDGET_ID;
+        budget_reason = "income_excluded";
+      } else {
+        const split_cat = {
           internal_match_category: split.internal_match_category,
           plaid_match_category: resolved_plaid,
-        },
-        context.txn_date_ms,
-        context.real_budgets,
-        context.everything_else_budget_id
-      );
-      budget_id = budget.budget_id;
-      budget_reason = budget.reason;
-      tie = budget.tie;
+        };
+        const per_lens = {} as Record<PeriodLens, ReturnType<typeof match_budget>>;
+        for (const lens of PERIOD_LENSES) {
+          per_lens[lens] = match_budget(
+            split_cat,
+            context.txn_date_ms,
+            context.real_budgets.filter((b) => b.cadence === lens),
+            context.everything_else_budget_ids[lens]
+          );
+        }
+        monthly_id = per_lens.monthly.budget_id;
+        weekly_id = per_lens.weekly.budget_id;
+        bi_weekly_id = per_lens.bi_monthly.budget_id;
+        // reason/tie reflect the monthly lens for logging; tie = ANY lens tie.
+        budget_reason = per_lens.monthly.reason;
+        tie = PERIOD_LENSES.some((lens) => per_lens[lens].tie);
+      }
     }
 
-    if (budget_id === UNASSIGNED_BUDGET_ID) {
+    // Missing-EE error: any lens unassigned for a NON-income split (income being
+    // unassigned in every lens is intentional B1, not the missing-EE error).
+    if (
+      !context.txn_is_income &&
+      (monthly_id === UNASSIGNED_BUDGET_ID ||
+        weekly_id === UNASSIGNED_BUDGET_ID ||
+        bi_weekly_id === UNASSIGNED_BUDGET_ID)
+    ) {
       any_unassigned = true;
     }
-    touched.add(budget_id); // after
+    touched.add(monthly_id); // after
+    touched.add(weekly_id);
+    touched.add(bi_weekly_id);
     if (outflow_id) touched_outflow.add(outflow_id); // after
     if (inflow_id) touched_inflow.add(inflow_id); // after
 
     const next: AssignedSplit = {
       split_id: split.split_id,
-      budget_id,
+      monthly_budget_id: monthly_id,
+      weekly_budget_id: weekly_id,
+      bi_weekly_budget_id: bi_weekly_id,
       budget_assignment_source: source,
+      budget_id: monthly_id, // legacy alias
       outflow_id,
       inflow_id,
       monthly_period_id: periods.monthly_period_id,
@@ -219,8 +279,13 @@ function split_assignment_changed(
   before: SplitForAssignment,
   after: AssignedSplit
 ): boolean {
+  // Prior per-lens ids fall back to the legacy monthly `budget_id` for
+  // pre-migration docs — so a first pass that stamps the three lens fields
+  // correctly registers as a change.
   return (
-    before.budget_id !== after.budget_id ||
+    (before.monthly_budget_id ?? before.budget_id) !== after.monthly_budget_id ||
+    (before.weekly_budget_id ?? before.budget_id) !== after.weekly_budget_id ||
+    (before.bi_weekly_budget_id ?? before.budget_id) !== after.bi_weekly_budget_id ||
     before.budget_assignment_source !== after.budget_assignment_source ||
     before.outflow_id !== after.outflow_id ||
     before.inflow_id !== after.inflow_id ||

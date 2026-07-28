@@ -50,6 +50,24 @@ async function seedTxn(
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   });
 }
+async function seedBudgetDoc(id: string, userId: string, period: string, amount: number) {
+  await db.collection('budgets').doc(id).set({
+    id, userId, createdBy: userId, ownerId: userId, name: `B ${period}`,
+    amount, period, categoryIds: [], isActive: true, isOngoing: true,
+    budgetType: 'recurring', startDate: ts('2026-01-01'), endDate: ts('2026-12-31'),
+    groupIds: [], access: { createdBy: userId, ownerId: userId, groupIds: [], isPrivate: true },
+  });
+}
+async function seedPeriodDates(
+  id: string, budgetId: string, periodType: string, startISO: string, endISO: string, allocated: number
+) {
+  await db.collection('budget_periods').doc(id).set({
+    id, budgetId, periodId: id, periodType,
+    periodStart: ts(startISO), periodEnd: ts(endISO),
+    allocatedAmount: allocated, rolledOverAmount: 0, spent: 0, remaining: allocated,
+    isActive: true, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+  });
+}
 /* eslint-enable @typescript-eslint/naming-convention */
 
 describe('recompute_budget_spent (emulator)', () => {
@@ -93,5 +111,48 @@ describe('recompute_budget_spent (emulator)', () => {
 
     const period = (await db.collection('budget_periods').doc(periodId).get()).data()!;
     expect(period.spent).toBe(123.45); // not 246.90 — recompute, not increment
+  });
+
+  it('per-lens: a split feeds each budget from ITS OWN lens field (Phase 3)', async () => {
+    const userId = uid();
+    const monthlyB = `mb_${Date.now()}`;
+    const weeklyB = `wb_${Date.now()}`;
+    const decoyMonthlyB = `dm_${Date.now()}`;
+
+    // budget docs — `period` selects which split-lens field spend matches on.
+    await seedBudgetDoc(monthlyB, userId, 'monthly', 300);
+    await seedBudgetDoc(weeklyB, userId, 'weekly', 100);
+    await seedBudgetDoc(decoyMonthlyB, userId, 'monthly', 300);
+
+    await seedPeriod(`${monthlyB}_M`, monthlyB, 300);
+    await seedPeriodDates(`${weeklyB}_W`, weeklyB, 'weekly', '2026-06-14', '2026-06-20T23:59:59', 100);
+    await seedPeriod(`${decoyMonthlyB}_M`, decoyMonthlyB, 300);
+
+    // One transaction whose split is assigned to DIFFERENT budgets per lens.
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection('transactions').doc(`tx_${monthlyB}`).set({
+      transactionId: `tx_${monthlyB}`, userId, isActive: true, transactionDate: ts('2026-06-15'),
+      type: 'expense', isPending: false,
+      splits: [{
+        splitId: 's1', budgetId: monthlyB,
+        monthlyBudgetId: monthlyB, weeklyBudgetId: weeklyB, biWeeklyBudgetId: 'unassigned',
+        amount: 100, isIgnored: false, outflowId: null, inflowId: null,
+      }],
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+
+    await recompute_budget_spent_orchestrator(ctx(), {
+      user_id: userId,
+      budget_ids: [monthlyB, weeklyB, decoyMonthlyB],
+      transaction_date_ms: JUN_15,
+    });
+
+    const m = (await db.collection('budget_periods').doc(`${monthlyB}_M`).get()).data()!;
+    const w = (await db.collection('budget_periods').doc(`${weeklyB}_W`).get()).data()!;
+    const dm = (await db.collection('budget_periods').doc(`${decoyMonthlyB}_M`).get()).data()!;
+    expect(m.spent).toBe(100); // monthly budget matched via monthlyBudgetId
+    expect(w.spent).toBe(100); // weekly budget matched via weeklyBudgetId
+    expect(dm.spent).toBe(0);  // decoy monthly budget NOT matched (monthlyBudgetId ≠ decoy)
   });
 });

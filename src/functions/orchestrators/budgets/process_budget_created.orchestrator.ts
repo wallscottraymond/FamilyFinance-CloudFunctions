@@ -161,12 +161,19 @@ async function generate_periods(
     return;
   }
 
-  await budget_period_repo.save_batch(ctx, computed.entities, payload.budget_name);
+  // EE budgets (prime_only) appear in their OWN lens only — keep just prime
+  // periods so a monthly-EE's non-prime weekly period can't double-count against
+  // the weekly-EE in the weekly view.
+  const entities = payload.prime_only
+    ? computed.entities.filter((e) => e.is_prime === true)
+    : computed.entities;
+
+  await budget_period_repo.save_batch(ctx, entities, payload.budget_name);
 
   // Update user_summary documents AFTER all periods are saved (the CREATE
   // summary trigger was removed to avoid batch race conditions). Enqueues one
   // deduplicated job per affected period — cascades across all future summaries.
-  const period_ids = computed.entities.map((p) => p.id);
+  const period_ids = entities.map((p) => p.id);
   try {
     await enqueue_user_summary_updates_from_budget_periods(ctx, payload.user_id, period_ids);
   } catch (summary_error) {
@@ -178,7 +185,7 @@ async function generate_periods(
   }
 
   // Write back period-range metadata (legacy parity).
-  await write_back_period_range(ctx, payload, computed.entities, generation_end);
+  await write_back_period_range(ctx, payload, entities, generation_end);
 
   // Periods now exist — recompute spend from any already-assigned splits. This
   // closes the race where transactions were assigned to this budget BEFORE its

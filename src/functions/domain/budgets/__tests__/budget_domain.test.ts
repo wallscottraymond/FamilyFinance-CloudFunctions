@@ -459,6 +459,7 @@ describe("compute_delete_budget", () => {
         affected_transaction_ids: [],
         owned_category_ids: [],
         everything_else_budget_id: "ee",
+        pending_rollover_by_type: [],
       },
       now: NOW,
     });
@@ -474,6 +475,7 @@ describe("compute_delete_budget", () => {
         affected_transaction_ids: ["t1"],
         owned_category_ids: ["cat_food"],
         everything_else_budget_id: "ee",
+        pending_rollover_by_type: [],
       },
       now: NOW,
     });

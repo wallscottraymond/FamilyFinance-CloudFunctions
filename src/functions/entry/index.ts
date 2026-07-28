@@ -17,12 +17,20 @@ export * from "./http";
 export * from "./triggers";
 
 // Scheduled fallback worker for the job queue (retries failed/missed jobs every
-// minute; on_job_created handles the immediate path). Only the queue worker is
-// wired here — the other scheduled functions in ./scheduled (log/idempotency
-// cleanup, soft-delete purge, quota snapshots) are intentionally left
-// un-deployed pending a deliberate decision, since some have destructive
-// side effects.
+// minute; on_job_created handles the immediate path).
 export { process_job_queue } from "./scheduled/process_job_queue.scheduled";
+
+// Internal-bookkeeping retention cleanups (daily). SAFE — each deletes only
+// records past a retention cutoff from an INTERNAL collection, never user data:
+//   • idempotency records (expire after 24h)
+//   • observability logs (minimal/debug/traces, per-tier retention)
+//   • trigger-processing dedup records (expire after 7d)
+// Decided deploy-worthy 2026-07-11 (Budget-CRUD migration #9). Still deliberately
+// EXCLUDED: purge_soft_deleted (permanent deletion of USER data — dangerous under
+// dev==prod) and snapshot_quota (quota system not in active use).
+export { cleanup_idempotency_scheduled } from "./scheduled/cleanup_idempotency.scheduled";
+export { cleanup_logs_scheduled } from "./scheduled/cleanup_logs.scheduled";
+export { cleanup_trigger_processing_scheduled } from "./scheduled/cleanup_trigger_processing.scheduled";
 
 // Plaid transient-error auto-retry: silently re-syncs items that are down /
 // rate limited every 4h, surfacing a reconnect prompt only after 24h. Safe to

@@ -152,11 +152,12 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
         
         budgetsToExtend.add(budget.id!);
 
-        // Calculate allocated amount based on actual days in period
-        // Convert budget.period (BudgetPeriod) to PeriodType for calculation
-        const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
-                                  budget.period === 'weekly' ? PeriodType.WEEKLY :
-                                  PeriodType.MONTHLY; // Default to monthly for other types
+        // Calculate allocated amount based on actual days in period.
+        // bi_monthly is a first-class prime cadence (Per-Period-EE Phase 0) — not
+        // clamped to monthly. quarterly/yearly/custom allocate on the monthly grid.
+        const budgetPeriodType = budget.period === 'weekly' ? PeriodType.WEEKLY :
+                                  budget.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
+                                  PeriodType.MONTHLY;
         const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
         
         const budgetPeriod: BudgetPeriodDocument = {

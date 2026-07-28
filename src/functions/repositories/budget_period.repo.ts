@@ -18,7 +18,7 @@ import {
   create_write_result,
   chunk_for_batch,
 } from "../types";
-import { BudgetPeriodEntity } from "../types/budgets/budget_entity.types";
+import { BudgetPeriodEntity, PendingRolloverByType } from "../types/budgets/budget_entity.types";
 
 /**
  * Firestore collection name.
@@ -56,6 +56,10 @@ function day_count(start: Timestamp, end: Timestamp): number {
   const s_utc = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate());
   const e_utc = Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate());
   return Math.round((e_utc - s_utc) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /**
@@ -436,5 +440,119 @@ export const budget_period_repo = {
       .count()
       .get();
     return snapshot.data().count;
+  },
+
+  /**
+   * Aggregates a budget's outstanding spread-rollover debt per period type,
+   * summing `pendingRolloverDeduction` (and taking the max `pendingRolloverPeriods`)
+   * across its active periods. Used on delete to transfer the debt to Everything
+   * Else. Only types with a positive, still-spreading balance are returned.
+   */
+  async get_pending_rollover_by_type(
+    _ctx: TraceContext,
+    budget_id: string
+  ): Promise<PendingRolloverByType[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("budgetId", "==", budget_id)
+      .where("isActive", "==", true)
+      .get();
+
+    const by_type = new Map<string, { amount: number; periods: number }>();
+    snapshot.forEach((doc) => {
+      const d = doc.data() as LegacyBudgetPeriodDoc & {
+        pendingRolloverDeduction?: number;
+        pendingRolloverPeriods?: number;
+      };
+      const pending = d.pendingRolloverDeduction ?? 0;
+      const periods = d.pendingRolloverPeriods ?? 0;
+      if (pending > 0 && periods > 0) {
+        const type = d.periodType ?? "monthly";
+        const cur = by_type.get(type) ?? { amount: 0, periods: 0 };
+        cur.amount += pending;
+        cur.periods = Math.max(cur.periods, periods);
+        by_type.set(type, cur);
+      }
+    });
+
+    return Array.from(by_type.entries()).map(([period_type, v]) => ({
+      period_type,
+      amount: round2(v.amount),
+      periods: v.periods,
+    }));
+  },
+
+  /**
+   * Transfers spread-rollover debt onto a TARGET budget's periods (Everything
+   * Else on delete). For each type: applies the deduction to the target's
+   * current-onward active periods of the SAME type by decrementing
+   * `rolledOverAmount` (negative = deduction, which flows into `remaining` and the
+   * summary regardless of the target's own rollover setting). `immediate` puts the
+   * full amount on the current period; `spread` splits it across the next N
+   * periods (N = periods-remaining, capped by how many the target has). Returns the
+   * affected target period IDs (for summary refresh). NOT an increment loop — a
+   * one-shot recompute of `remaining = (modified ?? allocated) + rolledOver - spent`.
+   */
+  async transfer_rollover_to_budget(
+    _ctx: TraceContext,
+    target_budget_id: string,
+    transfers: PendingRolloverByType[],
+    mode: "immediate" | "spread"
+  ): Promise<string[]> {
+    if (transfers.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const now_ms = now.toMillis();
+    const affected: string[] = [];
+    const batch = db.batch();
+
+    for (const t of transfers) {
+      if (t.amount <= 0) {
+        continue;
+      }
+      const snap = await db
+        .collection(COLLECTION)
+        .where("budgetId", "==", target_budget_id)
+        .where("periodType", "==", t.period_type)
+        .where("isActive", "==", true)
+        .get();
+
+      // Current-onward periods (end at/after now), earliest first.
+      const periods = snap.docs
+        .map((d) => ({ id: d.id, data: d.data() as LegacyBudgetPeriodDoc & { modifiedAmount?: number } }))
+        .filter((p) => p.data.periodEnd.toMillis() >= now_ms)
+        .sort((a, b) => a.data.periodStart.toMillis() - b.data.periodStart.toMillis());
+      if (periods.length === 0) {
+        continue;
+      }
+
+      const n = mode === "spread" ? Math.min(Math.max(1, t.periods), periods.length) : 1;
+      for (let i = 0; i < n; i++) {
+        // Put any rounding remainder on the last period so the shares sum exactly.
+        const share =
+          i === n - 1 ? round2(t.amount - round2(t.amount / n) * (n - 1)) : round2(t.amount / n);
+        const p = periods[i];
+        const d = p.data;
+        const new_rolled = round2((d.rolledOverAmount ?? 0) - share);
+        const allocated = d.modifiedAmount ?? d.allocatedAmount ?? 0;
+        const remaining = round2(allocated + new_rolled - (d.spent ?? 0));
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(p.id), {
+          rolledOverAmount: new_rolled,
+          remaining,
+          rolloverCalculatedAt: now,
+          updatedAt: now,
+        });
+        /* eslint-enable @typescript-eslint/naming-convention */
+        affected.push(p.id);
+      }
+    }
+
+    if (affected.length > 0) {
+      await batch.commit();
+    }
+    return affected;
   },
 };

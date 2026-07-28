@@ -296,8 +296,23 @@ export enum PaymentType {
 // UPDATED: Flat structure with renamed fields for consistency
 export interface TransactionSplit {
   splitId: string;                // Unique identifier for the split (renamed from 'id')
-  budgetId: string;               // Reference to budgets collection ('unassigned' if not assigned)
+  budgetId: string;               // LEGACY alias of monthlyBudgetId during migration; 'unassigned' if not assigned
   budgetName?: string;            // Budget name for display purposes (optional, populated by backend)
+
+  // Per-period-lens budget assignments (Per-Period-Everything-Else-Budgets project).
+  // A split is assigned INDEPENDENTLY per period cadence: a real budget of that
+  // cadence if its category matches, else that cadence's system "Everything Else"
+  // budget, else 'unassigned' (income). Mirrors the three *PeriodId fields below.
+  // Optional during migration; the assignment engine populates all three.
+  monthlyBudgetId?: string;              // Budget owning this split in the MONTHLY lens
+  weeklyBudgetId?: string;               // Budget owning this split in the WEEKLY lens
+  biWeeklyBudgetId?: string;             // Budget owning this split in the BI-WEEKLY lens
+  monthlyBudgetName?: string | null;     // Denormalized name for the monthly lens budget
+  weeklyBudgetName?: string | null;      // Denormalized name for the weekly lens budget
+  biWeeklyBudgetName?: string | null;    // Denormalized name for the bi-weekly lens budget
+  monthlyBudgetSource?: 'category' | 'manual';   // How the monthly lens was assigned
+  weeklyBudgetSource?: 'category' | 'manual';    // How the weekly lens was assigned
+  biWeeklyBudgetSource?: 'category' | 'manual';  // How the bi-weekly lens was assigned
 
   // Source period IDs based on transaction date (always populated)
   monthlyPeriodId: string | null;        // Monthly source period ID containing transaction date
@@ -318,6 +333,10 @@ export interface TransactionSplit {
   isDefault: boolean;             // True for the auto-created split when transaction is created
 
   // Enhanced status fields for budget tracking
+  manualBudgetAssignment?: boolean; // True when the USER explicitly set budgetId
+                                    // (vs. auto-matching). Preserved by the matcher —
+                                    // e.g. income is only counted in a budget when
+                                    // manually assigned (B2).
   isIgnored?: boolean;            // User marked to ignore from budget tracking
   isRefund?: boolean;             // Transaction is a refund (subtract from spending)
   isTaxDeductible?: boolean;      // Tax-deductible expense
@@ -497,6 +516,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
 
   // System budget flag
   isSystemEverythingElse?: boolean; // Flag for "everything else" catch-all budget
+  everythingElsePeriodType?: 'monthly' | 'weekly' | 'bi_monthly'; // Which period lens this EE budget owns (Per-Period-EE project). Absent on the legacy single monthly EE.
 
   // Soft deletion / trash functionality
   flaggedForDeletion?: boolean;     // True if budget is in "trash" awaiting permanent deletion
@@ -515,6 +535,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
 export enum BudgetPeriod {
   WEEKLY = "weekly",
   MONTHLY = "monthly",
+  BI_MONTHLY = "bi_monthly", // first-class prime cadence (Per-Period-EE Phase 0)
   QUARTERLY = "quarterly",
   YEARLY = "yearly",
   CUSTOM = "custom"

@@ -16,6 +16,7 @@ import {
   log_operation_success,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { budget_cadence_to_instance } from "../../domain/budgets";
 import {
   CreateBudgetInput,
   CreateBudgetDependencies,
@@ -58,8 +59,14 @@ export async function resolve_create_budget_dependencies(
   const budgets = await budget_repo.get_by_user_id(ctx, user_id);
   const existing_budget_count = budgets.length;
 
+  // Per-Period-EE: pick the EE for THIS budget's lens, so the re-home scopes to
+  // the right lens's splits. Falls back to any EE (legacy single-EE users).
+  const target_cadence = budget_cadence_to_instance(input.period);
+  const ee_budgets = budgets.filter((b) => b.is_system_everything_else === true);
   const everything_else =
-    budgets.find((b) => b.is_system_everything_else === true) ?? null;
+    ee_budgets.find((b) => budget_cadence_to_instance(b.period) === target_cadence) ??
+    ee_budgets[0] ??
+    null;
 
   // 3. Build the ownership map for the requested categories only.
   const category_owners: Record<string, string | null> = {};

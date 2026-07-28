@@ -13,13 +13,17 @@
  */
 import { z } from "zod";
 import { Timestamp } from "firebase-admin/firestore";
-import { BudgetEntity } from "./budget_entity.types";
+import { BudgetEntity, PendingRolloverByType } from "./budget_entity.types";
 /**
  * Zod schema for the delete_budget request payload.
  */
 export declare const delete_budget_input_schema: z.ZodObject<{
     idempotency_key: z.ZodString;
     budget_id: z.ZodString;
+    rollover_transfer_mode: z.ZodOptional<z.ZodEnum<{
+        immediate: "immediate";
+        spread: "spread";
+    }>>;
     debug_mode: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 /**
@@ -31,6 +35,7 @@ export type DeleteBudgetInputData = z.infer<typeof delete_budget_input_schema>;
  */
 export interface DeleteBudgetInput {
     budget_id: string;
+    rollover_transfer_mode?: "immediate" | "spread";
 }
 /**
  * Dependencies resolved before deleting a budget (read-only).
@@ -46,6 +51,8 @@ export interface DeleteBudgetDependencies {
     owned_category_ids: string[];
     /** The user's "Everything Else" budget ID (reassignment target) */
     everything_else_budget_id: string | null;
+    /** Outstanding spread-rollover debt per period type (transferred to EE on delete) */
+    pending_rollover_by_type: PendingRolloverByType[];
 }
 /**
  * Pure input for the delete_budget domain service. The domain service decides
@@ -77,6 +84,10 @@ export interface ProcessBudgetDeletedPayload {
     affected_transaction_ids: string[];
     release_category_ids: string[];
     everything_else_budget_id: string | null;
+    /** How to transfer pending rollover debt to EE (omitted → no transfer). */
+    rollover_transfer_mode?: "immediate" | "spread";
+    /** The deleted budget's outstanding rollover debt per type (captured pre-delete). */
+    pending_rollover_by_type?: PendingRolloverByType[];
 }
 /**
  * Response returned to the client after deleting a budget.

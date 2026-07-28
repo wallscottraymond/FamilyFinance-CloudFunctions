@@ -48,15 +48,37 @@ export function merge_assignment_onto_raw_splits(
     if (!a) {
       return raw;
     }
-    const budget_name = resolved.budget_names[a.budget_id];
-    if (budget_name !== undefined && raw.budgetName !== budget_name) {
+    // Denormalized budget NAME per lens (from the id→name map) so the app can
+    // show each period view's budget without a lookup. Legacy `budgetName` tracks
+    // the monthly lens (budgetId = monthly alias).
+    const monthly_name = resolved.budget_names[a.monthly_budget_id];
+    const weekly_name = resolved.budget_names[a.weekly_budget_id];
+    const bi_weekly_name = resolved.budget_names[a.bi_weekly_budget_id];
+    const budget_name = monthly_name;
+    if (
+      (monthly_name !== undefined && raw.budgetName !== monthly_name) ||
+      (weekly_name !== undefined && raw.weeklyBudgetName !== weekly_name) ||
+      (bi_weekly_name !== undefined && raw.biWeeklyBudgetName !== bi_weekly_name)
+    ) {
       name_changed = true;
     }
     return {
       ...raw,
+      // Legacy alias (= monthly lens) kept until all readers use the lens fields.
       budgetId: a.budget_id,
       budgetName: budget_name ?? raw.budgetName,
       budgetAssignmentSource: a.budget_assignment_source,
+      // Per-lens assignment (Per-Period-Everything-Else): the split is placed
+      // independently in each period cadence. All three share the same source.
+      monthlyBudgetId: a.monthly_budget_id,
+      weeklyBudgetId: a.weekly_budget_id,
+      biWeeklyBudgetId: a.bi_weekly_budget_id,
+      monthlyBudgetName: monthly_name ?? (raw.monthlyBudgetName ?? null),
+      weeklyBudgetName: weekly_name ?? (raw.weeklyBudgetName ?? null),
+      biWeeklyBudgetName: bi_weekly_name ?? (raw.biWeeklyBudgetName ?? null),
+      monthlyBudgetSource: a.budget_assignment_source,
+      weeklyBudgetSource: a.budget_assignment_source,
+      biWeeklyBudgetSource: a.budget_assignment_source,
       outflowId: a.outflow_id,
       inflowId: a.inflow_id,
       monthlyPeriodId: a.monthly_period_id,
@@ -67,6 +89,16 @@ export function merge_assignment_onto_raw_splits(
   });
   /* eslint-enable @typescript-eslint/naming-convention */
 
-  const split_budget_ids = [...new Set(result.splits.map((s) => s.budget_id))];
+  // splitBudgetIds = the distinct budgets a split touches ACROSS all three lenses
+  // (scopes the recompute fan-out in process_transaction_written).
+  const split_budget_ids = [
+    ...new Set(
+      result.splits.flatMap((s) => [
+        s.monthly_budget_id,
+        s.weekly_budget_id,
+        s.bi_weekly_budget_id,
+      ])
+    ),
+  ];
   return { updated_splits, name_changed, split_budget_ids };
 }

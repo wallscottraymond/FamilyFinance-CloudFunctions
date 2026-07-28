@@ -12,7 +12,7 @@ import { Timestamp } from "firebase-admin/firestore";
  * Budget period cadence. Mirrors the `BudgetPeriod` enum string values from the
  * legacy types so wire payloads and stored documents stay compatible.
  */
-export type BudgetPeriodType = "weekly" | "monthly" | "quarterly" | "yearly" | "custom";
+export type BudgetPeriodType = "weekly" | "monthly" | "bi_monthly" | "quarterly" | "yearly" | "custom";
 /**
  * Budget classification. `recurring` budgets renew every period; `limited`
  * budgets run for a fixed number of periods.
@@ -133,5 +133,15 @@ export interface BudgetPeriodEntity {
     is_active: boolean;
     created_at: Timestamp;
     updated_at: Timestamp;
+}
+/**
+ * A budget's outstanding spread-rollover debt for one period type — the sum of
+ * `pendingRolloverDeduction` (and max `pendingRolloverPeriods`) across its active
+ * periods of that type. Captured on delete to transfer the debt to Everything Else.
+ */
+export interface PendingRolloverByType {
+    period_type: string;
+    amount: number;
+    periods: number;
 }
 //# sourceMappingURL=budget_entity.types.d.ts.map

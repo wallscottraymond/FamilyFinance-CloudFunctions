@@ -19,6 +19,7 @@ import {
 } from "../types";
 import { BudgetEntity } from "../types/budgets/budget_entity.types";
 import { record_audit_entry_async } from "../audit";
+import { budget_cadence_to_instance } from "../domain/budgets";
 
 /**
  * Firestore collection name.
@@ -332,10 +333,22 @@ export const budget_repo = {
    */
   async find_everything_else(
     _ctx: TraceContext,
-    user_id: string
+    user_id: string,
+    cadence?: "monthly" | "weekly" | "bi_monthly"
   ): Promise<BudgetEntity | null> {
     const budgets = await this.get_by_user_id(_ctx, user_id);
-    return budgets.find((b) => b.is_system_everything_else === true) ?? null;
+    const ee = budgets.filter((b) => b.is_system_everything_else === true);
+    // Per-Period-EE: one EE per lens. With a cadence (a budget-CRUD re-home),
+    // return the EE for THAT lens so the re-home scopes to the right lens's splits.
+    // Falls back to any EE (legacy single-EE users).
+    if (cadence) {
+      return (
+        ee.find((b) => budget_cadence_to_instance(b.period) === cadence) ??
+        ee[0] ??
+        null
+      );
+    }
+    return ee[0] ?? null;
   },
 
   /**

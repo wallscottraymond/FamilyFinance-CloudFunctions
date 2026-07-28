@@ -12,5 +12,5 @@ import { DeleteBudgetResponse } from "../../types/budgets/delete_budget.types";
 /**
  * Deletes a budget.
  */
-export declare function delete_budget_orchestrator(ctx: TraceContext, user_id: string, idempotency_key: string, budget_id: string): Promise<DeleteBudgetResponse>;
+export declare function delete_budget_orchestrator(ctx: TraceContext, user_id: string, idempotency_key: string, budget_id: string, rollover_transfer_mode?: "immediate" | "spread"): Promise<DeleteBudgetResponse>;
 //# sourceMappingURL=delete_budget.orchestrator.d.ts.map

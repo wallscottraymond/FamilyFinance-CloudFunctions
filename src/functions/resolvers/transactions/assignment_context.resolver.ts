@@ -23,7 +23,11 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { category_repo } from "../../repositories/category.repo";
-import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
+import {
+  BudgetForMatch,
+  PeriodLens,
+} from "../../domain/transactions/match_budget.service";
+import { budget_cadence_to_instance } from "../../domain/budgets";
 import { CategoryRule } from "../../domain/transactions/match_category.service";
 import { SourcePeriodForMatch } from "../../domain/transactions/match_source_periods.service";
 import {
@@ -53,7 +57,8 @@ export interface ResolvedAssignment {
 export interface SharedAssignmentContext {
   real_budgets: BudgetForMatch[];
   budget_names: Record<string, string>;
-  everything_else_budget_id: string | null;
+  /** Everything Else budget id PER LENS (each period cadence has its own EE). */
+  everything_else_budget_ids: Record<PeriodLens, string | null>;
   category_rules: CategoryRule[];
 }
 
@@ -73,14 +78,25 @@ export async function resolve_shared_assignment_context(
     category_repo.get_active_cached(ctx),
   ]);
 
-  // Real budgets (+ the Everything Else id for the structural fallback).
+  // Real budgets (+ the Everything Else id PER LENS for the structural fallback).
+  // A budget's period maps to exactly one lens (weekly/monthly/bi_monthly); the
+  // three EE budgets are keyed by their own lens.
   const real_budgets: BudgetForMatch[] = [];
   const budget_names: Record<string, string> = {};
-  let everything_else_budget_id: string | null = null;
+  const everything_else_budget_ids: Record<PeriodLens, string | null> = {
+    monthly: null,
+    weekly: null,
+    bi_monthly: null,
+  };
   for (const b of budgets) {
     budget_names[b.id] = b.name;
+    const cadence = budget_cadence_to_instance(b.period);
     if (b.is_system_everything_else) {
-      everything_else_budget_id = b.id;
+      // The EE budget's `period` IS its lens (new EE budgets set period = lens;
+      // the legacy single EE has period 'monthly').
+      if (!everything_else_budget_ids[cadence]) {
+        everything_else_budget_ids[cadence] = b.id;
+      }
       continue;
     }
     const end_ts = b.budget_end_date ?? b.end_date;
@@ -90,6 +106,7 @@ export async function resolve_shared_assignment_context(
       start_ms: b.start_date.toMillis(),
       end_ms: b.is_ongoing ? null : end_ts.toMillis(),
       is_ongoing: b.is_ongoing,
+      cadence,
     });
   }
 
@@ -105,7 +122,7 @@ export async function resolve_shared_assignment_context(
   return {
     real_budgets,
     budget_names,
-    everything_else_budget_id,
+    everything_else_budget_ids,
     category_rules,
   };
 }
@@ -165,7 +182,7 @@ export async function resolve_assignment_context(
   const {
     real_budgets,
     budget_names,
-    everything_else_budget_id,
+    everything_else_budget_ids,
     category_rules,
   } = resolved_shared;
 
@@ -188,6 +205,11 @@ export async function resolve_assignment_context(
     budget_id: (s.budgetId as string) ?? "unassigned",
     budget_assignment_source:
       (s.budgetAssignmentSource as "category" | "manual") ?? "category",
+    // Prior per-lens assignments (for the touched-set + skip-if-unchanged). Fall
+    // back to the legacy monthly `budgetId` for pre-migration docs.
+    monthly_budget_id: (s.monthlyBudgetId as string | undefined) ?? undefined,
+    weekly_budget_id: (s.weeklyBudgetId as string | undefined) ?? undefined,
+    bi_weekly_budget_id: (s.biWeeklyBudgetId as string | undefined) ?? undefined,
     internal_match_category: (s.internalDetailedCategory as string | null) ?? null,
     plaid_match_category: (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE",
     outflow_id: (s.outflowId as string | null) ?? null,
@@ -201,8 +223,9 @@ export async function resolve_assignment_context(
     txn_date_ms,
     txn_merchant_name,
     txn_name: (data.name as string | null) ?? null,
+    txn_is_income: txn_type === "income",
     real_budgets,
-    everything_else_budget_id,
+    everything_else_budget_ids,
     category_rules,
     source_periods,
     recurring_by_split,

@@ -17,14 +17,23 @@
  *
  * @module domain/transactions/compute_transaction_assignment
  */
-import { BudgetForMatch } from "./match_budget.service";
+import { BudgetForMatch, PeriodLens } from "./match_budget.service";
+/** The three period lenses, in a stable order. */
+export declare const PERIOD_LENSES: PeriodLens[];
 import { CategoryRule } from "./match_category.service";
 import { SourcePeriodForMatch } from "./match_source_periods.service";
 /** A split as it currently stands, with the fields the engine reads + owns. */
 export interface SplitForAssignment {
     split_id: string;
+    /** The manual-pin signal: when `budget_assignment_source === "manual"`, this is
+     *  the globally-pinned budget id. Also the legacy single-budget field. */
     budget_id: string;
     budget_assignment_source: "category" | "manual";
+    /** Prior per-lens assignments (for touched-set + skip-if-unchanged). Fall back
+     *  to `budget_id` (monthly) for pre-migration docs that lack them. */
+    monthly_budget_id?: string;
+    weekly_budget_id?: string;
+    bi_weekly_budget_id?: string;
     internal_match_category: string | null;
     plaid_match_category: string;
     outflow_id: string | null;
@@ -43,8 +52,13 @@ export interface AssignmentContext {
     txn_date_ms: number;
     txn_merchant_name: string | null;
     txn_name: string | null;
+    /** True for income transactions. Income NEVER auto-assigns to a budget (B1) —
+     *  it stays unassigned unless the user manually pins it. */
+    txn_is_income: boolean;
+    /** All real budgets across every cadence; the engine filters per lens. */
     real_budgets: BudgetForMatch[];
-    everything_else_budget_id: string | null;
+    /** The Everything Else budget id PER LENS (null for a lens with no EE budget). */
+    everything_else_budget_ids: Record<PeriodLens, string | null>;
     category_rules: CategoryRule[];
     source_periods: SourcePeriodForMatch[];
     /** Recurring match per split id (empty = no recurring match). */
@@ -53,16 +67,22 @@ export interface AssignmentContext {
 /** The computed assignment for one split (the engine-owned fields only). */
 export interface AssignedSplit {
     split_id: string;
-    budget_id: string;
+    /** Per-lens budget assignment — the split is placed INDEPENDENTLY per cadence. */
+    monthly_budget_id: string;
+    weekly_budget_id: string;
+    bi_weekly_budget_id: string;
+    /** All three share the same source (global manual pin, else category). */
     budget_assignment_source: "category" | "manual";
+    /** LEGACY alias = monthly_budget_id (kept until callers read the lens fields). */
+    budget_id: string;
     outflow_id: string | null;
     inflow_id: string | null;
     monthly_period_id: string | null;
     weekly_period_id: string | null;
     bi_weekly_period_id: string | null;
-    /** Why this assignment was made — for per-split decision logging. */
+    /** Why this assignment was made — for per-split decision logging (monthly lens). */
     reason: {
-        budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual";
+        budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded";
         tie: boolean;
         recurring: "outflow" | "inflow" | "manual_detached" | "none";
     };

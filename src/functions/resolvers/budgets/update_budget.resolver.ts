@@ -16,6 +16,7 @@ import {
   log_operation_success,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { budget_cadence_to_instance } from "../../domain/budgets";
 import {
   UpdateBudgetInput,
   UpdateBudgetDependencies,
@@ -55,7 +56,11 @@ export async function resolve_update_budget_dependencies(
 
   const everything_else =
     removed_category_ids.length > 0
-      ? await budget_repo.find_everything_else(ctx, user_id)
+      ? await budget_repo.find_everything_else(
+          ctx,
+          user_id,
+          budget_cadence_to_instance(existing.period) // this budget's lens
+        )
       : null;
 
   const amount_changed =

@@ -17,14 +17,20 @@ import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod, BudgetPeriod } 
  * @returns The corresponding PeriodType for prime period generation
  */
 export function getPrimePeriodType(budgetPeriod: BudgetPeriod): PeriodType {
-  switch (budgetPeriod) {
-    case BudgetPeriod.WEEKLY:
+  // Budgets can store 'bi_monthly' even though it isn't in the BudgetPeriod enum —
+  // it IS a first-class prime cadence (Per-Period-EE Phase 0). Compare on the raw
+  // value so bi_monthly maps to BI_MONTHLY prime instead of falling through to
+  // MONTHLY (the previous `default` silently clamped it — the old comment claiming
+  // "BI_MONTHLY maps to BI_MONTHLY" was never actually implemented).
+  switch (budgetPeriod as string) {
+    case 'weekly':
       return PeriodType.WEEKLY;
-    case BudgetPeriod.MONTHLY:
+    case 'bi_monthly':
+      return PeriodType.BI_MONTHLY;
+    case 'monthly':
       return PeriodType.MONTHLY;
-    // BI_WEEKLY and BI_MONTHLY both map to BI_MONTHLY
     default:
-      // For QUARTERLY, YEARLY, CUSTOM - default to MONTHLY
+      // QUARTERLY, YEARLY, CUSTOM — no matching source period → monthly grid.
       return PeriodType.MONTHLY;
   }
 }

@@ -39,7 +39,8 @@ export async function delete_budget_orchestrator(
   ctx: TraceContext,
   user_id: string,
   idempotency_key: string,
-  budget_id: string
+  budget_id: string,
+  rollover_transfer_mode?: "immediate" | "spread"
 ): Promise<DeleteBudgetResponse> {
   const span = create_span(ctx, "orchestrator", "delete_budget");
   log_operation_start(span, user_id);
@@ -84,6 +85,10 @@ export async function delete_budget_orchestrator(
 
     // 4. Enqueue the cascade job
     if (plan.requires_cascade) {
+      // Only carry a transfer when the app requested one AND there's debt to move.
+      // Spread the mode in conditionally — Firestore rejects `undefined` values.
+      const should_transfer =
+        !!rollover_transfer_mode && dependencies.pending_rollover_by_type.length > 0;
       const payload: ProcessBudgetDeletedPayload = {
         budget_id,
         user_id,
@@ -92,6 +97,8 @@ export async function delete_budget_orchestrator(
         affected_transaction_ids: dependencies.affected_transaction_ids,
         release_category_ids: plan.release_category_ids,
         everything_else_budget_id: dependencies.everything_else_budget_id,
+        pending_rollover_by_type: dependencies.pending_rollover_by_type,
+        ...(should_transfer ? { rollover_transfer_mode } : {}),
       };
       await create_job("process_budget_deleted", payload, { trace_id: ctx.trace_id });
     }

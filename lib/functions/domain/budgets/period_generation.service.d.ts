@@ -23,7 +23,7 @@ export type PeriodInstanceType = "weekly" | "monthly" | "bi_monthly";
  * weekly / monthly / bi_monthly, so quarterly/yearly/custom budgets allocate on
  * a monthly base (matching the legacy fallback).
  */
-export declare function budget_cadence_to_instance(period: BudgetPeriodType): "weekly" | "monthly";
+export declare function budget_cadence_to_instance(period: BudgetPeriodType): PeriodInstanceType;
 /**
  * Compute the END of the period-generation window (the horizon up to which
  * budget periods are created).

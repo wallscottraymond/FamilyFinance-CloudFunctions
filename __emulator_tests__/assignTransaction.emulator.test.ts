@@ -73,8 +73,11 @@ describe('assign_transaction_orchestrator (emulator)', () => {
   it('assigns per-split (category → budget, else Everything Else) + writes splitBudgetIds + fans out', async () => {
     const userId = uid();
     const txnId = `txn_${Date.now()}`;
-    await seedBudget(`groceries_${txnId}`, userId, { categoryIds: ['FOOD_AND_DRINK'], isSystemEverythingElse: false });
-    await seedBudget(`ee_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true });
+    // A MONTHLY groceries budget + all three per-lens Everything Else budgets.
+    await seedBudget(`groceries_${txnId}`, userId, { categoryIds: ['FOOD_AND_DRINK'], isSystemEverythingElse: false, period: 'monthly' });
+    await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'monthly' });
+    await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'weekly' });
+    await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'bi_monthly' });
     await seedSourcePeriod(`${txnId}_2026M06`, 'monthly', '2026-06-01', '2026-06-30');
     await seedSourcePeriod(`${txnId}_2026W24`, 'weekly', '2026-06-14', '2026-06-20');
     // Split 1 → Groceries (FOOD_AND_DRINK); Split 2 → Everything Else (TRAVEL, unowned)
@@ -90,20 +93,29 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     const doc = (await db.collection('transactions').doc(txnId).get()).data()!;
     const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === 's1');
     const s2 = doc.splits.find((s: { splitId: string }) => s.splitId === 's2');
-    // per-split: only the matching split goes to Groceries; the other → EE
-    expect(s1.budgetId).toBe(`groceries_${txnId}`);
-    expect(s2.budgetId).toBe(`ee_${txnId}`);
+    // PER-LENS: s1 (FOOD_AND_DRINK) is claimed by the MONTHLY groceries budget in
+    // the monthly lens only; weekly + biweekly have no grocery budget → their EE.
+    expect(s1.budgetId).toBe(`groceries_${txnId}`); // legacy alias = monthly lens
+    expect(s1.monthlyBudgetId).toBe(`groceries_${txnId}`);
+    expect(s1.weeklyBudgetId).toBe(`ee_w_${txnId}`);
+    expect(s1.biWeeklyBudgetId).toBe(`ee_b_${txnId}`);
+    // s2 (TRAVEL, unowned) → every lens falls to that lens's EE
+    expect(s2.monthlyBudgetId).toBe(`ee_m_${txnId}`);
+    expect(s2.weeklyBudgetId).toBe(`ee_w_${txnId}`);
+    expect(s2.biWeeklyBudgetId).toBe(`ee_b_${txnId}`);
     // source periods stamped on every split
     expect(s1.monthlyPeriodId).toBe(`${txnId}_2026M06`);
     expect(s1.weeklyPeriodId).toBe(`${txnId}_2026W24`);
-    // denormalized splitBudgetIds (queryable)
-    expect([...doc.splitBudgetIds].sort()).toEqual([`ee_${txnId}`, `groceries_${txnId}`].sort());
+    // denormalized splitBudgetIds = union across lenses + splits
+    expect([...doc.splitBudgetIds].sort()).toEqual(
+      [`groceries_${txnId}`, `ee_m_${txnId}`, `ee_w_${txnId}`, `ee_b_${txnId}`].sort()
+    );
 
-    // fan-out enqueued for the touched budgets
+    // fan-out enqueued for the touched budgets (all lenses)
     const jobs = await jobsFor('recompute_budget_spent', txnId);
     expect(jobs).toHaveLength(1);
     expect((jobs[0].payload as { budget_ids: string[] }).budget_ids).toEqual(
-      expect.arrayContaining([`groceries_${txnId}`, `ee_${txnId}`])
+      expect.arrayContaining([`groceries_${txnId}`, `ee_m_${txnId}`, `ee_w_${txnId}`, `ee_b_${txnId}`])
     );
   });
 

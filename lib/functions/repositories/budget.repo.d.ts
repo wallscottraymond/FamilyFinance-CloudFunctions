@@ -39,7 +39,7 @@ export declare const budget_repo: {
     /**
      * Finds the user's system "Everything Else" budget, if any.
      */
-    find_everything_else(_ctx: TraceContext, user_id: string): Promise<BudgetEntity | null>;
+    find_everything_else(_ctx: TraceContext, user_id: string, cadence?: "monthly" | "weekly" | "bi_monthly"): Promise<BudgetEntity | null>;
     /**
      * Atomically removes category IDs from a budget's categoryIds array.
      * Idempotent: removing an absent category is a no-op.

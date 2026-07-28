@@ -67,12 +67,19 @@ export const auditTransactionAssignments = onRequest(
         continue;
       }
       const endTs = (d.budgetEndDate ?? d.endDate) as Timestamp | undefined;
+      const period = d.period as string | undefined;
       realBudgets.push({
         id: doc.id,
         category_ids: (d.categoryIds as string[]) ?? [],
         start_ms: (d.startDate as Timestamp).toMillis(),
         end_ms: d.isOngoing ? null : endTs?.toMillis() ?? null,
         is_ongoing: !!d.isOngoing,
+        cadence:
+          period === "weekly"
+            ? "weekly"
+            : period === "bi_monthly"
+              ? "bi_monthly"
+              : "monthly",
       });
     }
 

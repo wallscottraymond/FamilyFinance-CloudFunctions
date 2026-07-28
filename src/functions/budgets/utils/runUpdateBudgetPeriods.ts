@@ -177,9 +177,10 @@ export async function runUpdateBudgetPeriods(
     let updatedCount = 0;
     const sourcePeriodCache = new Map<string, admin.firestore.DocumentData>();
 
-    // Get budget period type for amount calculation
-    const budgetPeriodType = budgetAfter.period === 'monthly' ? PeriodType.MONTHLY :
-                             budgetAfter.period === 'weekly' ? PeriodType.WEEKLY :
+    // Get budget period type for amount calculation. bi_monthly is a first-class
+    // prime cadence (Per-Period-EE Phase 0) — not clamped to monthly.
+    const budgetPeriodType = budgetAfter.period === 'weekly' ? PeriodType.WEEKLY :
+                             budgetAfter.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
                              PeriodType.MONTHLY;
 
     for (let i = 0; i < currentAndFuturePeriods.length; i += batchSize) {

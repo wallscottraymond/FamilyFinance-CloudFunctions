@@ -19,7 +19,10 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { resolve_budget_periods_for_summary } from "../../resolvers/summaries";
-import { enqueue_user_summary_updates_by_type } from "../summaries";
+import {
+  enqueue_user_summary_updates_by_type,
+  enqueue_user_summary_updates_from_budget_periods,
+} from "../summaries";
 import { create_job } from "../../infrastructure/job_queue";
 import { ProcessBudgetDeletedPayload } from "../../types/budgets/delete_budget.types";
 
@@ -100,6 +103,42 @@ export async function process_budget_deleted_orchestrator(
       payload.release_category_ids,
       payload.user_id
     );
+  }
+
+  // 3b. Transfer the deleted budget's pending spread-rollover debt to Everything
+  //     Else (mode chosen by the user; captured pre-delete in the resolver). The
+  //     repo decrements EE periods' rolledOverAmount (→ remaining + summary), so
+  //     the overspend still gets paid back rather than vanishing on delete.
+  if (
+    payload.rollover_transfer_mode &&
+    payload.pending_rollover_by_type &&
+    payload.pending_rollover_by_type.length > 0 &&
+    payload.everything_else_budget_id
+  ) {
+    try {
+      const ee_period_ids = await budget_period_repo.transfer_rollover_to_budget(
+        ctx,
+        payload.everything_else_budget_id,
+        payload.pending_rollover_by_type,
+        payload.rollover_transfer_mode
+      );
+      console.log(
+        `[${ctx.trace_id}] process_budget_deleted: transferred rollover (${payload.rollover_transfer_mode}) ` +
+          `to EE across ${ee_period_ids.length} period(s)`
+      );
+      if (ee_period_ids.length > 0) {
+        await enqueue_user_summary_updates_from_budget_periods(
+          ctx,
+          payload.user_id,
+          ee_period_ids
+        );
+      }
+    } catch (rollover_error) {
+      console.error(
+        `[${ctx.trace_id}] process_budget_deleted: rollover transfer failed (non-fatal):`,
+        rollover_error
+      );
+    }
   }
 
   // 4. Recompute the affected user_summaries now that the periods are gone, so

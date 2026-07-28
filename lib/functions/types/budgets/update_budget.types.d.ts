@@ -91,7 +91,7 @@ export interface ProcessBudgetUpdatedPayload {
     /** Denormalized onto every generated budget_period (self-contained periods). */
     category_ids: string[];
     amount: number;
-    cadence: "weekly" | "monthly";
+    cadence: "weekly" | "monthly" | "bi_monthly";
     /** Generation anchor (budget start) in epoch ms */
     start_ms: number;
     /** Generation horizon (12mo ahead for ongoing, budget end for limited) in ms */

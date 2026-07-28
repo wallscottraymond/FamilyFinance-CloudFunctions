@@ -14,7 +14,7 @@
 
 import { z } from "zod";
 import { Timestamp } from "firebase-admin/firestore";
-import { BudgetEntity } from "./budget_entity.types";
+import { BudgetEntity, PendingRolloverByType } from "./budget_entity.types";
 
 // ============================================================================
 // Input Schema (wire format)
@@ -26,6 +26,11 @@ import { BudgetEntity } from "./budget_entity.types";
 export const delete_budget_input_schema = z.object({
   idempotency_key: z.string().min(1, "idempotency_key is required"),
   budget_id: z.string().min(1, "budget_id is required"),
+  /**
+   * How to transfer this budget's pending spread-rollover debt to Everything Else.
+   * Sent by the app only when the budget has pending rollover; omitted otherwise.
+   */
+  rollover_transfer_mode: z.enum(["immediate", "spread"]).optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -43,6 +48,7 @@ export type DeleteBudgetInputData = z.infer<typeof delete_budget_input_schema>;
  */
 export interface DeleteBudgetInput {
   budget_id: string;
+  rollover_transfer_mode?: "immediate" | "spread";
 }
 
 // ============================================================================
@@ -63,6 +69,8 @@ export interface DeleteBudgetDependencies {
   owned_category_ids: string[];
   /** The user's "Everything Else" budget ID (reassignment target) */
   everything_else_budget_id: string | null;
+  /** Outstanding spread-rollover debt per period type (transferred to EE on delete) */
+  pending_rollover_by_type: PendingRolloverByType[];
 }
 
 // ============================================================================
@@ -105,6 +113,10 @@ export interface ProcessBudgetDeletedPayload {
   affected_transaction_ids: string[];
   release_category_ids: string[];
   everything_else_budget_id: string | null;
+  /** How to transfer pending rollover debt to EE (omitted → no transfer). */
+  rollover_transfer_mode?: "immediate" | "spread";
+  /** The deleted budget's outstanding rollover debt per type (captured pre-delete). */
+  pending_rollover_by_type?: PendingRolloverByType[];
 }
 
 // ============================================================================

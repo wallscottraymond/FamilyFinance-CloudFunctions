@@ -22,6 +22,8 @@ export interface SplitForBudgetMatch {
     /** Plaid-derived category. */
     plaid_match_category: string | null;
 }
+/** The three period lenses a budget (and its assignment) can belong to. */
+export type PeriodLens = "monthly" | "weekly" | "bi_monthly";
 /** A real (non-Everything-Else) budget, reduced to what matching needs. */
 export interface BudgetForMatch {
     id: string;
@@ -31,6 +33,8 @@ export interface BudgetForMatch {
     /** Budget end, epoch ms — ignored when `is_ongoing`. */
     end_ms: number | null;
     is_ongoing: boolean;
+    /** The budget's prime cadence — used to filter budgets per assignment lens. */
+    cadence: PeriodLens;
 }
 /** Result of matching a split to a budget. */
 export interface BudgetMatchResult {

@@ -155,11 +155,12 @@ export async function createBudgetPeriodsFromSource(
   sourcePeriodsSnapshot.forEach((doc) => {
     const sourcePeriod = { id: doc.id, ...doc.data() } as SourcePeriod;
 
-    // Calculate allocated amount based on actual days in period
-    // Convert budget.period (BudgetPeriod) to PeriodType for calculation
-    const budgetPeriodType = budget.period === 'monthly' ? PeriodType.MONTHLY :
-                              budget.period === 'weekly' ? PeriodType.WEEKLY :
-                              PeriodType.MONTHLY; // Default to monthly for QUARTERLY, YEARLY, CUSTOM
+    // Calculate allocated amount based on actual days in period.
+    // bi_monthly is a first-class prime cadence (Per-Period-EE Phase 0) — not
+    // clamped. QUARTERLY/YEARLY/CUSTOM have no source period → monthly grid.
+    const budgetPeriodType = budget.period === 'weekly' ? PeriodType.WEEKLY :
+                              budget.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
+                              PeriodType.MONTHLY;
     const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
 
     const budgetPeriod: BudgetPeriodDocument = {

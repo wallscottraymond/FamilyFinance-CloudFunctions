@@ -20,6 +20,7 @@ import {
   log_operation_success,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { budget_cadence_to_instance } from "../../domain/budgets";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { DeleteBudgetDependencies } from "../../types/budgets/delete_budget.types";
@@ -45,12 +46,23 @@ export async function resolve_delete_budget_dependencies(
     throw new NotFoundError("budget", budget_id);
   }
 
-  const [budget_period_ids, affected_transaction_ids, everything_else] =
-    await Promise.all([
-      budget_period_repo.get_ids_by_budget_id(ctx, budget_id),
-      transaction_repo.get_ids_referencing_budget(ctx, user_id, budget_id),
-      budget_repo.find_everything_else(ctx, user_id),
-    ]);
+  const [
+    budget_period_ids,
+    affected_transaction_ids,
+    everything_else,
+    pending_rollover_by_type,
+  ] = await Promise.all([
+    budget_period_repo.get_ids_by_budget_id(ctx, budget_id),
+    transaction_repo.get_ids_referencing_budget(ctx, user_id, budget_id),
+    // Per-Period-EE: the EE for the deleted budget's lens (its released splits
+    // re-home within that lens).
+    budget_repo.find_everything_else(
+      ctx,
+      user_id,
+      budget_cadence_to_instance(existing.period)
+    ),
+    budget_period_repo.get_pending_rollover_by_type(ctx, budget_id),
+  ]);
 
   log_operation_success(span, user_id);
 
@@ -60,5 +72,6 @@ export async function resolve_delete_budget_dependencies(
     affected_transaction_ids,
     owned_category_ids: existing.category_ids,
     everything_else_budget_id: everything_else?.id ?? null,
+    pending_rollover_by_type,
   };
 }

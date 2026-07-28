@@ -135,6 +135,7 @@ describe('Budget CRUD Cascades (emulator)', () => {
         user_id: userId,
         group_ids: [],
         budget_name: 'Groceries',
+        category_ids: [],
         amount: 300,
         cadence: 'monthly',
         start_ms: new Date('2026-06-01').getTime(),
@@ -152,6 +153,72 @@ describe('Budget CRUD Cascades (emulator)', () => {
       // activePeriodRange written back onto the budget
       const budget = (await db.collection('budgets').doc(budgetId).get()).data();
       expect(budget?.activePeriodRange?.startPeriod).toBeDefined();
+    });
+
+    it('generates bi_monthly PRIME periods for a bi_monthly budget (Phase 0)', async () => {
+      const userId = uid();
+      const budgetId = bid();
+      await seedBudget(budgetId, userId, { name: 'BiMo', amount: 200, period: 'bi_monthly' });
+      await seedSourcePeriod(`${budgetId}_2026BM07A`, '2026-07-01', '2026-07-15', 'bi_monthly');
+      await seedSourcePeriod(`${budgetId}_2026BM07B`, '2026-07-16', '2026-07-31', 'bi_monthly');
+
+      await process_budget_created_orchestrator(ctx(), {
+        budget_id: budgetId,
+        user_id: userId,
+        group_ids: [],
+        budget_name: 'BiMo',
+        category_ids: [],
+        amount: 200,
+        cadence: 'bi_monthly', // was silently clamped to monthly before Phase 0
+        start_ms: new Date('2026-07-01').getTime(),
+        generation_end_ms: new Date('2026-08-01').getTime(),
+        is_recurring: true,
+        claims: [],
+        everything_else_budget_id: null,
+      });
+
+      // The two bi_monthly source periods are the budget's PRIME cadence →
+      // allocated 1:1. (In a full DB other source-period types also exist and
+      // generate NON-prime periods — that's correct — so assert on the bi_monthly
+      // ones specifically rather than the total count.) Before Phase 0 the cadence
+      // was clamped to monthly, so ZERO bi_monthly-prime periods would appear.
+      const periods = await periodsFor(budgetId);
+      const primeBiMonthly = periods.filter((p) => p.periodType === 'bi_monthly');
+      expect(primeBiMonthly.length).toBe(2);
+      primeBiMonthly.forEach((p) => expect(p.allocatedAmount).toBe(200));
+    });
+
+    it('prime_only (per-lens EE budgets) generates ONLY prime periods — no non-prime double-count', async () => {
+      const userId = uid();
+      const budgetId = bid();
+      await seedBudget(budgetId, userId, { name: 'EE Weekly', amount: 100, period: 'weekly' });
+      // Source periods of ALL three types overlapping the same window.
+      await seedSourcePeriod(`${budgetId}_W`, '2026-07-06', '2026-07-12', 'weekly');
+      await seedSourcePeriod(`${budgetId}_M`, '2026-07-01', '2026-07-31', 'monthly');
+      await seedSourcePeriod(`${budgetId}_BM`, '2026-07-01', '2026-07-15', 'bi_monthly');
+
+      await process_budget_created_orchestrator(ctx(), {
+        budget_id: budgetId,
+        user_id: userId,
+        group_ids: [],
+        budget_name: 'EE Weekly',
+        category_ids: [],
+        amount: 100,
+        cadence: 'weekly',
+        start_ms: new Date('2026-07-01').getTime(),
+        generation_end_ms: new Date('2026-08-01').getTime(),
+        is_recurring: true,
+        claims: [],
+        everything_else_budget_id: null,
+        prime_only: true, // EE budgets: own-lens prime only
+      });
+
+      const periods = await periodsFor(budgetId);
+      // Only the weekly (prime) periods — the monthly/bi_monthly NON-prime periods
+      // are suppressed so this EE can't double-count in the monthly/biweekly views.
+      expect(periods.length).toBeGreaterThanOrEqual(1);
+      expect(periods.every((p) => p.periodType === 'weekly')).toBe(true);
+      expect(periods.some((p) => p.periodType === 'monthly' || p.periodType === 'bi_monthly')).toBe(false);
     });
 
     it('writes a prime/non-prime overlap breakdown for converted periods', async () => {
@@ -175,6 +242,7 @@ describe('Budget CRUD Cascades (emulator)', () => {
         user_id: userId,
         group_ids: [],
         budget_name: 'Groceries',
+        category_ids: [],
         amount: 300,
         cadence: 'monthly',
         start_ms: new Date('2027-03-01').getTime(),
@@ -252,6 +320,7 @@ describe('Budget CRUD Cascades (emulator)', () => {
         user_id: userId,
         group_ids: [],
         budget_name: 'Test Budget',
+        category_ids: [],
         amount: 400,
         cadence: 'monthly',
         start_ms: daysFromNow(-5).getTime(),
@@ -307,6 +376,7 @@ describe('Budget CRUD Cascades (emulator)', () => {
         user_id: userId,
         group_ids: [],
         budget_name: 'New Name',
+        category_ids: [],
         amount: 100,
         cadence: 'monthly',
         start_ms: daysFromNow(-5).getTime(),
@@ -327,7 +397,7 @@ describe('Budget CRUD Cascades (emulator)', () => {
   });
 
   describe('process_budget_deleted', () => {
-    it('deletes periods, reassigns splits to Everything Else, releases categories', async () => {
+    it('deletes periods, enqueues split reassignment (engine), releases categories', async () => {
       const userId = uid();
       const budgetId = bid();
       const eeId = bid();
@@ -362,10 +432,17 @@ describe('Budget CRUD Cascades (emulator)', () => {
 
       // periods deleted
       expect((await periodsFor(budgetId)).length).toBe(0);
-      // split reassigned to EE
-      const txn = (await db.collection('transactions').doc(txnId).get()).data();
-      expect(txn?.splits[0].budgetId).toBe(eeId);
-      expect(txn?.splits[0].budgetName).toBe('Everything Else');
+      // Split reassignment is now async via the engine: the cascade enqueues an
+      // assign_transaction job (which lands the split on EE / the correct budget).
+      // Under --only firestore the job isn't executed, so assert it was enqueued.
+      const assignJobs = await db
+        .collection('_jobs')
+        .where('job_type', '==', 'assign_transaction')
+        .get();
+      const enqueued = assignJobs.docs.some(
+        (d) => (d.data().payload as { transaction_id?: string })?.transaction_id === txnId
+      );
+      expect(enqueued).toBe(true);
       // category released to EE
       const ee = (await db.collection('budgets').doc(eeId).get()).data();
       expect(ee?.categoryIds).toEqual(expect.arrayContaining(['existing_cat', 'released_cat']));

@@ -29,6 +29,7 @@ function budget(over: Partial<BudgetForMatch> = {}): BudgetForMatch {
     start_ms: JUN_01,
     end_ms: null,
     is_ongoing: true,
+    cadence: "monthly", // match_budget is cadence-agnostic; caller filters by lens
     ...over,
   };
 }

@@ -236,6 +236,15 @@ export interface TransactionSplit {
     splitId: string;
     budgetId: string;
     budgetName?: string;
+    monthlyBudgetId?: string;
+    weeklyBudgetId?: string;
+    biWeeklyBudgetId?: string;
+    monthlyBudgetName?: string | null;
+    weeklyBudgetName?: string | null;
+    biWeeklyBudgetName?: string | null;
+    monthlyBudgetSource?: 'category' | 'manual';
+    weeklyBudgetSource?: 'category' | 'manual';
+    biWeeklyBudgetSource?: 'category' | 'manual';
     monthlyPeriodId: string | null;
     weeklyPeriodId: string | null;
     biWeeklyPeriodId: string | null;
@@ -247,6 +256,7 @@ export interface TransactionSplit {
     amount: number;
     description?: string | null;
     isDefault: boolean;
+    manualBudgetAssignment?: boolean;
     isIgnored?: boolean;
     isRefund?: boolean;
     isTaxDeductible?: boolean;
@@ -381,6 +391,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
     isOngoing: boolean;
     budgetEndDate?: Timestamp;
     isSystemEverythingElse?: boolean;
+    everythingElsePeriodType?: 'monthly' | 'weekly' | 'bi_monthly';
     flaggedForDeletion?: boolean;
     deletionScheduledAt?: Timestamp;
     deletedBy?: string;
@@ -394,6 +405,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
 export declare enum BudgetPeriod {
     WEEKLY = "weekly",
     MONTHLY = "monthly",
+    BI_MONTHLY = "bi_monthly",// first-class prime cadence (Per-Period-EE Phase 0)
     QUARTERLY = "quarterly",
     YEARLY = "yearly",
     CUSTOM = "custom"

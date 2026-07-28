@@ -12,7 +12,7 @@
  * @module resolvers/transactions/assignment_context
  */
 import { TraceContext } from "../../types";
-import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
+import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
 import { CategoryRule } from "../../domain/transactions/match_category.service";
 import { SplitForAssignment, AssignmentContext } from "../../domain/transactions/compute_transaction_assignment.service";
 /** What the orchestrator needs back: the raw splits (for read-modify-write) + the pure input. */
@@ -35,7 +35,8 @@ export interface ResolvedAssignment {
 export interface SharedAssignmentContext {
     real_budgets: BudgetForMatch[];
     budget_names: Record<string, string>;
-    everything_else_budget_id: string | null;
+    /** Everything Else budget id PER LENS (each period cadence has its own EE). */
+    everything_else_budget_ids: Record<PeriodLens, string | null>;
     category_rules: CategoryRule[];
 }
 /**

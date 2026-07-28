@@ -18,9 +18,15 @@ const NOW = Timestamp.fromMillis(Date.UTC(2026, 5, 15));
 
 /** Minimal assigned split with sensible defaults. */
 function assigned(over: Partial<AssignedSplit> = {}): AssignedSplit {
+  const budget_id = over.budget_id ?? "b_groceries";
   return {
     split_id: "s1",
-    budget_id: "b_groceries",
+    budget_id,
+    // Default the three lenses to the monthly alias so single-lens tests stay
+    // equivalent (splitBudgetIds union collapses to the one id).
+    monthly_budget_id: budget_id,
+    weekly_budget_id: budget_id,
+    bi_weekly_budget_id: budget_id,
     budget_assignment_source: "category",
     outflow_id: null,
     inflow_id: null,
@@ -76,6 +82,10 @@ describe("merge_assignment_onto_raw_splits", () => {
       splitId: "s1",
       budgetId: "b_groceries",
       budgetName: "Groceries",
+      // Per-lens names denormalized from the id→name map.
+      monthlyBudgetName: "Groceries",
+      weeklyBudgetName: "Groceries",
+      biWeeklyBudgetName: "Groceries",
       budgetAssignmentSource: "category",
       monthlyPeriodId: "2026M06",
       weeklyPeriodId: "2026W24",
@@ -87,7 +97,14 @@ describe("merge_assignment_onto_raw_splits", () => {
   it("flags name_changed only when budgetName drifts", () => {
     const same = merge_assignment_onto_raw_splits(
       resolved(
-        [{ splitId: "s1", budgetName: "Groceries" }],
+        // All lens names already present + matching → nothing drifts.
+        [{
+          splitId: "s1",
+          budgetName: "Groceries",
+          monthlyBudgetName: "Groceries",
+          weeklyBudgetName: "Groceries",
+          biWeeklyBudgetName: "Groceries",
+        }],
         { b_groceries: "Groceries" }
       ),
       result([assigned()]),

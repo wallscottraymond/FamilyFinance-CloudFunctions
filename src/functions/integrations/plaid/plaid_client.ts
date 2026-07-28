@@ -243,7 +243,12 @@ export async function create_link_token(
       legal_name: input.user_name,
       email_address: input.user_email || undefined,
     },
-    products: [Products.Transactions, Products.Auth],
+    // `transactions` is what a budgeting app needs (history + balances) and is
+    // approved in Production. `auth` (account/routing numbers, for ACH) is NOT
+    // enabled on this Plaid account in Production — requesting it makes
+    // linkTokenCreate fail with INVALID_PRODUCT. Re-add Auth only after Plaid
+    // approves it (dashboard.plaid.com/overview/request-products).
+    products: [Products.Transactions],
     account_filters: {
       depository: {
         account_subtypes: [

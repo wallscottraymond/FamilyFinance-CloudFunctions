@@ -52,6 +52,20 @@ import {
  * // - categoryIds: [ALL_ACTIVE_CATEGORY_IDS]
  * ```
  */
+/** The three period lenses that each get their own Everything Else budget. */
+const EE_PERIOD_TYPES: Array<'monthly' | 'weekly' | 'bi_monthly'> = [
+  'monthly',
+  'weekly',
+  'bi_monthly',
+];
+
+/** Display name per lens (so the three EE budgets are distinguishable in the UI). */
+const EE_NAME_BY_PERIOD: Record<'monthly' | 'weekly' | 'bi_monthly', string> = {
+  monthly: 'Everything Else',
+  weekly: 'Everything Else (Weekly)',
+  bi_monthly: 'Everything Else (Bi-Monthly)',
+};
+
 export async function createEverythingElseBudget(
   db: Firestore,
   userId: string,
@@ -67,36 +81,64 @@ export async function createEverythingElseBudget(
     throw new Error('currency must be a valid 3-letter code (e.g., USD, EUR, GBP)');
   }
 
-  // === IDEMPOTENCY CHECK ===
-  // Check if user already has an "everything else" budget
-
+  // === IDEMPOTENCY: map existing EE budgets by their period lens ===
+  // Per-Period-EE: a user has ONE EE budget per period type (monthly/weekly/
+  // bi_monthly). The legacy single EE has period:'monthly' and no
+  // `everythingElsePeriodType`, so it's treated as the monthly lens.
+  const existingByPeriod = new Map<string, string>();
   try {
-    const existingBudgetQuery = await db
+    const existingSnap = await db
       .collection('budgets')
       .where('userId', '==', userId)
       .where('isSystemEverythingElse', '==', true)
-      .limit(1)
       .get();
-
-    if (!existingBudgetQuery.empty) {
-      const existingBudget = existingBudgetQuery.docs[0];
-      console.log(`✅ User ${userId} already has "everything else" budget: ${existingBudget.id}`);
-      return existingBudget.id;
+    for (const doc of existingSnap.docs) {
+      const d = doc.data();
+      const lens = (d.everythingElsePeriodType as string) || (d.period as string) || 'monthly';
+      if (!existingByPeriod.has(lens)) {
+        existingByPeriod.set(lens, doc.id);
+      }
     }
   } catch (error) {
-    console.error(`❌ Error checking for existing "everything else" budget:`, error);
+    console.error(`❌ Error checking for existing "everything else" budgets:`, error);
     throw error;
   }
 
-  // === CREATE NEW BUDGET ===
-
-  const now = Timestamp.now();
-  const groupIds: string[] = []; // Personal budget (not shared)
-
-  // Fetch all active categories - Everything Else owns ALL categories by default
+  // Fetch all active categories ONCE - each EE owns ALL categories by default.
   const allCategories = await getActiveCategories();
   const allCategoryIds = allCategories.map(c => c.id);
-  console.log(`📋 Populating "Everything Else" with ${allCategoryIds.length} categories`);
+
+  // Provision one EE budget per lens (create-or-reuse). Returns the MONTHLY id for
+  // backward compatibility ("the everything else budget" = the monthly lens).
+  const idByPeriod: Record<string, string> = {};
+  for (const period of EE_PERIOD_TYPES) {
+    const existingId = existingByPeriod.get(period);
+    if (existingId) {
+      console.log(`✅ User ${userId} already has ${period} EE budget: ${existingId}`);
+      idByPeriod[period] = existingId;
+      continue;
+    }
+    idByPeriod[period] = await createOneEEBudget(db, userId, userCurrency, period, allCategoryIds);
+  }
+
+  return idByPeriod['monthly'];
+}
+
+/**
+ * Create a single Everything Else budget for one period lens + enqueue its
+ * period-generation cascade. Internal helper for {@link createEverythingElseBudget}.
+ */
+async function createOneEEBudget(
+  db: Firestore,
+  userId: string,
+  userCurrency: string,
+  period: 'monthly' | 'weekly' | 'bi_monthly',
+  allCategoryIds: string[]
+): Promise<string> {
+  const now = Timestamp.now();
+  const groupIds: string[] = []; // Personal budget (not shared)
+  const name = EE_NAME_BY_PERIOD[period];
+  console.log(`📋 Creating "${name}" (${period}) with ${allCategoryIds.length} categories`);
 
   const budgetData: Partial<Budget> = {
     // === ROOT-LEVEL QUERY FIELDS ===
@@ -116,13 +158,14 @@ export async function createEverythingElseBudget(
 
     // === SYSTEM BUDGET IDENTIFICATION ===
     isSystemEverythingElse: true,
+    everythingElsePeriodType: period, // which lens this EE owns
 
     // === BUDGET CONFIGURATION ===
-    name: 'Everything Else',
+    name,
     amount: 0, // Always zero - calculated from spending
     currency: userCurrency,
     categoryIds: allCategoryIds, // Owns ALL categories by default
-    period: 'monthly' as any, // Monthly tracking periods
+    period: period as any, // prime tracking cadence for this lens
     startDate: now,
     endDate: now, // Legacy field for compatibility
     spent: 0,
@@ -137,7 +180,7 @@ export async function createEverythingElseBudget(
 
   try {
     const budgetRef = await db.collection('budgets').add(budgetData);
-    console.log(`✅ Created "everything else" budget for user ${userId}: ${budgetRef.id}`);
+    console.log(`✅ Created "${name}" budget for user ${userId}: ${budgetRef.id}`);
 
     // Generate the budget's periods + summaries via the v2 cascade. Without
     // this the EE budget has no budget_periods, so it never renders in the app
@@ -148,10 +191,10 @@ export async function createEverythingElseBudget(
         budget_id: budgetRef.id,
         user_id: userId,
         group_ids: groupIds,
-        budget_name: 'Everything Else',
+        budget_name: name,
         category_ids: allCategoryIds,
         amount: 0,
-        period: 'monthly',
+        period, // weekly / monthly / bi_monthly — prime cadence for this lens
         start: now.toDate(),
         is_ongoing: true,
         budget_end_date: null,
@@ -171,7 +214,7 @@ export async function createEverythingElseBudget(
 
     return budgetRef.id;
   } catch (error) {
-    console.error(`❌ Error creating "everything else" budget for user ${userId}:`, error);
+    console.error(`❌ Error creating "${name}" budget for user ${userId}:`, error);
     throw error;
   }
 }

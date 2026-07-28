@@ -158,8 +158,8 @@ export interface ProcessBudgetCreatedPayload {
   /** Denormalized onto every generated budget_period (self-contained periods). */
   category_ids: string[];
   amount: number;
-  /** Budget cadence mapped to a period instance base (weekly | monthly) */
-  cadence: "weekly" | "monthly";
+  /** Budget cadence mapped to a period instance base (weekly | monthly | bi_monthly) */
+  cadence: "weekly" | "monthly" | "bi_monthly";
   /** Generation anchor (budget start) in epoch ms */
   start_ms: number;
   /** Generation horizon (12mo ahead for ongoing, budget end for limited) in ms */
@@ -168,6 +168,12 @@ export interface ProcessBudgetCreatedPayload {
   is_recurring: boolean;
   claims: CategoryClaim[];
   everything_else_budget_id: string | null;
+  /**
+   * When true, generate ONLY prime periods (skip non-prime). Used by the
+   * per-lens Everything Else budgets, which must appear in their OWN period view
+   * only — a non-prime EE period would double-count against another lens's EE.
+   */
+  prime_only?: boolean;
 }
 
 // ============================================================================

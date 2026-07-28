@@ -11,7 +11,7 @@
  * @module repositories/budget_period
  */
 import { TraceContext, WriteResult } from "../types";
-import { BudgetPeriodEntity } from "../types/budgets/budget_entity.types";
+import { BudgetPeriodEntity, PendingRolloverByType } from "../types/budgets/budget_entity.types";
 /**
  * Budget Period Repository.
  */
@@ -88,5 +88,24 @@ export declare const budget_period_repo: {
      * Counts periods for a budget.
      */
     count_by_budget_id(_ctx: TraceContext, budget_id: string): Promise<number>;
+    /**
+     * Aggregates a budget's outstanding spread-rollover debt per period type,
+     * summing `pendingRolloverDeduction` (and taking the max `pendingRolloverPeriods`)
+     * across its active periods. Used on delete to transfer the debt to Everything
+     * Else. Only types with a positive, still-spreading balance are returned.
+     */
+    get_pending_rollover_by_type(_ctx: TraceContext, budget_id: string): Promise<PendingRolloverByType[]>;
+    /**
+     * Transfers spread-rollover debt onto a TARGET budget's periods (Everything
+     * Else on delete). For each type: applies the deduction to the target's
+     * current-onward active periods of the SAME type by decrementing
+     * `rolledOverAmount` (negative = deduction, which flows into `remaining` and the
+     * summary regardless of the target's own rollover setting). `immediate` puts the
+     * full amount on the current period; `spread` splits it across the next N
+     * periods (N = periods-remaining, capped by how many the target has). Returns the
+     * affected target period IDs (for summary refresh). NOT an increment loop — a
+     * one-shot recompute of `remaining = (modified ?? allocated) + rolledOver - spent`.
+     */
+    transfer_rollover_to_budget(_ctx: TraceContext, target_budget_id: string, transfers: PendingRolloverByType[], mode: "immediate" | "spread"): Promise<string[]>;
 };
 //# sourceMappingURL=budget_period.repo.d.ts.map

@@ -61,7 +61,8 @@ export const delete_budget = onCall(
         ctx,
         user_id,
         data.idempotency_key,
-        data.budget_id
+        data.budget_id,
+        data.rollover_transfer_mode
       );
 
       log_operation_success(span, user_id);

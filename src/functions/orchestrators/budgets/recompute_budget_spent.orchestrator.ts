@@ -22,6 +22,7 @@ import {
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { budget_repo } from "../../repositories/budget.repo";
 import { compute_budget_spent } from "../../domain/budgets/budget_spend.service";
+import { budget_cadence_to_instance } from "../../domain/budgets";
 import { resolve_spend_splits } from "../../resolvers/budgets/budget_spend.resolver";
 import { enqueue_user_summary_updates_from_budget_periods } from "../summaries";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
@@ -60,6 +61,13 @@ export async function recompute_budget_spent_orchestrator(
     let periods_updated = 0;
 
     for (const budget_id of input.budget_ids) {
+      // Read the budget once: its `period` selects which split-lens field spend is
+      // matched on (monthly→monthlyBudgetId, weekly→weeklyBudgetId, …), applied to
+      // ALL its periods (prime + non-prime). Reused for the rollover gate below.
+      const budget = await budget_repo.get_by_id(ctx, budget_id);
+      const cadence = budget
+        ? budget_cadence_to_instance(budget.period)
+        : "monthly";
       const periods = await budget_period_repo.get_by_budget_id(ctx, budget_id);
       // Date-scoped (engine fan-out) recomputes only the period(s) containing
       // the txn date; full mode (backfill, no date) recomputes every period.
@@ -89,7 +97,8 @@ export async function recompute_budget_spent_orchestrator(
           input.user_id,
           budget_id,
           start_ms,
-          end_ms
+          end_ms,
+          cadence
         );
         const { spent, pending_spent } = compute_budget_spent(
           budget_id,
@@ -118,7 +127,6 @@ export async function recompute_budget_spent_orchestrator(
       // writes rolledOverAmount/remaining — never spent — so it cannot re-enter
       // this pipeline. Non-fatal: a rollover hiccup must not fail the spend recompute.
       try {
-        const budget = await budget_repo.get_by_id(ctx, budget_id);
         if (budget?.rollover_enabled) {
           await create_job_if_not_exists(
             "recalculate_rollover",

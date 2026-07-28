@@ -22,6 +22,7 @@ const groceries: BudgetForMatch = {
   start_ms: Date.UTC(2026, 0, 1),
   end_ms: null,
   is_ongoing: true,
+  cadence: "monthly",
 };
 
 const periods = [
@@ -34,8 +35,9 @@ function ctx(over: Partial<AssignmentContext> = {}): AssignmentContext {
     txn_date_ms: JUN_15,
     txn_merchant_name: null,
     txn_name: null,
+    txn_is_income: false,
     real_budgets: [groceries],
-    everything_else_budget_id: EE,
+    everything_else_budget_ids: { monthly: EE, weekly: EE, bi_monthly: EE },
     category_rules: [],
     source_periods: periods,
     recurring_by_split: {},
@@ -79,6 +81,103 @@ describe("compute_transaction_assignment", () => {
     expect(r.splits[0].reason.budget).toBe("everything_else_fallback");
   });
 
+  it("PER-LENS: a WEEKLY budget claims only the weekly lens; monthly+biweekly fall to their own EE", () => {
+    const weeklyGroceries: BudgetForMatch = {
+      id: "b_weekly_groceries",
+      category_ids: ["FOOD_AND_DRINK"],
+      start_ms: Date.UTC(2026, 0, 1),
+      end_ms: null,
+      is_ongoing: true,
+      cadence: "weekly",
+    };
+    const r = compute_transaction_assignment(
+      [split({ plaid_match_category: "FOOD_AND_DRINK" })],
+      ctx({
+        real_budgets: [weeklyGroceries], // no monthly/biweekly grocery budget
+        everything_else_budget_ids: { monthly: "ee_m", weekly: "ee_w", bi_monthly: "ee_b" },
+      })
+    );
+    const s = r.splits[0];
+    expect(s.weekly_budget_id).toBe("b_weekly_groceries"); // weekly lens claimed
+    expect(s.monthly_budget_id).toBe("ee_m"); // no monthly grocery → monthly EE
+    expect(s.bi_weekly_budget_id).toBe("ee_b"); // no biweekly grocery → biweekly EE
+    expect(s.budget_id).toBe("ee_m"); // legacy alias = monthly lens
+    expect(r.any_unassigned).toBe(false);
+  });
+
+  it("global manual pin forces ALL three lenses onto the pinned budget", () => {
+    const pinned: BudgetForMatch = {
+      id: "b_pinned",
+      category_ids: [],
+      start_ms: Date.UTC(2026, 0, 1),
+      end_ms: null,
+      is_ongoing: true,
+      cadence: "monthly",
+    };
+    const r = compute_transaction_assignment(
+      [split({ budget_assignment_source: "manual", budget_id: "b_pinned" })],
+      ctx({ real_budgets: [groceries, pinned] })
+    );
+    const s = r.splits[0];
+    expect(s.monthly_budget_id).toBe("b_pinned");
+    expect(s.weekly_budget_id).toBe("b_pinned");
+    expect(s.bi_weekly_budget_id).toBe("b_pinned");
+    expect(s.budget_assignment_source).toBe("manual");
+  });
+
+  it("PER-LENS income: unassigned in all three lenses, no missing-EE error (B1)", () => {
+    const r = compute_transaction_assignment(
+      [split({ plaid_match_category: "FOOD_AND_DRINK" })],
+      ctx({ txn_is_income: true })
+    );
+    const s = r.splits[0];
+    expect(s.monthly_budget_id).toBe("unassigned");
+    expect(s.weekly_budget_id).toBe("unassigned");
+    expect(s.bi_weekly_budget_id).toBe("unassigned");
+    expect(r.any_unassigned).toBe(false);
+  });
+
+  it("income is NEVER auto-assigned to a budget — stays unassigned, no missing-EE error (B1)", () => {
+    const r = compute_transaction_assignment(
+      // Category WOULD match b_groceries, but income must not be budgeted.
+      [split({ plaid_match_category: "FOOD_AND_DRINK" })],
+      ctx({ txn_is_income: true })
+    );
+    expect(r.splits[0].budget_id).toBe("unassigned");
+    expect(r.splits[0].reason.budget).toBe("income_excluded");
+    expect(r.any_unassigned).toBe(false); // intentional, not the missing-EE error
+  });
+
+  it("income still matches a recurring inflow while skipping budget (income tracking intact)", () => {
+    const r = compute_transaction_assignment(
+      [split({ split_id: "s1" })],
+      ctx({
+        txn_is_income: true,
+        recurring_by_split: { s1: { outflow_id: null, inflow_id: "i_salary" } },
+      })
+    );
+    expect(r.splits[0].budget_id).toBe("unassigned");
+    expect(r.splits[0].inflow_id).toBe("i_salary");
+    expect(r.splits[0].reason.recurring).toBe("inflow");
+  });
+
+  it("a manually-pinned income keeps its budget — explicit assignment overrides B1 (B2)", () => {
+    const fund = {
+      id: "b_fund",
+      category_ids: [] as string[],
+      start_ms: Date.UTC(2026, 0, 1),
+      end_ms: null,
+      is_ongoing: true,
+      cadence: "monthly" as const,
+    };
+    const r = compute_transaction_assignment(
+      [split({ budget_assignment_source: "manual", budget_id: "b_fund" })],
+      ctx({ txn_is_income: true, real_budgets: [fund] })
+    );
+    expect(r.splits[0].budget_id).toBe("b_fund");
+    expect(r.splits[0].reason.budget).toBe("manual");
+  });
+
   it("manual pin (to an EXISTING budget) keeps it + DETACHES recurring", () => {
     const pinned = {
       id: "b_pinned",
@@ -86,6 +185,7 @@ describe("compute_transaction_assignment", () => {
       start_ms: Date.UTC(2026, 0, 1),
       end_ms: null,
       is_ongoing: true,
+      cadence: "monthly" as const,
     };
     const r = compute_transaction_assignment(
       [
@@ -212,9 +312,15 @@ describe("compute_transaction_assignment", () => {
   });
 
   it("skip-if-unchanged: no change when stored == computed", () => {
-    // Pre-set the split to exactly what the engine would compute.
+    // Pre-set the split to exactly what the engine would compute PER LENS:
+    // groceries is a monthly budget, so only the monthly lens is b_groceries; the
+    // weekly + biweekly lenses fall to their Everything Else (no weekly/biweekly
+    // grocery budget exists).
     const settled = split({
       budget_id: "b_groceries",
+      monthly_budget_id: "b_groceries",
+      weekly_budget_id: EE,
+      bi_weekly_budget_id: EE,
       monthly_period_id: "2026M06",
       weekly_period_id: "2026W24",
       bi_weekly_period_id: null,
@@ -226,7 +332,7 @@ describe("compute_transaction_assignment", () => {
   it("flags any_unassigned when there is no Everything Else budget", () => {
     const r = compute_transaction_assignment(
       [split({ plaid_match_category: "TRAVEL" })],
-      ctx({ everything_else_budget_id: null })
+      ctx({ everything_else_budget_ids: { monthly: null, weekly: null, bi_monthly: null } })
     );
     expect(r.any_unassigned).toBe(true);
     expect(r.splits[0].budget_id).toBe("unassigned");

@@ -32,8 +32,13 @@ export type PeriodInstanceType = "weekly" | "monthly" | "bi_monthly";
  */
 export function budget_cadence_to_instance(
   period: BudgetPeriodType
-): "weekly" | "monthly" {
-  return period === "weekly" ? "weekly" : "monthly";
+): PeriodInstanceType {
+  // weekly / monthly / bi_monthly are the three real prime cadences (they map 1:1
+  // to source-period types). quarterly / yearly / custom have no matching source
+  // period, so they allocate on the monthly grid (prime = monthly).
+  if (period === "weekly") return "weekly";
+  if (period === "bi_monthly") return "bi_monthly";
+  return "monthly";
 }
 
 /** Months of budget periods generated ahead for ongoing/recurring budgets. */
@@ -112,6 +117,8 @@ export function build_self_provision_budget_created_payload(args: {
     is_recurring: args.is_ongoing,
     claims: [],
     everything_else_budget_id: null,
+    // EE budgets appear only in their own period view → prime periods only.
+    prime_only: true,
   };
 }
 
