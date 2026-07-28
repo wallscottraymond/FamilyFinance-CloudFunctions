@@ -28,7 +28,6 @@ import { db } from '../../../index';
 import { formatTransactions } from '../utils/formatTransactions';
 import { matchCategoriesToTransactions } from '../utils/matchCategoriesToTransactions';
 import { matchTransactionSplitsToSourcePeriods } from '../utils/matchTransactionSplitsToSourcePeriods';
-import { matchTransactionSplitsToBudgets } from '../utils/matchTransactionSplitsToBudgets';
 import { matchTransactionSplitsToOutflows } from '../utils/matchTransactionSplitsToOutflows';
 import { batchCreateTransactions } from '../utils/batchCreateTransactions';
 
@@ -450,18 +449,14 @@ export const createTestTransactions = onCall({
         }
         console.log('');
 
-        // Step 4: Match budgets
-        console.log('⚙️  Step 4/6: Matching budgets...');
-        const withBudgets = await matchTransactionSplitsToBudgets(withPeriods, targetUserId);
-        console.log(`   ✅ Matched budget IDs for ${withBudgets.length} transaction splits`);
-        if (withBudgets[0]?.splits?.[0]) {
-          console.log(`   📊 First split budget: ${withBudgets[0].splits[0].budgetId || 'No budget'}`);
-        }
-        console.log('');
+        // Step 4: (budget matching removed 2026-07-27) — the Transaction Assignment
+        // Engine assigns budgets via on_transaction_written after these docs are
+        // written, so seeded test data is homed by the SAME single authority as
+        // production. Splits are written unassigned; the engine assigns them.
 
         // Step 5: Match outflows
         console.log('⚙️  Step 5/6: Matching outflows...');
-        const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withBudgets, targetUserId);
+        const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withPeriods, targetUserId);
         console.log(`   ✅ Matched outflow IDs for ${final.length} transaction splits`);
         console.log(`   ✅ Generated ${outflowUpdates.length} outflow updates`);
         console.log('');

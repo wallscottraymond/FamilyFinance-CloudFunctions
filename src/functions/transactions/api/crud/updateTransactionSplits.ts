@@ -11,7 +11,6 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Transaction, TransactionSplit } from "../../../../types";
 import { getDocument, updateDocument } from "../../../../utils/firestore";
 import * as admin from "firebase-admin";
-import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 interface UpdateTransactionSplitsRequest {
   transactionId: string;
@@ -100,23 +99,13 @@ export const updateTransactionSplits = onCall<
     updateData.isSplit = splits.length > 1;
     updateData.totalAllocated = totalAllocated;
 
-    // Create temporary transaction for split assignment
-    const tempTransaction: Transaction = {
-      ...existingTransaction,
-      ...updateData,
-      splits: splits,
-    };
-
-    // Validate and assign splits to budgets using centralized utility
-    console.log(`[updateTransactionSplits] Validating and assigning ${splits.length} splits`);
-    const assignmentResult = await assignTransactionSplits(tempTransaction, userId);
-
-    if (assignmentResult.modified) {
-      console.log('[updateTransactionSplits] Splits modified during assignment:', assignmentResult.changes);
-    }
-
-    // Use the validated and assigned splits
-    updateData.splits = assignmentResult.transaction.splits;
+    // Budget assignment is owned by the Transaction Assignment Engine:
+    // `on_transaction_written` re-runs the engine after this write, which matches
+    // each split to a budget on its DETAILED category (the `internalDetailedCategory`
+    // normalized below). So we do NOT pre-assign budgets here — we only normalize
+    // the splits (ids, category inheritance, the categoryId→internalDetailedCategory
+    // translation) so the engine's category match re-homes correctly. (Inline
+    // matcher removed 2026-07-27.)
 
     // Ensure all splits have required fields
     const txn: any = existingTransaction;

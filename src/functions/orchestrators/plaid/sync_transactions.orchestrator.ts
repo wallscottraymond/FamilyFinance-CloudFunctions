@@ -49,7 +49,6 @@ import { plaid_item_repo } from "../../repositories/plaid";
 import { format_transactions } from "../../transactions/utils/format_transactions";
 import { match_categories_to_transactions } from "../../transactions/utils/match_categories_to_transactions";
 import { match_transaction_splits_to_source_periods } from "../../transactions/utils/match_transaction_splits_to_source_periods";
-import { assign_transaction_splits_batch } from "../../transactions/utils/assign_transaction_splits";
 
 /**
  * Orchestrates the transaction synchronization flow.
@@ -313,15 +312,14 @@ async function process_added_transactions(
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
       console.log(`[${ctx.trace_id}] Step 3/6: Matched source periods`);
 
-      // Step 4: Assign budgets (centralized split assignment)
-      const assignment_results = await assign_transaction_splits_batch(with_periods, ctx.user_id);
-      const with_budgets = assignment_results.map(r => r.transaction);
-      console.log(`[${ctx.trace_id}] Step 4/6: Assigned budgets`);
-
-      // Step 5: (legacy outflow matcher removed 2026-06-13) — the engine sets
-      // split.outflow_id via on_transaction_written after upsert, and the reconcile
-      // engine updates outflow-period paid/received status. No inline matching here.
-      const final = with_budgets;
+      // Step 4: (inline budget assignment removed 2026-07-27) — the Transaction
+      // Assignment Engine now owns budget assignment: it runs via
+      // on_transaction_written after upsert (single source of truth), so an inline
+      // pass here would just be overwritten. Splits are written unassigned and the
+      // engine assigns them (+ EE fallback, stale-id fixing) within ~1-3s.
+      // Step 5: (legacy outflow matcher removed 2026-06-13) — the engine also sets
+      // split.outflow_id, and the reconcile engine updates outflow-period status.
+      const final = with_periods;
 
       // Step 6a: Transform legacy format to new persistence format
       const transactions_for_persistence = transform_legacy_to_persistence(
@@ -488,11 +486,10 @@ async function process_modified_transactions(
 
       const with_categories = await match_categories_to_transactions(formatted, ctx.user_id);
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
-      const assignment_results = await assign_transaction_splits_batch(with_periods, ctx.user_id);
-      const with_budgets = assignment_results.map(r => r.transaction);
-      // (legacy outflow matcher removed 2026-06-13) — engine sets outflow_id via
-      // on_transaction_written; reconcile updates outflow-period status.
-      const final = with_budgets;
+      // Inline budget assignment removed 2026-07-27 — the Transaction Assignment
+      // Engine assigns budgets (and outflow_id) via on_transaction_written after
+      // upsert (single source of truth); reconcile updates outflow-period status.
+      const final = with_periods;
 
       // Transform to new persistence format
       const transactions_for_persistence = transform_legacy_to_persistence(

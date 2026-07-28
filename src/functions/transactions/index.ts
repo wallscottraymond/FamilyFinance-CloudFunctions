@@ -58,10 +58,10 @@ export {
   matchTransactionSplitsToSourcePeriods
 } from "./utils/match_transaction_splits_to_source_periods";
 
-export {
-  match_transaction_splits_to_budgets,
-  matchTransactionSplitsToBudgets
-} from "./utils/match_transaction_splits_to_budgets";
+// match_transaction_splits_to_budgets + assign_transaction_splits (Gen-2 inline
+// budget matchers) deleted 2026-07-27 — budget assignment is now owned solely by
+// the Transaction Assignment Engine (domain/transactions/compute_transaction_assignment),
+// which runs via the on_transaction_written trigger on every write.
 
 export {
   match_transaction_splits_to_outflows,
@@ -72,13 +72,6 @@ export {
   match_transaction_to_budget,
   matchTransactionToBudget
 } from "./utils/match_transaction_to_budget";
-
-export {
-  assign_transaction_splits,
-  assign_transaction_splits_batch,
-  assignTransactionSplits,
-  assignTransactionSplitsBatch
-} from "./utils/assign_transaction_splits";
 
 export {
   validate_and_redistribute_splits,

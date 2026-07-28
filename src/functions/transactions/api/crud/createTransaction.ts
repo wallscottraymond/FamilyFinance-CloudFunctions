@@ -30,8 +30,6 @@ import {
 } from "../../../../utils/validation";
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
-import { matchTransactionSplitsToSourcePeriods } from "../../utils/matchTransactionSplitsToSourcePeriods";
-import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 /**
  * Create a new transaction
@@ -192,21 +190,14 @@ export const createTransaction = onRequest({
         },
       };
 
-      // CENTRALIZED SPLIT ASSIGNMENT: Validate budgetIds, redistribute amounts, and match to budgets
-      const assignmentResult = await assignTransactionSplits(transaction as Transaction, user.id!);
-
-      if (assignmentResult.modified) {
-        console.log('[createTransaction] Splits modified during assignment:', assignmentResult.changes);
-      }
-
-      // Use the transaction with assigned splits
-      let transactionWithBudgets = assignmentResult.transaction;
-
-      // Match transaction splits to source periods (app-wide)
-      const transactionsWithPeriods = await matchTransactionSplitsToSourcePeriods([transactionWithBudgets]);
-      const transactionWithPeriods = transactionsWithPeriods[0];
-
-      const createdTransaction = await createDocument<Transaction>("transactions", transactionWithPeriods);
+      // Budget assignment + source-period stamping are owned by the Transaction
+      // Assignment Engine: `on_transaction_written` runs the engine right after
+      // this write (single source of truth), so an inline pass here would just be
+      // overwritten. The split is persisted with its category populated and its
+      // budgetId (caller-supplied or 'unassigned'); the engine assigns it — plus
+      // periods, EE fallback, recurring links — within ~1-3s. (Inline matchers
+      // removed 2026-07-27.)
+      const createdTransaction = await createDocument<Transaction>("transactions", transaction as Transaction);
 
       // Budget spend is owned by the Transaction Assignment Engine: the
       // `on_transaction_written` trigger enqueues `assign_transaction`, which

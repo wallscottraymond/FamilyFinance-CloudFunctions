@@ -19,7 +19,6 @@ import {
 } from "../../../../utils/auth";
 import { validateRequest, updateTransactionSchema } from "../../../../utils/validation";
 import { firebaseCors } from "../../../../middleware/cors";
-import { assignTransactionSplits } from "../../utils/assignTransactionSplits";
 
 /**
  * Update transaction
@@ -92,34 +91,11 @@ export const updateTransaction = onRequest({
         );
       }
 
-      // CENTRALIZED SPLIT ASSIGNMENT: Validate budgetIds, redistribute amounts, and match to budgets
-      if (updateData.splits && updateData.splits.length > 0) {
-        console.log(`[updateTransaction] Validating and reassigning ${updateData.splits.length} splits`);
-
-        // Create a temporary transaction object with updated data
-        const tempTransaction: Transaction = {
-          ...existingTransaction,
-          ...updateData,
-          splits: updateData.splits || existingTransaction.splits,
-          transactionDate: updateData.transactionDate
-            ? (typeof updateData.transactionDate === 'string'
-                ? admin.firestore.Timestamp.fromDate(new Date(updateData.transactionDate))
-                : updateData.transactionDate)
-            : existingTransaction.transactionDate
-        };
-
-        // Call centralized assignment utility
-        const assignmentResult = await assignTransactionSplits(tempTransaction, user.id!);
-
-        if (assignmentResult.modified) {
-          console.log('[updateTransaction] Splits modified during assignment:', assignmentResult.changes);
-        }
-
-        // Use the validated and assigned splits
-        updateData.splits = assignmentResult.transaction.splits;
-
-        console.log(`[updateTransaction] Splits reassigned - budgetIds: ${updateData.splits.map(s => s.budgetId).join(', ')}`);
-      }
+      // Split budget assignment is owned by the Transaction Assignment Engine:
+      // `on_transaction_written` re-runs the engine after this write, so the
+      // updated splits are (re)assigned there — and, unlike the old inline
+      // matcher, manual pins (budgetAssignmentSource: 'manual') are honored. The
+      // caller's splits are written as-provided; no inline matcher (2026-07-27).
 
       // Convert transactionDate string to Timestamp if needed
       const updateDataForFirestore: any = { ...updateData };
