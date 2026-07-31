@@ -8,10 +8,13 @@
  * Rules (from the spend-pipeline design):
  * - A split counts toward a budget period when it is assigned to that budget AND
  *   the transaction date is within the period's range AND it is "countable".
- * - **Countable** excludes: transfers, ignored splits, and recurring-mapped
+ * - **Countable** excludes: transfers, `ignored` splits, and recurring-mapped
  *   splits (`outflow_id`/`inflow_id` set — the recurring system tracks those).
- * - Refunds are NOT excluded — they carry a negative amount and net the spend
- *   down (a period can go negative = a net credit).
+ * - **`refund` splits stay countable** (you paid → still in `spent`), but their
+ *   |amount| ALSO accrues into a parallel `return_amount` = the user's *expected*
+ *   returns (Split-Status-Actions). `return_amount` does NOT reduce `spent`; the UI
+ *   derives net = `spent − return_amount`. (A real negative Plaid credit is a
+ *   separate posted txn that nets `spent` down on its own.)
  * - The FULL split amount counts in EVERY overlapping period (the caller invokes
  *   this once per period; each period is an independent view).
  * - `pending_spent` is the pending-transaction portion of `spent`.
@@ -20,6 +23,9 @@
  *
  * @module domain/budgets/budget_spend
  */
+
+/** A split's budget-spend treatment (mirrors the `SpendStatus` type). */
+export type SpendStatusForSpend = "counted" | "ignored" | "refund";
 
 /** A split + its transaction context, as the spend computation needs it. */
 export interface SplitForSpend {
@@ -30,8 +36,8 @@ export interface SplitForSpend {
   is_pending: boolean;
   /** Transaction-level: an internal transfer (excluded from budget spend). */
   is_transfer: boolean;
-  /** Split-level exclude flag. */
-  is_ignored: boolean;
+  /** Split-level spend treatment (resolver derives it from spendStatus/legacy flags). */
+  spend_status: SpendStatusForSpend;
   /** Recurring links — present ⇒ tracked by the recurring system, excluded here. */
   outflow_id: string | null;
   inflow_id: string | null;
@@ -41,13 +47,15 @@ export interface SplitForSpend {
 export interface BudgetSpendResult {
   spent: number;
   pending_spent: number;
+  /** Σ|amount| of the countable `refund` splits — expected returns (parallel to spent). */
+  return_amount: number;
 }
 
-/** Whether a split counts toward budget spend. PURE. */
+/** Whether a split counts toward budget `spent`. `refund` stays countable. PURE. */
 export function is_countable(split: SplitForSpend): boolean {
   return (
     !split.is_transfer &&
-    !split.is_ignored &&
+    split.spend_status !== "ignored" &&
     split.outflow_id === null &&
     split.inflow_id === null
   );
@@ -76,6 +84,7 @@ export function compute_budget_spent(
 ): BudgetSpendResult {
   let spent = 0;
   let pending = 0;
+  let return_amount = 0;
 
   for (const split of splits) {
     if (split.budget_id !== budget_id) {
@@ -91,7 +100,15 @@ export function compute_budget_spent(
     if (split.is_pending) {
       pending += split.amount;
     }
+    // Refund splits stay in `spent` AND accrue their magnitude as an expected return.
+    if (split.spend_status === "refund") {
+      return_amount += Math.abs(split.amount);
+    }
   }
 
-  return { spent: round2(spent), pending_spent: round2(pending) };
+  return {
+    spent: round2(spent),
+    pending_spent: round2(pending),
+    return_amount: round2(return_amount),
+  };
 }

@@ -53,7 +53,6 @@ export {
   extract_removed_transaction_ids,
   has_material_changes,
   get_changed_fields,
-  map_plaid_category_to_internal,
 } from "./plaid_transaction_transformer";
 
 // Legacy transaction transformer (for pipeline output conversion)

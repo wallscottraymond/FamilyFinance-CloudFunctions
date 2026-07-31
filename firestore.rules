@@ -1246,7 +1246,22 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false; // Only cloud functions
     }
-    
+
+    // =======================
+    // PURGE STATUS RULES
+    // =======================
+
+    // Live status of a user's account-purge (drives the FE progress view + the
+    // sign-out on completion). A user must be able to READ their OWN status doc,
+    // else the client never receives `done` and never logs out. `isOwner`
+    // short-circuits the OR so this works even after the user's profile doc is
+    // deleted (it doesn't depend on `users/{uid}` existing). Written only by the
+    // purge Cloud Functions (admin SDK bypasses rules).
+    match /purge_status/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+    }
+
     // Deny all other requests
     match /{document=**} {
       allow read, write: if false;

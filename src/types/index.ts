@@ -292,6 +292,15 @@ export enum PaymentType {
   EXTRA_PRINCIPAL = 'extra_principal'     // Additional payment beyond required amount
 }
 
+/**
+ * A split's budget-spend treatment (Split-Status-Actions):
+ * - `counted` — normal: contributes its amount to the budget's `spent`.
+ * - `ignored` — excluded from `spent`.
+ * - `refund`  — STILL counted in `spent`, but |amount| also accrues into the
+ *   budget's parallel `returnAmount` (expected returns, planned before completed).
+ */
+export type SpendStatus = 'counted' | 'ignored' | 'refund';
+
 // Transaction Split interface for splitting transactions across budgets AND outflows
 // UPDATED: Flat structure with renamed fields for consistency
 export interface TransactionSplit {
@@ -328,6 +337,16 @@ export interface TransactionSplit {
   internalPrimaryCategory: string | null;   // User override primary category
   internalDetailedCategory: string | null;  // User override detailed category
 
+  // App-category classification (Simplified-Transaction-Categories): the two
+  // user-facing levels, resolved from the split's Plaid detailed via the
+  // `categories` collection (overallCategoryId = broad, firstCategoryId = specific).
+  // Populated by the assignment engine. `categorySource: 'user'` marks a manual
+  // reclassification the engine must NOT overwrite.
+  overallCategoryId?: string | null;     // Broad app-category slug (legacy level)
+  firstCategoryId?: string | null;       // PRIMARY app-category slug (first_category)
+  secondCategoryId?: string | null;      // SECONDARY = chosen category doc id (= Plaid detailed); set only on a user override
+  categorySource?: 'plaid' | 'user';     // 'plaid' = auto-derived; 'user' = preserved manual override
+
   amount: number;                 // Amount allocated to this split
   description?: string | null;           // Optional override description for this split
   isDefault: boolean;             // True for the auto-created split when transaction is created
@@ -337,9 +356,15 @@ export interface TransactionSplit {
                                     // (vs. auto-matching). Preserved by the matcher —
                                     // e.g. income is only counted in a budget when
                                     // manually assigned (B2).
-  isIgnored?: boolean;            // User marked to ignore from budget tracking
-  isRefund?: boolean;             // Transaction is a refund (subtract from spending)
-  isTaxDeductible?: boolean;      // Tax-deductible expense
+  // Spend status (Split-Status-Actions): the single source of truth for a split's
+  // budget-spend treatment. `ignored` = excluded from spent; `refund` = STILL counted
+  // in spent but its |amount| also accrues into the budget's parallel `returnAmount`
+  // (expected returns). Derived from isIgnored/isRefund when absent (no migration);
+  // the FE cycling pill writes this + mirrors the booleans below for back-compat.
+  spendStatus?: SpendStatus;
+  isIgnored?: boolean;            // User marked to ignore from budget tracking (mirror of spendStatus==='ignored')
+  isRefund?: boolean;             // Mirror of spendStatus==='refund' (expected return)
+  isTaxDeductible?: boolean;      // Tax-deductible expense (orthogonal flag)
   ignoredReason?: string | null;         // Why user ignored this split
   refundReason?: string | null;          // Reason for refund classification
 
@@ -394,6 +419,11 @@ export interface Transaction extends BaseDocument {
 
   // === SPLITS ARRAY ===
   splits: TransactionSplit[];     // Array of transaction splits
+
+  // === SPLIT-STATUS DERIVED AGGREGATES (denormalized for the tile/detail) ===
+  returnAmount?: number;          // Σ|amount| of this txn's `refund` splits (expected returns)
+  hasRefundSplits?: boolean;      // Any split with spendStatus === 'refund'
+  hasIgnoredSplits?: boolean;     // Any split with spendStatus === 'ignored'
 
   // === INITIAL PLAID DATA (preserved for reference) ===
   initialPlaidData: {

@@ -17,6 +17,7 @@ import { sync_transactions_orchestrator } from "../../orchestrators/plaid";
 import { generate_id } from "../../observability";
 import { TRANSACTION_SYNC_RATE_LIMIT_SECONDS } from "../../types/plaid";
 import { check_and_record } from "../../infrastructure/rate_limiter";
+import { is_user_purging } from "../../infrastructure/purge_guard";
 
 // Secrets required for Plaid API calls
 const plaidClientId = defineSecret("PLAID_CLIENT_ID");
@@ -65,6 +66,14 @@ export const sync_transactions = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     const user_id = request.auth.uid;
+
+    // 1b. PURGE GUARD — never re-populate a user who is being (or has been) erased.
+    if (await is_user_purging(user_id)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Account is being deleted; sync is disabled."
+      );
+    }
 
     // 2. INPUT VALIDATION
     const validation = sync_transactions_input_schema.safeParse(request.data || {});

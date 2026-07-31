@@ -2,7 +2,10 @@
  * assignment_field_guard Domain Service — Unit Tests
  */
 
-import { is_assignment_relevant_change } from "../assignment_field_guard.service";
+import {
+  is_assignment_relevant_change,
+  is_spend_relevant_change,
+} from "../assignment_field_guard.service";
 
 const ts = (ms: number) => ({ toMillis: () => ms });
 
@@ -90,5 +93,22 @@ describe("is_assignment_relevant_change", () => {
     const a = txn({ splits: [{ ...txn().splits[0], splitId: "s1" }, { ...txn().splits[0], splitId: "s2" }] });
     const b = txn({ splits: [{ ...txn().splits[0], splitId: "s2" }, { ...txn().splits[0], splitId: "s1" }] });
     expect(is_assignment_relevant_change(a, b)).toBe(false);
+  });
+});
+
+describe("is_spend_relevant_change", () => {
+  it("a spendStatus change (counted → refund) IS spend-relevant", () => {
+    const after = txn({ splits: [{ ...txn().splits[0], spendStatus: "refund" }] });
+    expect(is_spend_relevant_change(txn(), after)).toBe(true);
+  });
+
+  it("an isIgnored toggle IS spend-relevant", () => {
+    const after = txn({ splits: [{ ...txn().splits[0], isIgnored: true }] });
+    expect(is_spend_relevant_change(txn(), after)).toBe(true);
+  });
+
+  it("a cosmetic-only change is NOT spend-relevant", () => {
+    const after = txn({ splits: [{ ...txn().splits[0], description: "new", tags: ["x"] }] });
+    expect(is_spend_relevant_change(txn(), after)).toBe(false);
   });
 });

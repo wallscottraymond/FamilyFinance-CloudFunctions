@@ -41,6 +41,14 @@ export interface SplitForAssignment {
     monthly_period_id: string | null;
     weekly_period_id: string | null;
     bi_weekly_period_id: string | null;
+    /** Prior app-category classification (for override-preservation + skip-if-unchanged).
+     *  Optional: pre-migration splits lack them; `category_source` defaults to "plaid". */
+    overall_category_id?: string | null;
+    first_category_id?: string | null;
+    /** SECONDARY-level override: the chosen category doc id (== Plaid detailed). Only
+     *  meaningful when `category_source === "user"`; null = a first-only override. */
+    second_category_id?: string | null;
+    category_source?: "plaid" | "user";
 }
 /** Recurring match result for one split (produced by the recurring matchers). */
 export interface RecurringMatch {
@@ -60,6 +68,12 @@ export interface AssignmentContext {
     /** The Everything Else budget id PER LENS (null for a lens with no EE budget). */
     everything_else_budget_ids: Record<PeriodLens, string | null>;
     category_rules: CategoryRule[];
+    /** plaidDetailed → the two app-category slugs, from the `categories` collection.
+     *  Missing key → the split gets null slugs (unmapped Plaid detailed). */
+    category_slugs_by_plaid: Record<string, {
+        overall_category_id: string | null;
+        first_category_id: string | null;
+    }>;
     source_periods: SourcePeriodForMatch[];
     /** Recurring match per split id (empty = no recurring match). */
     recurring_by_split: Record<string, RecurringMatch>;
@@ -80,6 +94,13 @@ export interface AssignedSplit {
     monthly_period_id: string | null;
     weekly_period_id: string | null;
     bi_weekly_period_id: string | null;
+    /** App-category classification (Simplified-Transaction-Categories): the two
+     *  user-facing slugs + their source. `"user"` = a preserved manual override. */
+    overall_category_id: string | null;
+    first_category_id: string | null;
+    /** The chosen SECONDARY category doc id — only set on a user override (else null). */
+    second_category_id: string | null;
+    category_source: "plaid" | "user";
     /** Why this assignment was made — for per-split decision logging (monthly lens). */
     reason: {
         budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded";

@@ -98,6 +98,35 @@ describe('recompute_budget_spent (emulator)', () => {
     expect(period.remaining).toBe(230);     // 300 - 70
   });
 
+  it("a 'refund' split stays in spent AND writes budget_period.returnAmount", async () => {
+    const userId = uid();
+    const budgetId = `br_${Date.now()}`;
+    const periodId = `${budgetId}_2026M06`;
+    await seedPeriod(periodId, budgetId, 300);
+
+    await seedTxn(`tp_${budgetId}`, userId, budgetId, 100); // normal spend → +100
+    // A refund split: positive amount (you paid) + spendStatus 'refund' (expect back).
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection('transactions').doc(`tr_${budgetId}`).set({
+      transactionId: `tr_${budgetId}`, userId, isActive: true, transactionDate: ts('2026-06-15'),
+      type: 'expense', isPending: false,
+      splits: [{
+        splitId: 'rs1', budgetId, amount: 80, spendStatus: 'refund',
+        outflowId: null, inflowId: null,
+      }],
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+
+    await recompute_budget_spent_orchestrator(ctx(), {
+      user_id: userId, budget_ids: [budgetId], transaction_date_ms: JUN_15,
+    });
+
+    const period = (await db.collection('budget_periods').doc(periodId).get()).data()!;
+    expect(period.spent).toBe(180);        // 100 + 80 (refund still counts as paid)
+    expect(period.returnAmount).toBe(80);  // expected back — parallel figure
+  });
+
   it('recompute is idempotent (re-run yields the same spent)', async () => {
     const userId = uid();
     const budgetId = `b2_${Date.now()}`;

@@ -84,6 +84,13 @@ export function merge_assignment_onto_raw_splits(
       monthlyPeriodId: a.monthly_period_id,
       weeklyPeriodId: a.weekly_period_id,
       biWeeklyPeriodId: a.bi_weekly_period_id,
+      // App-category classification (Simplified-Transaction-Categories): the
+      // user-facing slugs + source. 'user' source preserves a manual override;
+      // secondCategoryId holds the specific chosen category only on an override.
+      overallCategoryId: a.overall_category_id,
+      firstCategoryId: a.first_category_id,
+      secondCategoryId: a.second_category_id,
+      categorySource: a.category_source,
       updatedAt: now,
     };
   });

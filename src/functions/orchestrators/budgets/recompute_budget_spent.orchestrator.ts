@@ -88,6 +88,7 @@ export async function recompute_budget_spent_orchestrator(
         spent: number;
         pending_spent: number;
         remaining: number;
+        return_amount: number;
       }> = [];
       for (const p of affected) {
         const start_ms = p.start_date.toMillis();
@@ -100,7 +101,7 @@ export async function recompute_budget_spent_orchestrator(
           end_ms,
           cadence
         );
-        const { spent, pending_spent } = compute_budget_spent(
+        const { spent, pending_spent, return_amount } = compute_budget_spent(
           budget_id,
           start_ms,
           end_ms,
@@ -113,6 +114,7 @@ export async function recompute_budget_spent_orchestrator(
           spent,
           pending_spent,
           remaining: round2(effective - spent),
+          return_amount,
         });
         affected_period_ids.push(p.id);
       }

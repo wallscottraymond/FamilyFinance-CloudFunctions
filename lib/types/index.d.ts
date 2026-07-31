@@ -232,6 +232,14 @@ export declare enum PaymentType {
     ADVANCE = "advance",// Payment for future periods
     EXTRA_PRINCIPAL = "extra_principal"
 }
+/**
+ * A split's budget-spend treatment (Split-Status-Actions):
+ * - `counted` — normal: contributes its amount to the budget's `spent`.
+ * - `ignored` — excluded from `spent`.
+ * - `refund`  — STILL counted in `spent`, but |amount| also accrues into the
+ *   budget's parallel `returnAmount` (expected returns, planned before completed).
+ */
+export type SpendStatus = 'counted' | 'ignored' | 'refund';
 export interface TransactionSplit {
     splitId: string;
     budgetId: string;
@@ -253,10 +261,15 @@ export interface TransactionSplit {
     plaidDetailedCategory: string;
     internalPrimaryCategory: string | null;
     internalDetailedCategory: string | null;
+    overallCategoryId?: string | null;
+    firstCategoryId?: string | null;
+    secondCategoryId?: string | null;
+    categorySource?: 'plaid' | 'user';
     amount: number;
     description?: string | null;
     isDefault: boolean;
     manualBudgetAssignment?: boolean;
+    spendStatus?: SpendStatus;
     isIgnored?: boolean;
     isRefund?: boolean;
     isTaxDeductible?: boolean;
@@ -296,6 +309,9 @@ export interface Transaction extends BaseDocument {
     name: string;
     merchantName: string | null;
     splits: TransactionSplit[];
+    returnAmount?: number;
+    hasRefundSplits?: boolean;
+    hasIgnoredSplits?: boolean;
     initialPlaidData: {
         plaidAccountId: string;
         plaidMerchantName: string;

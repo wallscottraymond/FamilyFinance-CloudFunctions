@@ -9,10 +9,13 @@
       "second_category": "Dividend Payment",
       "first_category": "Interest Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "interest_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 1
+      "index": 1,
+      "isActive": true
     },
     "INCOME_INTEREST_EARNED": {
       "name": "INCOME_INTEREST_EARNED",
@@ -23,10 +26,13 @@
       "second_category": "Interest Earned",
       "first_category": "Interest Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "interest_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 2
+      "index": 2,
+      "isActive": true
     },
     "INCOME_RETIREMENT_PENSION": {
       "name": "INCOME_RETIREMENT_PENSION",
@@ -37,10 +43,13 @@
       "second_category": "Retirement Pension",
       "first_category": "Interest Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "interest_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 3
+      "index": 3,
+      "isActive": true
     },
     "INCOME_TAX_REFUND": {
       "name": "INCOME_TAX_REFUND",
@@ -51,10 +60,13 @@
       "second_category": "Tax Refund",
       "first_category": "Government Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "government_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 4
+      "index": 4,
+      "isActive": true
     },
     "INCOME_UNEMPLOYMENT": {
       "name": "INCOME_UNEMPLOYMENT",
@@ -65,10 +77,13 @@
       "second_category": "Unemployment Payment",
       "first_category": "Government Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "government_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 5
+      "index": 5,
+      "isActive": true
     },
     "INCOME_WAGES": {
       "name": "INCOME_WAGES",
@@ -76,13 +91,16 @@
       "detailed_plaid_category": "INCOME_WAGES",
       "description": "Income from salaries, gig-economy work, and tips earned",
       "type": "Income",
-      "second_category": "Income",
-      "first_category": "Income",
+      "second_category": "Wages",
+      "first_category": "Wages",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "wages",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 6
+      "index": 6,
+      "isActive": true
     },
     "INCOME_OTHER_INCOME": {
       "name": "INCOME_OTHER_INCOME",
@@ -93,10 +111,13 @@
       "second_category": "Other Income",
       "first_category": "Government Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "government_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 7
+      "index": 7,
+      "isActive": true
     },
     "TRANSFER_IN_CASH_ADVANCES_AND_LOANS": {
       "name": "TRANSFER_IN_CASH_ADVANCES_AND_LOANS",
@@ -107,10 +128,13 @@
       "second_category": "Loans and Cash Advance",
       "first_category": "Loan Income",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "loan_income",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 8
+      "index": 8,
+      "isActive": true
     },
     "TRANSFER_IN_DEPOSIT": {
       "name": "TRANSFER_IN_DEPOSIT",
@@ -121,10 +145,13 @@
       "second_category": "Cash or Check Deposit",
       "first_category": "Bank Deposit",
       "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "bank_deposit",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 9
+      "index": 9,
+      "isActive": true
     },
     "TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS": {
       "name": "TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS",
@@ -135,10 +162,13 @@
       "second_category": "Retirement Transfer",
       "first_category": "Inbound Transfer",
       "overall_category": "Inbound Account Transfer",
+      "overallCategoryId": "inbound_account_transfer",
+      "firstCategoryId": "inbound_transfer",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 10
+      "index": 10,
+      "isActive": true
     },
     "TRANSFER_IN_SAVINGS": {
       "name": "TRANSFER_IN_SAVINGS",
@@ -149,10 +179,13 @@
       "second_category": "Savings Transfer",
       "first_category": "Inbound Transfer",
       "overall_category": "Inbound Account Transfer",
+      "overallCategoryId": "inbound_account_transfer",
+      "firstCategoryId": "inbound_transfer",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 11
+      "index": 11,
+      "isActive": true
     },
     "TRANSFER_IN_ACCOUNT_TRANSFER": {
       "name": "TRANSFER_IN_ACCOUNT_TRANSFER",
@@ -163,10 +196,13 @@
       "second_category": "Account Transfer",
       "first_category": "Inbound Transfer",
       "overall_category": "Inbound Account Transfer",
+      "overallCategoryId": "inbound_account_transfer",
+      "firstCategoryId": "inbound_transfer",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 12
+      "index": 12,
+      "isActive": true
     },
     "TRANSFER_IN_OTHER_TRANSFER_IN": {
       "name": "TRANSFER_IN_OTHER_TRANSFER_IN",
@@ -177,10 +213,13 @@
       "second_category": "Transfer Transaction",
       "first_category": "Inbound Transfer",
       "overall_category": "Inbound Account Transfer",
+      "overallCategoryId": "inbound_account_transfer",
+      "firstCategoryId": "inbound_transfer",
       "visible_by_default": false,
       "budget_selection": false,
       "income_selection": true,
-      "index": 13
+      "index": 13,
+      "isActive": true
     },
     "TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS": {
       "name": "TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS",
@@ -191,10 +230,13 @@
       "second_category": "Investment Transfer",
       "first_category": "Outbound Transfer",
       "overall_category": "Outbound Account Transfer",
+      "overallCategoryId": "outbound_account_transfer",
+      "firstCategoryId": "outbound_transfer",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 14
+      "index": 14,
+      "isActive": true
     },
     "TRANSFER_OUT_SAVINGS": {
       "name": "TRANSFER_OUT_SAVINGS",
@@ -205,10 +247,13 @@
       "second_category": "Savings Transfer",
       "first_category": "Outbound Transfer",
       "overall_category": "Outbound Account Transfer",
+      "overallCategoryId": "outbound_account_transfer",
+      "firstCategoryId": "outbound_transfer",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 15
+      "index": 15,
+      "isActive": true
     },
     "TRANSFER_OUT_WITHDRAWAL": {
       "name": "TRANSFER_OUT_WITHDRAWAL",
@@ -219,10 +264,13 @@
       "second_category": "Cash Withdrawl",
       "first_category": "Outbound Transfer",
       "overall_category": "Outbound Account Transfer",
+      "overallCategoryId": "outbound_account_transfer",
+      "firstCategoryId": "outbound_transfer",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 16
+      "index": 16,
+      "isActive": true
     },
     "TRANSFER_OUT_ACCOUNT_TRANSFER": {
       "name": "TRANSFER_OUT_ACCOUNT_TRANSFER",
@@ -233,10 +281,13 @@
       "second_category": "Account Transfer",
       "first_category": "Outbound Transfer",
       "overall_category": "Outbound Account Transfer",
+      "overallCategoryId": "outbound_account_transfer",
+      "firstCategoryId": "outbound_transfer",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 17
+      "index": 17,
+      "isActive": true
     },
     "TRANSFER_OUT_OTHER_TRANSFER_OUT": {
       "name": "TRANSFER_OUT_OTHER_TRANSFER_OUT",
@@ -247,10 +298,13 @@
       "second_category": "Other Transactions",
       "first_category": "Outbound Transfer",
       "overall_category": "Outbound Account Transfer",
+      "overallCategoryId": "outbound_account_transfer",
+      "firstCategoryId": "outbound_transfer",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 18
+      "index": 18,
+      "isActive": true
     },
     "LOAN_PAYMENTS_CAR_PAYMENT": {
       "name": "LOAN_PAYMENTS_CAR_PAYMENT",
@@ -261,10 +315,13 @@
       "second_category": "Car Payment",
       "first_category": "Loan Payment",
       "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 19
+      "index": 19,
+      "isActive": true
     },
     "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT": {
       "name": "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT",
@@ -275,10 +332,13 @@
       "second_category": "Credit Card Payment",
       "first_category": "Loan Payment",
       "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 20
+      "index": 20,
+      "isActive": true
     },
     "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT": {
       "name": "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT",
@@ -289,10 +349,13 @@
       "second_category": "Loan Payment",
       "first_category": "Loan Payment",
       "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 21
+      "index": 21,
+      "isActive": true
     },
     "LOAN_PAYMENTS_MORTGAGE_PAYMENT": {
       "name": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
@@ -303,10 +366,13 @@
       "second_category": "Mortgage Payment",
       "first_category": "Loan Payment",
       "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 22
+      "index": 22,
+      "isActive": true
     },
     "LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT": {
       "name": "LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT",
@@ -317,10 +383,13 @@
       "second_category": "Student Loan Payment",
       "first_category": "Loan Payment",
       "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 23
+      "index": 23,
+      "isActive": true
     },
     "LOAN_PAYMENTS_OTHER_PAYMENT": {
       "name": "LOAN_PAYMENTS_OTHER_PAYMENT",
@@ -331,10 +400,13 @@
       "second_category": "Debt Payment",
       "first_category": "Loan Payment",
       "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 24
+      "index": 24,
+      "isActive": true
     },
     "BANK_FEES_ATM_FEES": {
       "name": "BANK_FEES_ATM_FEES",
@@ -345,10 +417,13 @@
       "second_category": "ATM Fee",
       "first_category": "Bank Fees",
       "overall_category": "Bank Fees",
+      "overallCategoryId": "bank_fees",
+      "firstCategoryId": "bank_fees",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 25
+      "index": 25,
+      "isActive": true
     },
     "BANK_FEES_FOREIGN_TRANSACTION_FEES": {
       "name": "BANK_FEES_FOREIGN_TRANSACTION_FEES",
@@ -359,10 +434,13 @@
       "second_category": "Foreign Transaction Fee",
       "first_category": "Bank Fees",
       "overall_category": "Bank Fees",
+      "overallCategoryId": "bank_fees",
+      "firstCategoryId": "bank_fees",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 26
+      "index": 26,
+      "isActive": true
     },
     "BANK_FEES_INSUFFICIENT_FUNDS": {
       "name": "BANK_FEES_INSUFFICIENT_FUNDS",
@@ -373,10 +451,13 @@
       "second_category": "Insufficient Funds Fee",
       "first_category": "Bank Fees",
       "overall_category": "Bank Fees",
+      "overallCategoryId": "bank_fees",
+      "firstCategoryId": "bank_fees",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 27
+      "index": 27,
+      "isActive": true
     },
     "BANK_FEES_INTEREST_CHARGE": {
       "name": "BANK_FEES_INTEREST_CHARGE",
@@ -387,10 +468,13 @@
       "second_category": "Interest Fees",
       "first_category": "Bank Fees",
       "overall_category": "Bank Fees",
+      "overallCategoryId": "bank_fees",
+      "firstCategoryId": "bank_fees",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 28
+      "index": 28,
+      "isActive": true
     },
     "BANK_FEES_OVERDRAFT_FEES": {
       "name": "BANK_FEES_OVERDRAFT_FEES",
@@ -401,10 +485,13 @@
       "second_category": "Overdraft Fee",
       "first_category": "Bank Fees",
       "overall_category": "Bank Fees",
+      "overallCategoryId": "bank_fees",
+      "firstCategoryId": "bank_fees",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 29
+      "index": 29,
+      "isActive": true
     },
     "BANK_FEES_OTHER_BANK_FEES": {
       "name": "BANK_FEES_OTHER_BANK_FEES",
@@ -415,10 +502,13 @@
       "second_category": "Bank Fees",
       "first_category": "Bank Fees",
       "overall_category": "Bank Fees",
+      "overallCategoryId": "bank_fees",
+      "firstCategoryId": "bank_fees",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 30
+      "index": 30,
+      "isActive": true
     },
     "ENTERTAINMENT_CASINOS_AND_GAMBLING": {
       "name": "ENTERTAINMENT_CASINOS_AND_GAMBLING",
@@ -427,12 +517,15 @@
       "description": "Gambling, casinos, and sports betting",
       "type": "Outflow",
       "second_category": "Gambling",
-      "first_category": "Entertainment",
+      "first_category": "Gambling",
       "overall_category": "Gambling",
+      "overallCategoryId": "gambling",
+      "firstCategoryId": "gambling",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 31
+      "index": 31,
+      "isActive": true
     },
     "ENTERTAINMENT_MUSIC_AND_AUDIO": {
       "name": "ENTERTAINMENT_MUSIC_AND_AUDIO",
@@ -441,12 +534,15 @@
       "description": "Digital and in-person music purchases, including music streaming services",
       "type": "Outflow",
       "second_category": "Digital Music",
-      "first_category": "Entertainment",
-      "overall_category": "",
+      "first_category": "Digital Music",
+      "overall_category": "Entertainment",
+      "overallCategoryId": "entertainment",
+      "firstCategoryId": "digital_music",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 32
+      "index": 32,
+      "isActive": true
     },
     "ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS": {
       "name": "ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS",
@@ -457,10 +553,13 @@
       "second_category": "Event Tickets",
       "first_category": "Entertainment",
       "overall_category": "Entertainment",
+      "overallCategoryId": "entertainment",
+      "firstCategoryId": "entertainment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 33
+      "index": 33,
+      "isActive": true
     },
     "ENTERTAINMENT_TV_AND_MOVIES": {
       "name": "ENTERTAINMENT_TV_AND_MOVIES",
@@ -471,10 +570,13 @@
       "second_category": "Movies and Entertainment",
       "first_category": "Entertainment",
       "overall_category": "Entertainment",
+      "overallCategoryId": "entertainment",
+      "firstCategoryId": "entertainment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 34
+      "index": 34,
+      "isActive": true
     },
     "ENTERTAINMENT_VIDEO_GAMES": {
       "name": "ENTERTAINMENT_VIDEO_GAMES",
@@ -483,12 +585,15 @@
       "description": "Digital and in-person video game purchases",
       "type": "Outflow",
       "second_category": "Video Games",
-      "first_category": "Entertainment",
+      "first_category": "Video Games",
       "overall_category": "Video Games",
+      "overallCategoryId": "video_games",
+      "firstCategoryId": "video_games",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 35
+      "index": 35,
+      "isActive": true
     },
     "ENTERTAINMENT_OTHER_ENTERTAINMENT": {
       "name": "ENTERTAINMENT_OTHER_ENTERTAINMENT",
@@ -499,10 +604,13 @@
       "second_category": "Night Life",
       "first_category": "Entertainment",
       "overall_category": "Entertainment",
+      "overallCategoryId": "entertainment",
+      "firstCategoryId": "entertainment",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 36
+      "index": 36,
+      "isActive": true
     },
     "FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR": {
       "name": "FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR",
@@ -513,10 +621,13 @@
       "second_category": "Alcohol",
       "first_category": "Alcohol",
       "overall_category": "Alcohol",
+      "overallCategoryId": "alcohol",
+      "firstCategoryId": "alcohol",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 37
+      "index": 37,
+      "isActive": true
     },
     "FOOD_AND_DRINK_COFFEE": {
       "name": "FOOD_AND_DRINK_COFFEE",
@@ -525,12 +636,15 @@
       "description": "Purchases at coffee shops or cafes",
       "type": "Outflow",
       "second_category": "Coffee shops",
-      "first_category": "Food and Drink",
-      "overall_category": "Eating Out",
+      "first_category": "Eating Out",
+      "overall_category": "Food and Drink",
+      "overallCategoryId": "food_and_drink",
+      "firstCategoryId": "eating_out",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 38
+      "index": 38,
+      "isActive": true
     },
     "FOOD_AND_DRINK_FAST_FOOD": {
       "name": "FOOD_AND_DRINK_FAST_FOOD",
@@ -539,12 +653,15 @@
       "description": "Dining expenses for fast food chains",
       "type": "Outflow",
       "second_category": "Fast Food",
-      "first_category": "Food and Drink",
-      "overall_category": "Eating Out",
+      "first_category": "Eating Out",
+      "overall_category": "Food and Drink",
+      "overallCategoryId": "food_and_drink",
+      "firstCategoryId": "eating_out",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 39
+      "index": 39,
+      "isActive": true
     },
     "FOOD_AND_DRINK_GROCERIES": {
       "name": "FOOD_AND_DRINK_GROCERIES",
@@ -555,10 +672,13 @@
       "second_category": "Groceries",
       "first_category": "Groceries",
       "overall_category": "Groceries",
+      "overallCategoryId": "groceries",
+      "firstCategoryId": "groceries",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 40
+      "index": 40,
+      "isActive": true
     },
     "FOOD_AND_DRINK_RESTAURANT": {
       "name": "FOOD_AND_DRINK_RESTAURANT",
@@ -566,13 +686,16 @@
       "detailed_plaid_category": "FOOD_AND_DRINK_RESTAURANT",
       "description": "Dining expenses for restaurants, bars, gastropubs, and diners",
       "type": "Outflow",
-      "second_category": "Eating Out",
-      "first_category": "Food and Drink",
-      "overall_category": "Eating Out",
+      "second_category": "Restaurants",
+      "first_category": "Eating Out",
+      "overall_category": "Food and Drink",
+      "overallCategoryId": "food_and_drink",
+      "firstCategoryId": "eating_out",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 41
+      "index": 41,
+      "isActive": true
     },
     "FOOD_AND_DRINK_VENDING_MACHINES": {
       "name": "FOOD_AND_DRINK_VENDING_MACHINES",
@@ -581,12 +704,15 @@
       "description": "Purchases made at vending machine operators",
       "type": "Outflow",
       "second_category": "Vending Machines",
-      "first_category": "Food and Drink",
-      "overall_category": "Eating Out",
+      "first_category": "Eating Out",
+      "overall_category": "Food and Drink",
+      "overallCategoryId": "food_and_drink",
+      "firstCategoryId": "eating_out",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 42
+      "index": 42,
+      "isActive": true
     },
     "FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK": {
       "name": "FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK",
@@ -595,12 +721,15 @@
       "description": "Other miscellaneous food and drink, including desserts, juice bars, and delis",
       "type": "Outflow",
       "second_category": "Eating Out",
-      "first_category": "Food and Drink",
-      "overall_category": "Eating Out",
+      "first_category": "Eating Out",
+      "overall_category": "Food and Drink",
+      "overallCategoryId": "food_and_drink",
+      "firstCategoryId": "eating_out",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 43
+      "index": 43,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS": {
       "name": "GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS",
@@ -611,10 +740,13 @@
       "second_category": "Books and News",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 44
+      "index": 44,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES": {
       "name": "GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES",
@@ -625,10 +757,13 @@
       "second_category": "Clothing and Accessories",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 45
+      "index": 45,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_CONVENIENCE_STORES": {
       "name": "GENERAL_MERCHANDISE_CONVENIENCE_STORES",
@@ -639,10 +774,13 @@
       "second_category": "Convenience Stores",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 46
+      "index": 46,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_DEPARTMENT_STORES": {
       "name": "GENERAL_MERCHANDISE_DEPARTMENT_STORES",
@@ -653,10 +791,13 @@
       "second_category": "Home Goods",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 47
+      "index": 47,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_DISCOUNT_STORES": {
       "name": "GENERAL_MERCHANDISE_DISCOUNT_STORES",
@@ -667,10 +808,13 @@
       "second_category": "Discount Stores",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 48
+      "index": 48,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_ELECTRONICS": {
       "name": "GENERAL_MERCHANDISE_ELECTRONICS",
@@ -681,10 +825,13 @@
       "second_category": "Electronics",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 49
+      "index": 49,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES": {
       "name": "GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES",
@@ -695,10 +842,13 @@
       "second_category": "Photos and Gifts",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 50
+      "index": 50,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_OFFICE_SUPPLIES": {
       "name": "GENERAL_MERCHANDISE_OFFICE_SUPPLIES",
@@ -709,10 +859,13 @@
       "second_category": "Office Goods",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 51
+      "index": 51,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES": {
       "name": "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES",
@@ -723,10 +876,13 @@
       "second_category": "E-Commerce",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 52
+      "index": 52,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_PET_SUPPLIES": {
       "name": "GENERAL_MERCHANDISE_PET_SUPPLIES",
@@ -737,10 +893,13 @@
       "second_category": "Pet Supplies",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 53
+      "index": 53,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_SPORTING_GOODS": {
       "name": "GENERAL_MERCHANDISE_SPORTING_GOODS",
@@ -751,10 +910,13 @@
       "second_category": "Outdoor Equipment",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 54
+      "index": 54,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_SUPERSTORES": {
       "name": "GENERAL_MERCHANDISE_SUPERSTORES",
@@ -765,10 +927,13 @@
       "second_category": "Superstores",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 55
+      "index": 55,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_TOBACCO_AND_VAPE": {
       "name": "GENERAL_MERCHANDISE_TOBACCO_AND_VAPE",
@@ -776,13 +941,16 @@
       "detailed_plaid_category": "GENERAL_MERCHANDISE_TOBACCO_AND_VAPE",
       "description": "Purchases for tobacco and vaping products",
       "type": "Outflow",
-      "second_category": "Tabacco and Vape",
-      "first_category": "Tabacco and Vape",
+      "second_category": "Tobacco and Vape",
+      "first_category": "Tobacco and Vape",
       "overall_category": "Tobacco and Vape",
+      "overallCategoryId": "tobacco_and_vape",
+      "firstCategoryId": "tobacco_and_vape",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 56
+      "index": 56,
+      "isActive": true
     },
     "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE": {
       "name": "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE",
@@ -793,10 +961,13 @@
       "second_category": "Toys and Hobbies",
       "first_category": "Shopping",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "shopping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 57
+      "index": 57,
+      "isActive": true
     },
     "HOME_IMPROVEMENT_FURNITURE": {
       "name": "HOME_IMPROVEMENT_FURNITURE",
@@ -807,10 +978,13 @@
       "second_category": "Furniture",
       "first_category": "Home Goods",
       "overall_category": "Shopping",
+      "overallCategoryId": "shopping",
+      "firstCategoryId": "home_goods",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 58
+      "index": 58,
+      "isActive": true
     },
     "HOME_IMPROVEMENT_HARDWARE": {
       "name": "HOME_IMPROVEMENT_HARDWARE",
@@ -821,10 +995,13 @@
       "second_category": "Hardware and Materials",
       "first_category": "Home Improvement",
       "overall_category": "Home Improvement",
+      "overallCategoryId": "home_improvement",
+      "firstCategoryId": "home_improvement",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 59
+      "index": 59,
+      "isActive": true
     },
     "HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE": {
       "name": "HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE",
@@ -835,10 +1012,13 @@
       "second_category": "Home Repair",
       "first_category": "Home Improvement",
       "overall_category": "Home Improvement",
+      "overallCategoryId": "home_improvement",
+      "firstCategoryId": "home_improvement",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 60
+      "index": 60,
+      "isActive": true
     },
     "HOME_IMPROVEMENT_SECURITY": {
       "name": "HOME_IMPROVEMENT_SECURITY",
@@ -849,10 +1029,13 @@
       "second_category": "Home Security",
       "first_category": "Home Improvement",
       "overall_category": "Home Improvement",
+      "overallCategoryId": "home_improvement",
+      "firstCategoryId": "home_improvement",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 61
+      "index": 61,
+      "isActive": true
     },
     "HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT": {
       "name": "HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT",
@@ -863,10 +1046,13 @@
       "second_category": "Home Improvement",
       "first_category": "Home Improvement",
       "overall_category": "Home Improvement",
+      "overallCategoryId": "home_improvement",
+      "firstCategoryId": "home_improvement",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 62
+      "index": 62,
+      "isActive": true
     },
     "MEDICAL_DENTAL_CARE": {
       "name": "MEDICAL_DENTAL_CARE",
@@ -877,10 +1063,13 @@
       "second_category": "Dental",
       "first_category": "Dental",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "dental",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 63
+      "index": 63,
+      "isActive": true
     },
     "MEDICAL_EYE_CARE": {
       "name": "MEDICAL_EYE_CARE",
@@ -891,10 +1080,13 @@
       "second_category": "Medical - Eye",
       "first_category": "Medical",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "medical",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 64
+      "index": 64,
+      "isActive": true
     },
     "MEDICAL_NURSING_CARE": {
       "name": "MEDICAL_NURSING_CARE",
@@ -905,10 +1097,13 @@
       "second_category": "Nursing Care",
       "first_category": "Medical",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "medical",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 65
+      "index": 65,
+      "isActive": true
     },
     "MEDICAL_PHARMACIES_AND_SUPPLEMENTS": {
       "name": "MEDICAL_PHARMACIES_AND_SUPPLEMENTS",
@@ -919,10 +1114,13 @@
       "second_category": "Pharmacy",
       "first_category": "Medical",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "medical",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 66
+      "index": 66,
+      "isActive": true
     },
     "MEDICAL_PRIMARY_CARE": {
       "name": "MEDICAL_PRIMARY_CARE",
@@ -930,13 +1128,16 @@
       "detailed_plaid_category": "MEDICAL_PRIMARY_CARE",
       "description": "Doctors and physicians",
       "type": "Outflow",
-      "second_category": "Medical",
+      "second_category": "Primary Care",
       "first_category": "Medical",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "medical",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 67
+      "index": 67,
+      "isActive": true
     },
     "MEDICAL_VETERINARY_SERVICES": {
       "name": "MEDICAL_VETERINARY_SERVICES",
@@ -947,10 +1148,13 @@
       "second_category": "Veterinary",
       "first_category": "Medical",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "medical",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 68
+      "index": 68,
+      "isActive": true
     },
     "MEDICAL_OTHER_MEDICAL": {
       "name": "MEDICAL_OTHER_MEDICAL",
@@ -961,10 +1165,13 @@
       "second_category": "Medical",
       "first_category": "Medical",
       "overall_category": "Medical",
+      "overallCategoryId": "medical",
+      "firstCategoryId": "medical",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 69
+      "index": 69,
+      "isActive": true
     },
     "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS": {
       "name": "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS",
@@ -975,10 +1182,13 @@
       "second_category": "Fitness",
       "first_category": "Personal Care",
       "overall_category": "Personal Care",
+      "overallCategoryId": "personal_care",
+      "firstCategoryId": "personal_care",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 70
+      "index": 70,
+      "isActive": true
     },
     "PERSONAL_CARE_HAIR_AND_BEAUTY": {
       "name": "PERSONAL_CARE_HAIR_AND_BEAUTY",
@@ -989,10 +1199,13 @@
       "second_category": "Hair and Beauty",
       "first_category": "Personal Care",
       "overall_category": "Personal Care",
+      "overallCategoryId": "personal_care",
+      "firstCategoryId": "personal_care",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 71
+      "index": 71,
+      "isActive": true
     },
     "PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING": {
       "name": "PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING",
@@ -1003,10 +1216,13 @@
       "second_category": "Laundry and Dry Cleaning",
       "first_category": "Personal Care",
       "overall_category": "Personal Care",
+      "overallCategoryId": "personal_care",
+      "firstCategoryId": "personal_care",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 72
+      "index": 72,
+      "isActive": true
     },
     "PERSONAL_CARE_OTHER_PERSONAL_CARE": {
       "name": "PERSONAL_CARE_OTHER_PERSONAL_CARE",
@@ -1017,10 +1233,13 @@
       "second_category": "Personal Care",
       "first_category": "Personal Care",
       "overall_category": "Personal Care",
+      "overallCategoryId": "personal_care",
+      "firstCategoryId": "personal_care",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 73
+      "index": 73,
+      "isActive": true
     },
     "GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING": {
       "name": "GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING",
@@ -1031,10 +1250,13 @@
       "second_category": "Financial Services",
       "first_category": "Financial Services",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "financial_services",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 74
+      "index": 74,
+      "isActive": true
     },
     "GENERAL_SERVICES_AUTOMOTIVE": {
       "name": "GENERAL_SERVICES_AUTOMOTIVE",
@@ -1045,10 +1267,13 @@
       "second_category": "Automotive",
       "first_category": "Car Services",
       "overall_category": "Automotive",
+      "overallCategoryId": "automotive",
+      "firstCategoryId": "car_services",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 75
+      "index": 75,
+      "isActive": true
     },
     "GENERAL_SERVICES_CHILDCARE": {
       "name": "GENERAL_SERVICES_CHILDCARE",
@@ -1059,10 +1284,13 @@
       "second_category": "Childcare",
       "first_category": "Childcare",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "childcare",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 76
+      "index": 76,
+      "isActive": true
     },
     "GENERAL_SERVICES_CONSULTING_AND_LEGAL": {
       "name": "GENERAL_SERVICES_CONSULTING_AND_LEGAL",
@@ -1073,10 +1301,13 @@
       "second_category": "Legal Services",
       "first_category": "Legal Services",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "legal_services",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 77
+      "index": 77,
+      "isActive": true
     },
     "GENERAL_SERVICES_EDUCATION": {
       "name": "GENERAL_SERVICES_EDUCATION",
@@ -1087,10 +1318,13 @@
       "second_category": "Tuition",
       "first_category": "Academic Services",
       "overall_category": "Academic Services",
+      "overallCategoryId": "academic_services",
+      "firstCategoryId": "academic_services",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 78
+      "index": 78,
+      "isActive": true
     },
     "GENERAL_SERVICES_INSURANCE": {
       "name": "GENERAL_SERVICES_INSURANCE",
@@ -1101,10 +1335,13 @@
       "second_category": "Insurance",
       "first_category": "Insurance",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "insurance",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 79
+      "index": 79,
+      "isActive": true
     },
     "GENERAL_SERVICES_POSTAGE_AND_SHIPPING": {
       "name": "GENERAL_SERVICES_POSTAGE_AND_SHIPPING",
@@ -1115,10 +1352,13 @@
       "second_category": "Postage and Shipping",
       "first_category": "Postage and Shipping",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "postage_and_shipping",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 80
+      "index": 80,
+      "isActive": true
     },
     "GENERAL_SERVICES_STORAGE": {
       "name": "GENERAL_SERVICES_STORAGE",
@@ -1129,10 +1369,13 @@
       "second_category": "Storage Services",
       "first_category": "Storage Services",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "storage_services",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 81
+      "index": 81,
+      "isActive": true
     },
     "GENERAL_SERVICES_OTHER_GENERAL_SERVICES": {
       "name": "GENERAL_SERVICES_OTHER_GENERAL_SERVICES",
@@ -1143,10 +1386,13 @@
       "second_category": "Services",
       "first_category": "Other Services",
       "overall_category": "Services",
+      "overallCategoryId": "services",
+      "firstCategoryId": "other_services",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 82
+      "index": 82,
+      "isActive": true
     },
     "GOVERNMENT_AND_NON_PROFIT_DONATIONS": {
       "name": "GOVERNMENT_AND_NON_PROFIT_DONATIONS",
@@ -1157,10 +1403,13 @@
       "second_category": "Charitable Donation",
       "first_category": "Non-Profit",
       "overall_category": "Charitable Giving",
+      "overallCategoryId": "charitable_giving",
+      "firstCategoryId": "non_profit",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 83
+      "index": 83,
+      "isActive": true
     },
     "GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES": {
       "name": "GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES",
@@ -1170,11 +1419,14 @@
       "type": "Outflow",
       "second_category": "Government Identification",
       "first_category": "Government",
-      "overall_category": "Government Paymentss",
+      "overall_category": "Government Payments",
+      "overallCategoryId": "government_payments",
+      "firstCategoryId": "government",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 84
+      "index": 84,
+      "isActive": true
     },
     "GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT": {
       "name": "GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT",
@@ -1184,11 +1436,14 @@
       "type": "Outflow",
       "second_category": "Taxes",
       "first_category": "Government",
-      "overall_category": "Government Paymentss",
+      "overall_category": "Government Payments",
+      "overallCategoryId": "government_payments",
+      "firstCategoryId": "government",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 85
+      "index": 85,
+      "isActive": true
     },
     "GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT": {
       "name": "GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT",
@@ -1198,11 +1453,14 @@
       "type": "Outflow",
       "second_category": "Government",
       "first_category": "Government",
-      "overall_category": "Government Paymentss",
+      "overall_category": "Government Payments",
+      "overallCategoryId": "government_payments",
+      "firstCategoryId": "government",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 86
+      "index": 86,
+      "isActive": true
     },
     "TRANSPORTATION_BIKES_AND_SCOOTERS": {
       "name": "TRANSPORTATION_BIKES_AND_SCOOTERS",
@@ -1213,10 +1471,13 @@
       "second_category": "Bike and Scooter Rentals",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 87
+      "index": 87,
+      "isActive": true
     },
     "TRANSPORTATION_GAS": {
       "name": "TRANSPORTATION_GAS",
@@ -1227,10 +1488,13 @@
       "second_category": "Gas",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 88
+      "index": 88,
+      "isActive": true
     },
     "TRANSPORTATION_PARKING": {
       "name": "TRANSPORTATION_PARKING",
@@ -1241,10 +1505,13 @@
       "second_category": "Parking Payment",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 89
+      "index": 89,
+      "isActive": true
     },
     "TRANSPORTATION_PUBLIC_TRANSIT": {
       "name": "TRANSPORTATION_PUBLIC_TRANSIT",
@@ -1255,10 +1522,13 @@
       "second_category": "Public Transit",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 90
+      "index": 90,
+      "isActive": true
     },
     "TRANSPORTATION_TAXIS_AND_RIDE_SHARES": {
       "name": "TRANSPORTATION_TAXIS_AND_RIDE_SHARES",
@@ -1269,10 +1539,13 @@
       "second_category": "Taxis and Rideshares",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 91
+      "index": 91,
+      "isActive": true
     },
     "TRANSPORTATION_TOLLS": {
       "name": "TRANSPORTATION_TOLLS",
@@ -1283,10 +1556,13 @@
       "second_category": "Road Tolls",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 92
+      "index": 92,
+      "isActive": true
     },
     "TRANSPORTATION_OTHER_TRANSPORTATION": {
       "name": "TRANSPORTATION_OTHER_TRANSPORTATION",
@@ -1297,10 +1573,13 @@
       "second_category": "Other Transportation Costs",
       "first_category": "Transportation",
       "overall_category": "Transportation",
+      "overallCategoryId": "transportation",
+      "firstCategoryId": "transportation",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 93
+      "index": 93,
+      "isActive": true
     },
     "TRAVEL_FLIGHTS": {
       "name": "TRAVEL_FLIGHTS",
@@ -1311,10 +1590,13 @@
       "second_category": "Airlines",
       "first_category": "Travel",
       "overall_category": "Travel",
+      "overallCategoryId": "travel",
+      "firstCategoryId": "travel",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 94
+      "index": 94,
+      "isActive": true
     },
     "TRAVEL_LODGING": {
       "name": "TRAVEL_LODGING",
@@ -1325,10 +1607,13 @@
       "second_category": "Hotels",
       "first_category": "Travel",
       "overall_category": "Travel",
+      "overallCategoryId": "travel",
+      "firstCategoryId": "travel",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 95
+      "index": 95,
+      "isActive": true
     },
     "TRAVEL_RENTAL_CARS": {
       "name": "TRAVEL_RENTAL_CARS",
@@ -1339,10 +1624,13 @@
       "second_category": "Rental Cars",
       "first_category": "Travel",
       "overall_category": "Travel",
+      "overallCategoryId": "travel",
+      "firstCategoryId": "travel",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 96
+      "index": 96,
+      "isActive": true
     },
     "TRAVEL_OTHER_TRAVEL": {
       "name": "TRAVEL_OTHER_TRAVEL",
@@ -1353,10 +1641,13 @@
       "second_category": "Other Travel",
       "first_category": "Travel",
       "overall_category": "Travel",
+      "overallCategoryId": "travel",
+      "firstCategoryId": "travel",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 97
+      "index": 97,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY": {
       "name": "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY",
@@ -1367,10 +1658,13 @@
       "second_category": "Gas and Electricity",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 98
+      "index": 98,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_INTERNET_AND_CABLE": {
       "name": "RENT_AND_UTILITIES_INTERNET_AND_CABLE",
@@ -1381,10 +1675,13 @@
       "second_category": "Internet and Cable",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 99
+      "index": 99,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_RENT": {
       "name": "RENT_AND_UTILITIES_RENT",
@@ -1395,10 +1692,13 @@
       "second_category": "Rent",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 100
+      "index": 100,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT": {
       "name": "RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT",
@@ -1409,10 +1709,13 @@
       "second_category": "Sewage and Garbage",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 101
+      "index": 101,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_TELEPHONE": {
       "name": "RENT_AND_UTILITIES_TELEPHONE",
@@ -1423,10 +1726,13 @@
       "second_category": "Cell Phone",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 102
+      "index": 102,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_WATER": {
       "name": "RENT_AND_UTILITIES_WATER",
@@ -1437,10 +1743,13 @@
       "second_category": "Water Bill",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 103
+      "index": 103,
+      "isActive": true
     },
     "RENT_AND_UTILITIES_OTHER_UTILITIES": {
       "name": "RENT_AND_UTILITIES_OTHER_UTILITIES",
@@ -1451,10 +1760,132 @@
       "second_category": "Other Bills",
       "first_category": "Utilities",
       "overall_category": "Rent and Utilities",
+      "overallCategoryId": "rent_and_utilities",
+      "firstCategoryId": "utilities",
       "visible_by_default": true,
       "budget_selection": true,
       "income_selection": false,
-      "index": 104
+      "index": 104,
+      "isActive": true
+    },
+    "OTHER_OTHER": {
+      "name": "OTHER_OTHER",
+      "primary_plaid_category": "OTHER",
+      "detailed_plaid_category": "OTHER_OTHER",
+      "description": "Uncategorized / other transactions",
+      "type": "Outflow",
+      "second_category": "Uncategorized",
+      "first_category": "Other",
+      "overall_category": "Other",
+      "overallCategoryId": "other",
+      "firstCategoryId": "other",
+      "visible_by_default": true,
+      "budget_selection": true,
+      "income_selection": false,
+      "index": 200,
+      "isActive": true
+    },
+    "INCOME_SALARY": {
+      "name": "INCOME_SALARY",
+      "primary_plaid_category": "INCOME",
+      "detailed_plaid_category": "INCOME_SALARY",
+      "description": "Salary income",
+      "type": "Income",
+      "second_category": "Salary",
+      "first_category": "Wages",
+      "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "wages",
+      "visible_by_default": true,
+      "budget_selection": false,
+      "income_selection": true,
+      "index": 201,
+      "isActive": true
+    },
+    "INCOME_OTHER": {
+      "name": "INCOME_OTHER",
+      "primary_plaid_category": "INCOME",
+      "detailed_plaid_category": "INCOME_OTHER",
+      "description": "Other income",
+      "type": "Income",
+      "second_category": "Other Income",
+      "first_category": "Other Income",
+      "overall_category": "Income",
+      "overallCategoryId": "income",
+      "firstCategoryId": "other_income",
+      "visible_by_default": true,
+      "budget_selection": false,
+      "income_selection": true,
+      "index": 202,
+      "isActive": true
+    },
+    "TRANSFER_OUT_TRANSFER_OUT_FROM_APPS": {
+      "name": "TRANSFER_OUT_TRANSFER_OUT_FROM_APPS",
+      "primary_plaid_category": "TRANSFER_OUT",
+      "detailed_plaid_category": "TRANSFER_OUT_TRANSFER_OUT_FROM_APPS",
+      "description": "Outbound transfer via payment apps",
+      "type": "Outflow",
+      "second_category": "App Transfer",
+      "first_category": "Outbound Transfer",
+      "overall_category": "Outbound Account Transfer",
+      "overallCategoryId": "outbound_account_transfer",
+      "firstCategoryId": "outbound_transfer",
+      "visible_by_default": true,
+      "budget_selection": false,
+      "income_selection": false,
+      "index": 203,
+      "isActive": true
+    },
+    "TRANSFER_IN_TRANSFER_IN_FROM_APPS": {
+      "name": "TRANSFER_IN_TRANSFER_IN_FROM_APPS",
+      "primary_plaid_category": "TRANSFER_IN",
+      "detailed_plaid_category": "TRANSFER_IN_TRANSFER_IN_FROM_APPS",
+      "description": "Inbound transfer via payment apps",
+      "type": "Income",
+      "second_category": "App Transfer",
+      "first_category": "Inbound Transfer",
+      "overall_category": "Inbound Account Transfer",
+      "overallCategoryId": "inbound_account_transfer",
+      "firstCategoryId": "inbound_transfer",
+      "visible_by_default": true,
+      "budget_selection": false,
+      "income_selection": false,
+      "index": 204,
+      "isActive": true
+    },
+    "LOAN_PAYMENTS_BNPL": {
+      "name": "LOAN_PAYMENTS_BNPL",
+      "primary_plaid_category": "LOAN_PAYMENTS",
+      "detailed_plaid_category": "LOAN_PAYMENTS_BNPL",
+      "description": "Buy Now Pay Later installment payments",
+      "type": "Outflow",
+      "second_category": "Buy Now Pay Later",
+      "first_category": "Loan Payment",
+      "overall_category": "Loan Payment",
+      "overallCategoryId": "loan_payment",
+      "firstCategoryId": "loan_payment",
+      "visible_by_default": true,
+      "budget_selection": true,
+      "income_selection": false,
+      "index": 205,
+      "isActive": true
+    },
+    "OTHER_EXPENSE": {
+      "name": "OTHER_EXPENSE",
+      "primary_plaid_category": "OTHER",
+      "detailed_plaid_category": "OTHER_EXPENSE",
+      "description": "Default bucket for transactions with no/unknown category",
+      "type": "Outflow",
+      "second_category": "Uncategorized",
+      "first_category": "Other",
+      "overall_category": "Other",
+      "overallCategoryId": "other",
+      "firstCategoryId": "other",
+      "visible_by_default": true,
+      "budget_selection": true,
+      "income_selection": false,
+      "index": 206,
+      "isActive": true
     }
   }
 }

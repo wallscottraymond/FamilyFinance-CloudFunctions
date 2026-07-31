@@ -74,7 +74,15 @@ export async function resolve_spend_splits(
         txn_date_ms,
         is_pending,
         is_transfer,
-        is_ignored: s.isIgnored === true,
+        // Derive on read (no migration): explicit spendStatus wins, else fall back
+        // to the legacy isIgnored/isRefund booleans, else 'counted'.
+        spend_status:
+          (s.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
+          (s.isIgnored === true
+            ? "ignored"
+            : s.isRefund === true
+              ? "refund"
+              : "counted"),
         outflow_id: (s.outflowId as string | null) ?? null,
         inflow_id: (s.inflowId as string | null) ?? null,
       });

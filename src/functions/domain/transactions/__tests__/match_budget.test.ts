@@ -153,4 +153,55 @@ describe("match_budget", () => {
       match_budget(split, JUN_15, [budget()], EE)
     );
   });
+
+  // --- Phase 4b: slug-level matching (overall/first) ---
+
+  it("matches a budget that stores the split's firstCategoryId slug", () => {
+    const slugSplit = {
+      internal_match_category: null,
+      plaid_match_category: "FOOD_AND_DRINK_GROCERIES",
+      first_category_id: "groceries",
+      overall_category_id: "groceries",
+    };
+    const b = budget({ id: "b_slug", category_ids: ["groceries"] });
+    const r = match_budget(slugSplit, JUN_15, [b], EE);
+    expect(r.budget_id).toBe("b_slug");
+    expect(r.matched_category).toBe("groceries");
+  });
+
+  it("matches a budget storing the overallCategoryId (broad) — auto-includes the detailed", () => {
+    const slugSplit = {
+      internal_match_category: null,
+      plaid_match_category: "FOOD_AND_DRINK_COFFEE",
+      first_category_id: "eating_out",
+      overall_category_id: "food_and_drink",
+    };
+    const broad = budget({ id: "b_food", category_ids: ["food_and_drink"] });
+    expect(match_budget(slugSplit, JUN_15, [broad], EE).budget_id).toBe("b_food");
+  });
+
+  it("prefers the MORE SPECIFIC budget when both a specific + broad budget claim the split", () => {
+    const slugSplit = {
+      internal_match_category: null,
+      plaid_match_category: "FOOD_AND_DRINK_COFFEE",
+      first_category_id: "eating_out",
+      overall_category_id: "food_and_drink",
+    };
+    const broad = budget({ id: "b_food", category_ids: ["food_and_drink"] });
+    const specific = budget({ id: "b_dining", category_ids: ["eating_out"] });
+    const r = match_budget(slugSplit, JUN_15, [broad, specific], EE);
+    expect(r.budget_id).toBe("b_dining"); // first-level beats overall-level
+    expect(r.tie).toBe(true); // both claimed it → drift flagged
+  });
+
+  it("legacy detailed-based budgets still match (back-compat)", () => {
+    const slugSplit = {
+      internal_match_category: null,
+      plaid_match_category: "FOOD_AND_DRINK_GROCERIES",
+      first_category_id: "groceries",
+      overall_category_id: "groceries",
+    };
+    const legacy = budget({ id: "b_legacy", category_ids: ["FOOD_AND_DRINK_GROCERIES"] });
+    expect(match_budget(slugSplit, JUN_15, [legacy], EE).budget_id).toBe("b_legacy");
+  });
 });

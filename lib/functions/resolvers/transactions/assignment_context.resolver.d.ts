@@ -38,6 +38,11 @@ export interface SharedAssignmentContext {
     /** Everything Else budget id PER LENS (each period cadence has its own EE). */
     everything_else_budget_ids: Record<PeriodLens, string | null>;
     category_rules: CategoryRule[];
+    /** plaidDetailed (= category doc id) → the two app-category slugs. */
+    category_slugs_by_plaid: Record<string, {
+        overall_category_id: string | null;
+        first_category_id: string | null;
+    }>;
 }
 /**
  * Resolve the transaction-independent shared context for a user (budgets +

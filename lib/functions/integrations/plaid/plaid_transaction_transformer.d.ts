@@ -88,16 +88,4 @@ export declare function get_changed_fields(plaid_txn: PlaidTransaction, existing
     is_pending: boolean;
     plaid_primary_category: string;
 }): Array<"amount" | "date" | "pending" | "category">;
-/**
- * Maps Plaid category to internal category.
- *
- * PURE FUNCTION.
- *
- * This provides basic category mapping. The full category matching
- * is done by the existing matchCategoriesToTransactions utility.
- */
-export declare function map_plaid_category_to_internal(plaid_primary: string, plaid_detailed: string): {
-    primary: string | null;
-    detailed: string | null;
-};
 //# sourceMappingURL=plaid_transaction_transformer.d.ts.map

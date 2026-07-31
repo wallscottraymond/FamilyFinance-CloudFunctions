@@ -8,6 +8,7 @@
  */
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { defineSecret } from "firebase-functions/params";
 import {
   get_pending_jobs,
   claim_job,
@@ -15,6 +16,16 @@ import {
   mark_job_failed,
   Job,
 } from "../../infrastructure/job_queue";
+import {
+  purge_user_data_orchestrator,
+  PurgeUserDataInput,
+} from "../../orchestrators/users/purge_user_data.orchestrator";
+
+// Bound because the purge_user_data job revokes Plaid access tokens
+// (decrypt + /item/remove) from inside this job runner.
+const PLAID_CLIENT_ID = defineSecret("PLAID_CLIENT_ID");
+const PLAID_SECRET = defineSecret("PLAID_SECRET");
+const TOKEN_ENCRYPTION_KEY = defineSecret("TOKEN_ENCRYPTION_KEY");
 import {
   create_trace_context,
   create_span,
@@ -208,6 +219,11 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
       payload as AssignRecurringTransactionsInput
     );
   },
+
+  // Full, permanent user erase (revokes Plaid tokens + hard-deletes all data).
+  purge_user_data: async (ctx, payload) => {
+    await purge_user_data_orchestrator(ctx, payload as PurgeUserDataInput);
+  },
 };
 
 /**
@@ -221,6 +237,7 @@ export const process_job_queue = onSchedule(
     schedule: "every 1 minutes",
     timeoutSeconds: 540, // 9 minutes
     memory: "512MiB",
+    secrets: [PLAID_CLIENT_ID, PLAID_SECRET, TOKEN_ENCRYPTION_KEY],
   },
   async () => {
     const ctx = create_trace_context(false);

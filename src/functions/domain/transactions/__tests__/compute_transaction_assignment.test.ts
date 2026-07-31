@@ -39,6 +39,9 @@ function ctx(over: Partial<AssignmentContext> = {}): AssignmentContext {
     real_budgets: [groceries],
     everything_else_budget_ids: { monthly: EE, weekly: EE, bi_monthly: EE },
     category_rules: [],
+    category_slugs_by_plaid: {
+      FOOD_AND_DRINK: { overall_category_id: "food_and_drink", first_category_id: "eating_out" },
+    },
     source_periods: periods,
     recurring_by_split: {},
     ...over,
@@ -324,9 +327,100 @@ describe("compute_transaction_assignment", () => {
       monthly_period_id: "2026M06",
       weekly_period_id: "2026W24",
       bi_weekly_period_id: null,
+      // Also pre-set the app-category classification the engine would compute
+      // (FOOD_AND_DRINK → food_and_drink / eating_out) so nothing drifts.
+      overall_category_id: "food_and_drink",
+      first_category_id: "eating_out",
+      category_source: "plaid",
     });
     const r = compute_transaction_assignment([settled], ctx());
     expect(r.changed).toBe(false);
+  });
+
+  it("classifies the split into overall/first slugs from the resolved Plaid detailed", () => {
+    const r = compute_transaction_assignment([split()], ctx());
+    const s = r.splits[0];
+    expect(s.overall_category_id).toBe("food_and_drink");
+    expect(s.first_category_id).toBe("eating_out");
+    // Plaid splits do NOT persist a secondary (derived from the detailed at read time).
+    expect(s.second_category_id).toBeNull();
+    expect(s.category_source).toBe("plaid");
+  });
+
+  it("preserves a user category override (does not reclassify)", () => {
+    const overridden = split({
+      overall_category_id: "groceries",
+      first_category_id: "groceries",
+      second_category_id: "GROCERIES_FROZEN",
+      category_source: "user",
+    });
+    const s = compute_transaction_assignment([overridden], ctx()).splits[0];
+    expect(s.overall_category_id).toBe("groceries");
+    expect(s.first_category_id).toBe("groceries");
+    expect(s.second_category_id).toBe("GROCERIES_FROZEN");
+    expect(s.category_source).toBe("user");
+  });
+
+  it("a SECOND-level override retargets budget matching to the chosen detailed", () => {
+    // A budget keyed by the specific detailed the user picked (not the split's
+    // original FOOD_AND_DRINK) claims the split via the override's second_category_id.
+    const electronicsBudget: BudgetForMatch = {
+      id: "b_electronics",
+      category_ids: ["SHOPPING_ELECTRONICS"],
+      start_ms: Date.UTC(2026, 0, 1),
+      end_ms: null,
+      is_ongoing: true,
+      cadence: "monthly",
+    };
+    const overridden = split({
+      overall_category_id: "shopping",
+      first_category_id: "electronics",
+      second_category_id: "SHOPPING_ELECTRONICS",
+      category_source: "user",
+    });
+    const s = compute_transaction_assignment(
+      [overridden],
+      ctx({ real_budgets: [groceries, electronicsBudget] })
+    ).splits[0];
+    expect(s.monthly_budget_id).toBe("b_electronics");
+    expect(s.second_category_id).toBe("SHOPPING_ELECTRONICS");
+  });
+
+  it("a FIRST-only override (null second) matches only by first/overall slug", () => {
+    // Budget keyed by the FIRST slug claims the split; the original Plaid detailed
+    // must NOT leak through as an effective detailed.
+    const firstSlugBudget: BudgetForMatch = {
+      id: "b_first",
+      category_ids: ["electronics"], // firstCategoryId slug
+      start_ms: Date.UTC(2026, 0, 1),
+      end_ms: null,
+      is_ongoing: true,
+      cadence: "monthly",
+    };
+    const overridden = split({
+      overall_category_id: "shopping",
+      first_category_id: "electronics",
+      second_category_id: null,
+      category_source: "user",
+    });
+    const s = compute_transaction_assignment(
+      [overridden],
+      ctx({ real_budgets: [groceries, firstSlugBudget] })
+    ).splits[0];
+    // The original FOOD_AND_DRINK detailed no longer matches groceries; the first
+    // slug wins instead.
+    expect(s.monthly_budget_id).toBe("b_first");
+    expect(s.second_category_id).toBeNull();
+  });
+
+  it("null slugs when the Plaid detailed is unmapped", () => {
+    const s = compute_transaction_assignment(
+      [split({ plaid_match_category: "TRAVEL" })],
+      ctx()
+    ).splits[0];
+    expect(s.overall_category_id).toBeNull();
+    expect(s.first_category_id).toBeNull();
+    expect(s.category_source).toBe("plaid");
   });
 
   it("flags any_unassigned when there is no Everything Else budget", () => {

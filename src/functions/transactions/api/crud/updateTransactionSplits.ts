@@ -155,6 +155,23 @@ export const updateTransactionSplits = onCall<
       };
     });
 
+    // Split-Status-Actions: denormalize expected-returns aggregates from the final
+    // splits (status derived from spendStatus, falling back to legacy booleans).
+    const deriveStatus = (s: any): string =>
+      (typeof s.spendStatus === "string" && s.spendStatus) ||
+      (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted");
+    updateData.returnAmount = updateData.splits.reduce(
+      (sum: number, s: any) =>
+        sum + (deriveStatus(s) === "refund" ? Math.abs(s.amount || 0) : 0),
+      0
+    );
+    updateData.hasRefundSplits = updateData.splits.some(
+      (s: any) => deriveStatus(s) === "refund"
+    );
+    updateData.hasIgnoredSplits = updateData.splits.some(
+      (s: any) => deriveStatus(s) === "ignored"
+    );
+
     console.log(`[updateTransactionSplits] Splits assigned - budgetIds: ${updateData.splits.map((s: any) => s.budgetId).join(', ')}`);
 
     // Update transaction in Firestore (using Admin SDK - bypasses security rules)

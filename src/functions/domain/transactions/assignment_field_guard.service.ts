@@ -94,8 +94,10 @@ const SPEND_TXN_FIELDS = [
   "isActive",
 ] as const;
 
-/** Per-split fields that affect computed SPEND (not assignment). */
-const SPEND_SPLIT_FIELDS = ["amount", "isIgnored", "budgetId"] as const;
+/** Per-split fields that affect computed SPEND (not assignment). `spendStatus`
+ *  covers ignore + refund (counted↔refund doesn't move `isIgnored`, so it must be
+ *  projected here or a refund toggle wouldn't trigger a recompute). */
+const SPEND_SPLIT_FIELDS = ["amount", "isIgnored", "spendStatus", "budgetId"] as const;
 
 /** Projection of the spend-affecting split fields, keyed + sorted by splitId. */
 function project_spend_splits(doc: Record<string, unknown>): string {

@@ -21,6 +21,12 @@ export interface SplitForBudgetMatch {
     internal_match_category: string | null;
     /** Plaid-derived category. */
     plaid_match_category: string | null;
+    /** App-category slugs (Simplified-Transaction-Categories). A budget may claim a
+     *  split by its `firstCategoryId` or `overallCategoryId` slug — not just the raw
+     *  Plaid detailed — so slug-based budgets auto-include new detaileds. The MOST
+     *  SPECIFIC match wins: detailed → first → overall. */
+    overall_category_id?: string | null;
+    first_category_id?: string | null;
 }
 /** The three period lenses a budget (and its assignment) can belong to. */
 export type PeriodLens = "monthly" | "weekly" | "bi_monthly";

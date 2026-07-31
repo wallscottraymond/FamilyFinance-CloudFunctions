@@ -349,24 +349,3 @@ function create_default_split(
     rules: [],
   };
 }
-
-/**
- * Maps Plaid category to internal category.
- *
- * PURE FUNCTION.
- *
- * This provides basic category mapping. The full category matching
- * is done by the existing matchCategoriesToTransactions utility.
- */
-export function map_plaid_category_to_internal(
-  plaid_primary: string,
-  plaid_detailed: string
-): { primary: string | null; detailed: string | null } {
-  // Basic mapping - returns null to let existing category matcher handle it
-  // This is a passthrough as the existing matchCategoriesToTransactions
-  // utility does sophisticated merchant/keyword matching
-  return {
-    primary: null,
-    detailed: null,
-  };
-}

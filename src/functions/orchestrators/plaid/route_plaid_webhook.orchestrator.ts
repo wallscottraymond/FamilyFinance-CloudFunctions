@@ -19,6 +19,7 @@ import { handle_item_error_orchestrator } from "./handle_item_error.orchestrator
 import { handle_login_repaired_orchestrator } from "./handle_login_repaired.orchestrator";
 import { resolve_webhook_transaction_sync_dependencies } from "../../resolvers/plaid";
 import { PlaidWebhookType, PlaidWebhookCode } from "../../../types";
+import { is_user_purging } from "../../infrastructure/purge_guard";
 
 /** Webhook body fields used by the item-status handlers. */
 export interface ItemStatusWebhookBody {
@@ -146,6 +147,11 @@ export async function route_plaid_webhook_orchestrator(
         return { processed: false, message: "Item not found" };
       }
 
+      // Purge guard — don't recreate data for a user being erased.
+      if (await is_user_purging(deps.plaid_item.user_id)) {
+        return { processed: false, message: "User account being deleted" };
+      }
+
       const result = await sync_transactions_orchestrator({
         trace_id,
         span_id,
@@ -186,6 +192,10 @@ export async function route_plaid_webhook_orchestrator(
         `[${trace_id}] RECURRING_TRANSACTIONS: item ${plaid_item_id} not found`
       );
       return { processed: false, message: "Item not found" };
+    }
+    // Purge guard — don't recreate data for a user being erased.
+    if (await is_user_purging(deps.plaid_item.user_id)) {
+      return { processed: false, message: "User account being deleted" };
     }
     const result = await sync_recurring_orchestrator({
       trace_id,

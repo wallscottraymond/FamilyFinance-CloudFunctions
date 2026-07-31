@@ -60,6 +60,11 @@ export interface SharedAssignmentContext {
   /** Everything Else budget id PER LENS (each period cadence has its own EE). */
   everything_else_budget_ids: Record<PeriodLens, string | null>;
   category_rules: CategoryRule[];
+  /** plaidDetailed (= category doc id) → the two app-category slugs. */
+  category_slugs_by_plaid: Record<
+    string,
+    { overall_category_id: string | null; first_category_id: string | null }
+  >;
 }
 
 /**
@@ -119,11 +124,26 @@ export async function resolve_shared_assignment_context(
     keywords: (c.keywords as string[]) ?? [],
   }));
 
+  // App-category slug lookup: the category DOC ID is the Plaid detailed, so this
+  // maps a split's resolved Plaid detailed → its two user-facing category slugs
+  // (Simplified-Transaction-Categories). Built once per user, reused per txn.
+  const category_slugs_by_plaid: Record<
+    string,
+    { overall_category_id: string | null; first_category_id: string | null }
+  > = {};
+  for (const { id, data: c } of category_docs) {
+    category_slugs_by_plaid[id] = {
+      overall_category_id: (c.overallCategoryId as string | null) ?? null,
+      first_category_id: (c.firstCategoryId as string | null) ?? null,
+    };
+  }
+
   return {
     real_budgets,
     budget_names,
     everything_else_budget_ids,
     category_rules,
+    category_slugs_by_plaid,
   };
 }
 
@@ -184,6 +204,7 @@ export async function resolve_assignment_context(
     budget_names,
     everything_else_budget_ids,
     category_rules,
+    category_slugs_by_plaid,
   } = resolved_shared;
 
   // Source periods overlapping the transaction date.
@@ -217,6 +238,11 @@ export async function resolve_assignment_context(
     monthly_period_id: (s.monthlyPeriodId as string | null) ?? null,
     weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,
     bi_weekly_period_id: (s.biWeeklyPeriodId as string | null) ?? null,
+    // App-category classification: prior slugs + source (preserved when "user").
+    overall_category_id: (s.overallCategoryId as string | null) ?? null,
+    first_category_id: (s.firstCategoryId as string | null) ?? null,
+    second_category_id: (s.secondCategoryId as string | null) ?? null,
+    category_source: (s.categorySource as "plaid" | "user") ?? "plaid",
   }));
 
   const context: AssignmentContext = {
@@ -227,6 +253,7 @@ export async function resolve_assignment_context(
     real_budgets,
     everything_else_budget_ids,
     category_rules,
+    category_slugs_by_plaid,
     source_periods,
     recurring_by_split,
   };

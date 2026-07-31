@@ -9,12 +9,23 @@
  */
 
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { defineSecret } from "firebase-functions/params";
 import {
   claim_job,
   mark_job_completed,
   mark_job_failed,
   Job,
 } from "../../infrastructure/job_queue";
+import {
+  purge_user_data_orchestrator,
+  PurgeUserDataInput,
+} from "../../orchestrators/users/purge_user_data.orchestrator";
+
+// Bound because the purge_user_data job revokes Plaid access tokens
+// (decrypt + /item/remove) from inside this job runner.
+const PLAID_CLIENT_ID = defineSecret("PLAID_CLIENT_ID");
+const PLAID_SECRET = defineSecret("PLAID_SECRET");
+const TOKEN_ENCRYPTION_KEY = defineSecret("TOKEN_ENCRYPTION_KEY");
 import {
   cascade_hide_transactions_orchestrator,
   CascadeHideTransactionsInput,
@@ -207,6 +218,11 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
       payload as AssignRecurringTransactionsInput
     );
   },
+
+  // Full, permanent user erase (revokes Plaid tokens + hard-deletes all data).
+  purge_user_data: async (ctx, payload) => {
+    await purge_user_data_orchestrator(ctx, payload as PurgeUserDataInput);
+  },
 };
 
 /**
@@ -222,6 +238,7 @@ export const on_job_created = onDocumentCreated(
     region: "us-central1",
     memory: "512MiB",
     timeoutSeconds: 300, // 5 minutes max for job processing
+    secrets: [PLAID_CLIENT_ID, PLAID_SECRET, TOKEN_ENCRYPTION_KEY],
   },
   async (event) => {
     const job_id = event.params.jobId;

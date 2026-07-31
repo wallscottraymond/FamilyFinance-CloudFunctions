@@ -63,6 +63,8 @@ export declare const budget_period_repo: {
         spent: number;
         pending_spent: number;
         remaining: number;
+        /** Expected returns (Split-Status-Actions); parallel to spent. Default 0. */
+        return_amount?: number;
     }>): Promise<WriteResult[]>;
     /**
      * Updates allocation fields IN PLACE on existing periods (max 500 per batch).

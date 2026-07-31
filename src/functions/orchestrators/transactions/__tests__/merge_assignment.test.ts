@@ -33,6 +33,10 @@ function assigned(over: Partial<AssignedSplit> = {}): AssignedSplit {
     monthly_period_id: "2026M06",
     weekly_period_id: "2026W24",
     bi_weekly_period_id: null,
+    overall_category_id: "food_and_drink",
+    first_category_id: "eating_out",
+    second_category_id: null,
+    category_source: "plaid",
     reason: { budget: "category+date", tie: false, recurring: "none" },
     ...over,
   };
@@ -155,5 +159,20 @@ describe("merge_assignment_onto_raw_splits", () => {
       NOW
     );
     expect(split_budget_ids.sort()).toEqual(["b1", "b2"]);
+  });
+
+  it("denormalizes the app-category slugs + source onto the raw split", () => {
+    const r = resolved([{ splitId: "s1" }], { b_groceries: "Groceries" });
+    const { updated_splits } = merge_assignment_onto_raw_splits(
+      r,
+      result([assigned({ overall_category_id: "shopping", first_category_id: "electronics", second_category_id: "SHOPPING_ELECTRONICS", category_source: "user" })]),
+      NOW
+    );
+    expect(updated_splits[0]).toMatchObject({
+      overallCategoryId: "shopping",
+      firstCategoryId: "electronics",
+      secondCategoryId: "SHOPPING_ELECTRONICS",
+      categorySource: "user",
+    });
   });
 });

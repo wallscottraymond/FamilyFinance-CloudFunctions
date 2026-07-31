@@ -22,6 +22,12 @@ export interface SplitForBudgetMatch {
   internal_match_category: string | null;
   /** Plaid-derived category. */
   plaid_match_category: string | null;
+  /** App-category slugs (Simplified-Transaction-Categories). A budget may claim a
+   *  split by its `firstCategoryId` or `overallCategoryId` slug — not just the raw
+   *  Plaid detailed — so slug-based budgets auto-include new detaileds. The MOST
+   *  SPECIFIC match wins: detailed → first → overall. */
+  overall_category_id?: string | null;
+  first_category_id?: string | null;
 }
 
 /** The three period lenses a budget (and its assignment) can belong to. */
@@ -98,32 +104,46 @@ export function match_budget(
   real_budgets: BudgetForMatch[],
   everything_else_budget_id: string | null
 ): BudgetMatchResult {
-  const category = resolve_split_category(split);
+  const detailed = resolve_split_category(split);
+  // The identifiers a budget can claim this split by, MOST SPECIFIC FIRST:
+  // Plaid detailed → firstCategoryId slug → overallCategoryId slug. A budget's
+  // `category_ids` may hold any mix (legacy detaileds and/or the new slugs).
+  const ranked: Array<string | null> = [
+    detailed,
+    split.first_category_id ?? null,
+    split.overall_category_id ?? null,
+  ];
 
-  // Collect every real budget that owns this category for this date. By the
-  // claims-exclusivity invariant there should be at most one; collecting all
-  // lets us flag drift (tie) without changing the result.
-  let first_match: BudgetForMatch | null = null;
+  // Collect every real budget that owns ANY of the split's identifiers for this
+  // date, keeping the MOST SPECIFIC hit (a specific budget beats a broad one).
+  // `match_count` still flags multi-budget claims (drift) without changing the result.
+  let best: { budget: BudgetForMatch; rank: number; matched: string } | null = null;
   let match_count = 0;
-  if (category) {
-    for (const budget of real_budgets) {
-      if (
-        budget.category_ids.includes(category) &&
-        is_within_budget_range(txn_date_ms, budget)
-      ) {
-        match_count++;
-        if (first_match === null) {
-          first_match = budget;
-        }
+  for (const budget of real_budgets) {
+    if (!is_within_budget_range(txn_date_ms, budget)) {
+      continue;
+    }
+    let rank = -1;
+    for (let r = 0; r < ranked.length; r++) {
+      const id = ranked[r];
+      if (id && budget.category_ids.includes(id)) {
+        rank = r;
+        break;
+      }
+    }
+    if (rank >= 0) {
+      match_count++;
+      if (best === null || rank < best.rank) {
+        best = { budget, rank, matched: ranked[rank] as string };
       }
     }
   }
 
-  if (first_match) {
+  if (best) {
     return {
-      budget_id: first_match.id,
+      budget_id: best.budget.id,
       reason: "category+date",
-      matched_category: category,
+      matched_category: best.matched,
       tie: match_count > 1,
     };
   }

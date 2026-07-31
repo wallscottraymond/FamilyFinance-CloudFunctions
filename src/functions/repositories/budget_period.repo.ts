@@ -293,6 +293,8 @@ export const budget_period_repo = {
       spent: number;
       pending_spent: number;
       remaining: number;
+      /** Expected returns (Split-Status-Actions); parallel to spent. Default 0. */
+      return_amount?: number;
     }>
   ): Promise<WriteResult[]> {
     if (updates.length === 0) {
@@ -311,6 +313,7 @@ export const budget_period_repo = {
           spent: u.spent,
           pendingSpent: u.pending_spent,
           remaining: u.remaining,
+          returnAmount: u.return_amount ?? 0,
           lastCalculated: now,
           updatedAt: now,
         };

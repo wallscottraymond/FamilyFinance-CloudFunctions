@@ -8,6 +8,7 @@
 export { get_accounts, get_account } from "./get_accounts.entry";
 export { remove_account } from "./remove_account.entry";
 export { restore_account } from "./restore_account.entry";
+export { purge_user_data } from "./purge_user_data.entry";
 export { create_budget } from "./create_budget.entry";
 export { update_budget } from "./update_budget.entry";
 export { delete_budget } from "./delete_budget.entry";
