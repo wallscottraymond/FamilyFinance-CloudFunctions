@@ -28,6 +28,7 @@ import {
 /** The three period lenses, in a stable order. */
 export const PERIOD_LENSES: PeriodLens[] = ["monthly", "weekly", "bi_monthly"];
 import { match_category, CategoryRule } from "./match_category.service";
+import { is_transfer_category } from "./category_semantics.service";
 import {
   match_source_periods,
   SourcePeriodForMatch,
@@ -117,7 +118,7 @@ export interface AssignedSplit {
   category_source: "plaid" | "user";
   /** Why this assignment was made — for per-split decision logging (monthly lens). */
   reason: {
-    budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded";
+    budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded" | "transfer_excluded";
     tie: boolean;
     recurring: "outflow" | "inflow" | "manual_detached" | "none";
   };
@@ -211,6 +212,11 @@ export function compute_transaction_assignment(
     const effective_detailed =
       category_source === "user" ? second_category_id : resolved_plaid;
 
+    // A Plaid account-transfer split (TRANSFER_IN/OUT) is money moving between
+    // accounts, not spending — it NEVER auto-assigns to a budget (mirrors the
+    // income B1 rule). A user override to a non-transfer category clears this.
+    const is_transfer = is_transfer_category(effective_detailed ?? resolved_plaid);
+
     let monthly_id: string;
     let weekly_id: string;
     let bi_weekly_id: string;
@@ -253,11 +259,11 @@ export function compute_transaction_assignment(
 
       // 3. Budget PER LENS: each cadence is matched INDEPENDENTLY against the real
       //    budgets of THAT cadence, else that lens's Everything Else fallback.
-      //    EXCEPT income (B1): unassigned in every lens; recurring inflow above
-      //    still applies so income tracking works.
-      if (context.txn_is_income) {
+      //    EXCEPT income (B1) and transfers: unassigned in every lens. Any
+      //    recurring inflow/outflow match above still applies for tracking.
+      if (context.txn_is_income || is_transfer) {
         monthly_id = weekly_id = bi_weekly_id = UNASSIGNED_BUDGET_ID;
-        budget_reason = "income_excluded";
+        budget_reason = is_transfer ? "transfer_excluded" : "income_excluded";
       } else {
         const split_cat = {
           internal_match_category: split.internal_match_category,
@@ -285,10 +291,12 @@ export function compute_transaction_assignment(
       }
     }
 
-    // Missing-EE error: any lens unassigned for a NON-income split (income being
-    // unassigned in every lens is intentional B1, not the missing-EE error).
+    // Missing-EE error: any lens unassigned for a NON-income, NON-transfer split
+    // (income/transfers being unassigned in every lens is intentional, not the
+    // missing-EE error).
     if (
       !context.txn_is_income &&
+      !is_transfer &&
       (monthly_id === UNASSIGNED_BUDGET_ID ||
         weekly_id === UNASSIGNED_BUDGET_ID ||
         bi_weekly_id === UNASSIGNED_BUDGET_ID)

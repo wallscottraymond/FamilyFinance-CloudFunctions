@@ -258,6 +258,11 @@ export function transform_inflow_streams(
     const plaid_primary = stream.personal_finance_category?.primary ?? "INCOME";
     const plaid_detailed = stream.personal_finance_category?.detailed ?? "INCOME_OTHER";
 
+    // NOTE: we do NOT filter TRANSFER_* streams here — at transform time we can't
+    // tell an internal own-account transfer from an external ACH payment (that
+    // needs matched-pair detection across accounts). Internal transfers are
+    // filtered on READ (period_derivation.resolver) instead.
+
     // Classify income type
     const income_type = classify_income_type(plaid_detailed);
     const is_regular_salary = plaid_detailed === "INCOME_WAGES";
@@ -380,6 +385,9 @@ export function transform_outflow_streams(
     // Extract categories
     const plaid_primary = stream.personal_finance_category?.primary ?? "GENERAL_SERVICES";
     const plaid_detailed = stream.personal_finance_category?.detailed ?? "GENERAL_SERVICES_OTHER";
+
+    // NOTE: no TRANSFER_* filter here (see the inflow transformer) — internal vs
+    // external can't be told apart at transform time; filtered on READ instead.
 
     // Classify expense type and essentiality
     const expense_type = classify_expense_type(plaid_detailed, stream.frequency);

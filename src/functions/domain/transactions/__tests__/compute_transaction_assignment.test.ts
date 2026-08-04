@@ -151,6 +151,36 @@ describe("compute_transaction_assignment", () => {
     expect(r.any_unassigned).toBe(false); // intentional, not the missing-EE error
   });
 
+  it("a Plaid transfer is NEVER auto-assigned to a budget — stays unassigned, no missing-EE error", () => {
+    const r = compute_transaction_assignment(
+      // type is expense (TRANSFER_OUT is positive), but the transfer category must
+      // keep it out of Everything Else.
+      [split({ plaid_match_category: "TRANSFER_OUT_ACCOUNT_TRANSFER" })],
+      ctx({ txn_is_income: false })
+    );
+    expect(r.splits[0].budget_id).toBe("unassigned");
+    expect(r.splits[0].monthly_budget_id).toBe("unassigned");
+    expect(r.splits[0].weekly_budget_id).toBe("unassigned");
+    expect(r.splits[0].bi_weekly_budget_id).toBe("unassigned");
+    expect(r.splits[0].reason.budget).toBe("transfer_excluded");
+    expect(r.any_unassigned).toBe(false); // intentional, not the missing-EE error
+  });
+
+  it("a user override of a transfer to a real category re-enables budgeting", () => {
+    const r = compute_transaction_assignment(
+      [
+        split({
+          plaid_match_category: "TRANSFER_OUT_ACCOUNT_TRANSFER",
+          category_source: "user",
+          second_category_id: "FOOD_AND_DRINK",
+        }),
+      ],
+      ctx()
+    );
+    // Overridden to groceries → matches the grocery budget, not excluded.
+    expect(r.splits[0].reason.budget).not.toBe("transfer_excluded");
+  });
+
   it("income still matches a recurring inflow while skipping budget (income tracking intact)", () => {
     const r = compute_transaction_assignment(
       [split({ split_id: "s1" })],

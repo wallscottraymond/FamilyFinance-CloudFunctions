@@ -628,4 +628,47 @@ export const inflow_repo = {
 
     return results;
   },
+
+  /**
+   * Mark recurring inflows as HIDDEN (durable exclusion of internal account
+   * transfers). `isHidden` is preserved by `save_batch` across re-syncs. Idempotent.
+   */
+  async mark_hidden(
+    ctx: TraceContext,
+    stream_ids: string[],
+    hidden: boolean,
+    user_id: string
+  ): Promise<WriteResult[]> {
+    if (stream_ids.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const results: WriteResult[] = [];
+    for (const chunk of chunk_for_batch(stream_ids)) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        const before_doc = await doc_ref(id).get();
+        if (!before_doc.exists) continue;
+        const before = before_doc.data() as LegacyInflowDoc;
+        if (before.isHidden === hidden) continue; // idempotent
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        const after: LegacyInflowDoc = { ...before, isHidden: hidden, updatedAt: now };
+        batch.set(doc_ref(id), after);
+        results.push(create_write_result("inflow", id, "replace", before, after));
+        record_audit_entry_async({
+          user_id,
+          action: "update",
+          entity_type: "recurring_inflow",
+          entity_id: id,
+          before: before as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+          trace_id: ctx.trace_id,
+          metadata: { source: "api", context: { reason: "internal_transfer_hidden" } },
+        });
+      }
+      await batch.commit();
+    }
+    return results;
+  },
 };

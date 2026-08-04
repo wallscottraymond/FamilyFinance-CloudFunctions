@@ -54,6 +54,39 @@ export interface SourcePeriodForOutflowGeneration {
     end_date: Timestamp;
 }
 /**
+ * The minimal recurring-item schedule needed to generate occurrences.
+ * Works for outflows AND inflows (both carry frequency + anchor dates + amount).
+ */
+export interface RecurringScheduleForGeneration {
+    frequency: string;
+    average_amount: number;
+    first_date: Timestamp;
+    last_date: Timestamp;
+    predicted_next_date: Timestamp | null;
+}
+/** One generated (expected) occurrence: when it's due + how much. */
+export interface GeneratedOccurrence {
+    due_date_ms: number;
+    amount_due: number;
+}
+/**
+ * Derive-On-Read Period Architecture — Phase 3.
+ *
+ * Generate a recurring item's EXPECTED occurrences within an arbitrary window,
+ * FRESH from its schedule (frequency + anchor + amount). This is the read-time
+ * replacement for the stale materialized period docs: it reuses the exact same
+ * proven cycle + stepping logic (`calculate_payment_cycle` +
+ * `calculate_occurrences_in_period`), just against a synthetic window instead of
+ * a stored source period. Because it's recomputed on read, it can't go stale.
+ *
+ * PURE FUNCTION — no IO. Feeds `reconcile_occurrences` → `place_occurrences`.
+ *
+ * @param schedule        - The item's frequency + anchor dates + amount
+ * @param window_start_ms - Window start (inclusive), epoch ms
+ * @param window_end_ms   - Window end (inclusive), epoch ms
+ */
+export declare function generate_expected_occurrences_in_window(schedule: RecurringScheduleForGeneration, window_start_ms: number, window_end_ms: number): GeneratedOccurrence[];
+/**
  * Generate outflow periods for a given outflow and set of source periods.
  *
  * PURE function - no IO, no side effects.

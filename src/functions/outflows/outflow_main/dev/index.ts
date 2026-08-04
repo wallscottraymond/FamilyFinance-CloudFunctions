@@ -4,7 +4,5 @@
  * Exports development and testing functions for outflow_main
  */
 
-export * from './simulatePlaidRecurring';
 export * from './createTestOutflows';
-export * from './debugOutflowPeriods';
-export * from './testOutflowUpdate';
+// Deleted from prod 2026-08-04 (deprecated dev/debug): simulatePlaidRecurring, debugOutflowPeriods, testOutflowUpdate

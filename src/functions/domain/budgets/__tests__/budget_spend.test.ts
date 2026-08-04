@@ -11,6 +11,7 @@
 import {
   compute_budget_spent,
   is_countable,
+  is_transfer_category,
   SplitForSpend,
 } from "../budget_spend.service";
 
@@ -26,6 +27,8 @@ function s(over: Partial<SplitForSpend> = {}): SplitForSpend {
     txn_date_ms: JUN_15,
     is_pending: false,
     is_transfer: false,
+    is_income: false,
+    is_income_category: false,
     spend_status: "counted",
     outflow_id: null,
     inflow_id: null,
@@ -33,14 +36,52 @@ function s(over: Partial<SplitForSpend> = {}): SplitForSpend {
   };
 }
 
+describe("is_transfer_category", () => {
+  it("flags Plaid TRANSFER_IN/OUT detailed categories", () => {
+    expect(is_transfer_category("TRANSFER_OUT_ACCOUNT_TRANSFER")).toBe(true);
+    expect(is_transfer_category("TRANSFER_IN_ACCOUNT_TRANSFER")).toBe(true);
+    expect(is_transfer_category("TRANSFER_OUT_WITHDRAWAL")).toBe(true);
+    expect(is_transfer_category("TRANSFER_IN_DEPOSIT")).toBe(true);
+  });
+  it("does NOT flag spending categories or empty values", () => {
+    expect(is_transfer_category("FOOD_AND_DRINK_GROCERIES")).toBe(false);
+    expect(is_transfer_category("LOAN_PAYMENTS_MORTGAGE_PAYMENT")).toBe(false);
+    expect(is_transfer_category(null)).toBe(false);
+    expect(is_transfer_category(undefined)).toBe(false);
+    expect(is_transfer_category("")).toBe(false);
+  });
+});
+
 describe("is_countable", () => {
-  it("excludes transfer / ignored / recurring; refund STAYS countable", () => {
+  it("excludes transfer / income-category / ignored / recurring; refund STAYS countable", () => {
     expect(is_countable(s())).toBe(true);
     expect(is_countable(s({ is_transfer: true }))).toBe(false);
+    expect(is_countable(s({ is_income_category: true }))).toBe(false); // real income excluded
     expect(is_countable(s({ spend_status: "ignored" }))).toBe(false);
     expect(is_countable(s({ spend_status: "refund" }))).toBe(true); // still in spent
     expect(is_countable(s({ outflow_id: "o1" }))).toBe(false);
     expect(is_countable(s({ inflow_id: "i1" }))).toBe(false);
+  });
+});
+
+describe("income treatment in compute_budget_spent", () => {
+  const B = "b1";
+  it("a one-off income return (expense category) reverses spent", () => {
+    // $100 expense + $30 income return (e.g. an item refund) → net $70 spent.
+    const r = compute_budget_spent(B, JUN_01, JUN_30, [
+      s({ amount: 100 }),
+      s({ amount: 30, is_income: true }),
+    ]);
+    expect(r.spent).toBe(70);
+    expect(r.return_amount).toBe(30);
+  });
+  it("real income (INCOME_* category) is excluded entirely — neither adds nor reverses", () => {
+    const r = compute_budget_spent(B, JUN_01, JUN_30, [
+      s({ amount: 100 }),
+      s({ amount: 36725, is_income: true, is_income_category: true }),
+    ]);
+    expect(r.spent).toBe(100);
+    expect(r.return_amount).toBe(0);
   });
 });
 

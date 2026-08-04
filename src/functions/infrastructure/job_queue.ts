@@ -158,6 +158,48 @@ export async function get_job<TPayload = unknown>(
  * @param limit - Maximum jobs to return
  * @returns Array of pending jobs
  */
+/**
+ * Reclaim jobs orphaned in `processing` — a runner that crashed, OOM'd, or hit
+ * its function timeout leaves its job stuck in `processing` forever (claim only
+ * ever touches `pending`). This routes each stuck job back through the normal
+ * failure path: retry with backoff, or DLQ once `max_retries` is exhausted — so
+ * no single crash can permanently strand work.
+ *
+ * `status == "processing"` is a single-field filter (no composite index); the
+ * age cutoff is applied in memory. Call at the top of the scheduled sweep.
+ *
+ * @param stuck_after_ms - How long a job may sit in `processing` before it's
+ *   considered dead (must exceed the longest job timeout). Default 15 min.
+ * @param scan_limit - Max processing docs to scan per sweep.
+ * @returns Count of jobs reclaimed.
+ */
+export async function reclaim_stuck_jobs(
+  stuck_after_ms = 15 * 60 * 1000,
+  scan_limit = 500
+): Promise<number> {
+  const db = getFirestore();
+  const cutoff_ms = Date.now() - stuck_after_ms;
+
+  const snapshot = await db
+    .collection(COLLECTIONS.JOBS)
+    .where("status", "==", "processing")
+    .limit(scan_limit)
+    .get();
+
+  const stuck = snapshot.docs.filter((doc) => {
+    const updated = (doc.data() as Job).updated_at;
+    return (updated?.toMillis() ?? 0) <= cutoff_ms;
+  });
+
+  let reclaimed = 0;
+  for (const doc of stuck) {
+    // Same semantics as a runtime failure: retry-with-backoff, or DLQ if spent.
+    await mark_job_failed(doc.id, "reclaimed: stuck in processing past timeout");
+    reclaimed++;
+  }
+  return reclaimed;
+}
+
 export async function get_pending_jobs<TPayload = unknown>(
   job_type?: string,
   limit = 10

@@ -103,7 +103,7 @@ export interface AssignedSplit {
     category_source: "plaid" | "user";
     /** Why this assignment was made — for per-split decision logging (monthly lens). */
     reason: {
-        budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded";
+        budget: "category+date" | "everything_else_fallback" | "no_everything_else" | "manual" | "income_excluded" | "transfer_excluded";
         tie: boolean;
         recurring: "outflow" | "inflow" | "manual_detached" | "none";
     };

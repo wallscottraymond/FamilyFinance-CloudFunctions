@@ -4,6 +4,4 @@
  * Exports development and testing functions for outflow_periods
  */
 export * from './extendOutflowPeriods';
-export * from './migrateTransactionSplits';
-export * from './debugTransactionMatching';
 //# sourceMappingURL=index.d.ts.map

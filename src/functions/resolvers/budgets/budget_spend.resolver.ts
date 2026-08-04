@@ -15,7 +15,11 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
-import { SplitForSpend } from "../../domain/budgets/budget_spend.service";
+import {
+  SplitForSpend,
+  is_transfer_category,
+  is_income_category,
+} from "../../domain/budgets/budget_spend.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
 /** Which split field carries the budget assignment for each period lens. */
@@ -56,7 +60,8 @@ export async function resolve_spend_splits(
   for (const { data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
     const is_pending = d.isPending === true;
-    const is_transfer = d.type === "transfer";
+    const txn_is_transfer = d.type === "transfer";
+    const txn_is_income = d.type === "income";
     const splits = (d.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of splits) {
       // The split's assignment in this budget's lens; monthly falls back to the
@@ -68,12 +73,18 @@ export async function resolve_spend_splits(
       if (assigned !== budget_id) {
         continue;
       }
+      const effective_category =
+        (s.internalDetailedCategory as string | null) ?? (s.plaidDetailedCategory as string | null);
       out.push({
         budget_id,
         amount: (s.amount as number) ?? 0,
         txn_date_ms,
         is_pending,
-        is_transfer,
+        // Plaid account-transfer categories (TRANSFER_IN/OUT) are transfers even
+        // when `type` is income/expense — excluded from spend by is_countable.
+        is_transfer: txn_is_transfer || is_transfer_category(effective_category),
+        is_income: txn_is_income,
+        is_income_category: is_income_category(effective_category),
         // Derive on read (no migration): explicit spendStatus wins, else fall back
         // to the legacy isIgnored/isRefund booleans, else 'counted'.
         spend_status:

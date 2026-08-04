@@ -26,6 +26,12 @@ export declare const budget_period_repo: {
      */
     get_by_budget_id(_ctx: TraceContext, budget_id: string): Promise<BudgetPeriodEntity[]>;
     /**
+     * Returns all of a user's periods of ONE cadence in a single query. Used by
+     * the batched period derivation to load every budget's monthly home at once
+     * (instead of N per-budget queries).
+     */
+    get_by_user_and_type(_ctx: TraceContext, user_id: string, period_type: string): Promise<BudgetPeriodEntity[]>;
+    /**
      * Gets the raw doc data + id for a set of period IDs (missing docs skipped).
      * READ-ONLY — used by the summary resolver to group periods for recompute.
      */

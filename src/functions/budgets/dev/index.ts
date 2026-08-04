@@ -11,6 +11,5 @@
  * IMPORTANT: These functions should only be used in development/staging environments.
  */
 
-export { createTestBudget } from "./createTestBudget";
-export { createTestTransaction } from "./createTestTransaction";
 export { createTestBudgetSuite } from "./createTestBudgetSuite";
+// Deleted from prod 2026-08-04 (deprecated, no FE call): createTestBudget, createTestTransaction

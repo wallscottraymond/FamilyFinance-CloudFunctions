@@ -237,7 +237,7 @@ export const on_job_created = onDocumentCreated(
     document: "_jobs/{jobId}",
     region: "us-central1",
     memory: "512MiB",
-    timeoutSeconds: 300, // 5 minutes max for job processing
+    timeoutSeconds: 540, // 9 min — headroom for IO-heavy batches under Firestore contention
     secrets: [PLAID_CLIENT_ID, PLAID_SECRET, TOKEN_ENCRYPTION_KEY],
   },
   async (event) => {

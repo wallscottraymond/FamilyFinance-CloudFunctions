@@ -81,15 +81,26 @@ interface CycleInfo {
 }
 
 /**
+ * Normalize a frequency to a canonical UPPERCASE, underscore-free token so both
+ * the app form (`"semimonthly"`, `"biweekly"`) and any legacy underscore form
+ * (`"SEMI_MONTHLY"`) map to the same case. A mismatch here silently fell through
+ * to the monthly default — which made a semimonthly paycheck generate 1
+ * occurrence/month instead of 2.
+ */
+function normalize_frequency(frequency: string): string {
+  return frequency.toUpperCase().replace(/_/g, "");
+}
+
+/**
  * Get approximate cycle days for a frequency.
  */
 function get_cycle_days(frequency: string): number {
-  switch (frequency.toUpperCase()) {
+  switch (normalize_frequency(frequency)) {
     case "WEEKLY":
       return 7;
     case "BIWEEKLY":
       return 14;
-    case "SEMI_MONTHLY":
+    case "SEMIMONTHLY":
       return 15;
     case "MONTHLY":
       return 30;
@@ -115,14 +126,14 @@ function get_period_days(start: Date, end: Date): number {
 function add_frequency_interval(date: Date, frequency: string): Date {
   const result = new Date(date);
 
-  switch (frequency.toUpperCase()) {
+  switch (normalize_frequency(frequency)) {
     case "WEEKLY":
       result.setDate(result.getDate() + 7);
       break;
     case "BIWEEKLY":
       result.setDate(result.getDate() + 14);
       break;
-    case "SEMI_MONTHLY":
+    case "SEMIMONTHLY":
       result.setDate(result.getDate() + 15);
       break;
     case "MONTHLY":
@@ -147,14 +158,14 @@ function add_frequency_interval(date: Date, frequency: string): Date {
 function subtract_frequency_interval(date: Date, frequency: string): Date {
   const result = new Date(date);
 
-  switch (frequency.toUpperCase()) {
+  switch (normalize_frequency(frequency)) {
     case "WEEKLY":
       result.setDate(result.getDate() - 7);
       break;
     case "BIWEEKLY":
       result.setDate(result.getDate() - 14);
       break;
-    case "SEMI_MONTHLY":
+    case "SEMIMONTHLY":
       result.setDate(result.getDate() - 15);
       break;
     case "MONTHLY":
@@ -248,12 +259,13 @@ function calculate_occurrences_in_period(
   const occurrence_due_dates: Timestamp[] = [];
   let current_date = new Date(reference_date);
 
-  // If reference date is after period end, work backwards
-  while (current_date > period_end) {
+  // Rewind to at/before the period start, THEN advance to the first occurrence >=
+  // start. The reference (predicted_next_date) often lands inside or after the
+  // period; starting collection forward from it would skip occurrences that fall
+  // EARLIER in the same period (e.g. the first of two semimonthly paychecks).
+  while (current_date > period_start) {
     current_date = subtract_frequency_interval(current_date, frequency);
   }
-
-  // If reference date is before period start, work forwards
   while (current_date < period_start) {
     current_date = add_frequency_interval(current_date, frequency);
   }
@@ -287,6 +299,73 @@ function calculate_occurrences_in_period(
     amount_withheld,
     cycle_days,
   };
+}
+
+/**
+ * The minimal recurring-item schedule needed to generate occurrences.
+ * Works for outflows AND inflows (both carry frequency + anchor dates + amount).
+ */
+export interface RecurringScheduleForGeneration {
+  frequency: string;
+  average_amount: number;
+  first_date: Timestamp;
+  last_date: Timestamp;
+  predicted_next_date: Timestamp | null;
+}
+
+/** One generated (expected) occurrence: when it's due + how much. */
+export interface GeneratedOccurrence {
+  due_date_ms: number;
+  amount_due: number;
+}
+
+/**
+ * Derive-On-Read Period Architecture — Phase 3.
+ *
+ * Generate a recurring item's EXPECTED occurrences within an arbitrary window,
+ * FRESH from its schedule (frequency + anchor + amount). This is the read-time
+ * replacement for the stale materialized period docs: it reuses the exact same
+ * proven cycle + stepping logic (`calculate_payment_cycle` +
+ * `calculate_occurrences_in_period`), just against a synthetic window instead of
+ * a stored source period. Because it's recomputed on read, it can't go stale.
+ *
+ * PURE FUNCTION — no IO. Feeds `reconcile_occurrences` → `place_occurrences`.
+ *
+ * @param schedule        - The item's frequency + anchor dates + amount
+ * @param window_start_ms - Window start (inclusive), epoch ms
+ * @param window_end_ms   - Window end (inclusive), epoch ms
+ */
+export function generate_expected_occurrences_in_window(
+  schedule: RecurringScheduleForGeneration,
+  window_start_ms: number,
+  window_end_ms: number
+): GeneratedOccurrence[] {
+  // The cycle + occurrence helpers read only a handful of fields off the outflow
+  // (frequency, average_amount, first/last/predicted dates); build the minimal
+  // shape and reuse them unchanged.
+  const outflow = {
+    frequency: schedule.frequency,
+    average_amount: schedule.average_amount,
+    first_date: schedule.first_date,
+    last_date: schedule.last_date,
+    predicted_next_date: schedule.predicted_next_date,
+  } as unknown as OutflowForPeriodGeneration;
+
+  const window: SourcePeriodForOutflowGeneration = {
+    id: "window",
+    period_id: "window",
+    type: "custom",
+    start_date: Timestamp.fromMillis(window_start_ms),
+    end_date: Timestamp.fromMillis(window_end_ms),
+  };
+
+  const cycle_info = calculate_payment_cycle(outflow);
+  const result = calculate_occurrences_in_period(outflow, window, cycle_info);
+
+  return result.occurrence_due_dates.map((ts) => ({
+    due_date_ms: ts.toMillis(),
+    amount_due: cycle_info.bill_amount,
+  }));
 }
 
 /**

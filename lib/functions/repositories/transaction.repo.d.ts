@@ -244,7 +244,8 @@ export declare const transaction_repo: {
      *
      * @param ctx - Trace context
      * @param user_id - User ID (matches the `userId` field)
-     * @param limit - Maximum number of IDs to return (default 5000)
+     * @param limit - Optional hard cap on IDs returned. Omit (default) to return
+     *   ALL active transaction IDs via pagination — required for full coverage.
      * @returns Array of transaction document IDs
      */
     get_ids_by_user_id(ctx: TraceContext, user_id: string, limit?: number): Promise<string[]>;

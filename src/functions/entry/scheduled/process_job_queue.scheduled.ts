@@ -14,6 +14,7 @@ import {
   claim_job,
   mark_job_completed,
   mark_job_failed,
+  reclaim_stuck_jobs,
   Job,
 } from "../../infrastructure/job_queue";
 import {
@@ -248,6 +249,13 @@ export const process_job_queue = onSchedule(
     let failed = 0;
 
     try {
+      // Self-heal: return jobs orphaned in `processing` (crashed/OOM/timed-out
+      // runner) to the queue via the normal retry/DLQ path before claiming new work.
+      const reclaimed = await reclaim_stuck_jobs();
+      if (reclaimed > 0) {
+        console.log(`[${ctx.trace_id}] Reclaimed ${reclaimed} stuck job(s) from processing`);
+      }
+
       // Get pending jobs
       const pending_jobs = await get_pending_jobs(undefined, MAX_JOBS_PER_RUN);
 

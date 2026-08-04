@@ -10,7 +10,7 @@
  * @module repositories/transaction
  */
 
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, FieldPath } from "firebase-admin/firestore";
 import {
   WriteResult,
   TraceContext,
@@ -833,25 +833,46 @@ export const transaction_repo = {
    *
    * @param ctx - Trace context
    * @param user_id - User ID (matches the `userId` field)
-   * @param limit - Maximum number of IDs to return (default 5000)
+   * @param limit - Optional hard cap on IDs returned. Omit (default) to return
+   *   ALL active transaction IDs via pagination — required for full coverage.
    * @returns Array of transaction document IDs
    */
   async get_ids_by_user_id(
     ctx: TraceContext,
     user_id: string,
-    limit: number = 5000
+    limit?: number
   ): Promise<string[]> {
     const db = getFirestore();
+    const PAGE = 5000;
+    const ids: string[] = [];
+    let cursor: string | undefined;
 
-    const snapshot = await db
-      .collection(COLLECTION)
-      .where("userId", "==", user_id)
-      .where("isActive", "==", true)
-      .select() // Document IDs only
-      .limit(limit)
-      .get();
-
-    const ids = snapshot.docs.map((doc) => doc.id);
+    // Paginate by document id (implicit __name__ order — no composite index) so
+    // users with more than one page of transactions are FULLY covered. A fixed
+    // cap here silently under-covers the backfill/re-assignment work-list, which
+    // strands the tail of a large account (the bug that left 291 transfers in EE).
+    for (;;) {
+      let query = db
+        .collection(COLLECTION)
+        .where("userId", "==", user_id)
+        .where("isActive", "==", true)
+        .orderBy(FieldPath.documentId())
+        .select() // Document IDs only
+        .limit(PAGE);
+      if (cursor) {
+        query = query.startAfter(cursor);
+      }
+      const snapshot = await query.get();
+      if (snapshot.empty) break;
+      for (const doc of snapshot.docs) {
+        ids.push(doc.id);
+      }
+      if (limit && ids.length >= limit) {
+        return ids.slice(0, limit);
+      }
+      if (snapshot.size < PAGE) break; // last page
+      cursor = snapshot.docs[snapshot.docs.length - 1].id;
+    }
 
     console.log(
       `[${ctx.trace_id}] get_ids_by_user_id: user=${user_id}, found=${ids.length}`

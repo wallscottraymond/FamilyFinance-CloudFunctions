@@ -119,5 +119,11 @@ export declare const outflow_repo: {
      * Marks outflows as inactive when Plaid no longer reports them.
      */
     mark_stale(ctx: TraceContext, stream_ids: string[], user_id: string): Promise<WriteResult[]>;
+    /**
+     * Mark recurring outflows as HIDDEN (durable exclusion of internal account
+     * transfers). `isHidden` is preserved by `save_batch` across re-syncs, so once
+     * set it survives Plaid recreating the stream. Idempotent.
+     */
+    mark_hidden(ctx: TraceContext, stream_ids: string[], hidden: boolean, user_id: string): Promise<WriteResult[]>;
 };
 //# sourceMappingURL=outflow.repo.d.ts.map

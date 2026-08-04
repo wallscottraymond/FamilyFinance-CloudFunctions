@@ -48,6 +48,7 @@ import {
 } from "../../domain/outflow.service";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
+import { classify_internal_transfers_orchestrator } from "./classify_internal_transfers.orchestrator";
 
 // ============================================================================
 // Types
@@ -339,6 +340,26 @@ export async function sync_recurring_orchestrator(
     const error_msg = error instanceof Error ? error.message : "Unknown error";
     console.error(`[${ctx.trace_id}] Error updating plaid_item timestamp:`, error_msg);
     errors.push(`Timestamp update error: ${error_msg}`);
+  }
+
+  // 9.5 CLASSIFY INTERNAL TRANSFERS — durably hide internal account transfers that
+  // Plaid recreates on each sync (kept: external ACH bills + credit-card payments).
+  // Non-fatal: a classification failure must not fail the sync.
+  try {
+    const classified = await classify_internal_transfers_orchestrator(
+      ctx,
+      ctx.user_id,
+      Date.now()
+    );
+    if (classified.hidden_outflows + classified.hidden_inflows > 0) {
+      console.log(
+        `[${ctx.trace_id}] Hid internal transfers: ${classified.hidden_outflows} outflow(s), ${classified.hidden_inflows} inflow(s)`
+      );
+    }
+  } catch (error) {
+    const error_msg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[${ctx.trace_id}] Internal-transfer classification error:`, error_msg);
+    errors.push(`Internal-transfer classification error: ${error_msg}`);
   }
 
   // 10. BUILD RESPONSE

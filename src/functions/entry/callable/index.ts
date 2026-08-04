@@ -19,6 +19,15 @@ export { create_budget } from "./create_budget.entry";
 export { update_budget } from "./update_budget.entry";
 export { delete_budget } from "./delete_budget.entry";
 
+// Derive-On-Read Period Architecture (Phase 1): budget view derivation
+export { derive_budget_view } from "./derive_budget_view.entry";
+
+// Derive-On-Read Period Architecture (Phase 3): bill/income view derivation
+export { derive_recurring_view } from "./derive_recurring_view.entry";
+
+// Derive-On-Read Period Architecture: BATCHED whole-period derivation (one call)
+export { derive_period } from "./derive_period.entry";
+
 // Plaid operations
 export { create_link_token } from "./create_link_token.entry";
 export { create_update_link_token } from "./create_update_link_token.entry";

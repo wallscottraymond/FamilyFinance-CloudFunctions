@@ -34,6 +34,13 @@ export interface SplitForSpend {
     is_pending: boolean;
     /** Transaction-level: an internal transfer (excluded from budget spend). */
     is_transfer: boolean;
+    /** Transaction-level: a credit (`type: "income"`). Real income is excluded via
+     *  `is_income_category`; a credit in an EXPENSE category is a one-off return that
+     *  reverses (reduces) spent. */
+    is_income: boolean;
+    /** Effective category is a Plaid `INCOME_*` category ⇒ real income, not a purchase
+     *  return — excluded from budget spend entirely (belongs to inflows). */
+    is_income_category: boolean;
     /** Split-level spend treatment (resolver derives it from spendStatus/legacy flags). */
     spend_status: SpendStatusForSpend;
     /** Recurring links — present ⇒ tracked by the recurring system, excluded here. */
@@ -47,7 +54,12 @@ export interface BudgetSpendResult {
     /** Σ|amount| of the countable `refund` splits — expected returns (parallel to spent). */
     return_amount: number;
 }
-/** Whether a split counts toward budget `spent`. `refund` stays countable. PURE. */
+export { is_transfer_category, is_income_category, } from "../transactions/category_semantics.service";
+/**
+ * Whether a split counts toward budget `spent`. Excludes transfers, real income,
+ * ignored splits, and recurring-linked splits. `refund` and one-off income
+ * returns stay countable (the latter reverse spend — see compute_budget_spent). PURE.
+ */
 export declare function is_countable(split: SplitForSpend): boolean;
 /**
  * Recompute a budget period's spent + pending_spent from the splits.

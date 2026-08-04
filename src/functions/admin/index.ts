@@ -1,19 +1,17 @@
 // Export administrative functions
 export { generateSourcePeriods } from "./generateSourcePeriods";
 export { updateCurrentPeriods } from "./updateCurrentPeriods";
-export { clearAndRegeneratePeriods } from "./clearAndRegeneratePeriods";
-export { testCurrentPeriods } from "./testCurrentPeriods";
-export { verifyUTCPeriods } from "./verifyUTCPeriods";
-export { fetchRecurringTransactionsAdmin } from "./fetchRecurringTransactionsAdmin";
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
-export { auditTransactionAssignments } from "./auditTransactionAssignments";
 export { verifyAccessControl } from "./verifyAccessControl";
 export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
-export { debugUserSummaryUpdate } from "./debugUserSummaryUpdate";
-export { fixBudgetPeriodUserIds } from "./fixBudgetPeriodUserIds";
-export { fix_account_plaid_ids } from "./fix_account_plaid_ids";
 export { makeUserAdmin } from "./makeUserAdmin";
+
+// Deprecated admin/debug/migration functions — deleted from prod 2026-08-04
+// (safe-hygiene cleanup). Exports removed so a full deploy won't recreate them:
+//   clearAndRegeneratePeriods, testCurrentPeriods, verifyUTCPeriods,
+//   fetchRecurringTransactionsAdmin, auditTransactionAssignments,
+//   debugUserSummaryUpdate, fixBudgetPeriodUserIds, fix_account_plaid_ids
 
 // Transaction splitting migration functions (DEPRECATED - stubbed out)
 // export {

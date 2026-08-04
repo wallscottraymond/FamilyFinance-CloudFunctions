@@ -83,6 +83,22 @@ export declare function get_job<TPayload = unknown>(job_id: string): Promise<Job
  * @param limit - Maximum jobs to return
  * @returns Array of pending jobs
  */
+/**
+ * Reclaim jobs orphaned in `processing` — a runner that crashed, OOM'd, or hit
+ * its function timeout leaves its job stuck in `processing` forever (claim only
+ * ever touches `pending`). This routes each stuck job back through the normal
+ * failure path: retry with backoff, or DLQ once `max_retries` is exhausted — so
+ * no single crash can permanently strand work.
+ *
+ * `status == "processing"` is a single-field filter (no composite index); the
+ * age cutoff is applied in memory. Call at the top of the scheduled sweep.
+ *
+ * @param stuck_after_ms - How long a job may sit in `processing` before it's
+ *   considered dead (must exceed the longest job timeout). Default 15 min.
+ * @param scan_limit - Max processing docs to scan per sweep.
+ * @returns Count of jobs reclaimed.
+ */
+export declare function reclaim_stuck_jobs(stuck_after_ms?: number, scan_limit?: number): Promise<number>;
 export declare function get_pending_jobs<TPayload = unknown>(job_type?: string, limit?: number): Promise<Job<TPayload>[]>;
 /**
  * Marks a job as processing.

@@ -5,5 +5,4 @@
  */
 
 export * from './extendOutflowPeriods';
-export * from './migrateTransactionSplits';
-export * from './debugTransactionMatching';
+// Deleted from prod 2026-08-04 (deprecated migration/debug): migrateOutflowPeriodsTransactionSplits, debugTransactionMatching

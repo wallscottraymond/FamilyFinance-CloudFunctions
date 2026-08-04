@@ -36,6 +36,13 @@ export interface SplitForSpend {
   is_pending: boolean;
   /** Transaction-level: an internal transfer (excluded from budget spend). */
   is_transfer: boolean;
+  /** Transaction-level: a credit (`type: "income"`). Real income is excluded via
+   *  `is_income_category`; a credit in an EXPENSE category is a one-off return that
+   *  reverses (reduces) spent. */
+  is_income: boolean;
+  /** Effective category is a Plaid `INCOME_*` category ⇒ real income, not a purchase
+   *  return — excluded from budget spend entirely (belongs to inflows). */
+  is_income_category: boolean;
   /** Split-level spend treatment (resolver derives it from spendStatus/legacy flags). */
   spend_status: SpendStatusForSpend;
   /** Recurring links — present ⇒ tracked by the recurring system, excluded here. */
@@ -51,10 +58,23 @@ export interface BudgetSpendResult {
   return_amount: number;
 }
 
-/** Whether a split counts toward budget `spent`. `refund` stays countable. PURE. */
+// Plaid category semantics (transfer/income) live in the transactions domain so
+// the routing engine and this read-time calc share ONE definition. Re-exported
+// here for the existing budget read-path imports.
+export {
+  is_transfer_category,
+  is_income_category,
+} from "../transactions/category_semantics.service";
+
+/**
+ * Whether a split counts toward budget `spent`. Excludes transfers, real income,
+ * ignored splits, and recurring-linked splits. `refund` and one-off income
+ * returns stay countable (the latter reverse spend — see compute_budget_spent). PURE.
+ */
 export function is_countable(split: SplitForSpend): boolean {
   return (
     !split.is_transfer &&
+    !split.is_income_category &&
     split.spend_status !== "ignored" &&
     split.outflow_id === null &&
     split.inflow_id === null
@@ -96,13 +116,18 @@ export function compute_budget_spent(
     if (!is_countable(split)) {
       continue;
     }
-    spent += split.amount;
+    // A one-off income return (a credit in an expense category, e.g. an item
+    // refund) comes in positive and REVERSES that portion of spend. Everything
+    // else adds. Amounts are stored positive; direction comes from `is_income`.
+    const magnitude = Math.abs(split.amount);
+    const signed = split.is_income ? -magnitude : split.amount;
+    spent += signed;
     if (split.is_pending) {
-      pending += split.amount;
+      pending += signed;
     }
-    // Refund splits stay in `spent` AND accrue their magnitude as an expected return.
-    if (split.spend_status === "refund") {
-      return_amount += Math.abs(split.amount);
+    // Refund splits and income returns accrue their magnitude as an expected return.
+    if (split.is_income || split.spend_status === "refund") {
+      return_amount += magnitude;
     }
   }
 

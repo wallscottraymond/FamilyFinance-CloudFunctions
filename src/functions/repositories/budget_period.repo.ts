@@ -128,6 +128,26 @@ export const budget_period_repo = {
   },
 
   /**
+   * Returns all of a user's periods of ONE cadence in a single query. Used by
+   * the batched period derivation to load every budget's monthly home at once
+   * (instead of N per-budget queries).
+   */
+  async get_by_user_and_type(
+    _ctx: TraceContext,
+    user_id: string,
+    period_type: string
+  ): Promise<BudgetPeriodEntity[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("periodType", "==", period_type)
+      .get();
+    return snapshot.docs.map((doc) =>
+      map_to_entity(doc.data() as LegacyBudgetPeriodDoc)
+    );
+  },
+
+  /**
    * Gets the raw doc data + id for a set of period IDs (missing docs skipped).
    * READ-ONLY — used by the summary resolver to group periods for recompute.
    */
