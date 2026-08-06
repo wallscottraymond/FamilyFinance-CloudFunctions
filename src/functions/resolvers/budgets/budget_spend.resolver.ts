@@ -17,9 +17,9 @@ import { TraceContext } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import {
   SplitForSpend,
-  is_transfer_category,
   is_income_category,
 } from "../../domain/budgets/budget_spend.service";
+import { detect_internal_transfers_from_txns } from "../shared/on_read_matching";
 import { PeriodInstanceType } from "../../domain/budgets";
 
 /** Which split field carries the budget assignment for each period lens. */
@@ -55,12 +55,17 @@ export async function resolve_spend_splits(
     end_ms
   );
 
+  // Matched-pair internal-transfer detection: only OWN-account transfers (a matching
+  // opposite leg on another account) are excluded — external ACH bills that Plaid
+  // tags TRANSFER (mortgage, rent) stay countable. Same rule as the on-read paths.
+  const { internal_ids } = detect_internal_transfers_from_txns(txns);
+
   const lens_field = LENS_FIELD[cadence];
   const out: SplitForSpend[] = [];
-  for (const { data: d } of txns) {
+  for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
     const is_pending = d.isPending === true;
-    const txn_is_transfer = d.type === "transfer";
+    const txn_is_internal_transfer = internal_ids.has(id);
     const txn_is_income = d.type === "income";
     const splits = (d.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of splits) {
@@ -80,9 +85,9 @@ export async function resolve_spend_splits(
         amount: (s.amount as number) ?? 0,
         txn_date_ms,
         is_pending,
-        // Plaid account-transfer categories (TRANSFER_IN/OUT) are transfers even
-        // when `type` is income/expense — excluded from spend by is_countable.
-        is_transfer: txn_is_transfer || is_transfer_category(effective_category),
+        // Only INTERNAL (matched-pair own-account) transfers are excluded from spend
+        // by is_countable — external ACH bills tagged TRANSFER stay countable.
+        is_transfer: txn_is_internal_transfer,
         is_income: txn_is_income,
         is_income_category: is_income_category(effective_category),
         // Derive on read (no migration): explicit spendStatus wins, else fall back

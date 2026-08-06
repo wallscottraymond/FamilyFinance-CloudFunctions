@@ -21,7 +21,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { budget_repo } from "../../repositories/budget.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
-import { SplitForSpend, is_transfer_category } from "../../domain/budgets/budget_spend.service";
+import { SplitForSpend } from "../../domain/budgets/budget_spend.service";
 import {
   owned_splits_for_budget,
   SplitForOnReadMatch,
@@ -30,6 +30,10 @@ import {
   BudgetForMatch,
   PeriodLens,
 } from "../../domain/transactions/match_budget.service";
+import {
+  detect_internal_transfers_from_txns,
+  map_raw_split_to_on_read_match,
+} from "../shared/on_read_matching";
 
 function to_cadence(period: string): PeriodLens {
   return period === "weekly" ? "weekly" : period === "bi_monthly" ? "bi_monthly" : "monthly";
@@ -79,39 +83,25 @@ export async function resolve_on_read_spend_splits(
 
   // 2. Load the window's transactions and map splits to the matcher's shape.
   const txns = await transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
+  // Only INTERNAL (matched-pair own-account) transfers are excluded from spend —
+  // external ACH bills Plaid tags TRANSFER stay countable. Same rule everywhere.
+  const { internal_ids } = detect_internal_transfers_from_txns(txns);
   const splits: SplitForOnReadMatch[] = [];
-  for (const { data: d } of txns) {
+  for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
     const is_pending = d.isPending === true;
-    const txn_is_transfer = d.type === "transfer";
+    const txn_is_internal_transfer = internal_ids.has(id);
     const txn_is_income = d.type === "income";
     const raw = (d.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of raw) {
-      const manual =
-        (s.budgetAssignmentSource as string) === "manual"
-          ? (s.budgetId as string) ?? null
-          : null;
-      const internal_category = (s.internalDetailedCategory as string | null) ?? null;
-      const plaid_category = (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE";
-      splits.push({
-        amount: (s.amount as number) ?? 0,
-        txn_date_ms,
-        is_pending,
-        // Plaid account-transfer categories (TRANSFER_IN/OUT) are transfers even
-        // when `type` is income/expense — excluded from spend by is_countable.
-        is_transfer: txn_is_transfer || is_transfer_category(internal_category ?? plaid_category),
-        is_income: txn_is_income,
-        spend_status:
-          (s.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
-          (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted"),
-        outflow_id: (s.outflowId as string | null) ?? null,
-        inflow_id: (s.inflowId as string | null) ?? null,
-        internal_match_category: internal_category,
-        plaid_match_category: plaid_category,
-        overall_category_id: (s.overallCategoryId as string | null) ?? null,
-        first_category_id: (s.firstCategoryId as string | null) ?? null,
-        manual_pin_budget_id: manual,
-      });
+      splits.push(
+        map_raw_split_to_on_read_match(s, {
+          txn_date_ms,
+          is_pending,
+          is_transfer: txn_is_internal_transfer,
+          is_income: txn_is_income,
+        })
+      );
     }
   }
 

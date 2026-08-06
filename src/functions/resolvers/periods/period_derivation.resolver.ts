@@ -31,9 +31,9 @@ import {
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
 import { is_transfer_category } from "../../domain/budgets/budget_spend.service";
 import {
-  detect_internal_transfers,
-  TransferForPairing,
-} from "../../domain/transactions/internal_transfer.service";
+  detect_internal_transfers_from_txns,
+  map_raw_split_to_on_read_match,
+} from "../shared/on_read_matching";
 import {
   BudgetForMatch,
   PeriodLens,
@@ -93,12 +93,23 @@ export async function resolve_period_derivation_deps(
   window_start_ms: number,
   window_end_ms: number
 ): Promise<PeriodDerivationDeps> {
-  // 1. Buckets for the requested cadence overlapping the window.
-  const overlapping = await source_period_repo.get_overlapping(
-    ctx,
-    Timestamp.fromMillis(window_start_ms),
-    Timestamp.fromMillis(window_end_ms)
-  );
+  // 1. Fetch everything that only needs user_id + the requested window in ONE
+  // parallel round-trip. Only the transaction read depends on the derived period
+  // span (computed below), so it alone follows — 2 IO layers instead of 4.
+  const [overlapping, budget_entities, monthly_period_docs, outflows, inflows] =
+    await Promise.all([
+      source_period_repo.get_overlapping(
+        ctx,
+        Timestamp.fromMillis(window_start_ms),
+        Timestamp.fromMillis(window_end_ms)
+      ),
+      budget_repo.get_by_user_id(ctx, user_id),
+      budget_period_repo.get_by_user_and_type(ctx, user_id, "monthly"),
+      outflow_repo.get_by_user_id(ctx, user_id),
+      inflow_repo.get_by_user_id(ctx, user_id),
+    ]);
+
+  // Buckets for the requested cadence overlapping the window.
   const view_buckets: ViewBucket[] = overlapping
     .filter((p) => p.period_type === view_cadence)
     .map((p) => ({
@@ -125,9 +136,7 @@ export async function resolve_period_derivation_deps(
     ? Math.max(...view_buckets.map((b) => b.end_ms))
     : window_end_ms;
 
-  // 2. Budgets + their monthly homes (one query each).
-  const budget_entities = await budget_repo.get_by_user_id(ctx, user_id);
-  const monthly_period_docs = await budget_period_repo.get_by_user_and_type(ctx, user_id, "monthly");
+  // 2. Budgets + their monthly homes (fetched above, in parallel).
   const monthly_by_budget = new Map<string, MonthlyPeriodForDerivation[]>();
   for (const p of monthly_period_docs) {
     if (p.end_date.toMillis() < span_start_ms || p.start_date.toMillis() > span_end_ms) {
@@ -171,48 +180,31 @@ export async function resolve_period_derivation_deps(
       materialized.length > 0
         ? materialized
         : monthly_source_periods.map((sp) => {
-            const amt = monthly_equivalent_amount(b.amount, b.period);
-            return {
-              allocated_amount: amt,
-              effective_amount: amt,
-              start_ms: sp.start_ms,
-              end_ms: sp.end_ms,
-            };
-          });
+          const amt = monthly_equivalent_amount(b.amount, b.period);
+          return {
+            allocated_amount: amt,
+            effective_amount: amt,
+            start_ms: sp.start_ms,
+            end_ms: sp.end_ms,
+          };
+        });
     budgets.push({ id: b.id, name: b.name, is_ee, monthly_periods });
   }
 
-  // 3. Load recurring schedules + the window's transactions together.
-  const [outflows, inflows, txns] = await Promise.all([
-    outflow_repo.get_by_user_id(ctx, user_id),
-    inflow_repo.get_by_user_id(ctx, user_id),
-    transaction_repo.get_active_in_date_range(ctx, user_id, span_start_ms, span_end_ms),
-  ]);
+  // 3. Load the window's transactions (needs the period span derived above).
+  const txns = await transaction_repo.get_active_in_date_range(
+    ctx,
+    user_id,
+    span_start_ms,
+    span_end_ms
+  );
 
   // 3a. Matched-pair INTERNAL-transfer detection. `TRANSFER_*` alone is ambiguous —
   // Plaid tags both own-account transfers AND external ACH bills (mortgage, subs)
   // as TRANSFER_OUT_ACCOUNT_TRANSFER. A transfer is INTERNAL only when it pairs with
   // an opposite transfer of the same amount on ANOTHER account within a few days;
   // unpaired transfers are EXTERNAL (real spending/bills) and are NOT excluded.
-  const transfers_for_pairing: TransferForPairing[] = [];
-  for (const { id, data } of txns) {
-    const raw0 = (data.splits as Array<Record<string, unknown>>) ?? [];
-    const first = raw0[0] ?? {};
-    const eff =
-      (first.internalDetailedCategory as string | null) ??
-      (first.plaidDetailedCategory as string | null) ??
-      "";
-    if (!is_transfer_category(eff)) continue;
-    transfers_for_pairing.push({
-      id,
-      plaid_id: (data.transactionId as string | null) ?? null,
-      account_id: (data.accountId as string) ?? "",
-      amount: raw0.reduce((s, sp) => s + Math.abs((sp.amount as number) ?? 0), 0),
-      date_ms: (data.transactionDate as Timestamp).toMillis(),
-      direction: eff.startsWith("TRANSFER_IN") ? "in" : "out",
-    });
-  }
-  const { internal_ids, internal_plaid_ids } = detect_internal_transfers(transfers_for_pairing);
+  const { internal_ids, internal_plaid_ids } = detect_internal_transfers_from_txns(txns);
   // A recurring stream is an internal transfer when any of its transactions are.
   const is_internal_stream = (transaction_ids: string[] | undefined): boolean =>
     (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
@@ -289,28 +281,16 @@ export async function resolve_period_derivation_deps(
       const inflow_id = (s.inflowId as string | null) ?? null;
       const amount = (s.amount as number) ?? 0;
       const split_id = (s.splitId as string) ?? (s.id as string) ?? null;
-      const internal_category = (s.internalDetailedCategory as string | null) ?? null;
-      const plaid_category = (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE";
-      splits_for_match.push({
-        amount,
-        txn_date_ms,
-        is_pending,
-        // Excluded from spend only when it's an INTERNAL account transfer (matched
-        // pair). External ACH payments tagged TRANSFER_* stay countable.
-        is_transfer: txn_is_internal_transfer,
-        is_income: txn_is_income,
-        spend_status:
-          (s.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
-          (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted"),
-        outflow_id,
-        inflow_id,
-        internal_match_category: internal_category,
-        plaid_match_category: plaid_category,
-        overall_category_id: (s.overallCategoryId as string | null) ?? null,
-        first_category_id: (s.firstCategoryId as string | null) ?? null,
-        manual_pin_budget_id:
-          (s.budgetAssignmentSource as string) === "manual" ? (s.budgetId as string) ?? null : null,
-      });
+      // Excluded from spend only when it's an INTERNAL account transfer (matched
+      // pair). External ACH payments tagged TRANSFER_* stay countable.
+      splits_for_match.push(
+        map_raw_split_to_on_read_match(s, {
+          txn_date_ms,
+          is_pending,
+          is_transfer: txn_is_internal_transfer,
+          is_income: txn_is_income,
+        })
+      );
       income_amount += Math.abs(amount);
       // Outflow (bills) attribute via the split's stored link; MANUAL inflows via
       // split.inflowId — but a Plaid income txn is attributed ONCE below via

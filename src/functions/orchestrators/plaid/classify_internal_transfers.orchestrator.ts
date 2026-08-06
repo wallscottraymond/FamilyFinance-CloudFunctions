@@ -14,15 +14,11 @@
  * @module orchestrators/plaid/classify_internal_transfers
  */
 
-import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
-import {
-  detect_internal_transfers,
-  TransferForPairing,
-} from "../../domain/transactions/internal_transfer.service";
+import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
 
 /** Credit-card payments are always KEPT (a real recurring bill), never hidden. */
 const CC_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
@@ -61,29 +57,16 @@ export async function classify_internal_transfers_orchestrator(
   ]);
 
   // 2. Matched-pair internal-transfer detection over the window's transfers.
-  const transfers: TransferForPairing[] = [];
-  for (const { id, data } of txns) {
-    const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
-    const first = raw[0] ?? {};
-    const eff =
-      (first.internalDetailedCategory as string | null) ??
-      (first.plaidDetailedCategory as string | null) ??
-      "";
-    if (!is_transfer_category(eff)) continue;
-    transfers.push({
-      id,
-      plaid_id: (data.transactionId as string | null) ?? null,
-      account_id: (data.accountId as string) ?? "",
-      amount: raw.reduce((s, sp) => s + Math.abs((sp.amount as number) ?? 0), 0),
-      date_ms: (data.transactionDate as Timestamp).toMillis(),
-      direction: eff.startsWith("TRANSFER_IN") ? "in" : "out",
-    });
-  }
-  const { internal_plaid_ids } = detect_internal_transfers(transfers);
+  const { internal_plaid_ids } = detect_internal_transfers_from_txns(txns);
 
   // 3. Split each collection into hide / unhide (self-correcting).
   const partition = (
-    records: Array<{ id: string; plaid_detailed_category: string; transaction_ids: string[]; is_hidden: boolean }>
+    records: Array<{
+      id: string;
+      plaid_detailed_category: string;
+      transaction_ids: string[];
+      is_hidden: boolean;
+    }>
   ): { hide: string[]; unhide: string[] } => {
     const hide: string[] = [];
     const unhide: string[] = [];
