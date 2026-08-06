@@ -21,6 +21,10 @@ export { delete_budget } from "./delete_budget.entry";
 
 // Derive-On-Read Period Architecture (Phase 1): budget view derivation
 export { derive_budget_view } from "./derive_budget_view.entry";
+// Budget-detail transactions (on-read owner + derived status; ignored/transfers section)
+export { derive_budget_transactions } from "./derive_budget_transactions.entry";
+// Recurring inflow/outflow detail transactions (this-period + historical)
+export { derive_recurring_transactions } from "./derive_recurring_transactions.entry";
 
 // Derive-On-Read Period Architecture (Phase 3): bill/income view derivation
 export { derive_recurring_view } from "./derive_recurring_view.entry";

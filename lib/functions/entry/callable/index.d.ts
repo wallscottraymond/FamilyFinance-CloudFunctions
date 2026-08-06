@@ -13,6 +13,8 @@ export { create_budget } from "./create_budget.entry";
 export { update_budget } from "./update_budget.entry";
 export { delete_budget } from "./delete_budget.entry";
 export { derive_budget_view } from "./derive_budget_view.entry";
+export { derive_budget_transactions } from "./derive_budget_transactions.entry";
+export { derive_recurring_transactions } from "./derive_recurring_transactions.entry";
 export { derive_recurring_view } from "./derive_recurring_view.entry";
 export { derive_period } from "./derive_period.entry";
 export { create_link_token } from "./create_link_token.entry";
