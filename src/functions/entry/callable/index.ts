@@ -26,6 +26,12 @@ export { derive_budget_transactions } from "./derive_budget_transactions.entry";
 // Recurring inflow/outflow detail transactions (this-period + historical)
 export { derive_recurring_transactions } from "./derive_recurring_transactions.entry";
 
+// Remove-Recover-Recurring: remove / pause / restore / delete a recurring bill / income
+export { manage_recurring_outflow } from "./manage_recurring_outflow.entry";
+export { manage_recurring_inflow } from "./manage_recurring_inflow.entry";
+// Recovery screen: list currently removed/paused recurring items
+export { list_suppressed_recurring } from "./list_suppressed_recurring.entry";
+
 // Derive-On-Read Period Architecture (Phase 3): bill/income view derivation
 export { derive_recurring_view } from "./derive_recurring_view.entry";
 

@@ -40,6 +40,7 @@ import {
 } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
+import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
@@ -71,6 +72,8 @@ export interface RecurringForDerivation {
   kind: "outflow" | "inflow";
   schedule: RecurringScheduleForGeneration;
   payments: ActualPayment[];
+  /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
+  removal_intervals: RemovalInterval[];
 }
 
 export interface PeriodDerivationDeps {
@@ -229,6 +232,9 @@ export async function resolve_period_derivation_deps(
         predicted_next_date: o.predicted_next_date,
       },
       payments: [],
+      // User remove/pause spans — filtered per period on read (not a blanket skip,
+      // so past periods still show a going-forward/paused bill).
+      removal_intervals: o.removal_intervals,
     });
     payments_by_id.set(o.id, []);
   }
@@ -255,6 +261,8 @@ export async function resolve_period_derivation_deps(
         predicted_next_date: i.predicted_next_date,
       },
       payments: [],
+      // Income remove/pause spans — filtered per period on read, same as bills.
+      removal_intervals: i.removal_intervals,
     });
     payments_by_id.set(i.id, []);
     for (const tx_id of i.transaction_ids ?? []) {

@@ -20,6 +20,7 @@ import {
   chunk_for_batch,
 } from "../types";
 import { InflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
+import { RemovalInterval, RemovalMode } from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
 
 /**
@@ -85,9 +86,24 @@ export interface Inflow {
   tags: string[];
   rules: unknown[];
 
+  // User remove/pause state (Remove-Recover-Recurring). Suppression is derived on
+  // read from `removal_intervals`; `removed_by_user` is a denorm. Both preserved
+  // across Plaid re-sync.
+  removed_by_user: boolean;
+  removal_intervals: RemovalInterval[];
+
   // Sync tracking
   last_synced_at?: Timestamp;
 }
+
+/** Stored (camelCase) shape of a removal interval on the inflow doc. */
+/* eslint-disable @typescript-eslint/naming-convention */
+interface RemovalIntervalDoc {
+  fromMs: number;
+  toMs: number | null;
+  mode: RemovalMode;
+}
+/* eslint-enable @typescript-eslint/naming-convention */
 
 /**
  * Legacy Firestore document structure (camelCase).
@@ -148,10 +164,26 @@ interface LegacyInflowDoc {
   tags: string[];
   rules: unknown[];
 
+  // User remove/pause state (preserved across Plaid re-sync, like isHidden).
+  removedByUser?: boolean;
+  removalIntervals?: RemovalIntervalDoc[];
+
   // Sync tracking
   lastSyncedAt?: Timestamp;
 }
 /* eslint-enable @typescript-eslint/naming-convention */
+
+/** Map stored interval docs → domain intervals (defaults to empty). */
+function map_removal_intervals(docs?: RemovalIntervalDoc[]): RemovalInterval[] {
+  return (docs ?? []).map((d) => ({ from_ms: d.fromMs, to_ms: d.toMs, mode: d.mode }));
+}
+
+/** Map domain intervals → stored interval docs. */
+function to_removal_interval_docs(intervals: RemovalInterval[]): RemovalIntervalDoc[] {
+  /* eslint-disable @typescript-eslint/naming-convention */
+  return intervals.map((i) => ({ fromMs: i.from_ms, toMs: i.to_ms, mode: i.mode }));
+  /* eslint-enable @typescript-eslint/naming-convention */
+}
 
 /**
  * Maps legacy Firestore document to Inflow entity.
@@ -204,6 +236,9 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
     tags: doc.tags,
     rules: doc.rules,
 
+    removed_by_user: doc.removedByUser ?? false,
+    removal_intervals: map_removal_intervals(doc.removalIntervals),
+
     last_synced_at: doc.lastSyncedAt,
   };
 }
@@ -249,7 +284,8 @@ function map_persistence_to_doc(
     plaidPrimaryCategory: entity.plaid_primary_category,
     plaidDetailedCategory: entity.plaid_detailed_category,
     internalPrimaryCategory: existing?.internalPrimaryCategory ?? entity.internal_primary_category,
-    internalDetailedCategory: existing?.internalDetailedCategory ?? entity.internal_detailed_category,
+    internalDetailedCategory:
+      existing?.internalDetailedCategory ?? entity.internal_detailed_category,
 
     incomeType: entity.income_type,
     isRegularSalary: entity.is_regular_salary,
@@ -263,6 +299,10 @@ function map_persistence_to_doc(
     transactionIds: entity.transaction_ids,
     tags: existing?.tags ?? entity.tags,
     rules: existing?.rules ?? entity.rules,
+
+    // Preserve user remove/pause state across re-sync (Plaid never sets these).
+    removedByUser: existing?.removedByUser ?? false,
+    removalIntervals: existing?.removalIntervals ?? [],
 
     lastSyncedAt: now,
   };
@@ -306,6 +346,72 @@ export const inflow_repo = {
     }
     console.log(`[${ctx.trace_id}] inflow_repo.restore_by_ids: restored=${restored}`);
     return restored;
+  },
+
+  /**
+   * Persist a user's remove/pause/restore state (removal intervals + denorm).
+   * Preserved across Plaid re-sync by `save_batch`. Records an audit entry.
+   */
+  async set_removal_intervals(
+    ctx: TraceContext,
+    id: string,
+    intervals: RemovalInterval[],
+    removed_by_user: boolean,
+    user_id: string
+  ): Promise<WriteResult> {
+    const before_doc = await doc_ref(id).get();
+    if (!before_doc.exists) {
+      throw new Error(`Inflow ${id} not found`);
+    }
+    const before = before_doc.data() as LegacyInflowDoc;
+    const now = Timestamp.now();
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const after: LegacyInflowDoc = {
+      ...before,
+      removedByUser: removed_by_user,
+      removalIntervals: to_removal_interval_docs(intervals),
+      updatedAt: now,
+    };
+    /* eslint-enable @typescript-eslint/naming-convention */
+    await doc_ref(id).set(after);
+
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "recurring_inflow",
+      entity_id: id,
+      before: before as unknown as Record<string, unknown>,
+      after: after as unknown as Record<string, unknown>,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { operation: "set_removal_intervals" } },
+    });
+
+    return create_write_result("inflow", id, "replace", before, after);
+  },
+
+  /**
+   * Permanently delete an inflow doc — irreversible ("Delete permanently").
+   */
+  async hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult> {
+    const before_doc = await doc_ref(id).get();
+    if (!before_doc.exists) {
+      throw new Error(`Inflow ${id} not found`);
+    }
+    const before = before_doc.data() as LegacyInflowDoc;
+    await doc_ref(id).delete();
+
+    record_audit_entry_async({
+      user_id,
+      action: "delete",
+      entity_type: "recurring_inflow",
+      entity_id: id,
+      before: before as unknown as Record<string, unknown>,
+      after: null,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { operation: "hard_delete" } },
+    });
+
+    return create_write_result("inflow", id, "replace", before, null);
   },
 
   /**

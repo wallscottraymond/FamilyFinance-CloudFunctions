@@ -30,7 +30,9 @@ import {
   DerivedBudgetViewPeriod,
 } from "../../domain/budgets/budget_view.service";
 import { owned_splits_for_budget } from "../../domain/budgets/budget_spend_match.service";
-import { generate_expected_occurrences_in_window } from "../../domain/outflows/outflow_period.service";
+import {
+  generate_expected_occurrences_in_window,
+} from "../../domain/outflows/outflow_period.service";
 import {
   reconcile_occurrences,
   reconcile_income_occurrences,
@@ -40,6 +42,9 @@ import {
   place_occurrences,
   PlacedOccurrenceGroup,
 } from "../../domain/recurring/occurrence_placement.service";
+import {
+  is_suppressed_in_period,
+} from "../../domain/recurring/recurring_suppression.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
 const BUDGET: PerformanceBudget = { max_reads: 200, max_writes: 0, max_time_ms: 1500 };
@@ -96,6 +101,11 @@ export async function derive_period_orchestrator(
     });
 
     // Bills + income — generate → reconcile → place (in memory).
+    // Period end (ms) per bucket → drop occurrence-groups in a suppressed period
+    // (user remove/pause), snapping to whole periods per the viewing cadence.
+    const period_end_by_id = new Map(
+      deps.placement_buckets.map((b) => [b.period_id, b.end_ms])
+    );
     const bills: DerivedRecurringResult[] = [];
     const income: DerivedRecurringResult[] = [];
     for (const r of deps.recurring) {
@@ -126,7 +136,16 @@ export async function derive_period_orchestrator(
         reconciled = reconcile_occurrences(expected, r.payments);
       }
       const groups = place_occurrences(reconciled, deps.placement_buckets);
-      (r.kind === "outflow" ? bills : income).push({ recurring_id: r.id, name: r.name, groups });
+      // Suppress groups whose period is removed/paused for this item (per-period snap).
+      const visible_groups = groups.filter((g) => {
+        const end_ms = period_end_by_id.get(g.period_id);
+        return end_ms === undefined || !is_suppressed_in_period(r.removal_intervals, end_ms);
+      });
+      (r.kind === "outflow" ? bills : income).push({
+        recurring_id: r.id,
+        name: r.name,
+        groups: visible_groups,
+      });
     }
 
     if (is_budget_exceeded(perf, BUDGET)) {

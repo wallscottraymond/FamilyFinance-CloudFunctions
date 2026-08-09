@@ -12,6 +12,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { WriteResult, BatchWriteResult, ReadOptions, TraceContext } from "../types";
 import { OutflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
+import { RemovalInterval } from "../domain/recurring/recurring_suppression.service";
 /**
  * Outflow entity in snake_case (internal representation).
  */
@@ -53,6 +54,8 @@ export interface Outflow {
     transaction_ids: string[];
     tags: string[];
     rules: unknown[];
+    removed_by_user: boolean;
+    removal_intervals: RemovalInterval[];
     last_synced_at?: Timestamp;
 }
 /**
@@ -67,6 +70,16 @@ export declare const outflow_repo: {
      * Returns the number of docs written.
      */
     restore_by_ids(ctx: TraceContext, ids: string[]): Promise<number>;
+    /**
+     * Persist a user's remove/pause/restore state — the derived `removal_intervals`
+     * (source of truth for on-read suppression) + the `removed_by_user` denorm.
+     * Preserved across Plaid re-sync by `save_batch`. Records an audit entry.
+     */
+    set_removal_intervals(ctx: TraceContext, id: string, intervals: RemovalInterval[], removed_by_user: boolean, user_id: string): Promise<WriteResult>;
+    /**
+     * Permanently delete an outflow doc — irreversible ("Delete permanently").
+     */
+    hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;
     /**
      * Gets an outflow by ID.
      */

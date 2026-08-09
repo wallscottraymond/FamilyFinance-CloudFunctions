@@ -19,6 +19,7 @@ import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.ser
 import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
+import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 export interface BudgetForDerivation {
@@ -33,6 +34,8 @@ export interface RecurringForDerivation {
     kind: "outflow" | "inflow";
     schedule: RecurringScheduleForGeneration;
     payments: ActualPayment[];
+    /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
+    removal_intervals: RemovalInterval[];
 }
 export interface PeriodDerivationDeps {
     view_buckets: ViewBucket[];
