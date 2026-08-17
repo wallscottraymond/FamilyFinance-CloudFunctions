@@ -50,6 +50,10 @@ export interface Outflow {
   amount_min?: number;
   amount_max?: number;
   currency: string;
+  // User-set expected amount ("this + future"). When non-null it OVERRIDES
+  // `average_amount` everywhere the expected amount is derived. Preserved across
+  // Plaid re-sync (Plaid never sets it), so it's sticky. null = use Plaid's average.
+  expected_amount_override: number | null;
 
   // Description
   description: string | null;
@@ -129,6 +133,8 @@ interface LegacyOutflowDoc {
   lastAmount: number;
   averageAmount: number;
   currency: string;
+  // User-set expected-amount override (see Outflow.expected_amount_override).
+  expectedAmountOverride?: number | null;
 
   // Description
   description: string | null;
@@ -206,6 +212,7 @@ function map_to_entity(doc: LegacyOutflowDoc): Outflow {
     amount_min: undefined, // Legacy docs may not have this
     amount_max: undefined,
     currency: doc.currency,
+    expected_amount_override: doc.expectedAmountOverride ?? null,
 
     description: doc.description,
     merchant_name: doc.merchantName,
@@ -268,6 +275,9 @@ function map_persistence_to_doc(
 
     lastAmount: entity.last_amount,
     averageAmount: entity.average_amount,
+    // Preserve the user's expected-amount override across Plaid re-sync (Plaid
+    // refreshes averageAmount, but the override keeps driving the expected value).
+    expectedAmountOverride: existing?.expectedAmountOverride ?? null,
     currency: entity.currency,
 
     description: entity.description,

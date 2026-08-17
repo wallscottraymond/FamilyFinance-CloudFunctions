@@ -62,6 +62,14 @@ export interface PlacedOccurrenceGroup {
   /** Some but not all paid. */
   is_partially_paid: boolean;
   status: OccurrenceReconStatus;
+  /** Earliest due date of any placed occurrence, epoch ms (null if none). */
+  first_due_ms: number | null;
+  /**
+   * Earliest due date among the UNPAID placed occurrences, epoch ms — the "next
+   * thing owed" this period, which drives tile display + ordering. Null when the
+   * group is empty or fully paid (fall back to `first_due_ms` for a paid group).
+   */
+  next_unpaid_due_ms: number | null;
 }
 
 /** UTC day index (days since epoch) for a timestamp. PURE. */
@@ -102,6 +110,8 @@ export function place_occurrences(
     let total_due = 0;
     let total_paid = 0;
     let count_paid = 0;
+    let first_due_ms: number | null = null;
+    let next_unpaid_due_ms: number | null = null;
     const occurrence_ids: string[] = [];
     for (const o of placed) {
       occurrence_ids.push(o.occurrence_id);
@@ -109,6 +119,11 @@ export function place_occurrences(
       total_paid += o.amount_paid;
       if (o.is_paid) {
         count_paid++;
+      } else if (next_unpaid_due_ms === null || o.due_date_ms < next_unpaid_due_ms) {
+        next_unpaid_due_ms = o.due_date_ms;
+      }
+      if (first_due_ms === null || o.due_date_ms < first_due_ms) {
+        first_due_ms = o.due_date_ms;
       }
     }
 
@@ -138,6 +153,8 @@ export function place_occurrences(
       is_fully_paid,
       is_partially_paid,
       status,
+      first_due_ms,
+      next_unpaid_due_ms,
     };
   });
 }

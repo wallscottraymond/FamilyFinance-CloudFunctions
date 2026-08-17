@@ -1753,6 +1753,10 @@ export interface Outflow extends BaseDocument {
   // === FINANCIAL DATA ===
   lastAmount: number;                  // Last amount paid (from Plaid, absolute value)
   averageAmount: number;               // Average amount (from Plaid, absolute value)
+  // User-set expected amount ("this + future"). When non-null it OVERRIDES
+  // averageAmount everywhere the expected amount is derived. Preserved across
+  // Plaid re-sync (sticky). null/undefined = use Plaid's average.
+  expectedAmountOverride?: number | null;
   currency: string;                    // ISO currency code (e.g., "USD")
 
   // === DESCRIPTIVE INFO ===
@@ -2103,6 +2107,10 @@ export interface Inflow extends BaseDocument {
   // === FINANCIAL DATA ===
   lastAmount: number;                  // Last amount received
   averageAmount: number;               // Average amount
+  // User-set expected amount ("this + future"). When non-null it OVERRIDES
+  // averageAmount everywhere the expected amount is derived. Preserved across
+  // Plaid re-sync (sticky). null/undefined = use Plaid's average.
+  expectedAmountOverride?: number | null;
   currency: string;                    // ISO currency code
   unofficialCurrency: string | null;   // Unofficial currency code (if any)
 

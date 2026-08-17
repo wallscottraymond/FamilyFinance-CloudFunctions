@@ -69,6 +69,8 @@ function map_recurring(r: DerivedRecurringResult) {
       isDuePeriod: g.is_due_period,
       isFullyPaid: g.is_fully_paid,
       status: g.status,
+      firstDueMs: g.first_due_ms,
+      nextUnpaidDueMs: g.next_unpaid_due_ms,
     })),
   };
 }

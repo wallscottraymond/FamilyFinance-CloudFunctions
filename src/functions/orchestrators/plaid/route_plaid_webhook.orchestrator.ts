@@ -20,6 +20,7 @@ import { handle_login_repaired_orchestrator } from "./handle_login_repaired.orch
 import { resolve_webhook_transaction_sync_dependencies } from "../../resolvers/plaid";
 import { PlaidWebhookType, PlaidWebhookCode } from "../../../types";
 import { is_user_purging } from "../../infrastructure/purge_guard";
+import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
 
 /** Webhook body fields used by the item-status handlers. */
 export interface ItemStatusWebhookBody {
@@ -48,6 +49,22 @@ export async function route_plaid_webhook_orchestrator(
   const { trace_id, span_id } = ctx;
   const { webhook_type, webhook_code, plaid_item_id, request_id, webhook_body } =
     input;
+
+  // Observability: record that a webhook actually arrived for this item, for
+  // EVERY type/code, before routing. Best-effort — a stamp failure must never
+  // block webhook processing. (Previously `lastWebhookReceived` was only ever
+  // written as null at link time, so we had no way to see if Plaid was calling
+  // us at all.)
+  if (plaid_item_id) {
+    try {
+      await plaid_item_repo.mark_webhook_received({ trace_id, span_id }, plaid_item_id);
+    } catch (err) {
+      console.warn(
+        `[${trace_id}] Failed to stamp lastWebhookReceived for ${plaid_item_id}:`,
+        err
+      );
+    }
+  }
 
   // ITEM webhooks
   if (webhook_type === PlaidWebhookType.ITEM) {

@@ -93,9 +93,14 @@ export async function runUpdateInflowPeriods(
     // Step 1: Detect which fields changed
     const changedFields: string[] = [];
 
-    if (inflowBefore.averageAmount !== inflowAfter.averageAmount) {
+    // EFFECTIVE expected amount = user override when set, else Plaid's average.
+    // A change to EITHER recomputes period amounts.
+    const effectiveAmountBefore = inflowBefore.expectedAmountOverride ?? inflowBefore.averageAmount;
+    const effectiveAmount = inflowAfter.expectedAmountOverride ?? inflowAfter.averageAmount;
+
+    if (effectiveAmountBefore !== effectiveAmount) {
       changedFields.push('averageAmount');
-      console.log(`[runUpdateInflowPeriods] averageAmount changed: ${inflowBefore.averageAmount} → ${inflowAfter.averageAmount}`);
+      console.log(`[runUpdateInflowPeriods] effective expected amount changed: ${effectiveAmountBefore} → ${effectiveAmount} (override=${inflowAfter.expectedAmountOverride ?? 'none'})`);
     }
 
     if (inflowBefore.userCustomName !== inflowAfter.userCustomName) {
@@ -241,7 +246,8 @@ export async function runUpdateInflowPeriods(
     // Step 5: Calculate updated prediction
     let predictionData: { expectedDate: Timestamp; expectedAmount: number } | null = null;
     if (changedFields.includes('predictedNextDate') || changedFields.includes('averageAmount')) {
-      const prediction = predictNextPayment(inflowAfter);
+      // Predict from the EFFECTIVE amount so a user override drives the projection too.
+      const prediction = predictNextPayment({ ...inflowAfter, averageAmount: effectiveAmount });
       if (prediction) {
         predictionData = {
           expectedDate: prediction.expectedDate,
@@ -266,9 +272,10 @@ export async function runUpdateInflowPeriods(
         // Check if this period has received income (skip amount updates if so)
         const isReceived = period.isPaid || period.isFullyPaid || period.isPartiallyPaid;
 
-        // Handle averageAmount change (only for unreceived periods)
+        // Handle averageAmount change (only for unreceived periods).
+        // Uses the EFFECTIVE amount (override ?? average).
         if (changedFields.includes('averageAmount') && !isReceived) {
-          const incomeAmount = Math.abs(inflowAfter.averageAmount || 0);
+          const incomeAmount = Math.abs(effectiveAmount || 0);
           const daysInPeriod = calculateDaysInPeriod(period);
           const cycleDays = period.cycleDays || 30;
           const dailyRate = incomeAmount / cycleDays;

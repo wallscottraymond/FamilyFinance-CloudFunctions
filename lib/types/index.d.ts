@@ -1373,6 +1373,7 @@ export interface Outflow extends BaseDocument {
     accountId: string;
     lastAmount: number;
     averageAmount: number;
+    expectedAmountOverride?: number | null;
     currency: string;
     description: string | null;
     merchantName: string | null;
@@ -1628,6 +1629,7 @@ export interface Inflow extends BaseDocument {
     accountId: string;
     lastAmount: number;
     averageAmount: number;
+    expectedAmountOverride?: number | null;
     currency: string;
     unofficialCurrency: string | null;
     description: string | null;

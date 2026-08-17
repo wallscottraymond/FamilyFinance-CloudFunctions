@@ -226,7 +226,8 @@ export async function resolve_period_derivation_deps(
       name: o.user_custom_name || o.merchant_name || o.description || "Bill",
       schedule: {
         frequency: o.frequency,
-        average_amount: o.average_amount,
+        // User override ("this + future") wins over Plaid's average when set.
+        average_amount: o.expected_amount_override ?? o.average_amount,
         first_date: o.first_date,
         last_date: o.last_date,
         predicted_next_date: o.predicted_next_date,
@@ -255,7 +256,8 @@ export async function resolve_period_derivation_deps(
       name: i.user_custom_name || i.payer_name || i.description || "Income",
       schedule: {
         frequency: i.frequency,
-        average_amount: i.average_amount,
+        // User override ("this + future") wins over Plaid's average when set.
+        average_amount: i.expected_amount_override ?? i.average_amount,
         first_date: i.first_date,
         last_date: i.last_date,
         predicted_next_date: i.predicted_next_date,

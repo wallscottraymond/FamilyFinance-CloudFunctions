@@ -70,6 +70,9 @@ describe("place_occurrences", () => {
     expect(g.is_due_period).toBe(true);
     expect(g.is_fully_paid).toBe(false);
     expect(g.status).toBe("pending");
+    // Date rollup: the single unpaid occurrence drives both first + next-unpaid.
+    expect(g.first_due_ms).toBe(JUN_15);
+    expect(g.next_unpaid_due_ms).toBe(JUN_15);
   });
 
   it("marks fully paid when the occurrence is paid", () => {
@@ -81,6 +84,27 @@ describe("place_occurrences", () => {
     expect(g.total_unpaid).toBe(0);
     expect(g.is_fully_paid).toBe(true);
     expect(g.status).toBe("paid");
+    // A fully-paid group has a first-due date but no next-unpaid.
+    expect(g.first_due_ms).toBe(JUN_15);
+    expect(g.next_unpaid_due_ms).toBeNull();
+  });
+
+  it("exposes earliest due + earliest UNPAID due across mixed occurrences", () => {
+    // Two occurrences in June: the earlier one is paid, the later is not.
+    const occs = [
+      occ("o1", Date.UTC(2026, 5, 3), { amount_due: 50, is_paid: true, amount_paid: 50 }),
+      occ("o2", Date.UTC(2026, 5, 17), { amount_due: 50 }),
+    ];
+    const [g] = place_occurrences(occs, [junMonthBucket]);
+    // first_due = earliest of ALL (the paid Jun 3); next_unpaid = earliest UNPAID (Jun 17).
+    expect(g.first_due_ms).toBe(Date.UTC(2026, 5, 3));
+    expect(g.next_unpaid_due_ms).toBe(Date.UTC(2026, 5, 17));
+  });
+
+  it("returns null dates for an empty bucket", () => {
+    const [g] = place_occurrences([], [junMonthBucket]);
+    expect(g.first_due_ms).toBeNull();
+    expect(g.next_unpaid_due_ms).toBeNull();
   });
 
   it("marks partial when some occurrences in the bucket are paid", () => {

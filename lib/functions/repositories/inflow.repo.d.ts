@@ -31,6 +31,7 @@ export interface Inflow {
     amount_min?: number;
     amount_max?: number;
     currency: string;
+    expected_amount_override: number | null;
     description: string | null;
     payer_name: string | null;
     user_custom_name: string | null;

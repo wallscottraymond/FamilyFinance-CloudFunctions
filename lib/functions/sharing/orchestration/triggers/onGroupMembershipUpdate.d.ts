@@ -14,11 +14,10 @@
  * Memory: 1GiB (may need to update many resources), Timeout: 540s (9 minutes)
  */
 /**
- * Triggered when a group or family document is updated
- * Updates accessibleBy arrays in all related resources
+ * Triggered when a GROUP document is updated (RBAC v2).
+ * Scoped to the `groups` collection so it does NOT fire on unrelated writes.
  */
 export declare const onGroupMembershipUpdate: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/firestore").FirestoreEvent<import("firebase-functions/v2/firestore").Change<import("firebase-functions/v2/firestore").QueryDocumentSnapshot> | undefined, {
     groupId: string;
-    collection: string;
 }>>;
 //# sourceMappingURL=onGroupMembershipUpdate.d.ts.map

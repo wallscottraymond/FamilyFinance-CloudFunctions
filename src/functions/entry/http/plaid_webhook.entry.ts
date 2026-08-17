@@ -17,52 +17,66 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as crypto from "crypto";
+import * as jwt from "jsonwebtoken";
 import { generate_id } from "../../observability";
 import { route_plaid_webhook_orchestrator } from "../../orchestrators/plaid";
+import { get_webhook_verification_key } from "../../integrations/plaid/plaid_client";
 
-// Secrets required for webhook verification
-const plaidClientId = defineSecret("PLAID_CLIENT_ID");
-const plaidSecret = defineSecret("PLAID_SECRET");
-const plaidWebhookSecret = defineSecret("PLAID_WEBHOOK_SECRET");
-const tokenEncryptionKey = defineSecret("TOKEN_ENCRYPTION_KEY");
+// Plaid client credentials are needed to fetch webhook verification keys;
+// tokenEncryptionKey is needed by downstream sync orchestrators. Plaid signs
+// webhooks with a JWT (ES256) verified via public keys — there is NO shared
+// webhook secret (the old PLAID_WEBHOOK_SECRET HMAC scheme was incorrect).
+const PLAID_CLIENT_ID = defineSecret("PLAID_CLIENT_ID");
+const PLAID_SECRET = defineSecret("PLAID_SECRET");
+const TOKEN_ENCRYPTION_KEY = defineSecret("TOKEN_ENCRYPTION_KEY");
+
+// Cache verification keys by `kid` (they rarely rotate). Refetched on a cache miss.
+const key_cache = new Map<string, crypto.KeyObject>();
 
 /**
- * Verifies Plaid webhook signature using HMAC-SHA256.
- * Returns true if signature is valid.
+ * Verifies a Plaid webhook per Plaid's spec: the `plaid-verification` header is a
+ * JWS (ES256). We read its `kid`, fetch the matching public key from Plaid's
+ * /webhook_verification_key/get, verify the ES256 signature (rejecting anything
+ * older than 5 min), then confirm the JWT's `request_body_sha256` claim equals the
+ * SHA-256 of the RAW request body. Returns true only if all checks pass.
  */
-function verify_webhook_signature(
-  body: string,
-  signature: string,
-  secret: string
-): boolean {
+async function verify_plaid_webhook(token: string, raw_body: Buffer): Promise<boolean> {
   try {
-    if (!secret) {
-      console.error("PLAID_WEBHOOK_SECRET not configured");
+    if (!token) return false;
+
+    const decoded = jwt.decode(token, { complete: true });
+    if (!decoded || typeof decoded === "string") return false;
+    const { alg, kid } = decoded.header;
+    if (alg !== "ES256" || !kid) {
+      console.warn(`Webhook JWT rejected: alg=${alg} kid=${kid}`);
       return false;
     }
 
-    if (!signature || typeof signature !== "string") {
-      console.warn("Invalid signature format provided");
-      return false;
+    let public_key = key_cache.get(kid);
+    if (!public_key) {
+      const jwk = await get_webhook_verification_key(kid);
+      // Import only the EC public-key fields as a JWK.
+      public_key = crypto.createPublicKey({
+        key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y } as crypto.JsonWebKey,
+        format: "jwk",
+      });
+      key_cache.set(kid, public_key);
     }
 
-    const expected_signature = crypto
-      .createHmac("sha256", secret)
-      .update(body)
-      .digest("hex");
+    // Verify signature + freshness (iat within 5 minutes).
+    const claims = jwt.verify(token, public_key, {
+      algorithms: ["ES256"],
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      maxAge: "5m",
+    }) as jwt.JwtPayload;
 
-    // Length check before timing-safe comparison
-    if (signature.length !== expected_signature.length) {
-      return false;
-    }
-
-    // Timing-safe comparison
-    return crypto.timingSafeEqual(
-      Buffer.from(signature, "hex"),
-      Buffer.from(expected_signature, "hex")
-    );
+    // Confirm the body hasn't been tampered with.
+    const body_hash = crypto.createHash("sha256").update(raw_body).digest("hex");
+    const claimed = String(claims.request_body_sha256 || "");
+    if (claimed.length !== body_hash.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(claimed), Buffer.from(body_hash));
   } catch (error) {
-    console.error("Error verifying webhook signature:", error);
+    console.error("Error verifying Plaid webhook:", error);
     return false;
   }
 }
@@ -74,12 +88,14 @@ function verify_webhook_signature(
  * Follows architecture: Entry -> Orchestrator -> Resolver -> Domain -> Repository
  */
 export const plaid_webhook = onRequest(
+  /* eslint-disable @typescript-eslint/naming-convention */
   {
     memory: "512MiB",
     timeoutSeconds: 30, // Webhooks need fast response
     cors: false, // Webhooks should not have CORS
-    secrets: [plaidClientId, plaidSecret, plaidWebhookSecret, tokenEncryptionKey],
+    secrets: [PLAID_CLIENT_ID, PLAID_SECRET, TOKEN_ENCRYPTION_KEY],
   },
+  /* eslint-enable @typescript-eslint/naming-convention */
   async (req, res) => {
     // 1. METHOD CHECK
     if (req.method !== "POST") {
@@ -92,7 +108,8 @@ export const plaid_webhook = onRequest(
     const span_id = generate_id();
 
     // 3. EXTRACT WEBHOOK DATA
-    const webhook_body = JSON.stringify(req.body);
+    // Use the RAW body bytes for hash verification (JSON.stringify would reorder keys).
+    const raw_body = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
     const signature = req.get("plaid-verification") || "";
     const {
       webhook_type,
@@ -111,8 +128,7 @@ export const plaid_webhook = onRequest(
                           process.env.VERIFY_WEBHOOK_SIGNATURE === "true";
 
     if (should_verify) {
-      const webhook_secret = plaidWebhookSecret.value();
-      if (!verify_webhook_signature(webhook_body, signature, webhook_secret)) {
+      if (!(await verify_plaid_webhook(signature, raw_body))) {
         console.warn(`[${trace_id}] Invalid webhook signature`);
         res.status(401).json({
           success: false,

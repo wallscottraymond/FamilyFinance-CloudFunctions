@@ -58,6 +58,14 @@ export interface PlacedOccurrenceGroup {
     /** Some but not all paid. */
     is_partially_paid: boolean;
     status: OccurrenceReconStatus;
+    /** Earliest due date of any placed occurrence, epoch ms (null if none). */
+    first_due_ms: number | null;
+    /**
+     * Earliest due date among the UNPAID placed occurrences, epoch ms — the "next
+     * thing owed" this period, which drives tile display + ordering. Null when the
+     * group is empty or fully paid (fall back to `first_due_ms` for a paid group).
+     */
+    next_unpaid_due_ms: number | null;
 }
 /**
  * Place canonical occurrences into a view's buckets and roll each group up.

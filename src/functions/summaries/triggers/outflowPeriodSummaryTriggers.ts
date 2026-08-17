@@ -20,6 +20,10 @@ import {
   mark_processed,
 } from "../../repositories/infrastructure/trigger_processing.repository";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import {
+  only_ignored_changed,
+  PERIOD_SUMMARY_IGNORE_FIELDS,
+} from "../../domain/shared/doc_change.service";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -49,6 +53,20 @@ export const on_outflow_period_updated_summary = onDocumentUpdated(
   },
   async (event) => {
     const doc_id = event.params.outflowPeriodId;
+
+    // 0. CHANGE GUARD (pure, no IO) — skip writes that touched only bookkeeping
+    // fields (updatedAt/accessibleBy/…). The summary can't have changed, so we
+    // avoid the idempotency reads + job enqueue entirely. Huge win when unrelated
+    // writes (e.g. group membership sync) touch every period doc.
+    if (
+      only_ignored_changed(
+        event.data?.before?.data(),
+        event.data?.after?.data(),
+        PERIOD_SUMMARY_IGNORE_FIELDS
+      )
+    ) {
+      return;
+    }
 
     // Create trace context early for idempotency check
     const trace_id = uuid();

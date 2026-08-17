@@ -93,9 +93,15 @@ export async function runUpdateOutflowPeriods(
     // Step 1: Detect which fields changed
     const changedFields: string[] = [];
 
-    if (outflowBefore.averageAmount !== outflowAfter.averageAmount) {
+    // The EFFECTIVE expected amount is the user's override when set, else Plaid's
+    // average. A change to EITHER (edit the override, or Plaid refreshing the
+    // average while no override is set) recomputes period amounts.
+    const effectiveAmountBefore = outflowBefore.expectedAmountOverride ?? outflowBefore.averageAmount;
+    const effectiveAmount = outflowAfter.expectedAmountOverride ?? outflowAfter.averageAmount;
+
+    if (effectiveAmountBefore !== effectiveAmount) {
       changedFields.push('averageAmount');
-      console.log(`[runUpdateOutflowPeriods] averageAmount changed: ${outflowBefore.averageAmount} → ${outflowAfter.averageAmount}`);
+      console.log(`[runUpdateOutflowPeriods] effective expected amount changed: ${effectiveAmountBefore} → ${effectiveAmount} (override=${outflowAfter.expectedAmountOverride ?? 'none'})`);
     }
 
     if (outflowBefore.userCustomName !== outflowAfter.userCustomName) {
@@ -225,16 +231,16 @@ export async function runUpdateOutflowPeriods(
         const period = periodDoc.data() as OutflowPeriod;
         const updates: any = {};
 
-        // Handle averageAmount change
+        // Handle averageAmount change (uses the EFFECTIVE amount: override ?? average)
         if (changedFields.includes('averageAmount')) {
-          const dailyRate = outflowAfter.averageAmount / period.cycleDays;
+          const dailyRate = effectiveAmount / period.cycleDays;
           const daysInPeriod = calculateDaysInPeriod(period);
 
-          updates.averageAmount = outflowAfter.averageAmount;
+          updates.averageAmount = effectiveAmount;
           updates.amountWithheld = dailyRate * daysInPeriod;
-          updates.expectedAmount = outflowAfter.averageAmount;
-          updates.totalAmountDue = outflowAfter.averageAmount;
-          updates.amountPerOccurrence = outflowAfter.averageAmount;
+          updates.expectedAmount = effectiveAmount;
+          updates.totalAmountDue = effectiveAmount;
+          updates.amountPerOccurrence = effectiveAmount;
           updates.dailyWithholdingRate = dailyRate;
 
           // Update occurrence objects' amountDue (if they exist)
@@ -245,14 +251,14 @@ export async function runUpdateOutflowPeriods(
                 return { ...occ };
               } else {
                 // Update unpaid occurrences' amountDue to new amount
-                return { ...occ, amountDue: outflowAfter.averageAmount };
+                return { ...occ, amountDue: effectiveAmount };
               }
             });
             console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updated ${period.occurrences.length} occurrence objects`);
             const paidCount = period.occurrences.filter(o => o.isPaid).length;
             const unpaidCount = period.occurrences.length - paidCount;
             console.log(`  - Preserved ${paidCount} paid occurrence(s) at original amountDue`);
-            console.log(`  - Updated ${unpaidCount} unpaid occurrence(s) to $${outflowAfter.averageAmount.toFixed(2)}`);
+            console.log(`  - Updated ${unpaidCount} unpaid occurrence(s) to $${effectiveAmount.toFixed(2)}`);
           }
 
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating amounts`);

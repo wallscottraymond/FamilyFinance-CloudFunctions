@@ -41,6 +41,22 @@ export const on_budget_period_edited = onDocumentUpdated(
       return;
     }
 
+    // CHANGE GUARD (pure, no IO) — this trigger only syncs user-entered fields
+    // across period types. A write that didn't touch any of them (e.g. a recompute
+    // updating `spent`, or a bulk backfill) is a no-op, so bail out BEFORE the
+    // idempotency reads. Mirrors process_budget_period_edited's own detection.
+    const bf = before as unknown as Record<string, unknown>;
+    const af = after as unknown as Record<string, unknown>;
+    const relevant_changed =
+      before.userNotes !== after.userNotes ||
+      JSON.stringify(bf.checklistItems ?? []) !== JSON.stringify(af.checklistItems ?? []) ||
+      bf.modifiedAmount !== af.modifiedAmount ||
+      before.isModified !== after.isModified ||
+      before.isActive !== after.isActive;
+    if (!relevant_changed) {
+      return;
+    }
+
     const trace = create_trigger_trace(period_id, event.id);
 
     // Idempotency guard: triggers fire at-least-once, so skip replays of the

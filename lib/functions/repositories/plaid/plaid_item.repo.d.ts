@@ -65,6 +65,15 @@ export declare const plaid_item_repo: {
      */
     get_in_transient_state(ctx: TraceContext, statuses: string[]): Promise<TransientItemToRetry[]>;
     /**
+     * Lightweight rows for every ACTIVE item across all users — used by the
+     * scheduled fallback transaction sync so data still flows if a webhook is missed.
+     */
+    get_all_active(_ctx: TraceContext): Promise<Array<{
+        item_doc_id: string;
+        plaid_item_id: string;
+        user_id: string;
+    }>>;
+    /**
      * Gets a Plaid item by user and institution.
      *
      * @param ctx - Trace context
@@ -143,5 +152,17 @@ export declare const plaid_item_repo: {
      * @param id - Plaid item document ID
      */
     update_last_recurring_sync_at(ctx: TraceContext, id: string): Promise<void>;
+    /**
+     * Stamps `lastWebhookReceived` on the item matching Plaid's EXTERNAL item id
+     * (`plaidItemId`). Observability only — lets us confirm webhooks are actually
+     * arriving from Plaid (the field was previously written only as null at link
+     * time, so a null value was ambiguous). Looks up by external id (NOT the doc
+     * id) and does NOT filter on `isActive`, so we still record webhooks for items
+     * in an error/expired state. No-op when no item matches.
+     *
+     * @param ctx - Trace context
+     * @param plaid_item_id - Plaid's external item id from the webhook payload
+     */
+    mark_webhook_received(ctx: TraceContext, plaid_item_id: string): Promise<void>;
 };
 //# sourceMappingURL=plaid_item.repo.d.ts.map

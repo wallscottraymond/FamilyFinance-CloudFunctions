@@ -256,6 +256,25 @@ export const plaid_item_repo = {
   },
 
   /**
+   * Lightweight rows for every ACTIVE item across all users — used by the
+   * scheduled fallback transaction sync so data still flows if a webhook is missed.
+   */
+  async get_all_active(
+    _ctx: TraceContext
+  ): Promise<Array<{ item_doc_id: string; plaid_item_id: string; user_id: string }>> {
+    const db = get_db();
+    const snapshot = await db.collection(COLLECTION).where("isActive", "==", true).get();
+    return snapshot.docs.map((doc) => {
+      const legacy = doc.data() as LegacyPlaidItemDoc;
+      return {
+        item_doc_id: doc.id,
+        plaid_item_id: legacy.plaidItemId,
+        user_id: legacy.userId,
+      };
+    });
+  },
+
+  /**
    * Gets a Plaid item by user and institution.
    *
    * @param ctx - Trace context
@@ -503,5 +522,42 @@ export const plaid_item_repo = {
     /* eslint-enable @typescript-eslint/naming-convention */
 
     console.log(`[${ctx.trace_id}] Updated lastRecurringSyncAt for item ${id}`);
+  },
+
+  /**
+   * Stamps `lastWebhookReceived` on the item matching Plaid's EXTERNAL item id
+   * (`plaidItemId`). Observability only — lets us confirm webhooks are actually
+   * arriving from Plaid (the field was previously written only as null at link
+   * time, so a null value was ambiguous). Looks up by external id (NOT the doc
+   * id) and does NOT filter on `isActive`, so we still record webhooks for items
+   * in an error/expired state. No-op when no item matches.
+   *
+   * @param ctx - Trace context
+   * @param plaid_item_id - Plaid's external item id from the webhook payload
+   */
+  async mark_webhook_received(
+    ctx: TraceContext,
+    plaid_item_id: string
+  ): Promise<void> {
+    const snapshot = await get_db()
+      .collection(COLLECTION)
+      .where("plaidItemId", "==", plaid_item_id)
+      .limit(1)
+      .get();
+    if (snapshot.empty) {
+      console.warn(
+        `[${ctx.trace_id}] mark_webhook_received: no item for plaidItemId=${plaid_item_id}`
+      );
+      return;
+    }
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await snapshot.docs[0].ref.update({
+      lastWebhookReceived: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    console.log(
+      `[${ctx.trace_id}] Stamped lastWebhookReceived for plaidItemId=${plaid_item_id}`
+    );
   },
 };

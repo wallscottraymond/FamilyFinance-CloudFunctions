@@ -20,6 +20,10 @@ import {
   mark_processed,
 } from "../../repositories/infrastructure/trigger_processing.repository";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import {
+  only_ignored_changed,
+  PERIOD_SUMMARY_IGNORE_FIELDS,
+} from "../../domain/shared/doc_change.service";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -51,6 +55,17 @@ export const on_inflow_period_updated_period_summary = onDocumentUpdated(
   },
   async (event) => {
     const doc_id = event.params.inflowPeriodId;
+
+    // 0. CHANGE GUARD (pure, no IO) — skip bookkeeping-only writes before any IO.
+    if (
+      only_ignored_changed(
+        event.data?.before?.data(),
+        event.data?.after?.data(),
+        PERIOD_SUMMARY_IGNORE_FIELDS
+      )
+    ) {
+      return;
+    }
 
     // Create trace context early for idempotency check
     const trace_id = uuid();

@@ -31,6 +31,7 @@ export interface Outflow {
     amount_min?: number;
     amount_max?: number;
     currency: string;
+    expected_amount_override: number | null;
     description: string | null;
     merchant_name: string | null;
     user_custom_name: string | null;

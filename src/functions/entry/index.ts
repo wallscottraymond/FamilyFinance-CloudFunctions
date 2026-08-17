@@ -44,3 +44,11 @@ export {
 export {
   cleanup_relink_attempts_scheduled,
 } from "./scheduled/cleanup_relink_attempts.scheduled";
+
+// Plaid webhook fallback: every 6h, runs a transaction sync for every active
+// item so data keeps flowing even if a Plaid webhook is missed or rejected.
+// Safe to deploy — reads + Plaid transactions/sync + targeted item updates, no
+// destructive side effects.
+export {
+  sync_all_transactions_scheduled,
+} from "./scheduled/sync_all_transactions.scheduled";

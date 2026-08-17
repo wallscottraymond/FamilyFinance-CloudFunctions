@@ -22,6 +22,7 @@ import {
   DepositoryAccountSubtype,
   CreditAccountSubtype,
   InvestmentAccountSubtype,
+  JWKPublicKey,
 } from "plaid";
 import { PlaidCreateLinkTokenInput } from "../../types/plaid";
 import { defineSecret, defineString } from "firebase-functions/params";
@@ -132,6 +133,21 @@ async function with_retry<T>(
   }
 
   throw last_error ?? new Error("Unknown error during Plaid API call");
+}
+
+/**
+ * Fetches the JWK used to verify a Plaid webhook JWS, by key id (the JWT `kid`).
+ * Returns the raw JWK from Plaid's /webhook_verification_key/get — the caller
+ * imports it as a public key and verifies the ES256 signature.
+ */
+export async function get_webhook_verification_key(
+  key_id: string
+): Promise<JWKPublicKey> {
+  const client = create_plaid_client();
+  return with_retry(async () => {
+    const response = await client.webhookVerificationKeyGet({ key_id });
+    return response.data.key;
+  });
 }
 
 /**
@@ -463,7 +479,7 @@ export async function remove_item(
     // ITEM_NOT_FOUND means it's already been removed - treat as success
     if (error_code === "ITEM_NOT_FOUND") {
       console.log(
-        `[plaid_client.remove_item] Item already removed (ITEM_NOT_FOUND), treating as success`
+        "[plaid_client.remove_item] Item already removed (ITEM_NOT_FOUND), treating as success"
       );
       return {
         success: true,
@@ -475,7 +491,7 @@ export async function remove_item(
     // INVALID_ACCESS_TOKEN can also mean the item was removed
     if (error_code === "INVALID_ACCESS_TOKEN") {
       console.log(
-        `[plaid_client.remove_item] Invalid access token, item may already be removed`
+        "[plaid_client.remove_item] Invalid access token, item may already be removed"
       );
       return {
         success: true,

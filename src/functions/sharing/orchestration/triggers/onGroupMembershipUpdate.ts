@@ -178,29 +178,24 @@ async function updateChildPeriods(
 }
 
 /**
- * Triggered when a group or family document is updated
- * Updates accessibleBy arrays in all related resources
+ * Shared handler: when a group/family membership changes, sync accessibleBy across
+ * all related resources.
+ *
+ * ⚠️ This is invoked ONLY by the collection-scoped triggers below. Do NOT register
+ * a trigger on a wildcard collection path (`{collection}/{groupId}`) — that matches
+ * EVERY top-level collection, so the function fires on every transaction/period/job
+ * write (billed per invocation). That footgun previously drove ~921K/day of wasted
+ * invocations during bulk syncs.
  */
-export const onGroupMembershipUpdate = onDocumentUpdated({
-  document: '{collection}/{groupId}', // Matches both 'groups' and 'families'
-  region: 'us-central1',
-  memory: '1GiB',
-  timeoutSeconds: 540, // 9 minutes for large groups
-}, async (event) => {
+async function handleMembershipUpdate(
+  label: string,
+  groupId: string,
+  beforeData: FirebaseFirestore.DocumentData | undefined,
+  afterData: FirebaseFirestore.DocumentData | undefined
+): Promise<void> {
   try {
-    const collection = event.params.collection as string;
-    const groupId = event.params.groupId as string;
-
-    // Only process groups and families collections
-    if (collection !== 'groups' && collection !== 'families') {
-      return;
-    }
-
-    const beforeData = event.data?.before?.data();
-    const afterData = event.data?.after?.data();
-
     if (!beforeData || !afterData) {
-      console.log('[onGroupMembershipUpdate] No before/after data');
+      console.log(`[${label}] No before/after data`);
       return;
     }
 
@@ -214,11 +209,11 @@ export const onGroupMembershipUpdate = onDocumentUpdated({
       !beforeMembers.every(id => afterMembers.includes(id));
 
     if (!membershipChanged) {
-      console.log('[onGroupMembershipUpdate] No membership changes detected');
+      console.log(`[${label}] No membership changes detected`);
       return;
     }
 
-    console.log(`[onGroupMembershipUpdate] Group ${groupId} membership changed:`);
+    console.log(`[${label}] Group ${groupId} membership changed:`);
     console.log(`  Before: ${beforeMembers.length} members - ${beforeMembers.join(', ')}`);
     console.log(`  After: ${afterMembers.length} members - ${afterMembers.join(', ')}`);
 
@@ -241,11 +236,29 @@ export const onGroupMembershipUpdate = onDocumentUpdated({
     const results = await Promise.all(updatePromises);
     const totalUpdated = results.reduce((sum, count) => sum + count, 0);
 
-    console.log(`[onGroupMembershipUpdate] Successfully updated ${totalUpdated} resources for group ${groupId}`);
+    console.log(`[${label}] Successfully updated ${totalUpdated} resources for group ${groupId}`);
 
   } catch (error) {
-    console.error('[onGroupMembershipUpdate] Error:', error);
+    console.error(`[${label}] Error:`, error);
     // Don't throw - we don't want to break group updates if resource sync fails
     // The next membership change will attempt to sync again
   }
+}
+
+/**
+ * Triggered when a GROUP document is updated (RBAC v2).
+ * Scoped to the `groups` collection so it does NOT fire on unrelated writes.
+ */
+export const onGroupMembershipUpdate = onDocumentUpdated({
+  document: 'groups/{groupId}',
+  region: 'us-central1',
+  memory: '1GiB',
+  timeoutSeconds: 540, // 9 minutes for large groups
+}, async (event) => {
+  await handleMembershipUpdate(
+    'onGroupMembershipUpdate',
+    event.params.groupId as string,
+    event.data?.before?.data(),
+    event.data?.after?.data()
+  );
 });

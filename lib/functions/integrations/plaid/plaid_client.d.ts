@@ -6,7 +6,7 @@
  *
  * @module integrations/plaid/plaid_client
  */
-import { AccountBase, LinkTokenCreateResponse, ItemPublicTokenExchangeResponse, TransactionsSyncResponse, TransactionsRecurringGetResponse } from "plaid";
+import { AccountBase, LinkTokenCreateResponse, ItemPublicTokenExchangeResponse, TransactionsSyncResponse, TransactionsRecurringGetResponse, JWKPublicKey } from "plaid";
 import { PlaidCreateLinkTokenInput } from "../../types/plaid";
 /**
  * Result of fetching accounts from Plaid. `accounts` are the RAW Plaid SDK
@@ -25,6 +25,12 @@ export interface PlaidInstitutionInfo {
     institution_id: string;
     name: string;
 }
+/**
+ * Fetches the JWK used to verify a Plaid webhook JWS, by key id (the JWT `kid`).
+ * Returns the raw JWK from Plaid's /webhook_verification_key/get — the caller
+ * imports it as a public key and verifies the ES256 signature.
+ */
+export declare function get_webhook_verification_key(key_id: string): Promise<JWKPublicKey>;
 /**
  * Fetches accounts from Plaid for a given access token.
  *

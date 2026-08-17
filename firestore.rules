@@ -934,7 +934,9 @@ service cloud.firestore {
       // Only allow updates to user-modifiable fields for income streams
       let allowedFields = [
         'userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt',
-        'incomeType', 'isRegularSalary', 'employerName', 'taxable'
+        'incomeType', 'isRegularSalary', 'employerName', 'taxable',
+        // User custom name (rename) + user expected-amount override ("this + future")
+        'userCustomName', 'expectedAmountOverride'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields);
@@ -950,6 +952,8 @@ service cloud.firestore {
         'userCategory', 'userNotes', 'merchantCategory', 'isCancellable', 'reminderDays',
         // Flat structure fields
         'userCustomName', 'internalPrimaryCategory', 'internalDetailedCategory',
+        // User expected-amount override ("this + future")
+        'expectedAmountOverride',
         // Common fields
         'tags', 'isHidden', 'expenseType', 'isEssential', 'updatedAt', 'updatedBy'
       ];
