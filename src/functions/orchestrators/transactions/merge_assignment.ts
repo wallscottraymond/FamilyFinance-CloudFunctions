@@ -29,6 +29,14 @@ export interface MergedAssignment {
   name_changed: boolean;
   /** Distinct budget ids across the splits (the denormalized `splitBudgetIds`). */
   split_budget_ids: string[];
+  /**
+   * Distinct recurring ids the splits are linked to (denormalized
+   * `splitOutflowIds` / `splitInflowIds`). These make the durable txn↔recurring
+   * link QUERYABLE (`array-contains`) so recurring reconciliation can find a
+   * bill/income's payments without the stale Plaid stream `transactionIds[]`.
+   */
+  split_outflow_ids: string[];
+  split_inflow_ids: string[];
 }
 
 /**
@@ -107,5 +115,28 @@ export function merge_assignment_onto_raw_splits(
       ])
     ),
   ];
-  return { updated_splits, name_changed, split_budget_ids };
+
+  // Distinct recurring links across the splits → queryable denorm arrays.
+  const split_outflow_ids = [
+    ...new Set(
+      result.splits
+        .map((s) => s.outflow_id)
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  const split_inflow_ids = [
+    ...new Set(
+      result.splits
+        .map((s) => s.inflow_id)
+        .filter((id): id is string => !!id)
+    ),
+  ];
+
+  return {
+    updated_splits,
+    name_changed,
+    split_budget_ids,
+    split_outflow_ids,
+    split_inflow_ids,
+  };
 }

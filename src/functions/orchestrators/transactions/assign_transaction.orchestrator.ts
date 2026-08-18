@@ -113,7 +113,7 @@ export async function assign_transaction_orchestrator(
     //    budget's name. `name_changed` heals a drifted `budgetName` (the app
     //    defaults new splits to "General") even when the assignment is unchanged.
     const now = Timestamp.now();
-    const { updated_splits, name_changed, split_budget_ids } =
+    const { updated_splits, name_changed, split_budget_ids, split_outflow_ids, split_inflow_ids } =
       merge_assignment_onto_raw_splits(resolved, result, now);
 
     // 5. Skip-if-unchanged (loop prevention). A budgetName-only drift still
@@ -133,7 +133,9 @@ export async function assign_transaction_orchestrator(
       ctx,
       resolved.transaction_doc_id,
       updated_splits,
-      split_budget_ids
+      split_budget_ids,
+      split_outflow_ids,
+      split_inflow_ids
     );
 
     // 7. Scoped fan-out: recompute the touched budgets' spend — only when the

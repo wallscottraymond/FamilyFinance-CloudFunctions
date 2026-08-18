@@ -55,6 +55,72 @@ function budget_ids_from_doc(doc: Record<string, unknown>): string[] {
   return Array.from(new Set(ids)).filter((id) => id !== "unassigned");
 }
 
+/**
+ * Distinct recurring-outflow / -inflow ids the doc's splits are linked to (from the
+ * denormalized `splitOutflowIds`/`splitInflowIds`, else mapped off the splits). Used
+ * to refresh recurring reconciliation when a linked transaction changes — notably
+ * pending→posted, which the stream `transactionIds[]` misses.
+ */
+function recurring_links_from_doc(
+  doc: Record<string, unknown>
+): { outflow_ids: string[]; inflow_ids: string[] } {
+  const splits = (doc.splits as Array<Record<string, unknown>> | undefined) ?? [];
+  const out =
+    (doc.splitOutflowIds as string[] | undefined) ??
+    splits.map((s) => s.outflowId as string | undefined).filter((id): id is string => !!id);
+  const inf =
+    (doc.splitInflowIds as string[] | undefined) ??
+    splits.map((s) => s.inflowId as string | undefined).filter((id): id is string => !!id);
+  return {
+    outflow_ids: Array.from(new Set(out)),
+    inflow_ids: Array.from(new Set(inf)),
+  };
+}
+
+/**
+ * Enqueue a deduplicated `reconcile_recurring_period` job for every recurring
+ * outflow/inflow the transaction's splits touch across `before ∪ after`. Deduped
+ * per (recurring, event) so trigger replays collapse; routed through the guarded
+ * job queue (no per-write cascade).
+ */
+async function enqueue_recurring_reconciles(
+  ctx: TraceContext,
+  user_id: string,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+  event_id: string
+): Promise<void> {
+  const b = recurring_links_from_doc(before ?? {});
+  const a = recurring_links_from_doc(after ?? {});
+  const outflow_ids = Array.from(new Set([...b.outflow_ids, ...a.outflow_ids]));
+  const inflow_ids = Array.from(new Set([...b.inflow_ids, ...a.inflow_ids]));
+
+  for (const recurring_id of outflow_ids) {
+    await create_job_if_not_exists(
+      "reconcile_recurring_period",
+      {
+        deduplication_key: `reconcile:outflow:${recurring_id}:${event_id}`,
+        recurring_id,
+        recurring_type: "outflow",
+        user_id,
+      },
+      { trace_id: ctx.trace_id }
+    );
+  }
+  for (const recurring_id of inflow_ids) {
+    await create_job_if_not_exists(
+      "reconcile_recurring_period",
+      {
+        deduplication_key: `reconcile:inflow:${recurring_id}:${event_id}`,
+        recurring_id,
+        recurring_type: "inflow",
+        user_id,
+      },
+      { trace_id: ctx.trace_id }
+    );
+  }
+}
+
 export async function process_transaction_written_orchestrator(
   ctx: TraceContext,
   input: ProcessTransactionWrittenInput
@@ -83,6 +149,8 @@ export async function process_transaction_written_orchestrator(
         { trace_id: ctx.trace_id }
       );
     }
+    // Also refresh any recurring items the deleted transaction was paying.
+    await enqueue_recurring_reconciles(ctx, user_id, before, null, event_id);
     log_operation_success(span, user_id);
     return;
   }
@@ -134,6 +202,12 @@ export async function process_transaction_written_orchestrator(
       );
     }
   }
+
+  // Recurring reconciliation refresh: when a transaction linked to a bill/income
+  // changes (notably pending→posted, which the stream `transactionIds[]` misses),
+  // recompute that recurring's periods so paid/received + the pending flag update.
+  // before ∪ after so an UN-link also reverts the previously-linked item.
+  await enqueue_recurring_reconciles(ctx, user_id, before, after, event_id);
 
   log_operation_success(span, user_id);
 }

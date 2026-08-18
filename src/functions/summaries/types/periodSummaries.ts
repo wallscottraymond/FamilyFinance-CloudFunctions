@@ -95,6 +95,7 @@ export interface OutflowEntry {
 
   // === RECONCILIATION (4-state, for the tile status chip) ===
   reconciliationStatus?: "none" | "partial" | "complete" | "over"; // from period.reconciliation.status
+  hasPending?: boolean;            // paid/received count includes a still-pending payment → tile "pending" marker
   pendingAmount?: number;          // posted-pending amount (reconciliation.pendingAmount)
 
   // === GROUPING ===
@@ -235,6 +236,7 @@ export interface InflowEntry {
 
   // === RECONCILIATION (4-state, for the tile status chip) ===
   reconciliationStatus?: "none" | "partial" | "complete" | "over"; // from period.reconciliation.status
+  hasPending?: boolean;            // paid/received count includes a still-pending payment → tile "pending" marker
   pendingAmount?: number;          // posted-pending amount (reconciliation.pendingAmount)
 
   // === OCCURRENCE TRACKING ===

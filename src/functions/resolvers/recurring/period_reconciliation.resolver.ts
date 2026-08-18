@@ -145,18 +145,32 @@ export async function resolve_recurring_reconciliation(
       };
     });
 
-  // 3. Linked payments from the doc's `transactionIds` MEMBERSHIP. Those are Plaid
-  //    transaction ids (NOT Firestore doc ids), so load by `transactionId`. The
-  //    membership IS the link — a listed transaction is a payment for this recurring
-  //    item, regardless of whether the engine has stamped `split.outflow_id` yet.
+  // 3. Linked payments — UNION of two sources, deduped by Firestore doc id:
+  //    (a) the DURABLE split link (`splitOutflowIds`/`splitInflowIds`, stamped by
+  //        the assignment engine) — survives Plaid's id reissue on pending→posted;
+  //        this is the primary, current source.
+  //    (b) the recurring's Plaid stream `transactionIds[]` membership — legacy /
+  //        covers items the engine hasn't stamped yet. Can be STALE (Plaid lags),
+  //        so it's a supplement, not the source of truth.
   //    Each transaction contributes its net countable amount (one payment).
   const splits: ResolvedLinkedSplit[] = [];
   const user_id = (recurring as { user_id?: string }).user_id ?? "";
-  const txns = await transaction_repo.get_by_plaid_transaction_ids(
-    ctx,
-    user_id,
-    transaction_ids
-  );
+  const [link_txns, stream_txns] = await Promise.all([
+    transaction_repo.get_by_split_recurring_link(
+      ctx,
+      user_id,
+      input.recurring_type,
+      input.recurring_id
+    ),
+    transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, transaction_ids),
+  ]);
+  const seen = new Set<string>();
+  const txns = [...link_txns, ...stream_txns].filter((t) => {
+    const key = t.id;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   for (const txn of txns) {
     if (txn.isActive === false) continue;
     const date_ms = to_ms(txn.transactionDate) ?? 0;

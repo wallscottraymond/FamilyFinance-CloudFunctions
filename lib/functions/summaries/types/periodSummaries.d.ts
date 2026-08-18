@@ -65,6 +65,7 @@ export interface OutflowEntry {
     unpaidCount: number;
     itemCount: number;
     reconciliationStatus?: "none" | "partial" | "complete" | "over";
+    hasPending?: boolean;
     pendingAmount?: number;
     groupId: string;
 }
@@ -158,6 +159,7 @@ export interface InflowEntry {
     isFullyReceived: boolean;
     isPending: boolean;
     reconciliationStatus?: "none" | "partial" | "complete" | "over";
+    hasPending?: boolean;
     pendingAmount?: number;
     occurrenceCount: number;
     occurrencesPaid: number;

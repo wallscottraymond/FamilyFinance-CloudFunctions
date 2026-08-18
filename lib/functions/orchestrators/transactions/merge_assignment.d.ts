@@ -25,6 +25,14 @@ export interface MergedAssignment {
     name_changed: boolean;
     /** Distinct budget ids across the splits (the denormalized `splitBudgetIds`). */
     split_budget_ids: string[];
+    /**
+     * Distinct recurring ids the splits are linked to (denormalized
+     * `splitOutflowIds` / `splitInflowIds`). These make the durable txn↔recurring
+     * link QUERYABLE (`array-contains`) so recurring reconciliation can find a
+     * bill/income's payments without the stale Plaid stream `transactionIds[]`.
+     */
+    split_outflow_ids: string[];
+    split_inflow_ids: string[];
 }
 /**
  * Merge `result` onto `resolved.raw_splits`. PURE — `now` is injected so the

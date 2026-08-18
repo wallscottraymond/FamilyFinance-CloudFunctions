@@ -13,5 +13,6 @@ export { snapshot_quota_scheduled, cleanup_quota_scheduled, } from "./snapshot_q
 export { process_job_queue } from "./process_job_queue.scheduled";
 export { retry_transient_plaid_errors_scheduled } from "./retry_transient_plaid_errors.scheduled";
 export { sync_all_transactions_scheduled } from "./sync_all_transactions.scheduled";
+export { sync_all_recurring_scheduled } from "./sync_all_recurring.scheduled";
 export { cleanup_relink_attempts_scheduled } from "./cleanup_relink_attempts.scheduled";
 //# sourceMappingURL=index.d.ts.map

@@ -91,7 +91,7 @@ export async function assign_transactions_batch_orchestrator(
       );
 
       const now = Timestamp.now();
-      const { updated_splits, name_changed, split_budget_ids } =
+      const { updated_splits, name_changed, split_budget_ids, split_outflow_ids, split_inflow_ids } =
         merge_assignment_onto_raw_splits(resolved, result, now);
 
       // Skip-if-unchanged: nothing to write (matches single-item semantics).
@@ -104,7 +104,9 @@ export async function assign_transactions_batch_orchestrator(
         ctx,
         resolved.transaction_doc_id,
         updated_splits,
-        split_budget_ids
+        split_budget_ids,
+        split_outflow_ids,
+        split_inflow_ids
       );
       processed++;
       if (result.changed) {

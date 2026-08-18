@@ -122,6 +122,11 @@ export function calculateInflowSummary(
       isReceiptPeriod: inflowPeriod.isReceiptPeriod,
       expectedDate: inflowPeriod.predictedNextDate || undefined,
       isRegularSalary,
+      // Received count includes a still-pending deposit → tile "pending" marker.
+      hasPending:
+        (inflowPeriod as { hasPending?: boolean }).hasPending ??
+        (inflowPeriod as { reconciliation?: { hasPending?: boolean } }).reconciliation?.hasPending ??
+        false,
 
       // === PROGRESS METRICS ===
       receiptProgressPercentage,

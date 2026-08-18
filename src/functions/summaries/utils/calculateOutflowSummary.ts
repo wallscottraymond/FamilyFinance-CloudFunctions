@@ -55,6 +55,11 @@ export function calculateOutflowSummary(
     duePeriodCount: outflowPeriod.isDuePeriod ? 1 : 0,
     dueDate: outflowPeriod.dueDate || outflowPeriod.predictedNextDate || undefined,
     status: outflowPeriod.status || OutflowPeriodStatus.PENDING,
+    // Paid count includes a still-pending payment → tile "pending" marker.
+    hasPending:
+      (outflowPeriod as { hasPending?: boolean }).hasPending ??
+      (outflowPeriod as { reconciliation?: { hasPending?: boolean } }).reconciliation?.hasPending ??
+      false,
 
     // === PERIOD-SPECIFIC DATES ===
     firstDueDateInPeriod: outflowPeriod.firstDueDateInPeriod || undefined,

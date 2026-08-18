@@ -187,11 +187,17 @@ describe("compute_period_reconciliation — fixed, single occurrence", () => {
     ).toBe("partial");
   });
 
-  it("pending does NOT flip status but is tracked separately", () => {
+  it("counts a matched PENDING payment toward paid, but flags it pending", () => {
+    // Count-but-flag decision (2026-08-18): a pending payment marks the occurrence
+    // paid so the item doesn't look unpaid, but exposes has_pending + occ.pending
+    // for the tile's "paid · pending" marker. pending_amount stays tracked.
     const r = compute_period_reconciliation(fixed, [split(100, true)]);
-    expect(r.status).toBe("none");
+    expect(r.status).toBe("complete");
+    expect(r.occurrences_paid).toBe(1);
+    expect(r.has_pending).toBe(true);
+    expect(r.occurrences[0].pending).toBe(true);
     expect(r.pending_amount).toBe(100);
-    expect(r.matched_amount).toBe(0);
+    expect(r.matched_amount).toBe(0); // matched_amount = POSTED only
   });
 
   it("back-compat: a posted payment marks a period with NO occurrence data as paid", () => {
@@ -222,14 +228,25 @@ describe("compute_period_reconciliation — variable, single occurrence", () => 
     expect(compute_period_reconciliation(variable, [split(500)]).status).toBe("complete");
   });
 
-  it("none when only pending", () => {
-    expect(compute_period_reconciliation(variable, [split(80, true)]).status).toBe("none");
+  it("counts pending toward complete (variable), flagged pending", () => {
+    const r = compute_period_reconciliation(variable, [split(80, true)]);
+    expect(r.status).toBe("complete");
+    expect(r.has_pending).toBe(true);
+    expect(r.occurrences[0].pending).toBe(true);
   });
 
   it("full refund reverts to none", () => {
     expect(
       compute_period_reconciliation(variable, [split(80, false, "a"), split(-80, false, "r")]).status
     ).toBe("none");
+  });
+
+  it("a POSTED payment on the occurrence clears the pending flag", () => {
+    // Posted satisfies it → paid and NOT flagged pending (posted portion present).
+    const r = compute_period_reconciliation(variable, [split(80, false, "posted")]);
+    expect(r.status).toBe("complete");
+    expect(r.has_pending).toBe(false);
+    expect(r.occurrences[0].pending).toBe(false);
   });
 });
 

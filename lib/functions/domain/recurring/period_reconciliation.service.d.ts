@@ -102,6 +102,8 @@ export interface OccurrenceStatus {
     paid: boolean;
     transaction_id: string | null;
     amount: number | null;
+    /** True when this occurrence is satisfied ONLY by a still-pending payment. */
+    pending: boolean;
 }
 export interface ReconciliationResult {
     period_id: string;
@@ -114,8 +116,11 @@ export interface ReconciliationResult {
     expected_amount: number;
     /** Occurrences the period expects (self-corrected to its date range). */
     occurrences_expected: number;
-    /** Occurrences with a posted payment assigned. */
+    /** Occurrences with a payment assigned (posted OR pending — "count pending"). */
     occurrences_paid: number;
+    /** True when ANY counted occurrence is satisfied only by a pending payment
+     *  (drives the tile's "paid · pending" marker). */
+    has_pending: boolean;
     /** Per-occurrence detail (count + which transaction). */
     occurrences: OccurrenceStatus[];
     matched_splits: LinkedSplit[];

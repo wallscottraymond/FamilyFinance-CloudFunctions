@@ -83,17 +83,27 @@ function determine_confidence_level(
 function read_reconciliation(period: {
   isFullyPaid?: boolean;
   isPartiallyPaid?: boolean;
-}): { status: "none" | "partial" | "complete" | "over"; pendingAmount: number } {
+  hasPending?: boolean;
+}): {
+  status: "none" | "partial" | "complete" | "over";
+  pendingAmount: number;
+  hasPending: boolean;
+} {
   const rec = (period as {
     reconciliation?: {
       status?: "none" | "partial" | "complete" | "over";
       pendingAmount?: number;
+      hasPending?: boolean;
     };
   }).reconciliation;
   const status =
     rec?.status ??
     (period.isFullyPaid ? "complete" : period.isPartiallyPaid ? "partial" : "none");
-  return { status, pendingAmount: rec?.pendingAmount ?? 0 };
+  return {
+    status,
+    pendingAmount: rec?.pendingAmount ?? 0,
+    hasPending: rec?.hasPending ?? period.hasPending ?? false,
+  };
 }
 
 /**
@@ -140,6 +150,7 @@ function compute_outflow_entries(outflow_periods: OutflowPeriod[]): OutflowEntry
 
       // === RECONCILIATION ===
       reconciliationStatus: read_reconciliation(period).status,
+      hasPending: read_reconciliation(period).hasPending,
       pendingAmount: read_reconciliation(period).pendingAmount,
 
       // === GROUPING ===
@@ -312,6 +323,7 @@ function compute_inflow_entries(inflow_periods: InflowPeriod[], now: Date): Infl
 
       // === RECONCILIATION ===
       reconciliationStatus: read_reconciliation(period).status,
+      hasPending: read_reconciliation(period).hasPending,
       pendingAmount: read_reconciliation(period).pendingAmount,
 
       // === OCCURRENCE TRACKING ===

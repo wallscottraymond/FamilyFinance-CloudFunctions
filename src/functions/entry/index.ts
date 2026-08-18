@@ -52,3 +52,9 @@ export {
 export {
   sync_all_transactions_scheduled,
 } from "./scheduled/sync_all_transactions.scheduled";
+
+// Plaid webhook fallback: every 6h, runs a RECURRING (bill/income stream) sync for
+// every active item — recurring webhooks are infrequent, so this keeps streams fresh.
+export {
+  sync_all_recurring_scheduled,
+} from "./scheduled/sync_all_recurring.scheduled";

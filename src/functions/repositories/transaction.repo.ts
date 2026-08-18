@@ -385,12 +385,50 @@ export const transaction_repo = {
       for (const doc of snapshot.docs) {
         const data = doc.data() as LegacyTransactionDoc;
         if (data.ownerId === user_id) {
-          out.push(data);
+          out.push({ ...data, id: doc.id });
         }
       }
     }
     console.log(
       `[${ctx.trace_id}] get_by_plaid_transaction_ids: requested=${plaid_transaction_ids.length}, found=${out.length}`
+    );
+    return out;
+  },
+
+  /**
+   * Loads active transactions whose splits are linked to a recurring outflow/inflow,
+   * via the denormalized queryable `splitOutflowIds` / `splitInflowIds`
+   * (`array-contains`). This is the DURABLE link (stamped by the assignment engine),
+   * which survives Plaid's id reissue on pending→posted — unlike the recurring's
+   * stale stream `transactionIds[]`. Returns docs with `id` populated.
+   *
+   * @param ctx - Trace context
+   * @param user_id - Owner (filtered in memory to avoid a composite index)
+   * @param recurring_type - "outflow" | "inflow"
+   * @param recurring_id - The recurring definition id
+   */
+  async get_by_split_recurring_link(
+    ctx: TraceContext,
+    user_id: string,
+    recurring_type: "outflow" | "inflow",
+    recurring_id: string
+  ): Promise<LegacyTransactionDoc[]> {
+    if (!recurring_id) return [];
+    const field = recurring_type === "outflow" ? "splitOutflowIds" : "splitInflowIds";
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where(field, "array-contains", recurring_id)
+      .get();
+    const out: LegacyTransactionDoc[] = [];
+    for (const doc of snapshot.docs) {
+      const data = doc.data() as LegacyTransactionDoc;
+      if (data.ownerId === user_id && data.isActive !== false) {
+        out.push({ ...data, id: doc.id });
+      }
+    }
+    console.log(
+      `[${ctx.trace_id}] get_by_split_recurring_link: ${recurring_type}=${recurring_id}, found=${out.length}`
     );
     return out;
   },
@@ -644,17 +682,25 @@ export const transaction_repo = {
    * @param doc_id - Transaction document ID
    * @param updated_splits - The full splits array, with assignment fields applied
    * @param split_budget_ids - Distinct budget ids across the splits (queryable)
+   * @param split_outflow_ids - Distinct recurring-outflow links (queryable)
+   * @param split_inflow_ids - Distinct recurring-inflow links (queryable)
    */
   async apply_split_assignments(
     _ctx: TraceContext,
     doc_id: string,
     updated_splits: Array<Record<string, unknown>>,
-    split_budget_ids: string[]
+    split_budget_ids: string[],
+    split_outflow_ids: string[] = [],
+    split_inflow_ids: string[] = []
   ): Promise<void> {
     /* eslint-disable @typescript-eslint/naming-convention */
     await doc_ref(doc_id).update({
       splits: updated_splits,
       splitBudgetIds: split_budget_ids,
+      // Queryable durable txn↔recurring links (array-contains) — power recurring
+      // reconciliation without the stale Plaid stream transactionIds[].
+      splitOutflowIds: split_outflow_ids,
+      splitInflowIds: split_inflow_ids,
       updatedAt: Timestamp.now(),
     });
     /* eslint-enable @typescript-eslint/naming-convention */
