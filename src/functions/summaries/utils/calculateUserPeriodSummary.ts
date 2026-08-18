@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { UserPeriodSummary } from "../types/periodSummaries";
 import { fetchSourcePeriod } from "./fetchSourcePeriod";
 import { fetchOutflowsBatch } from "./fetchOutflowsBatch";
@@ -53,10 +53,36 @@ export async function calculateUserPeriodSummary(
     inflowPeriods: inflowPeriods.length,
   });
 
+  // Drop classified internal transfers (not real bills/income). `isHidden` lives
+  // on the recurring DEFINITION (set by the matched-pair transfer classifier), not
+  // the period doc — so join here. Mirrors period_derivation.resolver +
+  // user_summary.repo (the two other summary-writing paths).
+  const db = getFirestore();
+  const [outflowDefsSnap, inflowDefsSnap] = await Promise.all([
+    db.collection("outflows").where("ownerId", "==", userId).get(),
+    db.collection("inflows").where("ownerId", "==", userId).get(),
+  ]);
+  const hiddenOutflowIds = new Set(
+    outflowDefsSnap.docs
+      .filter((d) => (d.data() as { isHidden?: boolean }).isHidden === true)
+      .map((d) => d.id)
+  );
+  const hiddenInflowIds = new Set(
+    inflowDefsSnap.docs
+      .filter((d) => (d.data() as { isHidden?: boolean }).isHidden === true)
+      .map((d) => d.id)
+  );
+  const visibleOutflowPeriods = outflowPeriods.filter(
+    (p: { outflowId?: string }) => !hiddenOutflowIds.has(p.outflowId ?? "")
+  );
+  const visibleInflowPeriods = inflowPeriods.filter(
+    (p: { inflowId?: string }) => !hiddenInflowIds.has(p.inflowId ?? "")
+  );
+
   // Step 3: Convert resource periods to entry arrays
-  const outflows = calculateOutflowSummary(outflowPeriods);
+  const outflows = calculateOutflowSummary(visibleOutflowPeriods);
   const budgets = calculateBudgetSummary(budgetPeriods);
-  const inflows = calculateInflowSummary(inflowPeriods);
+  const inflows = calculateInflowSummary(visibleInflowPeriods);
   const goals = calculateGoalSummary(); // Stub for now
 
   // NOTE: Cross-resource metrics (totalIncome, totalExpenses, netCashFlow, savingsRate)

@@ -321,7 +321,18 @@ export const user_summary_repo = {
       // 3. Read all dependent period documents
       // Note: Firestore transactions require us to read docs by reference, not query
       // So we query outside and then read each doc inside the transaction for conflict detection
-      const [outflow_snapshot, budget_snapshot, inflow_snapshot] = await Promise.all([
+      // Also load the user's recurring DEFINITIONS so we can drop classified
+      // internal transfers. `isHidden` lives on the definition (set by the
+      // matched-pair transfer classifier), NOT on the period docs — so we must
+      // join here. Mirrors `period_derivation.resolver` which skips isHidden
+      // streams. Filtered in-memory (ownerId-only query) to avoid a composite index.
+      const [
+        outflow_snapshot,
+        budget_snapshot,
+        inflow_snapshot,
+        outflow_defs_snapshot,
+        inflow_defs_snapshot,
+      ] = await Promise.all([
         db.collection("outflow_periods")
           .where("ownerId", "==", user_id)
           .where("sourcePeriodId", "==", source_period_id)
@@ -338,11 +349,29 @@ export const user_summary_repo = {
           .where("sourcePeriodId", "==", source_period_id)
           .where("isActive", "==", true)
           .get(),
+        db.collection("outflows").where("ownerId", "==", user_id).get(),
+        db.collection("inflows").where("ownerId", "==", user_id).get(),
       ]);
 
-      const outflow_periods = outflow_snapshot.docs.map((doc) => doc.data() as OutflowPeriod);
+      const hidden_outflow_ids = new Set(
+        outflow_defs_snapshot.docs
+          .filter((d) => (d.data() as { isHidden?: boolean }).isHidden === true)
+          .map((d) => d.id)
+      );
+      const hidden_inflow_ids = new Set(
+        inflow_defs_snapshot.docs
+          .filter((d) => (d.data() as { isHidden?: boolean }).isHidden === true)
+          .map((d) => d.id)
+      );
+
+      // Exclude classified internal transfers (they are not real bills/income).
+      const outflow_periods = outflow_snapshot.docs
+        .map((doc) => doc.data() as OutflowPeriod)
+        .filter((p) => !hidden_outflow_ids.has(p.outflowId));
       const budget_periods = budget_snapshot.docs.map((doc) => doc.data() as BudgetPeriodDocument);
-      const inflow_periods = inflow_snapshot.docs.map((doc) => doc.data() as InflowPeriod);
+      const inflow_periods = inflow_snapshot.docs
+        .map((doc) => doc.data() as InflowPeriod)
+        .filter((p) => !hidden_inflow_ids.has(p.inflowId));
 
       console.log(
         `[${ctx.trace_id}] user_summary_repo.save_with_transaction: ` +
