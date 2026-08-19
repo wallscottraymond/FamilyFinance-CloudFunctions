@@ -322,8 +322,16 @@ export const transaction_repo = {
             metadata: { source: "api", context: { plaid_sync: true } },
           });
         } else {
-          // CREATE: New transaction
-          const doc_id = db.collection(COLLECTION).doc().id;
+          // CREATE: New transaction.
+          // DETERMINISTIC doc id derived from the Plaid transaction_id (NOT random)
+          // so concurrent syncs (the 6h fallback crons + a webhook processing the
+          // same "added" txn) collide on the SAME doc id → one idempotent `set`,
+          // never a duplicate. The pre-check above is not atomic, so a random id
+          // would let both branches create separate docs (the dup bug, 2026-08-18).
+          // `plaid_` prefix avoids Firestore's reserved `.`/`..`/`__*__` id forms;
+          // `/` (illegal in an id) is sanitized. Existing random-id docs stay found
+          // by `get_by_plaid_transaction_id`, so no migration + no split-brain.
+          const doc_id = `plaid_${txn.transaction_id.replace(/\//g, "_")}`;
           const doc_data = map_to_doc({ ...txn, id: doc_id }, now);
 
           batch.set(doc_ref(doc_id), doc_data);
