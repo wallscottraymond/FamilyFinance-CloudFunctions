@@ -1040,9 +1040,13 @@ service cloud.firestore {
     function isValidInflowPeriodUpdate() {
       let data = request.resource.data;
       let resource_data = resource.data;
-      // Only allow updates to user-modifiable fields for inflow periods
+      // Only allow updates to user-modifiable fields for inflow periods.
+      // MUST mirror what the app actually writes (inflowPeriodsService.updateInflowPeriod:
+      // note, isHidden, isReceived, isActive, userCustomName) — mirrors isValidOutflowPeriodUpdate.
+      // Missing note/isReceived/isActive/userCustomName here caused a rename permission-denied.
       let allowedFields = [
-        'userNotes', 'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt', 'updatedAt'
+        'note', 'userNotes', 'userCustomName', 'isHidden', 'isReceived', 'isActive',
+        'modifiedAmount', 'isModified', 'lastModifiedBy', 'lastModifiedAt', 'updatedAt'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields) &&
