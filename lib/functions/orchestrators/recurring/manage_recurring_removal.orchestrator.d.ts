@@ -15,6 +15,13 @@ import { RemovalInterval, RemovalState } from "../../domain/recurring/recurring_
 /** The write surface a removal-manageable recurring repo must expose. */
 export interface RemovalManageableRepo extends RemovalReadableRepo {
     set_removal_intervals(ctx: TraceContext, id: string, intervals: RemovalInterval[], removed_by_user: boolean, user_id: string): Promise<WriteResult>;
+    /**
+     * Reflect the new suppression intervals onto the item's materialized periods by
+     * flipping each period's `isActive` (suppressed → false). This is what drops a
+     * removed bill/income out of `user_summaries` (which reads only isActive==true) and
+     * thus out of the live list + totals; restore flips them back.
+     */
+    apply_period_suppression(ctx: TraceContext, id: string, intervals: RemovalInterval[], user_id: string): Promise<number>;
     hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;
 }
 export type ManageRecurringRemovalInput = {

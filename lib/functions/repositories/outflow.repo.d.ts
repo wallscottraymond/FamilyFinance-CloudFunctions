@@ -78,6 +78,17 @@ export declare const outflow_repo: {
      */
     set_removal_intervals(ctx: TraceContext, id: string, intervals: RemovalInterval[], removed_by_user: boolean, user_id: string): Promise<WriteResult>;
     /**
+     * Sync the outflow's materialized periods' `isActive` to the suppression state.
+     * A period whose bucket END falls inside a removal interval → `isActive=false`, so it
+     * drops out of `user_summaries` (whose builder queries only `isActive == true`) and
+     * therefore out of the live list + totals; otherwise `isActive=true` (restore/reactivate).
+     * Only docs whose flag actually changes are written, keeping the summary-recompute
+     * fan-out minimal. The durable source of truth stays `removalIntervals` on the def
+     * (survives Plaid re-sync); this just keeps the materialized read in step. Returns the
+     * number of periods flipped.
+     */
+    apply_period_suppression(ctx: TraceContext, id: string, intervals: RemovalInterval[], user_id: string): Promise<number>;
+    /**
      * Permanently delete an outflow doc — irreversible ("Delete permanently").
      */
     hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;

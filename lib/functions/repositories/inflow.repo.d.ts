@@ -77,6 +77,15 @@ export declare const inflow_repo: {
      */
     set_removal_intervals(ctx: TraceContext, id: string, intervals: RemovalInterval[], removed_by_user: boolean, user_id: string): Promise<WriteResult>;
     /**
+     * Sync the inflow's materialized periods' `isActive` to the suppression state.
+     * A period whose bucket END falls inside a removal interval → `isActive=false`, so it
+     * drops out of `user_summaries` (whose builder queries only `isActive == true`) and
+     * therefore out of the live list + totals; otherwise `isActive=true` (restore). Only
+     * flips changed docs. Durable source of truth stays `removalIntervals` on the def.
+     * Returns the number of periods flipped.
+     */
+    apply_period_suppression(ctx: TraceContext, id: string, intervals: RemovalInterval[], user_id: string): Promise<number>;
+    /**
      * Permanently delete an inflow doc — irreversible ("Delete permanently").
      */
     hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;

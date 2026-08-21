@@ -201,17 +201,18 @@ export async function runUpdateOutflowPeriods(
     console.log(`[runUpdateOutflowPeriods] Unpaid periods (for amount changes): ${unpaidPeriods.length}`);
     console.log(`[runUpdateOutflowPeriods] Paid periods (name-only updates): ${paidCount}`);
 
-    // Determine which periods to update based on what changed
-    // - userCustomName changes go to ALL periods
-    // - averageAmount/transactionIds changes only go to unpaid periods
-    const hasNameChange = changedFields.includes('userCustomName');
+    // Determine which periods to update based on what changed.
+    // EXPECTED-amount + name/metadata changes propagate to ALL periods — INCLUDING paid ones.
+    // Rationale (locked 2026-08-21): the EXPECTED amount is what you *expect* the bill to be and
+    // is independent of payment; only the ACTUAL paid amount (totalAmountPaid, occurrence.amountPaid)
+    // is tied to the real transaction and is NEVER overwritten here. Previously amount changes were
+    // gated to unpaid periods, so editing a bill whose current period was already paid silently did
+    // nothing (the name — which always went to all periods — DID change), i.e. "name changes but
+    // amount doesn't". The `transactionIds` auto-match below stays gated to unpaid periods.
+    const periodsToUpdate = allPeriods;
+    result.periodsSkipped = 0;
 
-    // If name changed, include all periods (paid periods will only get name updates)
-    const periodsToUpdate = hasNameChange ? allPeriods : unpaidPeriods;
-    result.periodsSkipped = hasNameChange ? 0 : paidCount;
-
-    console.log(`[runUpdateOutflowPeriods] Periods to update: ${periodsToUpdate.length}`);
-    console.log(`[runUpdateOutflowPeriods] Update mode: ${hasNameChange ? 'ALL periods (name change)' : 'unpaid only (amount change)'}`);
+    console.log(`[runUpdateOutflowPeriods] Periods to update: ${periodsToUpdate.length} (all; ${paidCount} paid get EXPECTED-only updates, actual paid amounts preserved)`);
 
     if (periodsToUpdate.length === 0) {
       console.log(`[runUpdateOutflowPeriods] No periods need updating`);
@@ -236,29 +237,23 @@ export async function runUpdateOutflowPeriods(
           const dailyRate = effectiveAmount / period.cycleDays;
           const daysInPeriod = calculateDaysInPeriod(period);
 
+          // EXPECTED fields — recomputed on every period (paid included).
           updates.averageAmount = effectiveAmount;
           updates.amountWithheld = dailyRate * daysInPeriod;
           updates.expectedAmount = effectiveAmount;
           updates.totalAmountDue = effectiveAmount;
           updates.amountPerOccurrence = effectiveAmount;
           updates.dailyWithholdingRate = dailyRate;
+          // ACTUAL paid is tied to the transaction and is NOT touched here; only the
+          // derived "unpaid = expected − paid" is recomputed (clamped at 0 when overpaid).
+          updates.totalAmountUnpaid = Math.max(0, effectiveAmount - (period.totalAmountPaid || 0));
 
-          // Update occurrence objects' amountDue (if they exist)
+          // Update each occurrence's EXPECTED amountDue to the new amount, but PRESERVE its
+          // ACTUAL payment facts (amountPaid, isPaid, paymentDate, transactionSplitId, …).
           if (period.occurrences && period.occurrences.length > 0) {
-            updates.occurrences = period.occurrences.map(occ => {
-              if (occ.isPaid) {
-                // Preserve paid occurrences' amountDue (already paid at old price)
-                return { ...occ };
-              } else {
-                // Update unpaid occurrences' amountDue to new amount
-                return { ...occ, amountDue: effectiveAmount };
-              }
-            });
-            console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updated ${period.occurrences.length} occurrence objects`);
-            const paidCount = period.occurrences.filter(o => o.isPaid).length;
-            const unpaidCount = period.occurrences.length - paidCount;
-            console.log(`  - Preserved ${paidCount} paid occurrence(s) at original amountDue`);
-            console.log(`  - Updated ${unpaidCount} unpaid occurrence(s) to $${effectiveAmount.toFixed(2)}`);
+            updates.occurrences = period.occurrences.map(occ => ({ ...occ, amountDue: effectiveAmount }));
+            const paidOcc = period.occurrences.filter(o => o.isPaid).length;
+            console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: set amountDue=$${effectiveAmount.toFixed(2)} on ${period.occurrences.length} occurrence(s) (${paidOcc} paid — amountPaid preserved)`);
           }
 
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating amounts`);
@@ -311,8 +306,10 @@ export async function runUpdateOutflowPeriods(
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating isActive to ${updates.isActive}`);
         }
 
-        // Handle transactionIds change - call autoMatchSinglePeriod
-        if (changedFields.includes('transactionIds')) {
+        // Handle transactionIds change - call autoMatchSinglePeriod.
+        // Gated to UNPAID periods (now that we iterate ALL periods for expected-amount updates):
+        // re-matching an already-paid period could double-assign, and its payment facts are settled.
+        if (changedFields.includes('transactionIds') && !isPaid) {
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: running auto-match`);
           try {
             const matchResult = await autoMatchSinglePeriod(

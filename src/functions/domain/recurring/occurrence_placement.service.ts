@@ -62,6 +62,12 @@ export interface PlacedOccurrenceGroup {
   /** Some but not all paid. */
   is_partially_paid: boolean;
   status: OccurrenceReconStatus;
+  /**
+   * Per-occurrence placement for calendar rendering — one entry per occurrence
+   * placed in this period, so the client can draw each due day (not just the
+   * aggregate first/next). `paid` includes pending (pending counts as paid).
+   */
+  occurrences: Array<{ due_ms: number; paid: boolean; amount: number }>;
   /** Earliest due date of any placed occurrence, epoch ms (null if none). */
   first_due_ms: number | null;
   /**
@@ -113,8 +119,10 @@ export function place_occurrences(
     let first_due_ms: number | null = null;
     let next_unpaid_due_ms: number | null = null;
     const occurrence_ids: string[] = [];
+    const placed_details: Array<{ due_ms: number; paid: boolean; amount: number }> = [];
     for (const o of placed) {
       occurrence_ids.push(o.occurrence_id);
+      placed_details.push({ due_ms: o.due_date_ms, paid: o.is_paid, amount: o.amount_due });
       total_due += o.amount_due;
       total_paid += o.amount_paid;
       if (o.is_paid) {
@@ -153,6 +161,7 @@ export function place_occurrences(
       is_fully_paid,
       is_partially_paid,
       status,
+      occurrences: placed_details,
       first_due_ms,
       next_unpaid_due_ms,
     };

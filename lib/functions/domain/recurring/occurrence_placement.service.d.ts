@@ -58,6 +58,16 @@ export interface PlacedOccurrenceGroup {
     /** Some but not all paid. */
     is_partially_paid: boolean;
     status: OccurrenceReconStatus;
+    /**
+     * Per-occurrence placement for calendar rendering — one entry per occurrence
+     * placed in this period, so the client can draw each due day (not just the
+     * aggregate first/next). `paid` includes pending (pending counts as paid).
+     */
+    occurrences: Array<{
+        due_ms: number;
+        paid: boolean;
+        amount: number;
+    }>;
     /** Earliest due date of any placed occurrence, epoch ms (null if none). */
     first_due_ms: number | null;
     /**

@@ -69,6 +69,11 @@ function map_recurring(r: DerivedRecurringResult) {
       isDuePeriod: g.is_due_period,
       isFullyPaid: g.is_fully_paid,
       status: g.status,
+      occurrences: g.occurrences.map((o) => ({
+        dueMs: o.due_ms,
+        paid: o.paid,
+        amount: o.amount,
+      })),
       firstDueMs: g.first_due_ms,
       nextUnpaidDueMs: g.next_unpaid_due_ms,
     })),

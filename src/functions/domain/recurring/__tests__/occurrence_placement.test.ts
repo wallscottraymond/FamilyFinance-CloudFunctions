@@ -60,6 +60,24 @@ describe("place_occurrences", () => {
     expect(byId.wD.count_in_period).toBe(0);
   });
 
+  it("exposes per-occurrence placement (due_ms + paid + amount) for the calendar", () => {
+    // A weekly bill with two occurrences in June — one paid, one not.
+    const occs = [
+      occ("o1", Date.UTC(2026, 5, 3), { is_paid: true, amount_paid: 2000 }),
+      occ("o2", Date.UTC(2026, 5, 17), { amount_due: 1500 }),
+    ];
+    const [g] = place_occurrences(occs, [junMonthBucket]);
+    expect(g.occurrences).toEqual([
+      { due_ms: Date.UTC(2026, 5, 3), paid: true, amount: 2000 },
+      { due_ms: Date.UTC(2026, 5, 17), paid: false, amount: 1500 },
+    ]);
+  });
+
+  it("empty group exposes an empty occurrences array (empty calendar days)", () => {
+    const [g] = place_occurrences([occ("o1", JUL_15)], [junMonthBucket]);
+    expect(g.occurrences).toEqual([]);
+  });
+
   it("rolls up totals + unpaid status for an unpaid occurrence", () => {
     const [g] = place_occurrences([occ("o1", JUN_15)], [junMonthBucket]);
     expect(g.total_due).toBe(2000);

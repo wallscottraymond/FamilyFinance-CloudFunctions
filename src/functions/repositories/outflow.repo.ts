@@ -20,7 +20,11 @@ import {
   chunk_for_batch,
 } from "../types";
 import { OutflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
-import { RemovalInterval, RemovalMode } from "../domain/recurring/recurring_suppression.service";
+import {
+  RemovalInterval,
+  RemovalMode,
+  is_suppressed_in_period,
+} from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
 
 /**
@@ -399,6 +403,50 @@ export const outflow_repo = {
     });
 
     return create_write_result("outflow", id, "replace", before, after);
+  },
+
+  /**
+   * Sync the outflow's materialized periods' `isActive` to the suppression state.
+   * A period whose bucket END falls inside a removal interval → `isActive=false`, so it
+   * drops out of `user_summaries` (whose builder queries only `isActive == true`) and
+   * therefore out of the live list + totals; otherwise `isActive=true` (restore/reactivate).
+   * Only docs whose flag actually changes are written, keeping the summary-recompute
+   * fan-out minimal. The durable source of truth stays `removalIntervals` on the def
+   * (survives Plaid re-sync); this just keeps the materialized read in step. Returns the
+   * number of periods flipped.
+   */
+  async apply_period_suppression(
+    ctx: TraceContext,
+    id: string,
+    intervals: RemovalInterval[],
+    user_id: string
+  ): Promise<number> {
+    const db = getFirestore();
+    const snap = await db.collection("outflow_periods").where("outflowId", "==", id).get();
+    const now = Timestamp.now();
+    let flipped = 0;
+    let batch = db.batch();
+    let batched = 0;
+    for (const doc of snap.docs) {
+      const p = doc.data();
+      const end_ms = (p.periodEndDate as Timestamp | undefined)?.toMillis();
+      if (end_ms === undefined) continue;
+      const next_active = !is_suppressed_in_period(intervals, end_ms);
+      if ((p.isActive !== false) === next_active) continue; // already in the right state
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      batch.update(doc.ref, { isActive: next_active, updatedAt: now });
+      flipped++;
+      if (++batched >= 450) {
+        await batch.commit();
+        batch = db.batch();
+        batched = 0;
+      }
+    }
+    if (batched > 0) await batch.commit();
+    console.log(
+      `[${ctx.trace_id}] outflow_repo.apply_period_suppression ${id}: flipped ${flipped}/${snap.size} periods (user ${user_id})`
+    );
+    return flipped;
   },
 
   /**

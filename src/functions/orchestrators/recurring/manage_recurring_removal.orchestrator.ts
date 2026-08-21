@@ -45,6 +45,18 @@ export interface RemovalManageableRepo extends RemovalReadableRepo {
     removed_by_user: boolean,
     user_id: string
   ): Promise<WriteResult>;
+  /**
+   * Reflect the new suppression intervals onto the item's materialized periods by
+   * flipping each period's `isActive` (suppressed → false). This is what drops a
+   * removed bill/income out of `user_summaries` (which reads only isActive==true) and
+   * thus out of the live list + totals; restore flips them back.
+   */
+  apply_period_suppression(
+    ctx: TraceContext,
+    id: string,
+    intervals: RemovalInterval[],
+    user_id: string
+  ): Promise<number>;
   hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;
 }
 
@@ -122,8 +134,11 @@ export async function manage_recurring_removal_orchestrator(
       next = apply_restore(context.removal_intervals, now_ms);
     }
 
-    // 5. Persist.
+    // 5. Persist the durable intervals on the definition, THEN reflect them onto the
+    // materialized periods (flip isActive) so the change shows in the summaries-backed
+    // list + totals — not just the derive path. Covers remove / pause / restore alike.
     await repo.set_removal_intervals(ctx, input.id, next, has_open_interval(next), user_id);
+    await repo.apply_period_suppression(ctx, input.id, next, user_id);
 
     log_operation_success(span, user_id);
     return {
