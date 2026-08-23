@@ -24,6 +24,7 @@ import {
   PendingTransactionInfo,
 } from "../types/plaid";
 import { record_audit_entry_async } from "../audit";
+import { NotFoundError, PermissionDeniedError } from "../types/errors";
 
 /**
  * Firestore collection name.
@@ -502,6 +503,80 @@ export const transaction_repo = {
       metadata: { source: "api", context: { plaid_sync: true, field_update: true } },
     });
 
+    return create_write_result("transaction", doc_id, "merge", before, { ...before, ...update_data });
+  },
+
+  /**
+   * Manually PIN a split to a recurring bill (outflow) or CLEAR the pin (outflow_id
+   * = null). Sets the split's `outflowId` + `outflowAssignmentSource="manual"` (so the
+   * Assignment Engine preserves it across re-syncs) and recomputes the durable
+   * `splitOutflowIds` denorm (which the recurring reconcile queries). The resulting
+   * write fires `on_transaction_written`, which enqueues the reconcile for the
+   * affected bill(s) across before∪after — marking the bill paid. Structural guards
+   * only (ownership, existence); no business logic.
+   */
+  async pin_split_to_outflow(
+    ctx: TraceContext,
+    doc_id: string,
+    split_id: string,
+    outflow_id: string | null,
+    user_id: string,
+    clear_budget = false
+  ): Promise<WriteResult> {
+    const ref = doc_ref(doc_id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new NotFoundError("transaction", doc_id);
+    }
+    const before = snap.data() as LegacyTransactionDoc & {
+      splits?: Array<Record<string, unknown>>;
+    };
+    if (before.ownerId !== user_id && (before as { userId?: string }).userId !== user_id) {
+      throw new PermissionDeniedError("assign_split_to_outflow", doc_id);
+    }
+    const splits = (before.splits ?? []).map((s) =>
+      s.splitId === split_id
+        ? {
+            ...s,
+            outflowId: outflow_id,
+            // Pin manually so a future sync/engine pass preserves it; clearing (null)
+            // reverts to auto-derivation.
+            outflowAssignmentSource: outflow_id ? "manual" : "auto",
+            inflowId: null, // a bill payment is not also an income match
+            ...(clear_budget ? { budgetId: "", budgetName: "" } : {}),
+          }
+        : s
+    );
+    if (!splits.some((s) => s.splitId === split_id)) {
+      throw new NotFoundError("transaction_split", split_id);
+    }
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const splitOutflowIds = Array.from(
+      new Set(
+        splits
+          .map((s) => s.outflowId as string | undefined)
+          .filter((id): id is string => !!id)
+      )
+    );
+    const now = Timestamp.now();
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const update_data = { splits, splitOutflowIds, updatedAt: now, updatedBy: user_id };
+    await ref.update(update_data);
+
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "transaction",
+      entity_id: doc_id,
+      before: before as unknown as Record<string, unknown>,
+      after: { ...before, ...update_data } as unknown as Record<string, unknown>,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { manual_outflow_pin: true, outflow_id } },
+    });
+
+    console.log(
+      `[${ctx.trace_id}] pin_split_to_outflow: txn=${doc_id} split=${split_id} → outflow=${outflow_id ?? "cleared"}`
+    );
     return create_write_result("transaction", doc_id, "merge", before, { ...before, ...update_data });
   },
 

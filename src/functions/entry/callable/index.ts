@@ -26,6 +26,9 @@ export { derive_budget_transactions } from "./derive_budget_transactions.entry";
 // Recurring inflow/outflow detail transactions (this-period + historical)
 export { derive_recurring_transactions } from "./derive_recurring_transactions.entry";
 
+// Manual split→bill assignment (durable pin + reconcile)
+export { assign_split_to_outflow } from "./assign_split_to_outflow.entry";
+
 // Remove-Recover-Recurring: remove / pause / restore / delete a recurring bill / income
 export { manage_recurring_outflow } from "./manage_recurring_outflow.entry";
 export { manage_recurring_inflow } from "./manage_recurring_inflow.entry";

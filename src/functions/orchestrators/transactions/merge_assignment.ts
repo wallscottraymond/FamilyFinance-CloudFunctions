@@ -88,6 +88,9 @@ export function merge_assignment_onto_raw_splits(
       weeklyBudgetSource: a.budget_assignment_source,
       biWeeklyBudgetSource: a.budget_assignment_source,
       outflowId: a.outflow_id,
+      // Manual bill-pin source — preserved so the engine keeps a user's bill
+      // assignment across re-syncs (mirrors budgetAssignmentSource).
+      outflowAssignmentSource: a.outflow_source,
       inflowId: a.inflow_id,
       monthlyPeriodId: a.monthly_period_id,
       weeklyPeriodId: a.weekly_period_id,

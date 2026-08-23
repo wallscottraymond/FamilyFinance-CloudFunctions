@@ -37,6 +37,10 @@ export interface SplitForAssignment {
     internal_match_category: string | null;
     plaid_match_category: string;
     outflow_id: string | null;
+    /** Manual bill-assignment pin: when `"manual"`, `outflow_id` is a user-chosen bill
+     *  that the engine PRESERVES (doesn't re-derive) while that outflow still exists —
+     *  survives Plaid re-sync. Defaults to `"auto"` (engine derives from recurring match). */
+    outflow_source?: "auto" | "manual";
     inflow_id: string | null;
     monthly_period_id: string | null;
     weekly_period_id: string | null;
@@ -77,6 +81,9 @@ export interface AssignmentContext {
     source_periods: SourcePeriodForMatch[];
     /** Recurring match per split id (empty = no recurring match). */
     recurring_by_split: Record<string, RecurringMatch>;
+    /** Active outflow (bill) ids — validates a manual outflow pin so a stale pin (bill
+     *  deleted) falls back to auto-derivation. Omitted → pins are trusted as-is. */
+    active_outflow_ids?: Set<string>;
 }
 /** The computed assignment for one split (the engine-owned fields only). */
 export interface AssignedSplit {
@@ -90,6 +97,8 @@ export interface AssignedSplit {
     /** LEGACY alias = monthly_budget_id (kept until callers read the lens fields). */
     budget_id: string;
     outflow_id: string | null;
+    /** "manual" = a user-pinned bill assignment the engine preserves; else "auto". */
+    outflow_source: "auto" | "manual";
     inflow_id: string | null;
     monthly_period_id: string | null;
     weekly_period_id: string | null;

@@ -29,6 +29,7 @@ function assigned(over: Partial<AssignedSplit> = {}): AssignedSplit {
     bi_weekly_budget_id: budget_id,
     budget_assignment_source: "category",
     outflow_id: null,
+    outflow_source: "auto",
     inflow_id: null,
     monthly_period_id: "2026M06",
     weekly_period_id: "2026W24",

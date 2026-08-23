@@ -75,6 +75,44 @@ describe("compute_transaction_assignment", () => {
     expect(r.changed).toBe(true);
   });
 
+  it("MANUAL PIN: preserves a user-pinned outflow even with NO recurring match", () => {
+    const r = compute_transaction_assignment(
+      [split({ outflow_id: "bill_1", outflow_source: "manual" })],
+      ctx({ recurring_by_split: {} }) // engine would otherwise derive null
+    );
+    const s = r.splits[0];
+    expect(s.outflow_id).toBe("bill_1");
+    expect(s.outflow_source).toBe("manual");
+    expect(s.reason.recurring).toBe("outflow");
+    expect(r.touched_outflow_ids).toContain("bill_1");
+  });
+
+  it("MANUAL PIN: a user pin OVERRIDES a recurring auto-match to a different outflow", () => {
+    const r = compute_transaction_assignment(
+      [split({ outflow_id: "bill_user", outflow_source: "manual" })],
+      ctx({ recurring_by_split: { s1: { outflow_id: "bill_auto", inflow_id: null } } })
+    );
+    expect(r.splits[0].outflow_id).toBe("bill_user"); // user wins
+  });
+
+  it("AUTO (no pin): derives outflow from the recurring match", () => {
+    const r = compute_transaction_assignment(
+      [split()],
+      ctx({ recurring_by_split: { s1: { outflow_id: "bill_auto", inflow_id: null } } })
+    );
+    expect(r.splits[0].outflow_id).toBe("bill_auto");
+    expect(r.splits[0].outflow_source).toBe("auto");
+  });
+
+  it("STALE PIN: a manual pin to a non-existent outflow falls back to auto-derivation", () => {
+    const r = compute_transaction_assignment(
+      [split({ outflow_id: "deleted_bill", outflow_source: "manual" })],
+      ctx({ active_outflow_ids: new Set(["some_other_bill"]) })
+    );
+    expect(r.splits[0].outflow_id).toBeNull(); // pin dropped (no recurring match either)
+    expect(r.splits[0].outflow_source).toBe("auto");
+  });
+
   it("falls to Everything Else when no real budget owns the category", () => {
     const r = compute_transaction_assignment(
       [split({ plaid_match_category: "TRAVEL" })],

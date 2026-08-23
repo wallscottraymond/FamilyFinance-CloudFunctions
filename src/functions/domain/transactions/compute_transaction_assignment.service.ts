@@ -49,6 +49,10 @@ export interface SplitForAssignment {
   internal_match_category: string | null;
   plaid_match_category: string;
   outflow_id: string | null;
+  /** Manual bill-assignment pin: when `"manual"`, `outflow_id` is a user-chosen bill
+   *  that the engine PRESERVES (doesn't re-derive) while that outflow still exists —
+   *  survives Plaid re-sync. Defaults to `"auto"` (engine derives from recurring match). */
+  outflow_source?: "auto" | "manual";
   inflow_id: string | null;
   monthly_period_id: string | null;
   weekly_period_id: string | null;
@@ -91,6 +95,9 @@ export interface AssignmentContext {
   source_periods: SourcePeriodForMatch[];
   /** Recurring match per split id (empty = no recurring match). */
   recurring_by_split: Record<string, RecurringMatch>;
+  /** Active outflow (bill) ids — validates a manual outflow pin so a stale pin (bill
+   *  deleted) falls back to auto-derivation. Omitted → pins are trusted as-is. */
+  active_outflow_ids?: Set<string>;
 }
 
 /** The computed assignment for one split (the engine-owned fields only). */
@@ -105,6 +112,8 @@ export interface AssignedSplit {
   /** LEGACY alias = monthly_budget_id (kept until callers read the lens fields). */
   budget_id: string;
   outflow_id: string | null;
+  /** "manual" = a user-pinned bill assignment the engine preserves; else "auto". */
+  outflow_source: "auto" | "manual";
   inflow_id: string | null;
   monthly_period_id: string | null;
   weekly_period_id: string | null;
@@ -291,6 +300,20 @@ export function compute_transaction_assignment(
       }
     }
 
+    // Manual bill pin: the user assigned this split to a specific bill. It OVERRIDES
+    // auto-derivation (and a manual-budget detach's null), and is PRESERVED across
+    // re-syncs — as long as the pinned outflow still exists (else fall back to auto).
+    let outflow_source: "auto" | "manual" = "auto";
+    if (
+      split.outflow_source === "manual" &&
+      split.outflow_id &&
+      (!context.active_outflow_ids || context.active_outflow_ids.has(split.outflow_id))
+    ) {
+      outflow_id = split.outflow_id;
+      outflow_source = "manual";
+      recurring_reason = "outflow";
+    }
+
     // Missing-EE error: any lens unassigned for a NON-income, NON-transfer split
     // (income/transfers being unassigned in every lens is intentional, not the
     // missing-EE error).
@@ -317,6 +340,7 @@ export function compute_transaction_assignment(
       budget_assignment_source: source,
       budget_id: monthly_id, // legacy alias
       outflow_id,
+      outflow_source,
       inflow_id,
       monthly_period_id: periods.monthly_period_id,
       weekly_period_id: periods.weekly_period_id,
@@ -358,6 +382,7 @@ function split_assignment_changed(
     (before.bi_weekly_budget_id ?? before.budget_id) !== after.bi_weekly_budget_id ||
     before.budget_assignment_source !== after.budget_assignment_source ||
     before.outflow_id !== after.outflow_id ||
+    (before.outflow_source ?? "auto") !== after.outflow_source ||
     before.inflow_id !== after.inflow_id ||
     before.monthly_period_id !== after.monthly_period_id ||
     before.weekly_period_id !== after.weekly_period_id ||

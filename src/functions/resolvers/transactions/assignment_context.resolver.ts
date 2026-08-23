@@ -234,6 +234,8 @@ export async function resolve_assignment_context(
     internal_match_category: (s.internalDetailedCategory as string | null) ?? null,
     plaid_match_category: (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE",
     outflow_id: (s.outflowId as string | null) ?? null,
+    // Manual bill-pin source — preserved so a user's bill assignment survives re-sync.
+    outflow_source: (s.outflowAssignmentSource as "auto" | "manual") ?? "auto",
     inflow_id: (s.inflowId as string | null) ?? null,
     monthly_period_id: (s.monthlyPeriodId as string | null) ?? null,
     weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,

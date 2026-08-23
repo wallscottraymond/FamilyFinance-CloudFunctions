@@ -15,6 +15,7 @@ export { delete_budget } from "./delete_budget.entry";
 export { derive_budget_view } from "./derive_budget_view.entry";
 export { derive_budget_transactions } from "./derive_budget_transactions.entry";
 export { derive_recurring_transactions } from "./derive_recurring_transactions.entry";
+export { assign_split_to_outflow } from "./assign_split_to_outflow.entry";
 export { manage_recurring_outflow } from "./manage_recurring_outflow.entry";
 export { manage_recurring_inflow } from "./manage_recurring_inflow.entry";
 export { list_suppressed_recurring } from "./list_suppressed_recurring.entry";

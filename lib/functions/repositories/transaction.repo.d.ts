@@ -152,6 +152,16 @@ export declare const transaction_repo: {
         is_pending: boolean;
     }>): Promise<WriteResult>;
     /**
+     * Manually PIN a split to a recurring bill (outflow) or CLEAR the pin (outflow_id
+     * = null). Sets the split's `outflowId` + `outflowAssignmentSource="manual"` (so the
+     * Assignment Engine preserves it across re-syncs) and recomputes the durable
+     * `splitOutflowIds` denorm (which the recurring reconcile queries). The resulting
+     * write fires `on_transaction_written`, which enqueues the reconcile for the
+     * affected bill(s) across before∪after — marking the bill paid. Structural guards
+     * only (ownership, existence); no business logic.
+     */
+    pin_split_to_outflow(ctx: TraceContext, doc_id: string, split_id: string, outflow_id: string | null, user_id: string, clear_budget?: boolean): Promise<WriteResult>;
+    /**
      * Soft-deletes transactions by Plaid transaction IDs.
      *
      * @param ctx - Trace context
