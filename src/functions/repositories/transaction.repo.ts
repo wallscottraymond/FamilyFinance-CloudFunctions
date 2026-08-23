@@ -604,23 +604,59 @@ export const transaction_repo = {
   ): Promise<Map<string, PendingTransactionInfo>> {
     const db = getFirestore();
 
-    const snapshot = await db
-      .collection(COLLECTION)
-      .where("ownerId", "==", user_id)
-      .where("plaidItemId", "==", plaid_item_id)
-      .where("isPending", "==", true)
-      .where("isActive", "==", true)
-      .get();
+    // ACTIVE pendings — the common (same-sync) case. PLUS recently REMOVED-BY-SYNC
+    // pendings — so a posted arriving in a LATER sync (after Plaid already removed the
+    // pending) can STILL inherit the user's splits. (`isActive==false` reuses the same
+    // composite index shape as `==true`, so no new index is required.)
+    const [active_snap, removed_snap] = await Promise.all([
+      db
+        .collection(COLLECTION)
+        .where("ownerId", "==", user_id)
+        .where("plaidItemId", "==", plaid_item_id)
+        .where("isPending", "==", true)
+        .where("isActive", "==", true)
+        .get(),
+      db
+        .collection(COLLECTION)
+        .where("ownerId", "==", user_id)
+        .where("plaidItemId", "==", plaid_item_id)
+        .where("isPending", "==", true)
+        .where("isActive", "==", false)
+        .get(),
+    ]);
 
     const result = new Map<string, PendingTransactionInfo>();
 
-    for (const doc of snapshot.docs) {
+    for (const doc of active_snap.docs) {
       const data = doc.data() as LegacyTransactionDoc;
       result.set(data.transactionId, map_to_pending_info(data));
     }
 
+    // Recently removed-by-Plaid-sync pendings only, within a window covering the
+    // pending lifecycle (Plaid posts 1–5 business days out). Don't overwrite an active.
+    const REMOVED_WINDOW_MS = 12 * 24 * 60 * 60 * 1000;
+    const cutoff_ms = Date.now() - REMOVED_WINDOW_MS;
+    let removed_recent = 0;
+    for (const doc of removed_snap.docs) {
+      const data = doc.data() as LegacyTransactionDoc & {
+        isDeleted?: boolean;
+        deletionReason?: string;
+        updatedAt?: { toMillis?: () => number };
+      };
+      const removed_by_sync =
+        data.isDeleted === true &&
+        typeof data.deletionReason === "string" &&
+        data.deletionReason.toLowerCase().includes("removed by plaid");
+      const updated_ms = data.updatedAt?.toMillis?.() ?? 0;
+      if (!removed_by_sync || updated_ms < cutoff_ms) continue;
+      if (result.has(data.transactionId)) continue; // an active pending wins
+      result.set(data.transactionId, map_to_pending_info(data));
+      removed_recent++;
+    }
+
     console.log(
-      `[${ctx.trace_id}] get_pending_transactions_for_item: found=${result.size}`
+      `[${ctx.trace_id}] get_pending_transactions_for_item: found=${result.size} ` +
+        `(active=${active_snap.size}, removed-recent=${removed_recent})`
     );
 
     return result;

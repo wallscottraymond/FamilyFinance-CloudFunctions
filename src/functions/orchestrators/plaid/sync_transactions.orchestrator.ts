@@ -22,8 +22,6 @@ import { create_child_span } from "../../observability";
 import {
   TransactionSyncInput,
   TransactionSyncResponse,
-  TransactionForPersistence,
-  PendingMigration,
   TRANSACTION_SYNC_BUDGET,
   PLAID_SYNC_PAGE_DELAY_MS,
 } from "../../types/plaid";
@@ -35,7 +33,6 @@ import {
 } from "../../integrations/plaid";
 import { sync_transactions } from "../../integrations/plaid";
 import {
-  validate_transactions_for_sync,
   merge_pending_to_posted,
   aggregate_transaction_sync_results,
   should_continue_sync,
@@ -280,13 +277,15 @@ async function process_added_transactions(
     `[${ctx.trace_id}] Identified ${migrations.length} pending->posted migrations`
   );
 
-  // Track IDs that are migrations (to skip normal creation)
-  const migration_posted_ids = new Set(migrations.map(m => m.posted_plaid_transaction_id));
-
-  // Filter out migrations from normal processing
-  const new_transactions = plaid_transactions.filter(
-    txn => !migration_posted_ids.has(txn.transaction_id)
+  // Migrations are processed through the SAME pipeline as new transactions (so the
+  // posted txn gets its real Plaid data — name/account/date/category), then we OVERLAY
+  // the pending's user splits (budget + outflow/inflow link + denorm arrays + categories
+  // + tags) onto the posted so a user's manual assignment on a PENDING txn survives the
+  // pending->posted resync. The pending itself is soft-deleted via Plaid's `removed` array.
+  const migration_by_posted = new Map(
+    migrations.map((m) => [m.posted_plaid_transaction_id, m])
   );
+  const new_transactions = plaid_transactions;
 
   let created = 0;
   let migrated = 0;
@@ -322,12 +321,26 @@ async function process_added_transactions(
       const final = with_periods;
 
       // Step 6a: Transform legacy format to new persistence format
-      const transactions_for_persistence = transform_legacy_to_persistence(
+      let transactions_for_persistence = transform_legacy_to_persistence(
         final,
         ctx.user_id,
         deps.user_context.group_ids
       );
-      console.log(`[${ctx.trace_id}] Step 6a: Transformed ${transactions_for_persistence.length} transactions to persistence format`);
+
+      // Step 6a-migrate: for each pending->posted migration, OVERLAY the pending's
+      // user splits onto the posted txn (merge_pending_to_posted preserves budget +
+      // outflow/inflow assignment + categories/tags, and proportionally rescales if the
+      // amount changed). Now the posted base has real Plaid data (unlike the old stub).
+      if (migration_by_posted.size > 0) {
+        transactions_for_persistence = transactions_for_persistence.map((t) => {
+          const m = migration_by_posted.get(t.transaction_id);
+          return m ? merge_pending_to_posted(t, m) : t;
+        });
+        migrated = transactions_for_persistence.filter((t) =>
+          migration_by_posted.has(t.transaction_id)
+        ).length;
+      }
+      console.log(`[${ctx.trace_id}] Step 6a: Transformed ${transactions_for_persistence.length} transactions (${migrated} inherited splits from a posted pending)`);
 
       // Step 6b: Upsert transactions via new repository
       const upsert_result = await transaction_repo.upsert_from_plaid_sync(
@@ -338,7 +351,8 @@ async function process_added_transactions(
       );
       console.log(`[${ctx.trace_id}] Step 6b: Upserted transactions (created=${upsert_result.created}, updated=${upsert_result.updated})`);
 
-      created = upsert_result.created;
+      // New creations exclude the migrated posted txns (they replace a pending, not net-new).
+      created = Math.max(0, upsert_result.created - migrated);
 
     } catch (error) {
       const error_msg = error instanceof Error ? error.message : "Unknown error";
@@ -347,115 +361,9 @@ async function process_added_transactions(
     }
   }
 
-  // Process migrations separately
-  if (migrations.length > 0) {
-    try {
-      migrated = await process_migrations(ctx, migrations, deps);
-    } catch (error) {
-      const error_msg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[${ctx.trace_id}] Migration error:`, error_msg);
-      errors.push(`Migration error: ${error_msg}`);
-    }
-  }
-
   return { created, migrated };
 }
 
-/**
- * Process pending->posted migrations.
- *
- * When a pending transaction posts:
- * 1. The posted transaction has a new ID
- * 2. It references the old pending ID via pending_transaction_id
- * 3. We need to migrate user modifications from the pending to the posted
- * 4. Soft-delete the pending transaction
- */
-async function process_migrations(
-  ctx: OrchestratorContext<TransactionSyncInput>,
-  migrations: PendingMigration[],
-  deps: NonNullable<Awaited<ReturnType<typeof resolve_transaction_sync_dependencies>>>
-): Promise<number> {
-  const trace = create_child_span(ctx);
-  let migrated = 0;
-
-  for (const migration of migrations) {
-    try {
-      // Get the posted transaction's Plaid data
-      // Note: The posted transaction should already be in the added array
-      // but we need to create it with the migrated data
-
-      // Create a minimal posted transaction for merge
-      // Note: transform_context would be used here if we needed full transformation
-      // In practice, this would come from the Plaid response
-      const posted_base: TransactionForPersistence = {
-        transaction_id: migration.posted_plaid_transaction_id,
-        user_id: ctx.user_id,
-        group_ids: deps.user_context.group_ids,
-        is_active: true,
-        plaid_item_id: deps.plaid_item.plaid_item_id,
-        account_id: "", // Will be filled from pending
-        amount: migration.new_amount,
-        currency: deps.user_context.currency,
-        transaction_date: new Date(), // Will be updated
-        name: "",
-        merchant_name: null,
-        is_pending: false,
-        pending_transaction_id: migration.pending_plaid_transaction_id,
-        type: "expense",
-        source: "plaid",
-        plaid_primary_category: "",
-        plaid_detailed_category: "",
-        internal_primary_category: null,
-        internal_detailed_category: null,
-        splits: [],
-        initial_plaid_data: {
-          plaid_account_id: "",
-          plaid_merchant_name: null,
-          plaid_name: "",
-          plaid_transaction_id: migration.posted_plaid_transaction_id,
-          plaid_pending: false,
-        },
-      };
-
-      const merged = merge_pending_to_posted(posted_base, migration);
-
-      // Validate
-      const validation = validate_transactions_for_sync([merged]);
-      if (validation.validation_errors.length > 0) {
-        console.warn(
-          `[${ctx.trace_id}] Migration validation errors for ${migration.posted_plaid_transaction_id}:`,
-          validation.validation_errors
-        );
-        continue;
-      }
-
-      // Update the pending transaction to mark it as posted
-      // The actual creation will happen through the normal pipeline
-      await transaction_repo.update_transaction_fields(
-        trace,
-        migration.pending_transaction.doc_id,
-        { is_pending: false }
-      );
-
-      migrated++;
-
-      console.log(
-        `[${ctx.trace_id}] Migrated pending ${migration.pending_plaid_transaction_id} ` +
-        `-> posted ${migration.posted_plaid_transaction_id}` +
-        (migration.amount_changed ? ` (amount: ${migration.old_amount} -> ${migration.new_amount})` : "")
-      );
-
-    } catch (error) {
-      const error_msg = error instanceof Error ? error.message : "Unknown error";
-      console.error(
-        `[${ctx.trace_id}] Failed to migrate ${migration.pending_plaid_transaction_id}:`,
-        error_msg
-      );
-    }
-  }
-
-  return migrated;
-}
 
 /**
  * Process modified transactions.

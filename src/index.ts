@@ -1,8 +1,11 @@
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
-// Initialize Firebase Admin
-admin.initializeApp();
+// Initialize Firebase Admin (idempotent — guarded so tests/tools that pre-initialize
+// admin, or import this barrel more than once, don't hit a double-init error).
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 // Export all function modules
 export * from "./functions/auth";
