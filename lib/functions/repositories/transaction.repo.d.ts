@@ -160,7 +160,7 @@ export declare const transaction_repo: {
      * affected bill(s) across before∪after — marking the bill paid. Structural guards
      * only (ownership, existence); no business logic.
      */
-    pin_split_to_outflow(ctx: TraceContext, doc_id: string, split_id: string, outflow_id: string | null, user_id: string, clear_budget?: boolean): Promise<WriteResult>;
+    pin_split_to_outflow(ctx: TraceContext, doc_id: string, split_id: string, outflow_id: string | null, user_id: string, clear_budget?: boolean, outflow_period_id?: string | null): Promise<WriteResult>;
     /**
      * Soft-deletes transactions by Plaid transaction IDs.
      *

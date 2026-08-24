@@ -35,6 +35,9 @@ const schema = z.object({
   split_id: z.string().min(1, "split_id is required"),
   /** The bill to pin to; null clears a manual pin (reverts to auto-derivation). */
   outflow_id: z.string().min(1).nullable(),
+  /** Optional: force the payment into a SPECIFIC period (sourcePeriodId, e.g. "2026M07"),
+   *  overriding date-based placement. Omit/null → the reconcile places it by txn date. */
+  outflow_period_id: z.string().min(1).nullable().optional(),
   /** Clear the split's budget assignment when pinning to a bill (default: keep). */
   clear_budget: z.boolean().optional(),
   debug_mode: z.boolean().optional(),
@@ -62,7 +65,8 @@ export const assign_split_to_outflow = onCall(
           { trace_id: ctx.trace_id }
         );
       }
-      const { transaction_id, split_id, outflow_id, clear_budget } = validation.data;
+      const { transaction_id, split_id, outflow_id, outflow_period_id, clear_budget } =
+        validation.data;
 
       await transaction_repo.pin_split_to_outflow(
         ctx,
@@ -70,12 +74,13 @@ export const assign_split_to_outflow = onCall(
         split_id,
         outflow_id,
         user_id,
-        clear_budget === true
+        clear_budget === true,
+        outflow_period_id ?? null
       );
 
       log_operation_success(span, user_id);
       return success_response(
-        { transaction_id, split_id, outflow_id },
+        { transaction_id, split_id, outflow_id, outflow_period_id: outflow_period_id ?? null },
         ctx.trace_id
       );
     } catch (error) {

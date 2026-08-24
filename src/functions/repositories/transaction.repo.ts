@@ -521,7 +521,8 @@ export const transaction_repo = {
     split_id: string,
     outflow_id: string | null,
     user_id: string,
-    clear_budget = false
+    clear_budget = false,
+    outflow_period_id: string | null = null
   ): Promise<WriteResult> {
     const ref = doc_ref(doc_id);
     const snap = await ref.get();
@@ -542,6 +543,10 @@ export const transaction_repo = {
             // Pin manually so a future sync/engine pass preserves it; clearing (null)
             // reverts to auto-derivation.
             outflowAssignmentSource: outflow_id ? "manual" : "auto",
+            // Optional period pin (Bill-Assignment-Two-Stage-Picker): force the recurring
+            // reconcile to place this payment in a SPECIFIC period (sourcePeriodId),
+            // overriding date-based alignment. Cleared when the bill pin is cleared.
+            outflowPinnedPeriodId: outflow_id ? outflow_period_id : null,
             inflowId: null, // a bill payment is not also an income match
             ...(clear_budget ? { budgetId: "", budgetName: "" } : {}),
           }

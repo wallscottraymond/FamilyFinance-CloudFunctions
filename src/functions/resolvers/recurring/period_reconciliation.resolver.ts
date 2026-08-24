@@ -145,6 +145,19 @@ export async function resolve_recurring_reconciliation(
       };
     });
 
+  // Period-pin support (Bill-Assignment-Two-Stage-Picker): map each sourcePeriodId to
+  // its date-range MIDPOINT. A split that pins a specific period aligns by this midpoint
+  // (across all cadences) instead of the txn date — forcing the payment into that period.
+  const midpoint_by_source_period = new Map<string, number>();
+  for (const { data } of period_docs) {
+    const sp = data.sourcePeriodId as string | undefined;
+    const s = to_ms(data.periodStartDate);
+    const e = to_ms(data.periodEndDate);
+    if (sp && s !== null && e !== null) {
+      midpoint_by_source_period.set(sp, Math.floor((s + e) / 2));
+    }
+  }
+
   // 3. Linked payments — UNION of two sources, deduped by Firestore doc id:
   //    (a) the DURABLE split link (`splitOutflowIds`/`splitInflowIds`, stamped by
   //        the assignment engine) — survives Plaid's id reissue on pending→posted;
@@ -173,7 +186,19 @@ export async function resolve_recurring_reconciliation(
   });
   for (const txn of txns) {
     if (txn.isActive === false) continue;
-    const date_ms = to_ms(txn.transactionDate) ?? 0;
+    // Honor a manual PERIOD PIN for THIS outflow: align by the pinned period's midpoint
+    // (forces placement into that period) instead of the transaction date.
+    let date_ms = to_ms(txn.transactionDate) ?? 0;
+    if (is_outflow) {
+      const pinned = (txn.splits ?? []).find((s) => {
+        const sp = s as { outflowId?: string | null; outflowPinnedPeriodId?: string };
+        return sp.outflowId === input.recurring_id && !!sp.outflowPinnedPeriodId;
+      }) as { outflowPinnedPeriodId?: string } | undefined;
+      const pinned_source = pinned?.outflowPinnedPeriodId;
+      if (pinned_source && midpoint_by_source_period.has(pinned_source)) {
+        date_ms = midpoint_by_source_period.get(pinned_source)!;
+      }
+    }
     const is_pending = txn.isPending === true;
     let amount = 0;
     let split_id = txn.id;
