@@ -97,6 +97,12 @@ export declare const inflow_period_repo: {
      */
     get_by_inflow_id(ctx: TraceContext, inflow_id: string): Promise<string[]>;
     /**
+     * Propagate a recurring inflow's hidden state onto its period docs (mirror of
+     * `outflow_period_repo.set_hidden_by_outflow_ids`). Keeps period-doc readers in sync
+     * with the durable `isHidden` set by `classify_internal_transfers`.
+     */
+    set_hidden_by_inflow_ids(ctx: TraceContext, inflow_ids: string[], hidden: boolean): Promise<number>;
+    /**
      * Gets the raw doc data + id for a set of period IDs (missing docs skipped).
      * READ-ONLY — used by the summary resolver to group periods for recompute.
      */

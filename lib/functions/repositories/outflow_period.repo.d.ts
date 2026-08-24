@@ -165,6 +165,13 @@ export declare const outflow_period_repo: {
      */
     set_active_by_account_id(ctx: TraceContext, account_id: string, is_active: boolean): Promise<number>;
     /**
+     * Propagate a recurring outflow's hidden state onto its period docs, so period-doc
+     * readers (e.g. the assign-to-bill picker) see the SAME durable `isHidden` as the
+     * outflow record. Called by `classify_internal_transfers` after it flips the outflow's
+     * hidden flag. Only writes docs whose value actually differs (invalidation-friendly).
+     */
+    set_hidden_by_outflow_ids(ctx: TraceContext, outflow_ids: string[], hidden: boolean): Promise<number>;
+    /**
      * Returns the period ids for a recurring outflow (mirror of
      * `inflow_period_repo.get_by_inflow_id`). The resolver loads the docs via
      * `get_by_ids` and filters active in memory.

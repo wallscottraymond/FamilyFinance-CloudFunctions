@@ -17,6 +17,8 @@
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { outflow_period_repo } from "../../repositories/outflow_period.repo";
+import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
 
@@ -86,6 +88,17 @@ export async function classify_internal_transfers_orchestrator(
     outflow_repo.mark_hidden(ctx, out.unhide, false, user_id),
     inflow_repo.mark_hidden(ctx, inf.hide, true, user_id),
     inflow_repo.mark_hidden(ctx, inf.unhide, false, user_id),
+  ]);
+
+  // Propagate the hidden flag onto the period docs so period-doc readers (e.g. the
+  // assign-to-bill picker) exclude internal transfers using the SAME durable signal —
+  // not a separate heuristic. Generation already copies `is_hidden`; this keeps the
+  // already-materialized periods in sync when classification flips.
+  await Promise.all([
+    outflow_period_repo.set_hidden_by_outflow_ids(ctx, out.hide, true),
+    outflow_period_repo.set_hidden_by_outflow_ids(ctx, out.unhide, false),
+    inflow_period_repo.set_hidden_by_inflow_ids(ctx, inf.hide, true),
+    inflow_period_repo.set_hidden_by_inflow_ids(ctx, inf.unhide, false),
   ]);
 
   return { hidden_outflows: out.hide.length, hidden_inflows: inf.hide.length };

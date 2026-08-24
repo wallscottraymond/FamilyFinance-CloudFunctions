@@ -643,6 +643,57 @@ export const outflow_period_repo = {
   },
 
   /**
+   * Propagate a recurring outflow's hidden state onto its period docs, so period-doc
+   * readers (e.g. the assign-to-bill picker) see the SAME durable `isHidden` as the
+   * outflow record. Called by `classify_internal_transfers` after it flips the outflow's
+   * hidden flag. Only writes docs whose value actually differs (invalidation-friendly).
+   */
+  async set_hidden_by_outflow_ids(
+    ctx: TraceContext,
+    outflow_ids: string[],
+    hidden: boolean
+  ): Promise<number> {
+    if (outflow_ids.length === 0) {
+      return 0;
+    }
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const ids: string[] = [];
+    for (const outflow_id of outflow_ids) {
+      const snapshot = await db
+        .collection(COLLECTION)
+        .where("outflowId", "==", outflow_id)
+        .select("isHidden")
+        .get();
+      snapshot.docs.forEach((doc) => {
+        if (doc.get("isHidden") !== hidden) ids.push(doc.id);
+      });
+    }
+    if (ids.length === 0) {
+      return 0;
+    }
+    let updated = 0;
+    for (const chunk of chunk_for_batch(ids)) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(db.collection(COLLECTION).doc(id), {
+          isHidden: hidden,
+          updatedAt: now,
+        });
+        /* eslint-enable @typescript-eslint/naming-convention */
+        updated++;
+      }
+      await batch.commit();
+    }
+    console.log(
+      `[${ctx.trace_id}] outflow_period.set_hidden_by_outflow_ids: ` +
+      `outflows=${outflow_ids.length}, updated=${updated}, hidden=${hidden}`
+    );
+    return updated;
+  },
+
+  /**
    * Returns the period ids for a recurring outflow (mirror of
    * `inflow_period_repo.get_by_inflow_id`). The resolver loads the docs via
    * `get_by_ids` and filters active in memory.
