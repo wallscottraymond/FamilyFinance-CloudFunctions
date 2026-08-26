@@ -42,6 +42,10 @@ interface CategoryOwnershipResponse {
   unassignedCount: number;
   /** Total categories in system */
   totalCategories: number;
+  /** firstCategoryId → owning (non-EE) budgetId, null if free (Phase 5 first-level grey-out). */
+  ownershipByFirst: Record<string, string | null>;
+  /** firstCategoryId → first_category display label. */
+  firstCategoryNames: Record<string, string>;
 }
 
 /**
@@ -94,6 +98,8 @@ export const getCategoryOwnershipMap = onRequest({
         budgetNames,
         categoryNames,
         everythingElseBudgetId: ownershipMap.everythingElseBudgetId,
+        ownershipByFirst: ownershipMap.ownershipByFirst,
+        firstCategoryNames: ownershipMap.firstCategoryNames,
         unassignedCount: ownershipMap.unassignedCategoryIds.length,
         totalCategories: ownershipMap.allCategoryIds.length,
       };

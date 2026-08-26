@@ -19,6 +19,10 @@ const path = require('path'), fs = require('fs'), os = require('os'), crypto = r
 const admin = require('firebase-admin');
 const PROJECT_ID = 'family-budget-app-cb59b';
 const COMMIT = process.argv.includes('--commit');
+// Scope to ONE user (by ownerId/userId), filtered in-memory so no composite index is needed.
+// REQUIRED in the shared dev project so we don't re-assign other users' transactions.
+const uIdx = process.argv.indexOf('--user');
+const USER = uIdx >= 0 ? process.argv[uIdx + 1] : null;
 const PAGE = 500;
 const WRITE_BATCH = 400;
 
@@ -48,6 +52,8 @@ async function main() {
       const d = doc.data();
       const user_id = d.userId || d.ownerId;
       if (!user_id) { skippedNoUser++; continue; }
+      if (USER && user_id !== USER) continue; // scope to the target user
+      if (d.isActive === false) continue;      // skip soft-deleted (resolver skips them anyway)
       if (COMMIT) {
         const job_id = crypto.randomUUID(); const now = Timestamp.now();
         batch.set(db.collection('_jobs').doc(job_id), {

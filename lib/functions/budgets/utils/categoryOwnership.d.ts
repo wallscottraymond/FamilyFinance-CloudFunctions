@@ -16,6 +16,11 @@ interface CategoryInfo {
     id: string;
     name: string;
     type: 'Income' | 'Outflow';
+    /** first_category slug + label (Simplified-Transaction-Categories) — the user-facing level. */
+    firstCategoryId: string | null;
+    firstCategory: string | null;
+    /** overall_category slug — a budget selecting an overall owns all its firsts. */
+    overallCategoryId: string | null;
 }
 interface BudgetInfo {
     id: string;
@@ -39,6 +44,10 @@ export interface CategoryOwnershipMap {
     budgetNames: Record<string, string>;
     /** Map of categoryId → category name (for display purposes) */
     categoryNames: Record<string, string>;
+    /** Map of firstCategoryId → owning (non-Everything-Else) budgetId, null if free. */
+    ownershipByFirst: Record<string, string | null>;
+    /** Map of firstCategoryId → first_category display label. */
+    firstCategoryNames: Record<string, string>;
 }
 /**
  * Get all active categories from the system (cached)

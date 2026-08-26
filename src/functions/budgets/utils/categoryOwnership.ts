@@ -26,6 +26,11 @@ interface CategoryInfo {
   id: string;
   name: string;
   type: 'Income' | 'Outflow';
+  /** first_category slug + label (Simplified-Transaction-Categories) — the user-facing level. */
+  firstCategoryId: string | null;
+  firstCategory: string | null;
+  /** overall_category slug — a budget selecting an overall owns all its firsts. */
+  overallCategoryId: string | null;
 }
 
 interface BudgetInfo {
@@ -51,6 +56,14 @@ export interface CategoryOwnershipMap {
   budgetNames: Record<string, string>;
   /** Map of categoryId → category name (for display purposes) */
   categoryNames: Record<string, string>;
+
+  // --- first_category-level ownership (Simplified-Transaction-Categories Phase 5) ---
+  // The FE picks/greys at the `first_category` level, and budgets now store slugs
+  // (`firstCategoryId`/`overallCategoryId`), which the detailed `ownership` above can't see.
+  /** Map of firstCategoryId → owning (non-Everything-Else) budgetId, null if free. */
+  ownershipByFirst: Record<string, string | null>;
+  /** Map of firstCategoryId → first_category display label. */
+  firstCategoryNames: Record<string, string>;
 }
 
 /**
@@ -71,11 +84,18 @@ export async function getActiveCategories(): Promise<CategoryInfo[]> {
 
   const categories: CategoryInfo[] = [];
   snapshot.forEach((doc) => {
-    const data = doc.data() as Category;
+    const data = doc.data() as Category & {
+      firstCategoryId?: string;
+      first_category?: string;
+      overallCategoryId?: string;
+    };
     categories.push({
       id: doc.id,
       name: data.name,
       type: data.type,
+      firstCategoryId: data.firstCategoryId ?? null,
+      firstCategory: data.first_category ?? null,
+      overallCategoryId: data.overallCategoryId ?? null,
     });
   });
 
@@ -197,7 +217,40 @@ export async function getCategoryOwnership(
     .filter(([_, budgetId]) => budgetId === null)
     .map(([categoryId, _]) => categoryId);
 
-  console.log(`[categoryOwnership] Result: ${allCategories.length} categories, ${unassignedCategoryIds.length} unassigned, Everything Else: ${everythingElseBudgetId || 'NOT FOUND'}`);
+  // 5. First_category-level ownership (Phase 5). Budgets store slugs (firstCategoryId or
+  //    overallCategoryId) or legacy detaileds; expand each to the firstCategoryIds it covers,
+  //    keyed by firstCategoryId. Everything Else is skipped, so EE-owned firsts stay free.
+  const firstCategoryNames: Record<string, string> = {};
+  const ownershipByFirst: Record<string, string | null> = {};
+  const firstByDetailed = new Map<string, string>();       // detailed doc id → firstCategoryId
+  const firstsByOverall = new Map<string, Set<string>>();  // overallCategoryId → firstCategoryIds
+  for (const cat of allCategories) {
+    if (!cat.firstCategoryId) continue;
+    ownershipByFirst[cat.firstCategoryId] = null;
+    if (cat.firstCategory) firstCategoryNames[cat.firstCategoryId] = cat.firstCategory;
+    firstByDetailed.set(cat.id, cat.firstCategoryId);
+    if (cat.overallCategoryId) {
+      let set = firstsByOverall.get(cat.overallCategoryId);
+      if (!set) { set = new Set(); firstsByOverall.set(cat.overallCategoryId, set); }
+      set.add(cat.firstCategoryId);
+    }
+  }
+  const firstsCoveredBy = (categoryId: string): string[] => {
+    if (ownershipByFirst.hasOwnProperty(categoryId)) return [categoryId];       // a firstCategoryId
+    if (firstsByOverall.has(categoryId)) return [...firstsByOverall.get(categoryId)!]; // an overall slug
+    const first = firstByDetailed.get(categoryId);                              // a legacy detailed
+    return first ? [first] : [];
+  };
+  for (const budget of budgets) {
+    if (budget.isSystemEverythingElse) continue;
+    for (const categoryId of budget.categoryIds) {
+      for (const firstId of firstsCoveredBy(categoryId)) {
+        ownershipByFirst[firstId] = budget.id;
+      }
+    }
+  }
+
+  console.log(`[categoryOwnership] Result: ${allCategories.length} categories, ${unassignedCategoryIds.length} unassigned, ${Object.keys(ownershipByFirst).length} firsts, Everything Else: ${everythingElseBudgetId || 'NOT FOUND'}`);
 
   return {
     ownership,
@@ -206,6 +259,8 @@ export async function getCategoryOwnership(
     unassignedCategoryIds,
     budgetNames,
     categoryNames,
+    ownershipByFirst,
+    firstCategoryNames,
   };
 }
 
