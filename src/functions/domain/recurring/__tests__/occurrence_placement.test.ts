@@ -73,6 +73,19 @@ describe("place_occurrences", () => {
     ]);
   });
 
+  it("a PAID occurrence shows the ACTUAL amount (over/under the estimate); outstanding shows expected", () => {
+    // Received commission came in ABOVE the estimate; a future one shows the estimate.
+    const occs = [
+      occ("o1", Date.UTC(2026, 5, 15), { is_paid: true, amount_due: 10000, amount_paid: 22681 }),
+      occ("o2", Date.UTC(2026, 5, 30), { is_paid: false, amount_due: 10000, amount_paid: 0 }),
+    ];
+    const [g] = place_occurrences(occs, [junMonthBucket]);
+    expect(g.occurrences).toEqual([
+      { due_ms: Date.UTC(2026, 5, 15), paid: true, amount: 22681 }, // ACTUAL, not the 10000 estimate
+      { due_ms: Date.UTC(2026, 5, 30), paid: false, amount: 10000 }, // expected/estimate
+    ]);
+  });
+
   it("empty group exposes an empty occurrences array (empty calendar days)", () => {
     const [g] = place_occurrences([occ("o1", JUL_15)], [junMonthBucket]);
     expect(g.occurrences).toEqual([]);

@@ -109,7 +109,13 @@ export async function resolve_recurring_matches(
   txn_type: string,
   txn_merchant_name: string | null,
   txn_date_ms: number,
-  splits: Array<{ split_id: string; amount: number }>
+  splits: Array<{ split_id: string; amount: number }>,
+  opts: {
+    /** The transaction's Plaid id — matched against the recurring streams' `transactionIds`. */
+    txn_plaid_id?: string | null;
+    outflow_tx_to_id?: Map<string, string>;
+    inflow_tx_to_id?: Map<string, string>;
+  } = {}
 ): Promise<RecurringBySplit> {
   const out: RecurringBySplit = {};
   for (const s of splits) {
@@ -120,6 +126,23 @@ export async function resolve_recurring_matches(
   const is_expense = txn_type === "expense";
   if (!is_income && !is_expense) {
     return out; // transfers match nothing
+  }
+
+  // 0. AUTHORITATIVE deterministic link: if this transaction is a member of a recurring
+  //    stream (its Plaid id is in the def's `transactionIds`) and the txn has a SINGLE
+  //    split, link that split directly. Plaid's own stream membership beats the fuzzy
+  //    merchant/amount scorer, which misses empty-merchant bills / stale periods (the S1
+  //    root cause). Multi-split txns fall through to per-split fuzzy matching (don't guess
+  //    which split is the bill). No stream match → fuzzy fallback below.
+  const stream_map = is_expense ? opts.outflow_tx_to_id : opts.inflow_tx_to_id;
+  if (opts.txn_plaid_id && stream_map && splits.length === 1) {
+    const recurring_id = stream_map.get(opts.txn_plaid_id);
+    if (recurring_id) {
+      out[splits[0].split_id] = is_expense
+        ? { outflow_id: recurring_id, inflow_id: null }
+        : { outflow_id: null, inflow_id: recurring_id };
+      return out;
+    }
   }
 
   const candidates = is_expense

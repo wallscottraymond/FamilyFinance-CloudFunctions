@@ -45,6 +45,9 @@ export interface SplitForOnReadMatch {
   spend_status: SpendStatusForSpend;
   outflow_id: string | null;
   inflow_id: string | null;
+  /** Txn is in a recurring bill/income Plaid stream (even if this split's link is
+   *  unset) → excluded from budget spend (S5). Optional; defaults false. */
+  is_recurring_member?: boolean;
   // Category inputs (for match_budget)
   internal_match_category: string | null;
   plaid_match_category: string | null;
@@ -68,8 +71,14 @@ export function resolve_split_owner(
   real_budgets: BudgetForMatch[],
   ee_budget_id: string | null
 ): string {
-  // 1. Manual pin wins outright.
-  if (split.manual_pin_budget_id) {
+  // 1. Manual pin wins — but ONLY while its budget still exists (a real budget or the EE).
+  //    A pin to a DELETED budget is stale, so we fall through to category matching (→ EE),
+  //    which re-homes the deleted budget's spending to Everything Else instead of orphaning it.
+  if (
+    split.manual_pin_budget_id &&
+    (split.manual_pin_budget_id === ee_budget_id ||
+      real_budgets.some((b) => b.id === split.manual_pin_budget_id))
+  ) {
     return split.manual_pin_budget_id;
   }
   // 2/3. Category match → else Everything-Else (both from the shared matcher).
@@ -105,6 +114,7 @@ export function owned_splits_for_budget(
       spend_status: s.spend_status,
       outflow_id: s.outflow_id,
       inflow_id: s.inflow_id,
+      is_recurring_member: s.is_recurring_member,
     });
   }
   return out;

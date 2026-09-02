@@ -29,5 +29,10 @@ export type RecurringBySplit = Record<string, {
 export declare function resolve_recurring_matches(ctx: TraceContext, user_id: string, txn_type: string, txn_merchant_name: string | null, txn_date_ms: number, splits: Array<{
     split_id: string;
     amount: number;
-}>): Promise<RecurringBySplit>;
+}>, opts?: {
+    /** The transaction's Plaid id — matched against the recurring streams' `transactionIds`. */
+    txn_plaid_id?: string | null;
+    outflow_tx_to_id?: Map<string, string>;
+    inflow_tx_to_id?: Map<string, string>;
+}): Promise<RecurringBySplit>;
 //# sourceMappingURL=recurring_matches.resolver.d.ts.map

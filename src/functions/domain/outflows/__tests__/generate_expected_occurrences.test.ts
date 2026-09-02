@@ -82,4 +82,94 @@ describe("generate_expected_occurrences_in_window", () => {
     );
     expect(occs.length).toBe(0);
   });
+
+  // Regression (S2 — Derive-On-Read-Regression-Audit): a "yearly" bill was normalized
+  // to "YEARLY", missed the "ANNUALLY" case, and fell through to the monthly default —
+  // so it generated an occurrence EVERY month and appeared in every future period.
+  const yearly: RecurringScheduleForGeneration = {
+    frequency: "yearly", // lowercase app spelling — the exact value that broke
+    average_amount: 193.41,
+    first_date: ts(2026, 4, 18),
+    last_date: ts(2026, 4, 18), // anchor: May 18
+    predicted_next_date: null,
+  };
+
+  it("generates a yearly bill only in its anniversary month, not every month", () => {
+    // September window → NONE (it's due in May).
+    const sep = generate_expected_occurrences_in_window(
+      yearly,
+      Date.UTC(2026, 8, 1),
+      Date.UTC(2026, 8, 30, 23, 59, 59)
+    );
+    expect(sep.length).toBe(0);
+    // May window → exactly one.
+    const may = generate_expected_occurrences_in_window(
+      yearly,
+      Date.UTC(2027, 4, 1),
+      Date.UTC(2027, 4, 31, 23, 59, 59)
+    );
+    expect(may.length).toBe(1);
+    expect(new Date(may[0].due_date_ms).getUTCMonth()).toBe(4); // May
+  });
+
+  // #4 (Derive-On-Read-Regression-Audit): semi-monthly is two FIXED days/month, not a
+  // drifting +15-day chain that emitted a phantom 3rd occurrence in some months.
+  const semimonthly = (anchorDay: number): RecurringScheduleForGeneration => ({
+    frequency: "semimonthly",
+    average_amount: 1000,
+    first_date: ts(2026, 0, anchorDay),
+    last_date: ts(2026, 8, anchorDay), // anchor in September
+    predicted_next_date: ts(2026, 8, anchorDay),
+  });
+
+  it("semi-monthly generates exactly TWO occurrences per month on fixed days (anchor 15th → 15 & 30)", () => {
+    const occs = generate_expected_occurrences_in_window(
+      semimonthly(15),
+      Date.UTC(2026, 8, 1),
+      Date.UTC(2026, 8, 30, 23, 59, 59)
+    );
+    const days = occs.map((o) => new Date(o.due_date_ms).getUTCDate());
+    expect(days).toEqual([15, 30]);
+  });
+
+  it("semi-monthly does NOT drift across months (Nov stays 15 & 30, not 14 & 29)", () => {
+    const occs = generate_expected_occurrences_in_window(
+      semimonthly(15),
+      Date.UTC(2026, 10, 1),
+      Date.UTC(2026, 10, 30, 23, 59, 59)
+    );
+    expect(occs.map((o) => new Date(o.due_date_ms).getUTCDate())).toEqual([15, 30]);
+  });
+
+  it("semi-monthly with a mid/late anchor (24th) → days 9 & 24; exactly two, no phantom", () => {
+    const occs = generate_expected_occurrences_in_window(
+      semimonthly(24),
+      Date.UTC(2026, 8, 1),
+      Date.UTC(2026, 8, 30, 23, 59, 59)
+    );
+    expect(occs.map((o) => new Date(o.due_date_ms).getUTCDate())).toEqual([9, 24]);
+  });
+
+  it("generation is timezone-independent (UTC day-math) — one monthly occurrence, same UTC day", () => {
+    // The anchor is UTC midnight on the 1st (a month-boundary day, most TZ-sensitive).
+    const monthly_first = monthly({ last_date: ts(2026, 0, 1), predicted_next_date: null });
+    const occs = generate_expected_occurrences_in_window(
+      monthly_first,
+      Date.UTC(2026, 5, 1),
+      Date.UTC(2026, 5, 30, 23, 59, 59)
+    );
+    expect(occs).toHaveLength(1);
+    expect(new Date(occs[0].due_date_ms).getUTCDate()).toBe(1); // the 1st, not shifted to the 31st
+  });
+
+  it("does NOT fan out an unknown frequency across every month (steps yearly, not monthly)", () => {
+    const unknown: RecurringScheduleForGeneration = { ...yearly, frequency: "GIBBERISH" };
+    // A 3-month window would hold 3 occurrences if it fell back to monthly; expect 0–1.
+    const occs = generate_expected_occurrences_in_window(
+      unknown,
+      Date.UTC(2026, 6, 1),
+      Date.UTC(2026, 8, 30, 23, 59, 59)
+    );
+    expect(occs.length).toBeLessThanOrEqual(1);
+  });
 });

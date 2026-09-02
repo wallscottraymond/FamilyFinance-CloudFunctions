@@ -35,6 +35,9 @@ export interface SplitForOnReadMatch {
     spend_status: SpendStatusForSpend;
     outflow_id: string | null;
     inflow_id: string | null;
+    /** Txn is in a recurring bill/income Plaid stream (even if this split's link is
+     *  unset) → excluded from budget spend (S5). Optional; defaults false. */
+    is_recurring_member?: boolean;
     internal_match_category: string | null;
     plaid_match_category: string | null;
     overall_category_id?: string | null;

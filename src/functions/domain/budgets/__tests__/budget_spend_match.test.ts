@@ -83,6 +83,29 @@ describe("resolve_split_owner", () => {
       )
     ).toBe(B_DINING);
   });
+
+  it("a stale manual pin to a DELETED budget re-homes to Everything Else (category → EE)", () => {
+    // Split was pinned to a budget that no longer exists, and its category (travel) is
+    // owned by no real budget → it must fall to EE, not orphan on the deleted id.
+    expect(
+      resolve_split_owner(
+        split({ manual_pin_budget_id: "deleted_budget_id", plaid_match_category: "travel" }),
+        REAL_BUDGETS,
+        EE
+      )
+    ).toBe(EE);
+  });
+
+  it("a stale manual pin re-matches by category when a live budget owns it", () => {
+    // Pinned to a deleted budget, but the category (groceries) is owned by a live budget.
+    expect(
+      resolve_split_owner(
+        split({ manual_pin_budget_id: "deleted_budget_id", plaid_match_category: "groceries" }),
+        REAL_BUDGETS,
+        EE
+      )
+    ).toBe(B_GROCERIES);
+  });
 });
 
 describe("owned_splits_for_budget + spend", () => {

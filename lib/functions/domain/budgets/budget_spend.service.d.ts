@@ -46,6 +46,11 @@ export interface SplitForSpend {
     /** Recurring links — present ⇒ tracked by the recurring system, excluded here. */
     outflow_id: string | null;
     inflow_id: string | null;
+    /** Transaction belongs to a recurring bill/income Plaid stream (by `transactionIds`),
+     *  even if this split's `outflow_id`/`inflow_id` link was never populated. Excludes
+     *  the split from budget spend so an unlinked bill payment doesn't double-count as
+     *  spending (S5). Optional: callers without stream context omit it (defaults false). */
+    is_recurring_member?: boolean;
 }
 /** Computed spend for one budget period. */
 export interface BudgetSpendResult {

@@ -33,8 +33,12 @@ import {
  * Delete a budget.
  */
 export const delete_budget = onCall(
+  // 512MiB: the resolver scans the user's active transactions to find splits that
+  // reference this budget; a heavy account (thousands of txns) exceeded the default
+  // 256MiB and the instance OOM-crashed → "Couldn't delete". The `.select` optimization
+  // in `get_ids_referencing_budget` cuts the footprint too; this is the safety margin.
   /* eslint-disable-next-line @typescript-eslint/naming-convention */
-  { maxInstances: 50 },
+  { maxInstances: 50, memory: "512MiB" },
   async (request): Promise<FunctionResponse<DeleteBudgetResponse>> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated");

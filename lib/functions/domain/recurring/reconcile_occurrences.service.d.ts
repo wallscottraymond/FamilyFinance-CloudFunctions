@@ -57,24 +57,31 @@ export declare function reconcile_occurrences(expected: ExpectedOccurrence[], pa
     tolerance_days?: number;
 }): ReconciledOccurrence[];
 /**
- * Reconcile INCOME from its ACTUAL transactions (Income-Tracking-Audit).
+ * Reconcile INCOME against its schedule-generated EXPECTED occurrences + ACTUAL deposits.
  *
- * Plaid gives us the exact deposits that compose a recurring income stream (via
- * its `transaction_ids`), so we do NOT synthesize historical occurrences for
- * income (which mis-counts variable/semimonthly pay). Instead:
- *   - each linked deposit in the window IS a received (paid) occurrence, and
- *   - the single `predicted_next_date` is projected as ONE outstanding occurrence
- *     when it falls in the window and hasn't already been received.
+ * Derive-On-Read-Regression-Audit (S3/S4): income previously projected ONLY the single
+ * `predicted_next_date`, so a semi-monthly payer showed 1 receipt instead of 2 (S4) and
+ * any month AFTER predicted_next showed NO income at all (S3 — e.g. October empty). Income
+ * now mirrors the bill path: the caller generates EXPECTED occurrences from the schedule
+ * (frequency + anchor), and here we reconcile the ACTUAL linked deposits (Plaid stream
+ * `transaction_ids`) against them:
+ *   - an expected occurrence with a deposit within tolerance → received (ACTUAL amount+date),
+ *   - an expected occurrence with no deposit → OUTSTANDING (expected amount),
+ *   - a deposit matching no expected occurrence → still shown as received (variable/extra pay;
+ *     income receipts are authoritative), so nothing real is ever hidden.
  *
  * Same output shape as `reconcile_occurrences` so placement is unchanged. PURE.
  *
- * @param recurring_id            - The inflow id
- * @param payments               - The inflow's actual linked deposits
- * @param predicted_next_date_ms - Next expected receipt (from the stream), or null
- * @param average_amount         - Expected amount for the projected outstanding one
- * @param window_start_ms/window_end_ms - The derivation window
+ * NOTE: outstanding (not-yet-received) occurrences carry the schedule's average amount;
+ * per-occurrence amount history (e.g. a semi-monthly payer's differing mid/end checks) is a
+ * later refinement — received ones already use the actual deposit amount.
+ *
+ * @param recurring_id  - The inflow id
+ * @param payments      - The inflow's actual linked deposits
+ * @param expected      - Expected occurrences generated from the schedule (in-window)
+ * @param window_start_ms/window_end_ms - The derivation window (bounds the extra deposits)
  */
-export declare function reconcile_income_occurrences(recurring_id: string, payments: ActualPayment[], predicted_next_date_ms: number | null, average_amount: number, window_start_ms: number, window_end_ms: number, opts?: {
+export declare function reconcile_income_occurrences(recurring_id: string, payments: ActualPayment[], expected: ExpectedOccurrence[], window_start_ms: number, window_end_ms: number, opts?: {
     tolerance_days?: number;
 }): ReconciledOccurrence[];
 //# sourceMappingURL=reconcile_occurrences.service.d.ts.map

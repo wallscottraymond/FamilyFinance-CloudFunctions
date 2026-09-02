@@ -332,6 +332,7 @@ export const user_summary_repo = {
         inflow_snapshot,
         outflow_defs_snapshot,
         inflow_defs_snapshot,
+        budget_defs_snapshot,
       ] = await Promise.all([
         db.collection("outflow_periods")
           .where("ownerId", "==", user_id)
@@ -351,7 +352,20 @@ export const user_summary_repo = {
           .get(),
         db.collection("outflows").where("ownerId", "==", user_id).get(),
         db.collection("inflows").where("ownerId", "==", user_id).get(),
+        db.collection("budgets").where("ownerId", "==", user_id).where("isActive", "==", true).get(),
       ]);
+
+      // Collapse the per-lens Everything-Else budgets to ONE canonical EE (monthly EE, else
+      // any EE) — MIRRORS the derive path (`period_derivation.resolver` `canonical_ee_id`). By the
+      // Prime/Non-Prime model every budget (incl. all 3 per-lens EE) has a period in EVERY cadence,
+      // so without this the monthly summary lists all 3 EE budgets (weekly + bi-monthly EE tiles
+      // leak into the monthly view when the FE reads the materialized summary).
+      const ee_defs = budget_defs_snapshot.docs
+        .map((d) => ({ id: d.id, data: d.data() as { isSystemEverythingElse?: boolean; period?: string } }))
+        .filter((b) => b.data.isSystemEverythingElse === true);
+      const canonical_ee_id =
+        ee_defs.find((b) => b.data.period === "monthly")?.id ?? ee_defs[0]?.id ?? null;
+      const excluded_ee_ids = new Set(ee_defs.map((b) => b.id).filter((id) => id !== canonical_ee_id));
 
       const hidden_outflow_ids = new Set(
         outflow_defs_snapshot.docs
@@ -368,7 +382,9 @@ export const user_summary_repo = {
       const outflow_periods = outflow_snapshot.docs
         .map((doc) => doc.data() as OutflowPeriod)
         .filter((p) => !hidden_outflow_ids.has(p.outflowId));
-      const budget_periods = budget_snapshot.docs.map((doc) => doc.data() as BudgetPeriodDocument);
+      const budget_periods = budget_snapshot.docs
+        .map((doc) => doc.data() as BudgetPeriodDocument)
+        .filter((p) => !excluded_ee_ids.has(p.budgetId));
       const inflow_periods = inflow_snapshot.docs
         .map((doc) => doc.data() as InflowPeriod)
         .filter((p) => !hidden_inflow_ids.has(p.inflowId));

@@ -30,6 +30,10 @@ export interface TxnMatchContext {
   is_transfer: boolean;
   /** Transaction `type === "income"` (a credit). */
   is_income: boolean;
+  /** Txn belongs to a recurring bill/income Plaid stream (by `transactionIds`) — even if
+   *  the split's `outflowId`/`inflowId` link is unset. Excludes it from budget spend (S5).
+   *  Optional; callers without stream context omit it (defaults false). */
+  is_recurring_member?: boolean;
 }
 
 /**
@@ -58,6 +62,7 @@ export function map_raw_split_to_on_read_match(
           : "counted"),
     outflow_id: (raw_split.outflowId as string | null) ?? null,
     inflow_id: (raw_split.inflowId as string | null) ?? null,
+    is_recurring_member: ctx.is_recurring_member ?? false,
     internal_match_category: internal_category,
     plaid_match_category: plaid_category,
     overall_category_id: (raw_split.overallCategoryId as string | null) ?? null,

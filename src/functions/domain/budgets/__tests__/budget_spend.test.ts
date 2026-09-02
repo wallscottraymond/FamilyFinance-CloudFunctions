@@ -62,6 +62,15 @@ describe("is_countable", () => {
     expect(is_countable(s({ outflow_id: "o1" }))).toBe(false);
     expect(is_countable(s({ inflow_id: "i1" }))).toBe(false);
   });
+
+  // S5 (Derive-On-Read-Regression-Audit): a bill payment whose split link was never set
+  // (outflow_id null) must STILL be excluded when its txn is in a recurring Plaid stream,
+  // so creating a budget over a bill category doesn't double-count the payment as spend.
+  it("excludes a recurring-stream-member split even when outflow_id/inflow_id are null", () => {
+    expect(is_countable(s({ outflow_id: null, inflow_id: null, is_recurring_member: true }))).toBe(false);
+    // Non-member with no link stays countable (normal discretionary spend).
+    expect(is_countable(s({ is_recurring_member: false }))).toBe(true);
+  });
 });
 
 describe("income treatment in compute_budget_spent", () => {

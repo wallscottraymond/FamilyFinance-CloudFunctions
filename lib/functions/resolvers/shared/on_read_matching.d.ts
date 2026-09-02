@@ -22,6 +22,10 @@ export interface TxnMatchContext {
     is_transfer: boolean;
     /** Transaction `type === "income"` (a credit). */
     is_income: boolean;
+    /** Txn belongs to a recurring bill/income Plaid stream (by `transactionIds`) — even if
+     *  the split's `outflowId`/`inflowId` link is unset. Excludes it from budget spend (S5).
+     *  Optional; callers without stream context omit it (defaults false). */
+    is_recurring_member?: boolean;
 }
 /**
  * Map a raw Firestore split (+ its transaction context) into the on-read matcher's

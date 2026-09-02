@@ -41,6 +41,8 @@ import {
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
+import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
+import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
@@ -72,6 +74,9 @@ export interface RecurringForDerivation {
   kind: "outflow" | "inflow";
   schedule: RecurringScheduleForGeneration;
   payments: ActualPayment[];
+  /** INCOME only: the stream's historical linked deposits, for per-slot amount estimation
+   *  (a semi-monthly stream's mid vs end occurrence draw from their own slot's average). */
+  payment_history?: DepositForSlot[];
   /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
   removal_intervals: RemovalInterval[];
 }
@@ -85,6 +90,8 @@ export interface PeriodDerivationDeps {
   any_ee_id: string | null;
   splits_for_match: SplitForOnReadMatch[];
   recurring: RecurringForDerivation[];
+  /** Real INCOME_* credits in the window not tied to any recurring inflow (→ "Other income"). */
+  other_income_credits: DepositForSlot[];
   span_start_ms: number;
   span_end_ms: number;
 }
@@ -214,6 +221,10 @@ export async function resolve_period_derivation_deps(
 
   const recurring: RecurringForDerivation[] = [];
   const payments_by_id = new Map<string, ActualPayment[]>();
+  // Included bills' Plaid `transactionIds` → map built AFTER the loop (conflict-safe).
+  // Lets a bill's payments be attributed DETERMINISTICALLY from Plaid's own stream, not
+  // only the sparse `split.outflowId` link — the fix for "paid bills read unpaid".
+  const outflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
   for (const o of outflows) {
     if (!o.is_active || o.is_hidden) continue; // hidden = classified internal transfer
     // Skip only INTERNAL account transfers; external ACH bills (mortgage, etc.) stay.
@@ -238,12 +249,13 @@ export async function resolve_period_derivation_deps(
       removal_intervals: o.removal_intervals,
     });
     payments_by_id.set(o.id, []);
+    outflow_stream_items.push({ id: o.id, transaction_ids: o.transaction_ids ?? [] });
   }
   // Income is reconciled DETERMINISTICALLY off Plaid's own stream `transaction_ids`
   // (see Income-Tracking-Audit), not fuzzy merchant matching: map each stream
   // transaction (Plaid id) → its inflow, then attribute payments below. Transfer
   // streams are NOT income — skip them so they never appear as expected income.
-  const inflow_tx_to_id = new Map<string, string>();
+  const inflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
   for (const i of inflows) {
     if (!i.is_active || i.is_hidden) continue; // hidden = classified internal transfer
     // Skip only INTERNAL account transfers; external inbound transfers stay.
@@ -267,13 +279,19 @@ export async function resolve_period_derivation_deps(
       removal_intervals: i.removal_intervals,
     });
     payments_by_id.set(i.id, []);
-    for (const tx_id of i.transaction_ids ?? []) {
-      inflow_tx_to_id.set(tx_id, i.id);
-    }
+    inflow_stream_items.push({ id: i.id, transaction_ids: i.transaction_ids ?? [] });
   }
+
+  // Authoritative bill/income links from Plaid stream `transactionIds`. A txn claimed by
+  // TWO streams is EXCLUDED (no arbitrary guess — see build_stream_membership_map).
+  const outflow_tx_to_id = build_stream_membership_map(outflow_stream_items);
+  const inflow_tx_to_id = build_stream_membership_map(inflow_stream_items);
 
   // 4. ONE pass over the window's transactions → split-match inputs + per-item payments.
   const splits_for_match: SplitForOnReadMatch[] = [];
+  // Real INCOME_* credits in the window NOT tied to any recurring inflow → "Other income
+  // received" (off-cycle paychecks, bonuses, contractor/gig), so real income is never hidden.
+  const other_income_credits: DepositForSlot[] = [];
   for (const { id, data } of txns) {
     const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
     const is_pending = data.isPending === true;
@@ -284,6 +302,7 @@ export async function resolve_period_derivation_deps(
     // Is this transaction part of a Plaid income stream? (Plaid id → inflow.)
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
     const linked_inflow_id = plaid_txn_id ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
+    const linked_outflow_id = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
     let income_amount = 0;
     const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of raw) {
@@ -299,6 +318,9 @@ export async function resolve_period_derivation_deps(
           is_pending,
           is_transfer: txn_is_internal_transfer,
           is_income: txn_is_income,
+          // Txn belongs to a recurring bill/income Plaid stream → not discretionary spend,
+          // so it never counts toward a budget even if its split link was never set (S5).
+          is_recurring_member: !!(linked_outflow_id || linked_inflow_id),
         })
       );
       income_amount += Math.abs(amount);
@@ -325,9 +347,73 @@ export async function resolve_period_derivation_deps(
         amount: income_amount,
       });
     }
+    // Deterministic Plaid BILL reconciliation (mirror of income): this txn belongs to
+    // an outflow's recurring stream → it's a payment for that bill. Only when NO split
+    // already links this txn to a bill (the split link is precise + wins), so we never
+    // double-count. Covers historical/unlinked payments whose `split.outflowId` was
+    // never set — the root cause of paid bills reading unpaid on read.
+    if (linked_outflow_id && payments_by_id.has(linked_outflow_id)) {
+      const any_split_outflow_linked = raw.some(
+        (s) => ((s.outflowId as string | null) ?? null) !== null
+      );
+      if (!any_split_outflow_linked) {
+        payments_by_id.get(linked_outflow_id)!.push({
+          transaction_id: id,
+          split_id: null,
+          date_ms: txn_date_ms,
+          amount: income_amount, // sum of |split amounts| = the full txn amount
+        });
+      }
+    }
+    // "Other income received": a real INCOME_* credit not part of any recurring inflow
+    // (no Plaid-stream link AND no split.inflowId). INCOME_* naturally excludes internal
+    // transfers (TRANSFER_*) + most refunds.
+    const txn_cat =
+      (data.plaidDetailedCategory as string | null) ??
+      (raw[0]?.plaidDetailedCategory as string | null) ??
+      "";
+    const any_split_inflow_linked = raw.some(
+      (s) => ((s.inflowId as string | null) ?? null) !== null
+    );
+    if (
+      txn_cat.startsWith("INCOME") &&
+      !linked_inflow_id &&
+      !any_split_inflow_linked &&
+      !txn_is_internal_transfer
+    ) {
+      other_income_credits.push({ date_ms: txn_date_ms, amount: income_amount });
+    }
   }
   for (const r of recurring) {
     r.payments = payments_by_id.get(r.id) ?? [];
+  }
+
+  // INCOME per-slot amounts: load each inflow's HISTORICAL linked deposits (its whole Plaid
+  // stream, not just the in-window ones) so a semi-monthly stream's mid vs end occurrences
+  // can each show their own slot's recent average instead of the blended stream average.
+  const inflow_tx_ids = [...inflow_tx_to_id.keys()];
+  if (inflow_tx_ids.length > 0) {
+    const history_by_inflow = new Map<string, DepositForSlot[]>();
+    const hist_docs = await transaction_repo.get_by_plaid_transaction_ids(
+      ctx,
+      user_id,
+      inflow_tx_ids
+    );
+    for (const d of hist_docs) {
+      const inflow_id = inflow_tx_to_id.get(d.transactionId as string);
+      if (!inflow_id) continue;
+      const splits = (d.splits as Array<{ amount?: number }>) ?? [];
+      const amount = Math.abs(
+        splits.reduce((s, sp) => s + (sp.amount ?? 0), 0) || (d.amount as number) || 0
+      );
+      const date_ms = (d.transactionDate as Timestamp).toMillis();
+      const list = history_by_inflow.get(inflow_id) ?? [];
+      list.push({ date_ms, amount });
+      history_by_inflow.set(inflow_id, list);
+    }
+    for (const r of recurring) {
+      if (r.kind === "inflow") r.payment_history = history_by_inflow.get(r.id) ?? [];
+    }
   }
 
   // Emit only ONE Everything-Else budget (the monthly home). Today's data has a
@@ -346,6 +432,7 @@ export async function resolve_period_derivation_deps(
     any_ee_id,
     splits_for_match,
     recurring,
+    other_income_credits,
     span_start_ms,
     span_end_ms,
   };

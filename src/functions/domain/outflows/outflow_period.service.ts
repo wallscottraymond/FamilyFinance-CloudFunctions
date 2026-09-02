@@ -10,6 +10,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { DomainResult, success_many, validation_failed } from "../../types";
 import { OutflowPeriodForPersistence } from "../../repositories/outflow_period.repo";
+import { normalize_frequency } from "../recurring/frequency";
 
 /**
  * Outflow data needed for period generation (snake_case).
@@ -82,14 +83,13 @@ interface CycleInfo {
 
 /**
  * Normalize a frequency to a canonical UPPERCASE, underscore-free token so both
- * the app form (`"semimonthly"`, `"biweekly"`) and any legacy underscore form
- * (`"SEMI_MONTHLY"`) map to the same case. A mismatch here silently fell through
- * to the monthly default — which made a semimonthly paycheck generate 1
- * occurrence/month instead of 2.
+ * the app form (`"semimonthly"`, `"biweekly"`, `"yearly"`) and any legacy underscore
+ * form (`"SEMI_MONTHLY"`) map to the same canonical token via the shared
+ * `normalize_frequency`. A mismatch used to silently fall through to the monthly
+ * default — which made a `yearly` bill generate 1 occurrence/MONTH (appearing in every
+ * period) and a `semimonthly` one mis-step. Unknown now defaults to a YEARLY step so an
+ * unrecognized cadence never fans out across every period.
  */
-function normalize_frequency(frequency: string): string {
-  return frequency.toUpperCase().replace(/_/g, "");
-}
 
 /**
  * Get approximate cycle days for a frequency.
@@ -109,7 +109,8 @@ function get_cycle_days(frequency: string): number {
     case "ANNUALLY":
       return 365;
     default:
-      return 30;
+      // UNKNOWN — treat as annual so it never fans out as monthly (see frequency.ts).
+      return 365;
   }
 }
 
@@ -124,29 +125,34 @@ function get_period_days(start: Date, end: Date): number {
  * Add frequency interval to a date.
  */
 function add_frequency_interval(date: Date, frequency: string): Date {
+  // UTC date-math: anchors are stored at UTC midnight, so stepping in UTC keeps an
+  // occurrence on its intended UTC day regardless of the runtime timezone.
   const result = new Date(date);
 
   switch (normalize_frequency(frequency)) {
     case "WEEKLY":
-      result.setDate(result.getDate() + 7);
+      result.setUTCDate(result.getUTCDate() + 7);
       break;
     case "BIWEEKLY":
-      result.setDate(result.getDate() + 14);
+      result.setUTCDate(result.getUTCDate() + 14);
       break;
     case "SEMIMONTHLY":
-      result.setDate(result.getDate() + 15);
+      // Real semi-monthly generation is day-of-month based (see semimonthly_due_dates);
+      // this +15 is only a defensive fallback if the generic loop is ever used for it.
+      result.setUTCDate(result.getUTCDate() + 15);
       break;
     case "MONTHLY":
-      result.setMonth(result.getMonth() + 1);
+      result.setUTCMonth(result.getUTCMonth() + 1);
       break;
     case "QUARTERLY":
-      result.setMonth(result.getMonth() + 3);
+      result.setUTCMonth(result.getUTCMonth() + 3);
       break;
     case "ANNUALLY":
-      result.setFullYear(result.getFullYear() + 1);
+      result.setUTCFullYear(result.getUTCFullYear() + 1);
       break;
     default:
-      result.setMonth(result.getMonth() + 1);
+      // UNKNOWN — step by a year so an unrecognized cadence never fans out monthly.
+      result.setUTCFullYear(result.getUTCFullYear() + 1);
   }
 
   return result;
@@ -156,29 +162,30 @@ function add_frequency_interval(date: Date, frequency: string): Date {
  * Subtract frequency interval from a date.
  */
 function subtract_frequency_interval(date: Date, frequency: string): Date {
-  const result = new Date(date);
+  const result = new Date(date); // UTC date-math (see add_frequency_interval).
 
   switch (normalize_frequency(frequency)) {
     case "WEEKLY":
-      result.setDate(result.getDate() - 7);
+      result.setUTCDate(result.getUTCDate() - 7);
       break;
     case "BIWEEKLY":
-      result.setDate(result.getDate() - 14);
+      result.setUTCDate(result.getUTCDate() - 14);
       break;
     case "SEMIMONTHLY":
-      result.setDate(result.getDate() - 15);
+      result.setUTCDate(result.getUTCDate() - 15);
       break;
     case "MONTHLY":
-      result.setMonth(result.getMonth() - 1);
+      result.setUTCMonth(result.getUTCMonth() - 1);
       break;
     case "QUARTERLY":
-      result.setMonth(result.getMonth() - 3);
+      result.setUTCMonth(result.getUTCMonth() - 3);
       break;
     case "ANNUALLY":
-      result.setFullYear(result.getFullYear() - 1);
+      result.setUTCFullYear(result.getUTCFullYear() - 1);
       break;
     default:
-      result.setMonth(result.getMonth() - 1);
+      // UNKNOWN — mirror the forward step (a year), never monthly.
+      result.setUTCFullYear(result.getUTCFullYear() - 1);
   }
 
   return result;
@@ -192,21 +199,62 @@ function adjust_for_month_end(
   reference_date: Date,
   frequency: string
 ): Date {
-  const freq = frequency.toUpperCase();
+  const freq = normalize_frequency(frequency);
   if (freq !== "MONTHLY" && freq !== "QUARTERLY" && freq !== "ANNUALLY") {
     return current_date;
   }
 
-  const original_day = reference_date.getDate();
-  const current_month = current_date.getMonth();
-  const current_year = current_date.getFullYear();
-  const last_day_of_month = new Date(current_year, current_month + 1, 0).getDate();
+  const original_day = reference_date.getUTCDate();
+  const current_month = current_date.getUTCMonth();
+  const current_year = current_date.getUTCFullYear();
+  const last_day_of_month = new Date(Date.UTC(current_year, current_month + 1, 0)).getUTCDate();
 
   if (original_day > last_day_of_month) {
-    return new Date(current_year, current_month, last_day_of_month);
+    return new Date(Date.UTC(current_year, current_month, last_day_of_month));
   }
 
   return current_date;
+}
+
+/** Last day-of-month for a UTC year/month0. PURE. */
+function utc_last_day_of_month(year: number, month0: number): number {
+  return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+}
+
+/** A UTC-midnight date for year/month0/day, clamped to the month's last day. PURE. */
+function utc_day(year: number, month0: number, day: number): Date {
+  return new Date(Date.UTC(year, month0, Math.min(day, utc_last_day_of_month(year, month0))));
+}
+
+/**
+ * The two semi-monthly days-of-month implied by an anchor date. Semi-monthly pay lands
+ * on two FIXED days each month (e.g. 15th + last, or 1st + 16th) — NOT a drifting +15-day
+ * chain, which slid off real paydays and emitted a phantom 3rd occurrence some months. PURE.
+ */
+function semimonthly_days(reference: Date): [number, number] {
+  const d = reference.getUTCDate();
+  return d <= 15 ? [d, d + 15] : [d - 15, d];
+}
+
+/**
+ * Semi-monthly occurrence due dates within [start, end] — two per calendar month on the
+ * anchor's fixed days (clamped to month-end), UTC. Replaces the +15-day stepping. PURE.
+ */
+function semimonthly_due_dates(reference: Date, start: Date, end: Date): Date[] {
+  const [d1, d2] = semimonthly_days(reference);
+  const out: Date[] = [];
+  // Pad a month either side so boundary occurrences aren't missed; filter to the window.
+  const start_idx = start.getUTCFullYear() * 12 + start.getUTCMonth() - 1;
+  const end_idx = end.getUTCFullYear() * 12 + end.getUTCMonth() + 1;
+  for (let idx = start_idx; idx <= end_idx; idx++) {
+    const year = Math.floor(idx / 12);
+    const month0 = ((idx % 12) + 12) % 12;
+    for (const day of [d1, d2]) {
+      const dt = utc_day(year, month0, day);
+      if (dt >= start && dt <= end) out.push(dt);
+    }
+  }
+  return out;
 }
 
 /**
@@ -255,34 +303,50 @@ function calculate_occurrences_in_period(
     reference_date = outflow.first_date.toDate();
   }
 
-  // Find all occurrences that fall within the period
+  // Find all occurrences that fall within the period.
   const occurrence_due_dates: Timestamp[] = [];
-  let current_date = new Date(reference_date);
+  let next_expected_date: Timestamp;
 
-  // Rewind to at/before the period start, THEN advance to the first occurrence >=
-  // start. The reference (predicted_next_date) often lands inside or after the
-  // period; starting collection forward from it would skip occurrences that fall
-  // EARLIER in the same period (e.g. the first of two semimonthly paychecks).
-  while (current_date > period_start) {
-    current_date = subtract_frequency_interval(current_date, frequency);
-  }
-  while (current_date < period_start) {
-    current_date = add_frequency_interval(current_date, frequency);
-  }
-
-  // Collect all occurrences within the period
-  while (current_date <= period_end) {
-    if (current_date >= period_start) {
-      const adjusted = adjust_for_month_end(current_date, reference_date, frequency);
-      occurrence_due_dates.push(Timestamp.fromDate(adjusted));
+  if (normalize_frequency(frequency) === "SEMIMONTHLY") {
+    // Semi-monthly is day-of-month based (two fixed days/month), NOT +15-day stepping.
+    for (const dt of semimonthly_due_dates(reference_date, period_start, period_end)) {
+      occurrence_due_dates.push(Timestamp.fromDate(dt));
     }
-    current_date = add_frequency_interval(current_date, frequency);
-  }
+    // Next expected = the first semi-monthly day after the period (scan ~45 days out).
+    const after = semimonthly_due_dates(
+      reference_date,
+      new Date(period_end.getTime() + 1),
+      new Date(period_end.getTime() + 45 * 24 * 60 * 60 * 1000)
+    );
+    next_expected_date = Timestamp.fromDate(after[0] ?? new Date(period_end.getTime() + 1));
+  } else {
+    let current_date = new Date(reference_date);
 
-  // Next expected date is after the period
-  const next_expected_date = Timestamp.fromDate(
-    adjust_for_month_end(current_date, reference_date, frequency)
-  );
+    // Rewind to at/before the period start, THEN advance to the first occurrence >=
+    // start. The reference (predicted_next_date) often lands inside or after the
+    // period; starting collection forward from it would skip occurrences that fall
+    // EARLIER in the same period.
+    while (current_date > period_start) {
+      current_date = subtract_frequency_interval(current_date, frequency);
+    }
+    while (current_date < period_start) {
+      current_date = add_frequency_interval(current_date, frequency);
+    }
+
+    // Collect all occurrences within the period.
+    while (current_date <= period_end) {
+      if (current_date >= period_start) {
+        const adjusted = adjust_for_month_end(current_date, reference_date, frequency);
+        occurrence_due_dates.push(Timestamp.fromDate(adjusted));
+      }
+      current_date = add_frequency_interval(current_date, frequency);
+    }
+
+    // Next expected date is after the period.
+    next_expected_date = Timestamp.fromDate(
+      adjust_for_month_end(current_date, reference_date, frequency)
+    );
+  }
 
   const number_of_occurrences = occurrence_due_dates.length;
   const total_expected_amount = number_of_occurrences * amount_per_occurrence;

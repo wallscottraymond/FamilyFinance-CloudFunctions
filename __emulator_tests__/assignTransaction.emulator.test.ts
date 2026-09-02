@@ -60,6 +60,21 @@ function split(splitId: string, plaidCat: string, amount: number, over: Record<s
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
+/* eslint-disable @typescript-eslint/naming-convention */
+async function seedOutflow(id: string, userId: string, transactionIds: string[], over: Record<string, unknown> = {}) {
+  await db.collection('outflows').doc(id).set({
+    id, ownerId: userId, createdBy: userId, groupIds: [], isActive: true, isHidden: false,
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    averageAmount: 813.83, currency: 'USD', description: 'Online Payment To CU', merchantName: '',
+    userCustomName: 'Kia Telluride Payment', frequency: 'monthly',
+    firstDate: ts('2026-05-21'), lastDate: ts('2026-06-15'), predictedNextDate: ts('2026-07-15'),
+    plaidPrimaryCategory: 'LOAN_PAYMENTS', plaidDetailedCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+    type: 'recurring', source: 'plaid', isUserModified: false, transactionIds, tags: [], rules: [],
+    removedByUser: false, removalIntervals: [], ...over,
+  });
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
 async function jobsFor(jobType: string, transactionId: string) {
   const snap = await db.collection('_jobs').where('job_type', '==', jobType).get();
   return snap.docs.map((d) => d.data()).filter(
@@ -136,5 +151,34 @@ describe('assign_transaction_orchestrator (emulator)', () => {
   it('returns found:false for a missing transaction', async () => {
     const res = await assign_transaction_orchestrator(ctx(), { user_id: uid(), transaction_id: 'nope' });
     expect(res.found).toBe(false);
+  });
+
+  // S1 backfill (Derive-On-Read-Regression-Audit): an empty-merchant bill payment whose
+  // split link was never set gets linked DETERMINISTICALLY via the outflow's Plaid stream
+  // `transactionIds` — the fuzzy period matcher misses it (blank merchant, no period seeded).
+  it('links a single-split bill payment to its outflow via stream transactionIds (deterministic)', async () => {
+    const userId = uid();
+    const txnId = `billpay_${Date.now()}`;
+    await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'monthly' });
+    await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'weekly' });
+    await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'bi_monthly' });
+    await seedSourcePeriod(`${txnId}_2026M06`, 'monthly', '2026-06-01', '2026-06-30');
+    // The outflow's Plaid stream claims this transaction id — but NO outflow_period is seeded,
+    // so the fuzzy matcher has zero candidates. Deterministic stream linking must still fire.
+    await seedOutflow(`kia_${txnId}`, userId, [txnId]);
+    // Single split, empty merchant, no outflowId — exactly the unlinked historical case.
+    await db.collection('transactions').doc(txnId).set({
+      transactionId: txnId, userId, isActive: true, transactionDate: ts('2026-06-15'),
+      merchantName: '', name: 'Online Payment To CU', type: 'expense',
+      splits: [split('s1', 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', 813.83)],
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+
+    const res = await assign_transaction_orchestrator(ctx(), { user_id: userId, transaction_id: txnId });
+    expect(res.found).toBe(true);
+
+    const doc = (await db.collection('transactions').doc(txnId).get()).data()!;
+    const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === 's1');
+    expect(s1.outflowId).toBe(`kia_${txnId}`); // deterministically linked from the stream
   });
 });

@@ -33,6 +33,7 @@ import { owned_splits_for_budget } from "../../domain/budgets/budget_spend_match
 import {
   generate_expected_occurrences_in_window,
 } from "../../domain/outflows/outflow_period.service";
+import { estimate_slot_amounts } from "../../domain/recurring/income_slot_amounts";
 import {
   reconcile_occurrences,
   reconcile_income_occurrences,
@@ -48,6 +49,9 @@ import {
 import { PeriodInstanceType } from "../../domain/budgets";
 
 const BUDGET: PerformanceBudget = { max_reads: 200, max_writes: 0, max_time_ms: 1500 };
+
+/** Synthetic income id for the "Other Income" bucket (unmatched real INCOME_* credits). */
+const OTHER_INCOME_ID = "__other_income__";
 
 export interface DerivePeriodInput {
   view_cadence: PeriodInstanceType;
@@ -109,32 +113,47 @@ export async function derive_period_orchestrator(
     const bills: DerivedRecurringResult[] = [];
     const income: DerivedRecurringResult[] = [];
     for (const r of deps.recurring) {
-      let reconciled;
-      if (r.kind === "inflow") {
-        // Income: paid = the actual linked deposits (Plaid transaction_ids), NOT
-        // synthesized occurrences; outstanding = the projected next receipt.
-        reconciled = reconcile_income_occurrences(
-          r.id,
-          r.payments,
-          r.schedule.predicted_next_date ? r.schedule.predicted_next_date.toMillis() : null,
-          r.schedule.average_amount,
-          deps.span_start_ms,
-          deps.span_end_ms
-        );
-      } else {
-        // Bills: generate expected occurrences from the schedule, then reconcile.
-        const expected: ExpectedOccurrence[] = generate_expected_occurrences_in_window(
-          r.schedule,
-          deps.span_start_ms,
-          deps.span_end_ms
-        ).map((g) => ({
-          occurrence_id: `${r.id}_${g.due_date_ms}`,
-          recurring_id: r.id,
-          due_date_ms: g.due_date_ms,
-          amount_due: g.amount_due,
-        }));
-        reconciled = reconcile_occurrences(expected, r.payments);
+      // Both bills AND income generate EXPECTED occurrences from the schedule (freq +
+      // anchor) across the window — so a semi-monthly item yields 2/month and future
+      // months still show upcoming occurrences (income no longer projects just one).
+      let expected: ExpectedOccurrence[] = generate_expected_occurrences_in_window(
+        r.schedule,
+        deps.span_start_ms,
+        deps.span_end_ms
+      ).map((g) => ({
+        occurrence_id: `${r.id}_${g.due_date_ms}`,
+        recurring_id: r.id,
+        due_date_ms: g.due_date_ms,
+        amount_due: g.amount_due,
+      }));
+      // INCOME per-slot amounts: give each occurrence its OWN slot's recent-average amount
+      // (mid-month vs end-of-month) from history, instead of the single blended stream average.
+      // Received occurrences still use the ACTUAL deposit (in reconcile); this sets the amount
+      // shown for OUTSTANDING occurrences.
+      if (r.kind === "inflow" && (r.payment_history?.length ?? 0) > 0) {
+        const occ_days = expected.map((e) => new Date(e.due_date_ms).getUTCDate());
+        const slot_amounts = estimate_slot_amounts(occ_days, r.payment_history!);
+        if (slot_amounts.size > 0) {
+          expected = expected.map((e) => {
+            const day = new Date(e.due_date_ms).getUTCDate();
+            const amt = slot_amounts.get(day);
+            return amt != null ? { ...e, amount_due: amt } : e;
+          });
+        }
       }
+      // Income reconciles those expected occurrences against ACTUAL Plaid deposits
+      // (authoritative receipts, with extras surfaced); bills reconcile against linked
+      // payments. Both then place into the view buckets identically.
+      const reconciled =
+        r.kind === "inflow"
+          ? reconcile_income_occurrences(
+            r.id,
+            r.payments,
+            expected,
+            deps.span_start_ms,
+            deps.span_end_ms
+          )
+          : reconcile_occurrences(expected, r.payments);
       const groups = place_occurrences(reconciled, deps.placement_buckets);
       // Suppress groups whose period is removed/paused for this item (per-period snap).
       const visible_groups = groups.filter((g) => {
@@ -146,6 +165,25 @@ export async function derive_period_orchestrator(
         name: r.name,
         groups: visible_groups,
       });
+    }
+
+    // "Other income received": real INCOME_* credits in the window not tied to any recurring
+    // inflow (off-cycle paychecks, bonuses, contractor/gig). Surface them as a synthetic
+    // "Other Income" bucket — each a RECEIVED occurrence with its actual amount — so real
+    // income is never hidden just because Plaid didn't group it into a recurring stream.
+    if (deps.other_income_credits.length > 0) {
+      const other_occurrences = deps.other_income_credits.map((c, i) => ({
+        occurrence_id: `other_income_${c.date_ms}_${i}`,
+        recurring_id: OTHER_INCOME_ID,
+        due_date_ms: c.date_ms,
+        amount_due: c.amount,
+        amount_paid: c.amount,
+        is_paid: true,
+      }));
+      const other_groups = place_occurrences(other_occurrences, deps.placement_buckets);
+      if (other_groups.some((g) => g.is_due_period)) {
+        income.push({ recurring_id: OTHER_INCOME_ID, name: "Other Income", groups: other_groups });
+      }
     }
 
     if (is_budget_exceeded(perf, BUDGET)) {

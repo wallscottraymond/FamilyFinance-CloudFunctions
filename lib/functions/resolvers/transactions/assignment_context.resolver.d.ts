@@ -43,6 +43,12 @@ export interface SharedAssignmentContext {
         overall_category_id: string | null;
         first_category_id: string | null;
     }>;
+    /** Plaid stream transaction id → recurring id, from active defs' `transactionIds`.
+     *  The AUTHORITATIVE bill/income link (Plaid's own recurring stream), used to
+     *  deterministically set a split's `outflow_id`/`inflow_id` — the fuzzy period
+     *  matcher (empty-merchant bills, missing periods) misses these (S1 root cause). */
+    outflow_tx_to_id: Map<string, string>;
+    inflow_tx_to_id: Map<string, string>;
 }
 /**
  * Resolve the transaction-independent shared context for a user (budgets +

@@ -114,37 +114,89 @@ export function reconcile_occurrences(
 }
 
 /**
- * Reconcile INCOME from its ACTUAL transactions (Income-Tracking-Audit).
+ * Reconcile INCOME against its schedule-generated EXPECTED occurrences + ACTUAL deposits.
  *
- * Plaid gives us the exact deposits that compose a recurring income stream (via
- * its `transaction_ids`), so we do NOT synthesize historical occurrences for
- * income (which mis-counts variable/semimonthly pay). Instead:
- *   - each linked deposit in the window IS a received (paid) occurrence, and
- *   - the single `predicted_next_date` is projected as ONE outstanding occurrence
- *     when it falls in the window and hasn't already been received.
+ * Derive-On-Read-Regression-Audit (S3/S4): income previously projected ONLY the single
+ * `predicted_next_date`, so a semi-monthly payer showed 1 receipt instead of 2 (S4) and
+ * any month AFTER predicted_next showed NO income at all (S3 — e.g. October empty). Income
+ * now mirrors the bill path: the caller generates EXPECTED occurrences from the schedule
+ * (frequency + anchor), and here we reconcile the ACTUAL linked deposits (Plaid stream
+ * `transaction_ids`) against them:
+ *   - an expected occurrence with a deposit within tolerance → received (ACTUAL amount+date),
+ *   - an expected occurrence with no deposit → OUTSTANDING (expected amount),
+ *   - a deposit matching no expected occurrence → still shown as received (variable/extra pay;
+ *     income receipts are authoritative), so nothing real is ever hidden.
  *
  * Same output shape as `reconcile_occurrences` so placement is unchanged. PURE.
  *
- * @param recurring_id            - The inflow id
- * @param payments               - The inflow's actual linked deposits
- * @param predicted_next_date_ms - Next expected receipt (from the stream), or null
- * @param average_amount         - Expected amount for the projected outstanding one
- * @param window_start_ms/window_end_ms - The derivation window
+ * NOTE: outstanding (not-yet-received) occurrences carry the schedule's average amount;
+ * per-occurrence amount history (e.g. a semi-monthly payer's differing mid/end checks) is a
+ * later refinement — received ones already use the actual deposit amount.
+ *
+ * @param recurring_id  - The inflow id
+ * @param payments      - The inflow's actual linked deposits
+ * @param expected      - Expected occurrences generated from the schedule (in-window)
+ * @param window_start_ms/window_end_ms - The derivation window (bounds the extra deposits)
  */
 export function reconcile_income_occurrences(
   recurring_id: string,
   payments: ActualPayment[],
-  predicted_next_date_ms: number | null,
-  average_amount: number,
+  expected: ExpectedOccurrence[],
   window_start_ms: number,
   window_end_ms: number,
   opts: { tolerance_days?: number } = {}
 ): ReconciledOccurrence[] {
   const tolerance_ms = (opts.tolerance_days ?? DEFAULT_TOLERANCE_DAYS) * MS_PER_DAY;
   const out: ReconciledOccurrence[] = [];
+  const ordered = [...payments].sort((a, b) => a.date_ms - b.date_ms);
+  const matched = new Set<number>();
 
-  // 1. Each actual linked deposit in the window = a received (paid) occurrence.
-  for (const p of payments) {
+  // 1. Reconcile each expected occurrence against its closest unclaimed deposit.
+  for (const e of expected) {
+    let best_index = -1;
+    let best_diff = Infinity;
+    for (let i = 0; i < ordered.length; i++) {
+      if (matched.has(i)) continue;
+      const diff = Math.abs(ordered[i].date_ms - e.due_date_ms);
+      if (diff <= tolerance_ms && diff < best_diff) {
+        best_diff = diff;
+        best_index = i;
+      }
+    }
+    if (best_index >= 0) {
+      const p = ordered[best_index];
+      matched.add(best_index);
+      out.push({
+        occurrence_id: e.occurrence_id,
+        recurring_id,
+        due_date_ms: e.due_date_ms,
+        amount_due: e.amount_due,
+        amount_paid: p.amount,
+        is_paid: true,
+        matched_transaction_id: p.transaction_id,
+        matched_split_id: p.split_id,
+        payment_date_ms: p.date_ms,
+      });
+    } else {
+      out.push({
+        occurrence_id: e.occurrence_id,
+        recurring_id,
+        due_date_ms: e.due_date_ms,
+        amount_due: e.amount_due,
+        amount_paid: 0,
+        is_paid: false,
+        matched_transaction_id: null,
+        matched_split_id: null,
+        payment_date_ms: null,
+      });
+    }
+  }
+
+  // 2. Deposits that matched NO expected occurrence → still shown as received (in-window),
+  //    so variable/extra pay is never hidden.
+  for (let i = 0; i < ordered.length; i++) {
+    if (matched.has(i)) continue;
+    const p = ordered[i];
     if (p.date_ms < window_start_ms || p.date_ms > window_end_ms) continue;
     out.push({
       occurrence_id: `${recurring_id}_${p.date_ms}`,
@@ -156,27 +208,6 @@ export function reconcile_income_occurrences(
       matched_transaction_id: p.transaction_id,
       matched_split_id: p.split_id,
       payment_date_ms: p.date_ms,
-    });
-  }
-
-  // 2. Project the next expected receipt as OUTSTANDING when it's in the window
-  //    and not already covered by a received deposit.
-  if (
-    predicted_next_date_ms != null &&
-    predicted_next_date_ms >= window_start_ms &&
-    predicted_next_date_ms <= window_end_ms &&
-    !payments.some((p) => Math.abs(p.date_ms - predicted_next_date_ms) <= tolerance_ms)
-  ) {
-    out.push({
-      occurrence_id: `${recurring_id}_next_${predicted_next_date_ms}`,
-      recurring_id,
-      due_date_ms: predicted_next_date_ms,
-      amount_due: average_amount,
-      amount_paid: 0,
-      is_paid: false,
-      matched_transaction_id: null,
-      matched_split_id: null,
-      payment_date_ms: null,
     });
   }
 

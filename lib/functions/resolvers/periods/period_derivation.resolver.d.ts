@@ -20,6 +20,7 @@ import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
+import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 export interface BudgetForDerivation {
@@ -34,6 +35,9 @@ export interface RecurringForDerivation {
     kind: "outflow" | "inflow";
     schedule: RecurringScheduleForGeneration;
     payments: ActualPayment[];
+    /** INCOME only: the stream's historical linked deposits, for per-slot amount estimation
+     *  (a semi-monthly stream's mid vs end occurrence draw from their own slot's average). */
+    payment_history?: DepositForSlot[];
     /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
     removal_intervals: RemovalInterval[];
 }
@@ -46,6 +50,8 @@ export interface PeriodDerivationDeps {
     any_ee_id: string | null;
     splits_for_match: SplitForOnReadMatch[];
     recurring: RecurringForDerivation[];
+    /** Real INCOME_* credits in the window not tied to any recurring inflow (→ "Other income"). */
+    other_income_credits: DepositForSlot[];
     span_start_ms: number;
     span_end_ms: number;
 }

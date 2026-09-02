@@ -32,44 +32,78 @@ describe("reconcile_income_occurrences", () => {
   const IN = "inflow1";
   const W_START = day(2026, 6, 1); // July
   const W_END = day(2026, 6, 31);
+  const inExp = (id: string, due_ms: number, amount = 10406): ExpectedOccurrence => ({
+    occurrence_id: id,
+    recurring_id: IN,
+    due_date_ms: due_ms,
+    amount_due: amount,
+  });
 
-  it("each actual deposit in the window is a received (paid) occurrence", () => {
+  it("marks an expected occurrence received when a deposit lands within tolerance (actual amount)", () => {
     const r = reconcile_income_occurrences(
       IN,
-      [payment("t1", day(2026, 6, 15), 3358), payment("t2", day(2026, 6, 31), 36725)],
-      null,
-      10406,
+      [payment("t1", day(2026, 6, 15), 3358)],
+      [inExp("e1", day(2026, 6, 15))],
+      W_START,
+      W_END
+    );
+    expect(r.length).toBe(1);
+    expect(r[0].is_paid).toBe(true);
+    expect(r[0].amount_paid).toBe(3358); // ACTUAL deposit, not the expected 10406
+  });
+
+  // S4 regression: a semi-monthly payer must show BOTH occurrences (was 1).
+  it("shows BOTH semi-monthly occurrences — received + still-outstanding", () => {
+    const r = reconcile_income_occurrences(
+      IN,
+      [payment("t1", day(2026, 6, 15), 9000)], // only the mid-month check received
+      [inExp("e1", day(2026, 6, 15)), inExp("e2", day(2026, 6, 30))],
       W_START,
       W_END
     );
     expect(r.length).toBe(2);
-    expect(r.every((o) => o.is_paid)).toBe(true);
-    expect(r.reduce((s, o) => s + o.amount_paid, 0)).toBe(40083);
+    expect(r.find((o) => o.due_date_ms === day(2026, 6, 15))!.is_paid).toBe(true);
+    const endMonth = r.find((o) => o.due_date_ms === day(2026, 6, 30))!;
+    expect(endMonth.is_paid).toBe(false); // outstanding, still shown
+    expect(endMonth.amount_due).toBe(10406);
   });
 
-  it("projects predicted_next as ONE outstanding occurrence when unpaid & in-window", () => {
-    const r = reconcile_income_occurrences(IN, [], day(2026, 6, 15), 10406, W_START, W_END);
-    expect(r.length).toBe(1);
-    expect(r[0].is_paid).toBe(false);
-    expect(r[0].amount_due).toBe(10406);
-  });
-
-  it("does NOT project predicted_next if a deposit already covers it (within tolerance)", () => {
+  // S3 regression: a future month with expected-but-unreceived occurrences still shows income.
+  it("shows expected occurrences as outstanding when nothing is received yet (future month)", () => {
     const r = reconcile_income_occurrences(
       IN,
-      [payment("t1", day(2026, 6, 15), 10000)],
-      day(2026, 6, 16),
-      10406,
+      [],
+      [inExp("e1", day(2026, 6, 15)), inExp("e2", day(2026, 6, 30))],
       W_START,
       W_END
     );
-    expect(r.length).toBe(1); // just the paid one, no duplicate outstanding
-    expect(r[0].is_paid).toBe(true);
+    expect(r.length).toBe(2);
+    expect(r.every((o) => !o.is_paid)).toBe(true);
   });
 
-  it("ignores predicted_next outside the window", () => {
-    const r = reconcile_income_occurrences(IN, [], day(2026, 7, 15), 10406, W_START, W_END);
-    expect(r.length).toBe(0);
+  it("surfaces a deposit that matches no expected occurrence as received (variable/extra pay)", () => {
+    const r = reconcile_income_occurrences(
+      IN,
+      [payment("bonus", day(2026, 6, 20), 5000)],
+      [], // no expected occurrence near it
+      W_START,
+      W_END
+    );
+    expect(r.length).toBe(1);
+    expect(r[0].is_paid).toBe(true);
+    expect(r[0].amount_paid).toBe(5000);
+  });
+
+  it("does not double-count: a deposit claims its expected occurrence, not also an extra row", () => {
+    const r = reconcile_income_occurrences(
+      IN,
+      [payment("t1", day(2026, 6, 15), 10000)],
+      [inExp("e1", day(2026, 6, 16))],
+      W_START,
+      W_END
+    );
+    expect(r.length).toBe(1); // one occurrence, paid — no duplicate extra
+    expect(r[0].is_paid).toBe(true);
   });
 });
 

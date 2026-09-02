@@ -10,6 +10,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { DomainResult, success_many, validation_failed } from "../../types";
 import { InflowPeriodForPersistence } from "../../repositories/inflow_period.repo";
+import { normalize_frequency } from "../recurring/frequency";
 
 /**
  * Inflow data needed for period generation (snake_case).
@@ -82,12 +83,12 @@ interface CycleInfo {
  * Get approximate cycle days for a frequency.
  */
 function get_cycle_days(frequency: string): number {
-  switch (frequency.toUpperCase()) {
+  switch (normalize_frequency(frequency)) {
     case "WEEKLY":
       return 7;
     case "BIWEEKLY":
       return 14;
-    case "SEMI_MONTHLY":
+    case "SEMIMONTHLY":
       return 15;
     case "MONTHLY":
       return 30;
@@ -96,7 +97,8 @@ function get_cycle_days(frequency: string): number {
     case "ANNUALLY":
       return 365;
     default:
-      return 30;
+      // UNKNOWN — treat as annual so it never fans out as monthly (see frequency.ts).
+      return 365;
   }
 }
 
@@ -111,29 +113,32 @@ function get_period_days(start: Date, end: Date): number {
  * Add frequency interval to a date.
  */
 function add_frequency_interval(date: Date, frequency: string): Date {
+  // UTC date-math: anchors are UTC-midnight, so stepping in UTC keeps the day stable
+  // regardless of runtime timezone (mirrors outflow_period.service).
   const result = new Date(date);
 
-  switch (frequency.toUpperCase()) {
+  switch (normalize_frequency(frequency)) {
     case "WEEKLY":
-      result.setDate(result.getDate() + 7);
+      result.setUTCDate(result.getUTCDate() + 7);
       break;
     case "BIWEEKLY":
-      result.setDate(result.getDate() + 14);
+      result.setUTCDate(result.getUTCDate() + 14);
       break;
-    case "SEMI_MONTHLY":
-      result.setDate(result.getDate() + 15);
+    case "SEMIMONTHLY":
+      result.setUTCDate(result.getUTCDate() + 15);
       break;
     case "MONTHLY":
-      result.setMonth(result.getMonth() + 1);
+      result.setUTCMonth(result.getUTCMonth() + 1);
       break;
     case "QUARTERLY":
-      result.setMonth(result.getMonth() + 3);
+      result.setUTCMonth(result.getUTCMonth() + 3);
       break;
     case "ANNUALLY":
-      result.setFullYear(result.getFullYear() + 1);
+      result.setUTCFullYear(result.getUTCFullYear() + 1);
       break;
     default:
-      result.setMonth(result.getMonth() + 1);
+      // UNKNOWN — step by a year so an unrecognized cadence never fans out monthly.
+      result.setUTCFullYear(result.getUTCFullYear() + 1);
   }
 
   return result;
@@ -143,29 +148,30 @@ function add_frequency_interval(date: Date, frequency: string): Date {
  * Subtract frequency interval from a date.
  */
 function subtract_frequency_interval(date: Date, frequency: string): Date {
-  const result = new Date(date);
+  const result = new Date(date); // UTC date-math (see add_frequency_interval).
 
-  switch (frequency.toUpperCase()) {
+  switch (normalize_frequency(frequency)) {
     case "WEEKLY":
-      result.setDate(result.getDate() - 7);
+      result.setUTCDate(result.getUTCDate() - 7);
       break;
     case "BIWEEKLY":
-      result.setDate(result.getDate() - 14);
+      result.setUTCDate(result.getUTCDate() - 14);
       break;
-    case "SEMI_MONTHLY":
-      result.setDate(result.getDate() - 15);
+    case "SEMIMONTHLY":
+      result.setUTCDate(result.getUTCDate() - 15);
       break;
     case "MONTHLY":
-      result.setMonth(result.getMonth() - 1);
+      result.setUTCMonth(result.getUTCMonth() - 1);
       break;
     case "QUARTERLY":
-      result.setMonth(result.getMonth() - 3);
+      result.setUTCMonth(result.getUTCMonth() - 3);
       break;
     case "ANNUALLY":
-      result.setFullYear(result.getFullYear() - 1);
+      result.setUTCFullYear(result.getUTCFullYear() - 1);
       break;
     default:
-      result.setMonth(result.getMonth() - 1);
+      // UNKNOWN — mirror the forward step (a year), never monthly.
+      result.setUTCFullYear(result.getUTCFullYear() - 1);
   }
 
   return result;
@@ -179,18 +185,18 @@ function adjust_for_month_end(
   reference_date: Date,
   frequency: string
 ): Date {
-  const freq = frequency.toUpperCase();
+  const freq = normalize_frequency(frequency);
   if (freq !== "MONTHLY" && freq !== "QUARTERLY" && freq !== "ANNUALLY") {
     return current_date;
   }
 
-  const original_day = reference_date.getDate();
-  const current_month = current_date.getMonth();
-  const current_year = current_date.getFullYear();
-  const last_day_of_month = new Date(current_year, current_month + 1, 0).getDate();
+  const original_day = reference_date.getUTCDate();
+  const current_month = current_date.getUTCMonth();
+  const current_year = current_date.getUTCFullYear();
+  const last_day_of_month = new Date(Date.UTC(current_year, current_month + 1, 0)).getUTCDate();
 
   if (original_day > last_day_of_month) {
-    return new Date(current_year, current_month, last_day_of_month);
+    return new Date(Date.UTC(current_year, current_month, last_day_of_month));
   }
 
   return current_date;

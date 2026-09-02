@@ -23,6 +23,9 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { category_repo } from "../../repositories/category.repo";
+import { outflow_repo } from "../../repositories/outflow.repo";
+import { inflow_repo } from "../../repositories/inflow.repo";
+import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
 import {
   BudgetForMatch,
   PeriodLens,
@@ -65,6 +68,12 @@ export interface SharedAssignmentContext {
     string,
     { overall_category_id: string | null; first_category_id: string | null }
   >;
+  /** Plaid stream transaction id → recurring id, from active defs' `transactionIds`.
+   *  The AUTHORITATIVE bill/income link (Plaid's own recurring stream), used to
+   *  deterministically set a split's `outflow_id`/`inflow_id` — the fuzzy period
+   *  matcher (empty-merchant bills, missing periods) misses these (S1 root cause). */
+  outflow_tx_to_id: Map<string, string>;
+  inflow_tx_to_id: Map<string, string>;
 }
 
 /**
@@ -78,10 +87,23 @@ export async function resolve_shared_assignment_context(
 ): Promise<SharedAssignmentContext> {
   // Budgets (per-user) and category rules (cached reference data) are
   // independent — fetch concurrently.
-  const [budgets, category_docs] = await Promise.all([
+  const [budgets, category_docs, outflows, inflows] = await Promise.all([
     budget_repo.get_by_user_id(ctx, user_id),
     category_repo.get_active_cached(ctx),
+    outflow_repo.get_by_user_id(ctx, user_id),
+    inflow_repo.get_by_user_id(ctx, user_id),
   ]);
+
+  // Authoritative recurring-stream links: Plaid stream `transactionIds` → recurring id.
+  // Only ACTIVE, non-hidden defs (hidden = classified internal transfer) contribute, so
+  // a txn is linked to a bill/income exactly as the derive-on-read read path does. A txn
+  // claimed by two streams is excluded (no guessing — see build_stream_membership_map).
+  const outflow_tx_to_id = build_stream_membership_map(
+    outflows.filter((o) => o.is_active && !o.is_hidden)
+  );
+  const inflow_tx_to_id = build_stream_membership_map(
+    inflows.filter((i) => i.is_active && !i.is_hidden)
+  );
 
   // Real budgets (+ the Everything Else id PER LENS for the structural fallback).
   // A budget's period maps to exactly one lens (weekly/monthly/bi_monthly); the
@@ -144,6 +166,8 @@ export async function resolve_shared_assignment_context(
     everything_else_budget_ids,
     category_rules,
     category_slugs_by_plaid,
+    outflow_tx_to_id,
+    inflow_tx_to_id,
   };
 }
 
@@ -177,14 +201,14 @@ export async function resolve_assignment_context(
   const txn_type = (data.type as string) ?? "expense";
 
   // Transaction-independent context: reuse the caller's shared slice (batch) or
-  // resolve it now (single-item path). Run it concurrently with the two
-  // transaction-DEPENDENT reads (source periods + recurring matches), which only
-  // need data already in hand.
+  // resolve it now (single-item path). Resolve it FIRST because the recurring
+  // matcher needs its authoritative stream maps; the two transaction-DEPENDENT
+  // reads (source periods + recurring matches) then run concurrently.
   const anchor = Timestamp.fromMillis(txn_date_ms);
-  const [resolved_shared, periods, recurring_by_split] = await Promise.all([
-    shared
-      ? Promise.resolve(shared)
-      : resolve_shared_assignment_context(ctx, user_id),
+  const txn_plaid_id = (data.transactionId as string | null) ?? null;
+  const resolved_shared =
+    shared ?? (await resolve_shared_assignment_context(ctx, user_id));
+  const [periods, recurring_by_split] = await Promise.all([
     source_period_repo.get_overlapping(ctx, anchor, anchor),
     resolve_recurring_matches(
       ctx,
@@ -195,7 +219,12 @@ export async function resolve_assignment_context(
       raw_splits.map((s) => ({
         split_id: s.splitId as string,
         amount: (s.amount as number) ?? 0,
-      }))
+      })),
+      {
+        txn_plaid_id,
+        outflow_tx_to_id: resolved_shared.outflow_tx_to_id,
+        inflow_tx_to_id: resolved_shared.inflow_tx_to_id,
+      }
     ),
   ]);
 

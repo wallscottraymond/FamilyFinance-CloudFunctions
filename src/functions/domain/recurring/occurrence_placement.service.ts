@@ -122,7 +122,14 @@ export function place_occurrences(
     const placed_details: Array<{ due_ms: number; paid: boolean; amount: number }> = [];
     for (const o of placed) {
       occurrence_ids.push(o.occurrence_id);
-      placed_details.push({ due_ms: o.due_date_ms, paid: o.is_paid, amount: o.amount_due });
+      // A RECEIVED/paid occurrence shows the ACTUAL amount (the real deposit/payment — free
+      // to exceed or fall under the estimate, e.g. commission pay); an OUTSTANDING one shows
+      // the expected/estimated amount. `amount_paid` is the real transaction amount.
+      placed_details.push({
+        due_ms: o.due_date_ms,
+        paid: o.is_paid,
+        amount: o.is_paid ? o.amount_paid : o.amount_due,
+      });
       total_due += o.amount_due;
       total_paid += o.amount_paid;
       if (o.is_paid) {

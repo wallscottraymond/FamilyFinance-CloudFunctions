@@ -1067,26 +1067,29 @@ export const transaction_repo = {
     budget_id: string
   ): Promise<string[]> {
     const db = getFirestore();
+    // Load ONLY the denormalized `splitBudgetIds` (union of the splits' budget ids),
+    // not the full docs — a heavy account has thousands of transactions, and pulling
+    // full docs (nested splits, categories) OOM-crashed the 256MiB delete function.
     const [owner_snap, user_snap] = await Promise.all([
       db
         .collection(COLLECTION)
         .where("ownerId", "==", user_id)
         .where("isActive", "==", true)
+        .select("splitBudgetIds")
         .get(),
       db
         .collection(COLLECTION)
         .where("userId", "==", user_id)
         .where("isActive", "==", true)
+        .select("splitBudgetIds")
         .get(),
     ]);
 
     const matched = new Set<string>();
     for (const snap of [owner_snap, user_snap]) {
       snap.docs.forEach((doc) => {
-        /* eslint-disable @typescript-eslint/naming-convention */
-        const splits = (doc.data().splits ?? []) as Array<{ budgetId?: string }>;
-        /* eslint-enable @typescript-eslint/naming-convention */
-        if (splits.some((s) => s.budgetId === budget_id)) {
+        const ids = (doc.data().splitBudgetIds ?? []) as string[];
+        if (ids.includes(budget_id)) {
           matched.add(doc.id);
         }
       });
