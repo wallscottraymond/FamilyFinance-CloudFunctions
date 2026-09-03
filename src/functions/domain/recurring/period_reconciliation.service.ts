@@ -369,3 +369,39 @@ function compute_status(p: {
   }
   return "partial";
 }
+
+// ============================================================================
+// 3. COUNTABLE SPLIT NET  (extracted from the reconciliation resolver — P2-11)
+// ============================================================================
+
+/** A stored transaction split — subset needed for the countable-amount math. */
+export interface CountableSplitInput {
+  amount?: number | null;
+  isIgnored?: boolean;
+  isRefund?: boolean;
+  splitId?: string;
+}
+
+/**
+ * Net countable amount a transaction's splits contribute toward a recurring
+ * occurrence: ignored splits are excluded, refunds SUBTRACT their magnitude, and
+ * everything else ADDS its magnitude. Also resolves the split id (last split's
+ * `splitId`, falling back to the provided default).
+ *
+ * Pure — moved here from `period_reconciliation.resolver.ts` so the resolver stays
+ * lookup-only (per the layered architecture).
+ */
+export function compute_countable_split_net(
+  splits: CountableSplitInput[],
+  fallback_split_id: string,
+): { amount: number; split_id: string } {
+  let amount = 0;
+  let split_id = fallback_split_id;
+  for (const s of splits) {
+    if (s.isIgnored) continue;
+    const magnitude = Math.abs(Number(s.amount ?? 0));
+    amount += s.isRefund ? -magnitude : magnitude;
+    if (s.splitId) split_id = s.splitId;
+  }
+  return { amount, split_id };
+}

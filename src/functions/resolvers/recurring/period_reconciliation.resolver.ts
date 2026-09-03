@@ -18,6 +18,7 @@ import { inflow_repo } from "../../repositories/inflow.repo";
 import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
 
 export type RecurringType = "outflow" | "inflow";
 
@@ -200,14 +201,9 @@ export async function resolve_recurring_reconciliation(
       }
     }
     const is_pending = txn.isPending === true;
-    let amount = 0;
-    let split_id = txn.id;
-    for (const s of txn.splits ?? []) {
-      if (s.isIgnored) continue;
-      const magnitude = Math.abs(Number(s.amount ?? 0));
-      amount += s.isRefund ? -magnitude : magnitude;
-      if (s.splitId) split_id = s.splitId;
-    }
+    // Net countable amount (ignore/refund math) — computed in the domain service
+    // so the resolver stays lookup-only (P2-11).
+    const { amount, split_id } = compute_countable_split_net(txn.splits ?? [], txn.id);
     splits.push({ transaction_id: txn.id, split_id, amount, is_pending, date_ms });
   }
 

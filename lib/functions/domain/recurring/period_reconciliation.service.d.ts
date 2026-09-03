@@ -144,4 +144,24 @@ export interface ReconciliationResult {
  * PURE FUNCTION.
  */
 export declare function compute_period_reconciliation(period: PeriodForReconciliation, linked_splits: LinkedSplit[]): ReconciliationResult;
+/** A stored transaction split — subset needed for the countable-amount math. */
+export interface CountableSplitInput {
+    amount?: number | null;
+    isIgnored?: boolean;
+    isRefund?: boolean;
+    splitId?: string;
+}
+/**
+ * Net countable amount a transaction's splits contribute toward a recurring
+ * occurrence: ignored splits are excluded, refunds SUBTRACT their magnitude, and
+ * everything else ADDS its magnitude. Also resolves the split id (last split's
+ * `splitId`, falling back to the provided default).
+ *
+ * Pure — moved here from `period_reconciliation.resolver.ts` so the resolver stays
+ * lookup-only (per the layered architecture).
+ */
+export declare function compute_countable_split_net(splits: CountableSplitInput[], fallback_split_id: string): {
+    amount: number;
+    split_id: string;
+};
 //# sourceMappingURL=period_reconciliation.service.d.ts.map

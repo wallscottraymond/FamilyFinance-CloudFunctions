@@ -285,17 +285,17 @@ async function process_added_transactions(
   const migration_by_posted = new Map(
     migrations.map((m) => [m.posted_plaid_transaction_id, m])
   );
-  const new_transactions = plaid_transactions;
 
   let created = 0;
   let migrated = 0;
 
-  // Process new transactions through existing pipeline
-  if (new_transactions.length > 0) {
+  // Process all synced transactions through the existing pipeline (P2-13: the
+  // `new_transactions` alias for `plaid_transactions` was redundant — inlined).
+  if (plaid_transactions.length > 0) {
     try {
       // Step 1: Format transactions (Plaid -> internal structure)
       const formatted = await format_transactions(
-        new_transactions,
+        plaid_transactions,
         deps.plaid_item.plaid_item_id,
         ctx.user_id,
         deps.user_context.family_id || undefined,
