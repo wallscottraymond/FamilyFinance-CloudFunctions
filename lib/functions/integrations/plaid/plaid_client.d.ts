@@ -6,7 +6,7 @@
  *
  * @module integrations/plaid/plaid_client
  */
-import { AccountBase, LinkTokenCreateResponse, ItemPublicTokenExchangeResponse, TransactionsSyncResponse, TransactionsRecurringGetResponse, JWKPublicKey } from "plaid";
+import { AccountBase, LinkTokenCreateResponse, ItemPublicTokenExchangeResponse, TransactionsSyncResponse, TransactionsRecurringGetResponse, LiabilitiesObject, JWKPublicKey } from "plaid";
 import { PlaidCreateLinkTokenInput } from "../../types/plaid";
 /**
  * Result of fetching accounts from Plaid. `accounts` are the RAW Plaid SDK
@@ -56,6 +56,35 @@ export declare function get_institution_by_id(institution_id: string): Promise<{
  * @returns Account data with fresh balances
  */
 export declare function fetch_plaid_balances(access_token: string, account_ids?: string[]): Promise<PlaidAccountsResult>;
+/** Result of {@link fetch_plaid_liabilities} — RAW Plaid liabilities object. */
+export interface PlaidLiabilitiesResult {
+    /** Raw Plaid `liabilities` object (credit/mortgage/student arrays) or null. */
+    liabilities: LiabilitiesObject | null;
+    request_id: string;
+}
+/**
+ * Fetches liability detail from Plaid (`/liabilities/get`) — Investments-And-
+ * Liabilities-Modeling. Returns RAW Plaid SDK types; mapping happens in the
+ * transformer.
+ *
+ * THROWS if the item wasn't linked with the Liabilities product (Plaid error
+ * `PRODUCTS_NOT_SUPPORTED` / `INVALID_PRODUCT`) — callers MUST catch and skip so a
+ * cash-only item doesn't fail the whole sync.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param account_ids - Optional specific account IDs to fetch
+ */
+export declare function fetch_plaid_liabilities(access_token: string, account_ids?: string[]): Promise<PlaidLiabilitiesResult>;
+/**
+ * Fetches liabilities but NEVER throws — returns the raw liabilities object, or
+ * `null` when the item wasn't linked with the Liabilities product (the common
+ * case: cash-only items) or any other error. Lets the sync attach liabilities when
+ * available without ever failing the whole sync over a cash item.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param trace_id - For logging the skip reason
+ */
+export declare function safe_fetch_liabilities(access_token: string, trace_id: string): Promise<LiabilitiesObject | null>;
 /**
  * Creates a Plaid Link token for initializing Plaid Link.
  *

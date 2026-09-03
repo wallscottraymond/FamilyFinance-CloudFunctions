@@ -38,6 +38,11 @@ const create_link_token_input_schema = z.object({
   access_token: z.string().optional(),
   /** Redirect URI for OAuth flows. Optional. */
   redirect_uri: z.string().url().optional(),
+  /**
+   * Link flow (Investments-And-Liabilities-Modeling). "cash" (default) = asset
+   * accounts; "liability" = credit + loans (adds the Liabilities product).
+   */
+  flow: z.enum(["cash", "liability"]).optional(),
   /** Debug mode enables verbose logging */
   debug_mode: z.boolean().optional(),
 });
@@ -126,6 +131,7 @@ export const create_link_token = onCall(
         input: {
           access_token: input.access_token,
           redirect_uri: input.redirect_uri,
+          flow: input.flow,
         },
         user_id,
         idempotency_key: `create_link_token:${user_id}:${Date.now()}`,

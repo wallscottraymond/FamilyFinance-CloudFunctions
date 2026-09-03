@@ -7,6 +7,7 @@
  */
 
 import { Timestamp } from "firebase-admin/firestore";
+import { LinkTokenFlow } from "./liability.types";
 
 // ============================================================================
 // Input Types
@@ -22,6 +23,13 @@ export interface CreateLinkTokenInput {
 
   /** Redirect URI for OAuth flows. Optional. */
   redirect_uri?: string;
+
+  /**
+   * Which Link flow this token is for (Investments-And-Liabilities-Modeling):
+   * - "cash" (default) → depository + investment accounts, `products: [Transactions]`
+   * - "liability" → credit + all loan subtypes, `products: [Transactions, Liabilities]`
+   */
+  flow?: LinkTokenFlow;
 }
 
 // ============================================================================
@@ -126,6 +134,9 @@ export interface PlaidCreateLinkTokenInput {
 
   /** Access token for update mode (re-authentication) */
   access_token?: string;
+
+  /** Link flow — selects products + account_filters (default "cash"). */
+  flow?: LinkTokenFlow;
 }
 
 // ============================================================================

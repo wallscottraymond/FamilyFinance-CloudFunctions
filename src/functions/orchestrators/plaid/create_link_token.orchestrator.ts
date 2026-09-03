@@ -95,6 +95,7 @@ export async function create_link_token_orchestrator(
       user_name: deps.user_display_name,
       user_email: deps.user_email,
       access_token: ctx.input.access_token,
+      flow: ctx.input.flow,
     });
 
     // =========================================================================

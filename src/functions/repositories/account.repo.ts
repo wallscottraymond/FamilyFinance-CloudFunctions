@@ -21,7 +21,7 @@ import {
   chunk_for_batch,
   TraceContext,
 } from "../types";
-import { ClientAccountData } from "../types/plaid";
+import { ClientAccountData, LiabilityDetail, LiabilityByAccountId } from "../types/plaid";
 import { record_audit_entry_async } from "../audit";
 
 /**
@@ -74,6 +74,14 @@ export interface Account extends BaseEntity {
   is_sync_enabled: boolean;
   last_synced_at?: Timestamp;
 
+  /**
+   * Optional Plaid liability detail (Investments-And-Liabilities-Modeling) —
+   * discriminated by `kind` (credit|mortgage|student). Present only on enriched
+   * liability accounts; absent on cash + un-enriched loans. Stored as-is (camelCase)
+   * so it round-trips to the Firestore doc + mobile without remapping.
+   */
+  liability?: LiabilityDetail;
+
   /** Access control metadata */
   access: AccessMetadata;
 }
@@ -111,6 +119,8 @@ interface LegacyAccountDoc {
   institutionName: string;
   isSyncEnabled?: boolean;
   lastSyncedAt?: Timestamp;
+  /** Plaid liability detail (camelCase, stored as-is). See Account.liability. */
+  liability?: LiabilityDetail;
   access?: {
     ownerId: string;
     createdBy: string;
@@ -151,6 +161,7 @@ function map_to_entity(doc: LegacyAccountDoc): Account {
     },
     is_sync_enabled: doc.isSyncEnabled ?? true,
     last_synced_at: doc.lastSyncedAt,
+    liability: doc.liability,
     access: doc.access
       ? {
         owner_id: doc.access.ownerId,
@@ -196,6 +207,7 @@ function map_to_doc(entity: Account): LegacyAccountDoc {
     institutionName: entity.institution.name,
     isSyncEnabled: entity.is_sync_enabled,
     lastSyncedAt: entity.last_synced_at,
+    liability: entity.liability,
     access: {
       ownerId: entity.access.owner_id,
       createdBy: entity.access.created_by,
@@ -691,7 +703,14 @@ export const account_repo = {
     item_id: string,
     user_id: string,
     institution: { id: string; name: string },
-    group_id?: string
+    group_id?: string,
+    /**
+     * Optional Plaid liability detail keyed by `account_id`
+     * (Investments-And-Liabilities-Modeling). When present for an account, it's
+     * written on create + refreshed on update. Absent → account's liability left
+     * untouched.
+     */
+    liabilities?: LiabilityByAccountId
   ): Promise<{
     created: number;
     updated: number;
@@ -730,9 +749,10 @@ export const account_repo = {
         );
 
         const new_balance = plaid_account.balances.current ?? 0;
+        const liability_detail = liabilities?.[plaid_account.account_id];
 
         if (existing) {
-          // UPDATE: Only update balances
+          // UPDATE: balances (+ refresh liability detail when we have it).
           const ref = doc_ref(existing.id);
           /* eslint-disable @typescript-eslint/naming-convention */
           const update_data = {
@@ -741,6 +761,8 @@ export const account_repo = {
             limit: plaid_account.balances.limit ?? undefined,
             lastBalanceUpdate: now,
             updatedAt: now,
+            // Only touch `liability` when we fetched one this sync (don't clobber).
+            ...(liability_detail ? { liability: liability_detail } : {}),
           };
           /* eslint-enable @typescript-eslint/naming-convention */
           batch.update(ref, update_data);
@@ -798,6 +820,7 @@ export const account_repo = {
             institutionId: institution.id,
             institutionName: institution.name,
             isSyncEnabled: true,
+            liability: liability_detail,
             access: {
               ownerId: user_id,
               createdBy: user_id,

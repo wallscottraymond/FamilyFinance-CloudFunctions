@@ -54,7 +54,12 @@ import {
   RecurringSyncInput,
 } from "./sync_recurring.orchestrator";
 import { TransactionSyncInput } from "../../types/plaid";
-import { fetch_plaid_balances, plaid_accounts_to_data } from "../../integrations/plaid";
+import {
+  fetch_plaid_balances,
+  plaid_accounts_to_data,
+  safe_fetch_liabilities,
+  plaid_liabilities_to_domain,
+} from "../../integrations/plaid";
 
 /**
  * Orchestrates the complete initial sync when a Plaid item is created.
@@ -356,6 +361,14 @@ async function execute_accounts_phase(
       );
     }
 
+    // 1b. Fetch liability detail (Investments-And-Liabilities-Modeling) — never
+    //     fails the sync: cash-only items return null (no Liabilities product).
+    const raw_liabilities = await safe_fetch_liabilities(
+      deps.plaid_item.access_token,
+      ctx.trace_id
+    );
+    const liabilities = plaid_liabilities_to_domain(raw_liabilities);
+
     // 2. Upsert accounts using shared repository method
     // This creates accounts if they don't exist, updates balances if they do
     const group_id = deps.group_ids.length > 0 ? deps.group_ids[0] : undefined;
@@ -366,7 +379,8 @@ async function execute_accounts_phase(
       ctx.input.plaid_item_id,
       ctx.user_id,
       { id: ctx.input.institution_id, name: ctx.input.institution_name },
-      group_id
+      group_id,
+      liabilities
     );
     perf.writes += upsert_result.created + upsert_result.updated;
 

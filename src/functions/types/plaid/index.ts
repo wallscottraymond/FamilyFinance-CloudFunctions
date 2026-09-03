@@ -216,3 +216,15 @@ export {
   REAUTH_ERROR_CODES,
   ERROR_CODE_MESSAGES,
 } from "./item_status_webhook.types";
+
+export {
+  // Liability detail (Investments-And-Liabilities-Modeling)
+  LinkTokenFlow,
+  LiabilityApr,
+  LiabilityAddress,
+  CreditLiabilityDetail,
+  MortgageLiabilityDetail,
+  StudentLiabilityDetail,
+  LiabilityDetail,
+  LiabilityByAccountId,
+} from "./liability.types";

@@ -11,7 +11,7 @@
  */
 import { Timestamp } from "firebase-admin/firestore";
 import { WriteResult, BatchWriteResult, ReadOptions, BaseEntity, AccessMetadata, TraceContext } from "../types";
-import { ClientAccountData } from "../types/plaid";
+import { ClientAccountData, LiabilityDetail, LiabilityByAccountId } from "../types/plaid";
 /**
  * Account entity in snake_case (new architecture).
  */
@@ -47,6 +47,13 @@ export interface Account extends BaseEntity {
     /** Sync settings */
     is_sync_enabled: boolean;
     last_synced_at?: Timestamp;
+    /**
+     * Optional Plaid liability detail (Investments-And-Liabilities-Modeling) —
+     * discriminated by `kind` (credit|mortgage|student). Present only on enriched
+     * liability accounts; absent on cash + un-enriched loans. Stored as-is (camelCase)
+     * so it round-trips to the Firestore doc + mobile without remapping.
+     */
+    liability?: LiabilityDetail;
     /** Access control metadata */
     access: AccessMetadata;
 }
@@ -191,7 +198,7 @@ export declare const account_repo: {
     }>, item_id: string, user_id: string, institution: {
         id: string;
         name: string;
-    }, group_id?: string): Promise<{
+    }, group_id?: string, liabilities?: LiabilityByAccountId): Promise<{
         created: number;
         updated: number;
         results: Array<{

@@ -22,6 +22,9 @@ import {
   DepositoryAccountSubtype,
   CreditAccountSubtype,
   InvestmentAccountSubtype,
+  LoanAccountSubtype,
+  LinkTokenAccountFilters,
+  LiabilitiesObject,
   JWKPublicKey,
 } from "plaid";
 import { PlaidCreateLinkTokenInput } from "../../types/plaid";
@@ -235,6 +238,75 @@ export async function fetch_plaid_balances(
   };
 }
 
+/** Result of {@link fetch_plaid_liabilities} — RAW Plaid liabilities object. */
+export interface PlaidLiabilitiesResult {
+  /** Raw Plaid `liabilities` object (credit/mortgage/student arrays) or null. */
+  liabilities: LiabilitiesObject | null;
+  request_id: string;
+}
+
+/**
+ * Fetches liability detail from Plaid (`/liabilities/get`) — Investments-And-
+ * Liabilities-Modeling. Returns RAW Plaid SDK types; mapping happens in the
+ * transformer.
+ *
+ * THROWS if the item wasn't linked with the Liabilities product (Plaid error
+ * `PRODUCTS_NOT_SUPPORTED` / `INVALID_PRODUCT`) — callers MUST catch and skip so a
+ * cash-only item doesn't fail the whole sync.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param account_ids - Optional specific account IDs to fetch
+ */
+export async function fetch_plaid_liabilities(
+  access_token: string,
+  account_ids?: string[]
+): Promise<PlaidLiabilitiesResult> {
+  const client = create_plaid_client();
+
+  const response = await with_retry(async () => {
+    return client.liabilitiesGet({
+      /* eslint-disable @typescript-eslint/naming-convention */
+      access_token,
+      options: account_ids ? { account_ids } : undefined,
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
+  });
+
+  return {
+    liabilities: response.data.liabilities ?? null,
+    request_id: response.data.request_id,
+  };
+}
+
+/**
+ * Fetches liabilities but NEVER throws — returns the raw liabilities object, or
+ * `null` when the item wasn't linked with the Liabilities product (the common
+ * case: cash-only items) or any other error. Lets the sync attach liabilities when
+ * available without ever failing the whole sync over a cash item.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @param trace_id - For logging the skip reason
+ */
+export async function safe_fetch_liabilities(
+  access_token: string,
+  trace_id: string
+): Promise<LiabilitiesObject | null> {
+  try {
+    const result = await fetch_plaid_liabilities(access_token);
+    return result.liabilities;
+  } catch (error) {
+    // PRODUCTS_NOT_SUPPORTED / INVALID_PRODUCT for cash-only items is EXPECTED —
+    // not an error worth failing the sync. Log at debug and move on.
+    const code =
+      (error as { response?: { data?: { error_code?: string } } })?.response?.data
+        ?.error_code ?? "UNKNOWN";
+    console.log(
+      `[${trace_id}] safe_fetch_liabilities: skipping (${code}) — item likely has no Liabilities product`
+    );
+    return null;
+  }
+}
+
 /**
  * Creates a Plaid Link token for initializing Plaid Link.
  *
@@ -250,6 +322,49 @@ export async function create_link_token(
   const client = create_plaid_client();
 
   /* eslint-disable @typescript-eslint/naming-convention */
+  // Two link flows (Investments-And-Liabilities-Modeling):
+  //  - "cash" (default): asset accounts — depository + investment. `products:
+  //    [Transactions]`. (Investments stay here so brokerages/401k remain linkable;
+  //    their data isn't enriched until the Investments product ships.)
+  //  - "liability": debt accounts — credit cards + ALL loan subtypes. Adds the
+  //    `Liabilities` product so APR/statement/min/due come back. Credit cards move
+  //    HERE (off the cash flow) so they get their liability detail.
+  // Liabilities is only requested on the liability flow → we don't pay/consent for
+  // it on every link. If Liabilities isn't dashboard-approved, this flow fails with
+  // INVALID_PRODUCT (same gate as Auth — see below).
+  const is_liability = (input.flow ?? "cash") === "liability";
+
+  const products = is_liability
+    ? [Products.Transactions, Products.Liabilities]
+    : [Products.Transactions];
+
+  const account_filters: LinkTokenAccountFilters = is_liability
+    ? {
+        credit: { account_subtypes: [CreditAccountSubtype.CreditCard] },
+        // ALL loan subtypes (mortgage/student/auto/home equity/LOC/…). Only
+        // credit/mortgage/student get Liabilities detail; the rest link balance-only.
+        loan: { account_subtypes: [LoanAccountSubtype.All] },
+      }
+    : {
+        depository: {
+          account_subtypes: [
+            DepositoryAccountSubtype.Checking,
+            DepositoryAccountSubtype.Savings,
+            DepositoryAccountSubtype.MoneyMarket,
+            DepositoryAccountSubtype.Cd,
+          ],
+        },
+        investment: {
+          account_subtypes: [
+            InvestmentAccountSubtype._401k,
+            InvestmentAccountSubtype._403B,
+            InvestmentAccountSubtype.Ira,
+            InvestmentAccountSubtype.Roth,
+            InvestmentAccountSubtype.Brokerage,
+          ],
+        },
+      };
+
   const request: LinkTokenCreateRequest = {
     client_name: "Family Finance",
     language: "en",
@@ -264,7 +379,7 @@ export async function create_link_token(
     // enabled on this Plaid account in Production — requesting it makes
     // linkTokenCreate fail with INVALID_PRODUCT. Re-add Auth only after Plaid
     // approves it (dashboard.plaid.com/overview/request-products).
-    products: [Products.Transactions],
+    products,
     // Pull the maximum history Plaid allows (730 days = 24 months) at link time.
     // Without this, Plaid defaults to ~90 days, which starves recurring-stream
     // detection (`transactionsRecurringGet` only sees the synced history) — so
@@ -274,28 +389,7 @@ export async function create_link_token(
     transactions: {
       days_requested: 730,
     },
-    account_filters: {
-      depository: {
-        account_subtypes: [
-          DepositoryAccountSubtype.Checking,
-          DepositoryAccountSubtype.Savings,
-          DepositoryAccountSubtype.MoneyMarket,
-          DepositoryAccountSubtype.Cd,
-        ],
-      },
-      credit: {
-        account_subtypes: [CreditAccountSubtype.CreditCard],
-      },
-      investment: {
-        account_subtypes: [
-          InvestmentAccountSubtype._401k,
-          InvestmentAccountSubtype._403B,
-          InvestmentAccountSubtype.Ira,
-          InvestmentAccountSubtype.Roth,
-          InvestmentAccountSubtype.Brokerage,
-        ],
-      },
-    },
+    account_filters,
     webhook: process.env.PLAID_WEBHOOK_URL || undefined,
     // OAuth return (iOS Universal Link). Must be HTTPS + exact-match a URI
     // registered in the Plaid Dashboard. Server-authoritative (like webhook):

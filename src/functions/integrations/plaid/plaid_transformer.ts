@@ -8,8 +8,13 @@
  */
 
 import { Timestamp } from "firebase-admin/firestore";
-import { AccountBase } from "plaid";
+import { AccountBase, LiabilitiesObject } from "plaid";
 import { DomainResult } from "../../types";
+import {
+  LiabilityByAccountId,
+  LiabilityApr,
+  LiabilityAddress,
+} from "../../types/plaid";
 import { PlaidInstitutionInfo } from "./plaid_client";
 
 /**
@@ -52,6 +57,133 @@ export function plaid_accounts_to_data(
       iso_currency_code: account.balances.iso_currency_code,
     },
   }));
+}
+
+// ============================================================================
+// Liabilities (Investments-And-Liabilities-Modeling)
+// ============================================================================
+
+/** PURE: ISO/`YYYY-MM-DD` date string → epoch ms (undefined if absent/invalid). */
+function liability_date_to_ms(s: string | null | undefined): number | undefined {
+  if (!s) return undefined;
+  const ms = new Date(s).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+/** PURE: nullable number → undefined-normalized number. */
+function liability_num(n: number | null | undefined): number | undefined {
+  return n === null || n === undefined ? undefined : n;
+}
+
+/** PURE: map a Plaid address-ish object → our LiabilityAddress. */
+function liability_address(
+  a:
+    | { street?: string | null; city?: string | null; region?: string | null; postal_code?: string | null; country?: string | null }
+    | null
+    | undefined
+): LiabilityAddress | undefined {
+  if (!a) return undefined;
+  const out: LiabilityAddress = {
+    street: a.street ?? undefined,
+    city: a.city ?? undefined,
+    region: a.region ?? undefined,
+    postalCode: a.postal_code ?? undefined,
+    country: a.country ?? undefined,
+  };
+  return Object.values(out).some((v) => v !== undefined) ? out : undefined;
+}
+
+/**
+ * PURE: convert a raw Plaid `liabilities` object into our discriminated
+ * `LiabilityDetail`s keyed by `account_id`. Credit / mortgage / student only —
+ * un-enriched loan types simply don't appear (→ no `liability` on the account).
+ * No IO, no side effects.
+ */
+export function plaid_liabilities_to_domain(
+  liabilities: LiabilitiesObject | null
+): LiabilityByAccountId {
+  const out: LiabilityByAccountId = {};
+  if (!liabilities) return out;
+
+  for (const c of liabilities.credit ?? []) {
+    if (!c.account_id) continue;
+    const aprs: LiabilityApr[] = (c.aprs ?? []).map((a) => ({
+      type: String(a.apr_type),
+      percentage: a.apr_percentage,
+      balanceSubjectToApr: liability_num(a.balance_subject_to_apr),
+      interestChargeAmount: liability_num(a.interest_charge_amount),
+    }));
+    out[c.account_id] = {
+      kind: "credit",
+      aprs,
+      lastStatementBalance: liability_num(c.last_statement_balance),
+      lastStatementIssueDateMs: liability_date_to_ms(c.last_statement_issue_date),
+      minimumPaymentAmount: liability_num(c.minimum_payment_amount),
+      nextPaymentDueDateMs: liability_date_to_ms(c.next_payment_due_date),
+      lastPaymentAmount: liability_num(c.last_payment_amount),
+      lastPaymentDateMs: liability_date_to_ms(c.last_payment_date),
+      isOverdue: c.is_overdue ?? undefined,
+    };
+  }
+
+  for (const m of liabilities.mortgage ?? []) {
+    if (!m.account_id) continue;
+    const past_due = liability_num(m.past_due_amount);
+    out[m.account_id] = {
+      kind: "mortgage",
+      interestRatePercentage: liability_num(m.interest_rate?.percentage),
+      interestRateType: m.interest_rate?.type ?? undefined,
+      originationDateMs: liability_date_to_ms(m.origination_date),
+      originationPrincipalAmount: liability_num(m.origination_principal_amount),
+      maturityDateMs: liability_date_to_ms(m.maturity_date),
+      loanTerm: m.loan_term ?? undefined,
+      nextMonthlyPayment: liability_num(m.next_monthly_payment),
+      nextPaymentDueDateMs: liability_date_to_ms(m.next_payment_due_date),
+      lastPaymentAmount: liability_num(m.last_payment_amount),
+      lastPaymentDateMs: liability_date_to_ms(m.last_payment_date),
+      escrowBalance: liability_num(m.escrow_balance),
+      currentLateFee: liability_num(m.current_late_fee),
+      pastDueAmount: past_due,
+      hasPmi: m.has_pmi ?? undefined,
+      hasPrepaymentPenalty: m.has_prepayment_penalty ?? undefined,
+      propertyAddress: liability_address(m.property_address),
+      ytdInterestPaid: liability_num(m.ytd_interest_paid),
+      ytdPrincipalPaid: liability_num(m.ytd_principal_paid),
+      // Mortgage has no `is_overdue` — derive it.
+      isOverdue: past_due !== undefined ? past_due > 0 : undefined,
+    };
+  }
+
+  for (const s of liabilities.student ?? []) {
+    if (!s.account_id) continue;
+    out[s.account_id] = {
+      kind: "student",
+      loanName: s.loan_name ?? undefined,
+      interestRatePercentage: liability_num(s.interest_rate_percentage),
+      minimumPaymentAmount: liability_num(s.minimum_payment_amount),
+      nextPaymentDueDateMs: liability_date_to_ms(s.next_payment_due_date),
+      lastPaymentAmount: liability_num(s.last_payment_amount),
+      lastPaymentDateMs: liability_date_to_ms(s.last_payment_date),
+      lastStatementBalance: liability_num(s.last_statement_balance),
+      lastStatementIssueDateMs: liability_date_to_ms(s.last_statement_issue_date),
+      originationDateMs: liability_date_to_ms(s.origination_date),
+      originationPrincipalAmount: liability_num(s.origination_principal_amount),
+      outstandingInterestAmount: liability_num(s.outstanding_interest_amount),
+      expectedPayoffDateMs: liability_date_to_ms(s.expected_payoff_date),
+      loanStatusType: s.loan_status?.type ? String(s.loan_status.type) : undefined,
+      repaymentPlanType: s.repayment_plan?.type ? String(s.repayment_plan.type) : undefined,
+      repaymentPlanDescription: s.repayment_plan?.description ?? undefined,
+      pslfEstimatedEligibilityDateMs: liability_date_to_ms(
+        s.pslf_status?.estimated_eligibility_date
+      ),
+      servicerAddress: liability_address(s.servicer_address),
+      ytdInterestPaid: liability_num(s.ytd_interest_paid),
+      ytdPrincipalPaid: liability_num(s.ytd_principal_paid),
+      isOverdue: s.is_overdue ?? undefined,
+    };
+  }
+
+  return out;
 }
 
 /**

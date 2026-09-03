@@ -31,7 +31,12 @@ import {
   create_item_failure_result,
   aggregate_balance_sync_results,
 } from "../../domain/plaid/balance_sync.service";
-import { fetch_plaid_balances, plaid_accounts_to_data } from "../../integrations/plaid";
+import {
+  fetch_plaid_balances,
+  plaid_accounts_to_data,
+  safe_fetch_liabilities,
+  plaid_liabilities_to_domain,
+} from "../../integrations/plaid";
 import { account_repo } from "../../repositories/account.repo";
 import { ACCOUNT_EVENTS } from "../../events/account.events";
 
@@ -133,6 +138,14 @@ export async function sync_balances_orchestrator(
       continue;
     }
 
+    // 2a2. Refresh liability detail on every balance sync (never fails the sync —
+    //      cash-only items return null). Investments-And-Liabilities-Modeling.
+    const raw_liabilities = await safe_fetch_liabilities(
+      item.access_token,
+      ctx.trace_id
+    );
+    const liabilities = plaid_liabilities_to_domain(raw_liabilities);
+
     // 2b. UPSERT ACCOUNTS (creates if new, updates balances if exists)
     try {
       const upsert_result = await account_repo.upsert_from_plaid(
@@ -141,7 +154,8 @@ export async function sync_balances_orchestrator(
         item.item_id,
         ctx.user_id,
         { id: item.institution_id, name: item.institution_name },
-        item.group_id
+        item.group_id,
+        liabilities
       );
 
       // 2c. BUILD ACCOUNT RESULTS

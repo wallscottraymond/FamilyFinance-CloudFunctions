@@ -7,8 +7,9 @@
  * @module integrations/plaid/plaid_transformer
  */
 import { Timestamp } from "firebase-admin/firestore";
-import { AccountBase } from "plaid";
+import { AccountBase, LiabilitiesObject } from "plaid";
 import { DomainResult } from "../../types";
+import { LiabilityByAccountId } from "../../types/plaid";
 import { PlaidInstitutionInfo } from "./plaid_client";
 /**
  * Account data in the snake_case domain-input shape the downstream
@@ -33,6 +34,13 @@ export interface PlaidAccountData {
  * PURE: map raw Plaid SDK accounts to the domain-input shape. No IO.
  */
 export declare function plaid_accounts_to_data(accounts: AccountBase[]): PlaidAccountData[];
+/**
+ * PURE: convert a raw Plaid `liabilities` object into our discriminated
+ * `LiabilityDetail`s keyed by `account_id`. Credit / mortgage / student only —
+ * un-enriched loan types simply don't appear (→ no `liability` on the account).
+ * No IO, no side effects.
+ */
+export declare function plaid_liabilities_to_domain(liabilities: LiabilitiesObject | null): LiabilityByAccountId;
 /**
  * Account entity ready for persistence.
  * Matches the structure expected by account_repo.
