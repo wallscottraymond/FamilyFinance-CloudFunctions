@@ -86,6 +86,8 @@ import {
   regenerate_recurring_occurrences_orchestrator,
   RegenerateRecurringOccurrencesInput,
 } from "../../orchestrators/recurring/regenerate_recurring_occurrences.orchestrator";
+import { sync_transactions_orchestrator } from "../../orchestrators/plaid/sync_transactions.orchestrator";
+import { create_job } from "../../infrastructure/job_queue";
 import {
   assign_recurring_transactions_orchestrator,
   AssignRecurringTransactionsInput,
@@ -222,6 +224,35 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   // Full, permanent user erase (revokes Plaid tokens + hard-deletes all data).
   purge_user_data: async (ctx, payload) => {
     await purge_user_data_orchestrator(ctx, payload as PurgeUserDataInput);
+  },
+
+  // Delayed transaction re-sync for a freshly-linked item — Plaid's initial history
+  // pull is ASYNC, so the sync at link time usually returns 0. Self-retries with an
+  // escalating delay until transactions arrive (or ~4 attempts), so new items don't
+  // depend on a timely SYNC_UPDATES_AVAILABLE webhook.
+  resync_transactions: async (ctx, payload) => {
+    const p = payload as { item_id: string; user_id: string; attempt?: number };
+    const attempt = p.attempt ?? 1;
+    const result = await sync_transactions_orchestrator({
+      trace_id: ctx.trace_id,
+      span_id: ctx.span_id,
+      input: { item_id: p.item_id, user_id: p.user_id },
+      user_id: p.user_id,
+      idempotency_key: `resync_transactions:${p.item_id}:${attempt}:${ctx.trace_id}`,
+    });
+    const got_data =
+      result.success && (result.added_count > 0 || result.modified_count > 0);
+    if (!got_data && attempt < 4) {
+      // Plaid still not ready — try again with an escalating delay (3, 6, 9 min).
+      await create_job(
+        "resync_transactions",
+        { item_id: p.item_id, user_id: p.user_id, attempt: attempt + 1 },
+        { delay_seconds: 180 * attempt, trace_id: ctx.trace_id }
+      );
+      console.log(
+        `[${ctx.trace_id}] resync_transactions: no data on attempt ${attempt} for ${p.item_id}; re-scheduled`
+      );
+    }
   },
 };
 

@@ -47,6 +47,7 @@ import {
 } from "../../domain/plaid";
 import { plaid_item_repo } from "../../repositories/plaid";
 import { account_repo } from "../../repositories/account.repo";
+import { create_job } from "../../infrastructure/job_queue";
 import { create_event_emitter, ACCOUNT_EVENTS, AccountCreatedPayload } from "../../events";
 import { sync_transactions_orchestrator } from "./sync_transactions.orchestrator";
 import {
@@ -195,6 +196,28 @@ export async function plaid_initial_sync_orchestrator(
       perf
     );
     phases.push(transactions_phase);
+
+    // A freshly-linked Plaid item almost always returns 0 transactions at link
+    // time — Plaid's initial history pull is ASYNC and only signalled later via a
+    // SYNC_UPDATES_AVAILABLE webhook (which can be late/absent). Schedule a delayed
+    // re-sync so transactions reliably land for new items regardless of webhook
+    // timing. The `resync_transactions` handler self-retries with backoff until
+    // data arrives. Non-fatal — never block the initial sync on this.
+    try {
+      await create_job(
+        "resync_transactions",
+        { item_id: ctx.input.item_doc_id, user_id: ctx.user_id, attempt: 1 },
+        { delay_seconds: 120, trace_id: ctx.trace_id }
+      );
+      console.log(
+        `[${ctx.trace_id}] Scheduled delayed transaction re-sync for item ${ctx.input.item_doc_id}`
+      );
+    } catch (error) {
+      console.warn(
+        `[${ctx.trace_id}] Failed to schedule delayed transaction re-sync:`,
+        error instanceof Error ? error.message : "unknown"
+      );
+    }
 
     // Check if we should continue
     if (!transactions_phase.success) {
