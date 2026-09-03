@@ -1896,8 +1896,21 @@ const CATEGORIES_DATA = {
 
 // Categories upload function
 export const uploadCategoriesData = onCall({ cors: true }, async (request) => {
+  // 1. Authentication check
+  if (!request.auth) {
+    console.error('❌ [uploadCategoriesData] Unauthenticated request');
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // 2. Admin role check — this overwrites the entire categories collection
+  const isAdmin = request.auth.token?.role === 'admin';
+  if (!isAdmin) {
+    console.error(`❌ [uploadCategoriesData] Non-admin user attempted upload: ${request.auth.uid}`);
+    throw new HttpsError('permission-denied', 'Only admins can upload categories');
+  }
+
   try {
-    console.log('Starting categories upload...');
+    console.log(`Starting categories upload... (admin: ${request.auth.uid})`);
     const db = getFirestore();
 
     const fullCategoriesData = CATEGORIES_DATA;

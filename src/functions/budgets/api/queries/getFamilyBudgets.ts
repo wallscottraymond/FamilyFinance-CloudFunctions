@@ -1,86 +1,76 @@
-import { onRequest } from "firebase-functions/v2/https";
-import { 
-  Budget, 
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import {
+  Budget,
   UserRole
 } from "../../../../types";
-import { 
+import {
   queryDocuments,
   updateDocument
 } from "../../../../utils/firestore";
-import { 
-  authMiddleware, 
-  createErrorResponse, 
-  createSuccessResponse
-} from "../../../../utils/auth";
-import { firebaseCors } from "../../../../middleware/cors";
+import { authenticateRequest } from "../../../../utils/auth";
 
 /**
- * Get family budgets
+ * Get family budgets.
+ *
+ * Callable (onCall): use the Firebase Functions SDK (httpsCallable). Returns the
+ * Budget[] directly. Users without a family get a `failed-precondition` error whose
+ * message contains "User must belong to a family" — the client detects this and
+ * falls back to personal budgets.
  */
-export const getFamilyBudgets = onRequest({
+export const getFamilyBudgets = onCall({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
   cors: true
-}, async (request, response) => {
-  return firebaseCors(request, response, async () => {
-    if (request.method !== "GET") {
-      return response.status(405).json(
-        createErrorResponse("method-not-allowed", "Only GET requests are allowed")
-      );
+}, async (request): Promise<Budget[]> => {
+  // Authenticate (callable-aware helper reads request.auth)
+  let userData;
+  try {
+    ({ userData } = await authenticateRequest(request, UserRole.VIEWER));
+  } catch (error: any) {
+    throw new HttpsError("unauthenticated", error?.message || "Authentication required");
+  }
+
+  if (!userData.familyId) {
+    // Message preserved for the client's no-family fallback detection
+    throw new HttpsError("failed-precondition", "User must belong to a family");
+  }
+
+  try {
+    const data = (request.data || {}) as { includeInactive?: boolean | string; limit?: number; offset?: number };
+    const includeInactive = data.includeInactive === true || data.includeInactive === "true";
+    const limit = Number(data.limit) || 50;
+    const offset = Number(data.offset) || 0;
+
+    // Build query conditions
+    const whereConditions = [
+      { field: "familyId", operator: "==" as const, value: userData.familyId },
+    ];
+
+    if (!includeInactive) {
+      whereConditions.push({ field: "isActive", operator: "==" as const, value: "true" });
     }
 
-    try {
-      // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.VIEWER);
-      if (!authResult.success || !authResult.user) {
-        return response.status(401).json(authResult.error);
-      }
+    // Query budgets
+    const budgets = await queryDocuments<Budget>("budgets", {
+      where: whereConditions,
+      orderBy: "createdAt",
+      orderDirection: "desc",
+      limit,
+      offset,
+    });
 
-      const { user } = authResult;
+    // Update spent amounts for all budgets
+    const updatedBudgets = await Promise.all(
+      budgets.map(budget => updateBudgetSpentAmount(budget))
+    );
 
-      if (!user.familyId) {
-        return response.status(400).json(
-          createErrorResponse("no-family", "User must belong to a family")
-        );
-      }
+    return updatedBudgets;
 
-      const includeInactive = request.query.includeInactive === "true";
-      const limit = parseInt(request.query.limit as string) || 50;
-      const offset = parseInt(request.query.offset as string) || 0;
-
-      // Build query conditions
-      const whereConditions = [
-        { field: "familyId", operator: "==" as const, value: user.familyId },
-      ];
-
-      if (!includeInactive) {
-        whereConditions.push({ field: "isActive", operator: "==" as const, value: "true" });
-      }
-
-      // Query budgets
-      const budgets = await queryDocuments<Budget>("budgets", {
-        where: whereConditions,
-        orderBy: "createdAt",
-        orderDirection: "desc",
-        limit,
-        offset,
-      });
-
-      // Update spent amounts for all budgets
-      const updatedBudgets = await Promise.all(
-        budgets.map(budget => updateBudgetSpentAmount(budget))
-      );
-
-      return response.status(200).json(createSuccessResponse(updatedBudgets));
-
-    } catch (error: any) {
-      console.error("Error getting family budgets:", error);
-      return response.status(500).json(
-        createErrorResponse("internal-error", "Failed to get family budgets")
-      );
-    }
-  });
+  } catch (error: any) {
+    console.error("Error getting family budgets:", error);
+    throw new HttpsError("internal", "Failed to get family budgets");
+  }
 });
 
 /**

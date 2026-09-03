@@ -1,4 +1,4 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import {
   Budget,
   UserRole,
@@ -8,103 +8,80 @@ import {
   queryDocuments,
   updateDocument
 } from "../../../../utils/firestore";
-import {
-  authMiddleware,
-  createErrorResponse,
-  createSuccessResponse
-} from "../../../../utils/auth";
-import { firebaseCors } from "../../../../middleware/cors";
+import { authenticateRequest } from "../../../../utils/auth";
 
 /**
  * Get personal budgets for individual users (not family-based)
- * This function works for users regardless of family membership
+ * This function works for users regardless of family membership.
+ *
+ * Callable (onCall): use the Firebase Functions SDK (httpsCallable) — the client
+ * no longer hand-builds URLs or attaches tokens. Returns the Budget[] directly.
  */
-export const getPersonalBudgets = onRequest({
+export const getPersonalBudgets = onCall({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
   cors: true
-}, async (request, response) => {
-  return firebaseCors(request, response, async () => {
-    if (request.method !== "GET") {
-      return response.status(405).json(
-        createErrorResponse("method-not-allowed", "Only GET requests are allowed")
-      );
+}, async (request): Promise<Budget[]> => {
+  // Authenticate (callable-aware helper reads request.auth)
+  let userData;
+  try {
+    ({ userData } = await authenticateRequest(request, UserRole.VIEWER));
+  } catch (error: any) {
+    throw new HttpsError("unauthenticated", error?.message || "Authentication required");
+  }
+
+  try {
+    // Optional filters from the callable payload
+    const { startDate, endDate, category, isActive } = (request.data || {}) as {
+      startDate?: string; endDate?: string; category?: string; isActive?: string | boolean;
+    };
+
+    // Build query conditions
+    const whereConditions: WhereClause[] = [
+      { field: "createdBy", operator: "==", value: userData.id },
+    ];
+
+    if (startDate) {
+      whereConditions.push({ field: "startDate", operator: ">=", value: startDate });
     }
 
-    try {
-      // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.VIEWER);
-      if (!authResult.success || !authResult.user) {
-        return response.status(401).json(authResult.error);
-      }
+    if (endDate) {
+      whereConditions.push({ field: "endDate", operator: "<=", value: endDate });
+    }
 
-      const { user } = authResult;
+    if (category) {
+      whereConditions.push({ field: "categoryIds", operator: "array-contains", value: category });
+    }
 
-      // Parse query parameters for filtering
-      const { startDate, endDate, category, isActive } = request.query;
-
-      // Build query conditions
-      const whereConditions: WhereClause[] = [
-        { field: "createdBy", operator: "==", value: user.id },
-      ];
-
-      // Add optional filters
-      if (startDate) {
-        whereConditions.push({
-          field: "startDate",
-          operator: ">=",
-          value: startDate as string
-        });
-      }
-
-      if (endDate) {
-        whereConditions.push({
-          field: "endDate",
-          operator: "<=",
-          value: endDate as string
-        });
-      }
-
-      if (category) {
-        whereConditions.push({
-          field: "categoryIds",
-          operator: "array-contains",
-          value: category as string
-        });
-      }
-
-      if (isActive !== undefined) {
-        whereConditions.push({
-          field: "isActive",
-          operator: "==",
-          value: isActive === 'true'
-        });
-      }
-
-      // Query personal budgets created by this user
-      const budgets = await queryDocuments<Budget>("budgets", {
-        where: whereConditions,
-        orderBy: "createdAt",
-        orderDirection: "desc",
+    if (isActive !== undefined) {
+      whereConditions.push({
+        field: "isActive",
+        operator: "==",
+        value: isActive === true || isActive === 'true'
       });
-
-      console.log(`[getPersonalBudgets] Found ${budgets.length} personal budgets for user ${user.id}`);
-
-      // Update spent amounts for all budgets (optional - can be disabled for performance)
-      const updatedBudgets = await Promise.all(
-        budgets.map(budget => updateBudgetSpentAmount(budget))
-      );
-
-      return response.status(200).json(createSuccessResponse(updatedBudgets));
-
-    } catch (error: any) {
-      console.error("Error getting personal budgets:", error);
-      return response.status(500).json(
-        createErrorResponse("internal-error", "Failed to get personal budgets")
-      );
     }
-  });
+
+    // Query personal budgets created by this user
+    const budgets = await queryDocuments<Budget>("budgets", {
+      where: whereConditions,
+      orderBy: "createdAt",
+      orderDirection: "desc",
+    });
+
+    console.log(`[getPersonalBudgets] Found ${budgets.length} personal budgets for user ${userData.id}`);
+
+    // Update spent amounts for all budgets (optional - can be disabled for performance)
+    const updatedBudgets = await Promise.all(
+      budgets.map(budget => updateBudgetSpentAmount(budget))
+    );
+
+    return updatedBudgets;
+
+  } catch (error: any) {
+    console.error("Error getting personal budgets:", error);
+    throw new HttpsError("internal", "Failed to get personal budgets");
+  }
 });
 
 /**

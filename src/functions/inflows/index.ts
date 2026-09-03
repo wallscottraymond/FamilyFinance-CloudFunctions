@@ -22,7 +22,7 @@
 // =============================================================================
 // These legacy triggers have been replaced by the 5-layer architecture:
 // - onInflowCreated → entry/triggers/on_inflow_created.trigger.ts
-// - onInflowUpdated → (pending migration)
+// - onInflowUpdated → entry/triggers/on_recurring_updated.trigger.ts (on_inflow_updated)
 //
 // The new triggers use:
 // - Entry → Orchestrator → Resolver → Domain → Repository
@@ -31,8 +31,11 @@
 // =============================================================================
 // export { onInflowCreated } from "./orchestration/triggers/onInflowCreated";  // DEPRECATED
 
-// Keep onInflowUpdated until it's migrated to new architecture
-export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
+// RETIRED 2026-09-02 (BE-1): superseded by `on_inflow_updated`
+// (entry/triggers/on_recurring_updated.trigger.ts). Both fired on inflows/{id} →
+// double `runUpdateInflowPeriods` (double period recompute + race). Removing the
+// export deletes the legacy `onInflowUpdated` function on the next deploy.
+// export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
 
 // Scheduled
 export { extendRecurringInflowPeriods } from "./orchestration/scheduled/extendRecurringInflowPeriods";

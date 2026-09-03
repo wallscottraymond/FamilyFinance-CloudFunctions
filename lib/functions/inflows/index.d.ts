@@ -14,7 +14,6 @@
  * - orchestration/scheduled: Scheduled functions (rolling window maintenance)
  * - inflow_periods/utils: Utilities for period management, alignment, prediction
  */
-export { onInflowUpdated } from "./orchestration/triggers/onInflowUpdated";
 export { extendRecurringInflowPeriods } from "./orchestration/scheduled/extendRecurringInflowPeriods";
 export { regenerateInflowPeriods } from "./inflow_periods/api/regenerateInflowPeriods";
 export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";

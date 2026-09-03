@@ -1,1 +1,1 @@
-{"version":3,"file":"getFamilyBudgets.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/queries/getFamilyBudgets.ts"],"names":[],"mappings":"AAgBA;;GAEG;AACH,eAAO,MAAM,gBAAgB,qDAgE3B,CAAC"}
+{"version":3,"file":"getFamilyBudgets.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/queries/getFamilyBudgets.ts"],"names":[],"mappings":"AACA,OAAO,EACL,MAAM,EAEP,MAAM,mBAAmB,CAAC;AAO3B;;;;;;;GAOG;AACH,eAAO,MAAM,gBAAgB,yFAsD3B,CAAC"}

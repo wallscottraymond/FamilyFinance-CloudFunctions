@@ -18,6 +18,7 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
+import { authMiddleware, UserRole } from '../../utils/auth';
 import { initializeApp, getApps } from 'firebase-admin/app';
 
 // Initialize Firebase Admin if not already initialized
@@ -199,8 +200,15 @@ export const verifyAccessControl = onRequest({
   memory: '512MiB',
   timeoutSeconds: 120,
 }, async (req, res) => {
+  // Authenticate + require ADMIN — this endpoint reads user data across all collections
+  const authResult = await authMiddleware(req, UserRole.ADMIN);
+  if (!authResult.success) {
+    res.status(401).json(authResult.error);
+    return;
+  }
+
   try {
-    console.log('🔍 Starting access control verification across all collections...');
+    console.log(`🔍 Starting access control verification across all collections... (admin: ${authResult.user?.email})`);
 
     // Collections to verify
     const collectionsToVerify = [

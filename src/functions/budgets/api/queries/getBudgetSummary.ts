@@ -1,87 +1,72 @@
-import { onRequest } from "firebase-functions/v2/https";
-import { 
-  Budget, 
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import {
+  Budget,
   UserRole
 } from "../../../../types";
-import { 
-  getDocument, 
+import {
+  getDocument,
   queryDocuments
 } from "../../../../utils/firestore";
-import { 
-  authMiddleware, 
-  createErrorResponse, 
-  createSuccessResponse,
-  checkFamilyAccess 
+import {
+  authenticateRequest,
+  checkFamilyAccess
 } from "../../../../utils/auth";
-import { firebaseCors } from "../../../../middleware/cors";
 
 /**
- * Get budget spending summary
+ * Get budget spending summary.
+ *
+ * Callable (onCall): use the Firebase Functions SDK (httpsCallable). Returns the
+ * summary object directly. Pass `{ id: budgetId }` in the callable payload.
  */
-export const getBudgetSummary = onRequest({
+export const getBudgetSummary = onCall({
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
   cors: true
-}, async (request, response) => {
-  return firebaseCors(request, response, async () => {
-    if (request.method !== "GET") {
-      return response.status(405).json(
-        createErrorResponse("method-not-allowed", "Only GET requests are allowed")
-      );
+}, async (request) => {
+  const budgetId = (request.data?.id as string) || "";
+  if (!budgetId) {
+    throw new HttpsError("invalid-argument", "Budget ID is required");
+  }
+
+  // Authenticate (callable-aware helper reads request.auth)
+  let userData;
+  try {
+    ({ userData } = await authenticateRequest(request, UserRole.VIEWER));
+  } catch (error: any) {
+    throw new HttpsError("unauthenticated", error?.message || "Authentication required");
+  }
+
+  try {
+    // Get budget
+    const budget = await getDocument<Budget>("budgets", budgetId);
+    if (!budget) {
+      throw new HttpsError("not-found", "Budget not found");
     }
 
-    try {
-      const budgetId = request.query.id as string;
-      if (!budgetId) {
-        return response.status(400).json(
-          createErrorResponse("missing-parameter", "Budget ID is required")
-        );
+    // Check access - for individual budgets check ownership/membership, for shared budgets check family access
+    if (budget.isShared && budget.familyId) {
+      // Shared budget - check family access
+      if (!await checkFamilyAccess(userData.id!, budget.familyId)) {
+        throw new HttpsError("permission-denied", "Cannot access this family budget");
       }
-
-      // Authenticate user
-      const authResult = await authMiddleware(request, UserRole.VIEWER);
-      if (!authResult.success || !authResult.user) {
-        return response.status(401).json(authResult.error);
+    } else {
+      // Individual budget - check ownership or membership
+      if (budget.createdBy !== userData.id! && !(budget.memberIds || []).includes(userData.id!)) {
+        throw new HttpsError("permission-denied", "Cannot access this budget");
       }
+    }
 
-      const { user } = authResult;
-
-      // Get budget
-      const budget = await getDocument<Budget>("budgets", budgetId);
-      if (!budget) {
-        return response.status(404).json(
-          createErrorResponse("budget-not-found", "Budget not found")
-        );
-      }
-
-      // Check access - for individual budgets check ownership/membership, for shared budgets check family access
-      if (budget.isShared && budget.familyId) {
-        // Shared budget - check family access
-        if (!await checkFamilyAccess(user.id!, budget.familyId)) {
-          return response.status(403).json(
-            createErrorResponse("access-denied", "Cannot access this family budget")
-          );
-        }
-      } else {
-        // Individual budget - check ownership or membership
-        if (budget.createdBy !== user.id! && !(budget.memberIds || []).includes(user.id!)) {
-          return response.status(403).json(
-            createErrorResponse("access-denied", "Cannot access this budget")
-          );
-        }
-      }
-
-      // Get transactions for this budget
-      const transactions = await queryDocuments("transactions", {
-        where: [
-          { field: "budgetId", operator: "==", value: budgetId },
-          { field: "status", operator: "==", value: "approved" },
-          { field: "type", operator: "==", value: "expense" },
-        ],
-        orderBy: "date",
-        orderDirection: "desc",
-      });
+    // Get transactions for this budget
+    const transactions = await queryDocuments("transactions", {
+      where: [
+        { field: "budgetId", operator: "==", value: budgetId },
+        { field: "status", operator: "==", value: "approved" },
+        { field: "type", operator: "==", value: "expense" },
+      ],
+      orderBy: "date",
+      orderDirection: "desc",
+    });
 
       // Calculate spending by member
       const spendingByMember: Record<string, { amount: number; transactionCount: number }> = {};
@@ -138,13 +123,12 @@ export const getBudgetSummary = onRequest({
         members: spendingSummary,
       };
 
-      return response.status(200).json(createSuccessResponse(summary));
+      return summary;
 
-    } catch (error: any) {
-      console.error("Error getting budget summary:", error);
-      return response.status(500).json(
-        createErrorResponse("internal-error", "Failed to get budget summary")
-      );
-    }
-  });
+  } catch (error: any) {
+    // Preserve intentional HttpsErrors (not-found, permission-denied, …)
+    if (error instanceof HttpsError) throw error;
+    console.error("Error getting budget summary:", error);
+    throw new HttpsError("internal", "Failed to get budget summary");
+  }
 });

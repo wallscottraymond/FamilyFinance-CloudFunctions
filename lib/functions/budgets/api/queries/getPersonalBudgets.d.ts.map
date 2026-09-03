@@ -1,1 +1,1 @@
-{"version":3,"file":"getPersonalBudgets.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/queries/getPersonalBudgets.ts"],"names":[],"mappings":"AAiBA;;;GAGG;AACH,eAAO,MAAM,kBAAkB,qDAsF7B,CAAC"}
+{"version":3,"file":"getPersonalBudgets.d.ts","sourceRoot":"","sources":["../../../../../src/functions/budgets/api/queries/getPersonalBudgets.ts"],"names":[],"mappings":"AACA,OAAO,EACL,MAAM,EAGP,MAAM,mBAAmB,CAAC;AAO3B;;;;;;GAMG;AACH,eAAO,MAAM,kBAAkB,yFAiE7B,CAAC"}

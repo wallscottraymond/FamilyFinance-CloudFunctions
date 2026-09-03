@@ -14,7 +14,7 @@
     "lint": "eslint --ext .js,.ts .",
     "lint:fix": "eslint --ext .js,.ts . --fix",
     "test": "jest --selectProjects unit",
-    "test:guardrail": "jest --selectProjects unit --testPathPattern \"trigger_safety|doc_change\"",
+    "test:guardrail": "jest --selectProjects unit --testPathPattern \"trigger_safety|doc_change\" --no-watchman",
     "test:watch": "jest --selectProjects unit --watch",
     "test:emulator": "jest --selectProjects emulator",
     "test:emulator:watch": "jest --selectProjects emulator --watch",

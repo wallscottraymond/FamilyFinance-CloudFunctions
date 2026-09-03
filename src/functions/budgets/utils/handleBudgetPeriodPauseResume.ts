@@ -164,6 +164,23 @@ export async function handleBudgetPeriodPauseResume(
 
     console.log(`[handleBudgetPeriodPauseResume] Found Everything Else period: ${everythingElsePeriod.id}`);
 
+    // Idempotency guard (BE-5): a paused period carries `pausedAllocatedAmount`. If we're
+    // already in the target state, no-op — so a replay/retry can't re-apply the Everything-Else
+    // transfer and double-count its allocated/remaining/spent totals.
+    const alreadyPaused = (periodData as any).pausedAllocatedAmount != null;
+    if (isPausing && alreadyPaused) {
+      result.success = true;
+      result.action = 'paused';
+      result.message = 'Budget period already paused (idempotent no-op)';
+      return result;
+    }
+    if (!isPausing && !alreadyPaused) {
+      result.success = true;
+      result.action = 'resumed';
+      result.message = 'Budget period already resumed (idempotent no-op)';
+      return result;
+    }
+
     if (isPausing) {
       // PAUSING: Reassign splits to Everything Else
       const transactions = await findTransactionsForBudgetPeriod(
@@ -218,11 +235,14 @@ export async function handleBudgetPeriodPauseResume(
         updatedAt: Timestamp.now()
       });
 
-      // Update Everything Else period allocation
+      // Update Everything Else period allocation — read-modify-REPLACE (absolute set),
+      // NOT FieldValue.increment (BE-5): increments double-apply on a write retry, and
+      // absolute values are idempotent.
+      const eePaused = everythingElsePeriod.data() as any;
       batch.update(everythingElsePeriod.ref, {
-        allocatedAmount: FieldValue.increment(allocatedAmount),
-        remaining: FieldValue.increment(allocatedAmount - totalAmountReassigned),
-        spent: FieldValue.increment(totalAmountReassigned),
+        allocatedAmount: (eePaused.allocatedAmount || 0) + allocatedAmount,
+        remaining: (eePaused.remaining || 0) + (allocatedAmount - totalAmountReassigned),
+        spent: (eePaused.spent || 0) + totalAmountReassigned,
         updatedAt: Timestamp.now()
       });
 
@@ -290,11 +310,13 @@ export async function handleBudgetPeriodPauseResume(
         updatedAt: Timestamp.now()
       });
 
-      // Update Everything Else period - subtract the reclaimed amounts
+      // Update Everything Else period — subtract via absolute read-modify-REPLACE
+      // (not FieldValue.increment — idempotent under retry). BE-5.
+      const eeResume = everythingElsePeriod.data() as any;
       batch.update(everythingElsePeriod.ref, {
-        allocatedAmount: FieldValue.increment(-pausedAllocated),
-        remaining: FieldValue.increment(-(pausedAllocated - totalAmountReclaimed)),
-        spent: FieldValue.increment(-totalAmountReclaimed),
+        allocatedAmount: (eeResume.allocatedAmount || 0) - pausedAllocated,
+        remaining: (eeResume.remaining || 0) - (pausedAllocated - totalAmountReclaimed),
+        spent: (eeResume.spent || 0) - totalAmountReclaimed,
         updatedAt: Timestamp.now()
       });
 
