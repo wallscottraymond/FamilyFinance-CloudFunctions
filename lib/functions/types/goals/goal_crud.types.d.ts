@@ -81,6 +81,7 @@ export declare const update_goal_input_schema: z.ZodObject<{
     status: z.ZodOptional<z.ZodEnum<{
         active: "active";
         completed: "completed";
+        paused: "paused";
         archived: "archived";
     }>>;
     linked_recurring_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;

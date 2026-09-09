@@ -20,8 +20,12 @@ export type GoalType =
   | "savings" // ongoing: hold/grow ≥ X per period in a watched account
   | "invest"; // like savings, but scoped to investment accounts
 
-/** Lifecycle. `completed` = target reached (celebrated); `archived` = off the active view. */
-export type GoalStatus = "active" | "completed" | "archived";
+/**
+ * Lifecycle. `paused` = temporarily not counted (no income draw, hidden from the
+ * active period section) but resumable; `completed` = target reached (celebrated);
+ * `archived` = deleted/off the active view.
+ */
+export type GoalStatus = "active" | "paused" | "completed" | "archived";
 
 /**
  * The cadence the user set the per-period amount in ("$X per week/month/…").

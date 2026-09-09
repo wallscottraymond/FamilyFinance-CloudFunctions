@@ -13,8 +13,12 @@
 import { Timestamp } from "firebase-admin/firestore";
 /** The four goal kinds. */
 export type GoalType = "debt_paydown" | "big_purchase" | "savings" | "invest";
-/** Lifecycle. `completed` = target reached (celebrated); `archived` = off the active view. */
-export type GoalStatus = "active" | "completed" | "archived";
+/**
+ * Lifecycle. `paused` = temporarily not counted (no income draw, hidden from the
+ * active period section) but resumable; `completed` = target reached (celebrated);
+ * `archived` = deleted/off the active view.
+ */
+export type GoalStatus = "active" | "paused" | "completed" | "archived";
 /**
  * The cadence the user set the per-period amount in ("$X per week/month/…").
  * Mirrors the budget PeriodInstanceCadence so cadence translation is shared.

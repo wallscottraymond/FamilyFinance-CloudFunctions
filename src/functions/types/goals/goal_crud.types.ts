@@ -102,7 +102,7 @@ export const update_goal_input_schema = z.object({
   home_cadence: z.enum(GOAL_CADENCE_VALUES).optional(),
   per_period_amount: z.number().positive().optional(),
   priority_rank: z.number().int().min(0).optional(),
-  status: z.enum(["active", "completed", "archived"]).optional(),
+  status: z.enum(["active", "paused", "completed", "archived"]).optional(),
   linked_recurring_id: z.string().nullable().optional(),
   apr: z.number().min(0).max(100).nullable().optional(),
   minimum_payment: z.number().min(0).nullable().optional(),
