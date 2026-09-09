@@ -19,6 +19,12 @@ export { create_budget } from "./create_budget.entry";
 export { update_budget } from "./update_budget.entry";
 export { delete_budget } from "./delete_budget.entry";
 
+// Goal CRUD operations (Goals — Phase 1)
+export { create_goal } from "./create_goal.entry";
+export { update_goal } from "./update_goal.entry";
+export { delete_goal } from "./delete_goal.entry";
+export { derive_goals_view } from "./derive_goals_view.entry";
+
 // Derive-On-Read Period Architecture (Phase 1): budget view derivation
 export { derive_budget_view } from "./derive_budget_view.entry";
 // Budget-detail transactions (on-read owner + derived status; ignored/transfers section)

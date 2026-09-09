@@ -24,6 +24,8 @@ import {
 } from "../../repositories";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { goal_repo } from "../../repositories/goal.repo";
+import { GoalForLeftover } from "../../domain/budgets/everything_else_leftover.service";
 import {
   ViewBucket,
   MonthlyPeriodForDerivation,
@@ -90,6 +92,8 @@ export interface PeriodDerivationDeps {
   any_ee_id: string | null;
   splits_for_match: SplitForOnReadMatch[];
   recurring: RecurringForDerivation[];
+  /** Active income-drawing goals' planned set-aside (for the EE leftover). */
+  goals: GoalForLeftover[];
   /** Real INCOME_* credits in the window not tied to any recurring inflow (→ "Other income"). */
   other_income_credits: DepositForSlot[];
   span_start_ms: number;
@@ -106,7 +110,7 @@ export async function resolve_period_derivation_deps(
   // 1. Fetch everything that only needs user_id + the requested window in ONE
   // parallel round-trip. Only the transaction read depends on the derived period
   // span (computed below), so it alone follows — 2 IO layers instead of 4.
-  const [overlapping, budget_entities, monthly_period_docs, outflows, inflows] =
+  const [overlapping, budget_entities, monthly_period_docs, outflows, inflows, all_goals] =
     await Promise.all([
       source_period_repo.get_overlapping(
         ctx,
@@ -117,7 +121,14 @@ export async function resolve_period_derivation_deps(
       budget_period_repo.get_by_user_and_type(ctx, user_id, "monthly"),
       outflow_repo.get_by_user_id(ctx, user_id),
       inflow_repo.get_by_user_id(ctx, user_id),
+      goal_repo.get_by_user(ctx, user_id),
     ]);
+
+  // Active, income-drawing goals contribute their planned per-period set-aside to
+  // the Everything-Else leftover (EE limit = income − bills − goals − budgets).
+  const goals: GoalForLeftover[] = all_goals
+    .filter((g) => g.status === "active" && g.draws_income)
+    .map((g) => ({ per_period_amount: g.per_period_amount, home_cadence: g.home_cadence }));
 
   // Buckets for the requested cadence overlapping the window.
   const view_buckets: ViewBucket[] = overlapping
@@ -432,6 +443,7 @@ export async function resolve_period_derivation_deps(
     any_ee_id,
     splits_for_match,
     recurring,
+    goals,
     other_income_credits,
     span_start_ms,
     span_end_ms,

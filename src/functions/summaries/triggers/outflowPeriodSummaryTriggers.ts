@@ -120,8 +120,13 @@ export const on_outflow_period_updated_summary = onDocumentUpdated(
         },
         {
           trace_id,
-          // No delay - job is processed immediately by on_job_created trigger
-          // Deduplication prevents duplicates while a job is active
+          // DEBOUNCE (cost fix): delay the rebuild so a burst of period updates for
+          // the SAME summary (e.g. bulk period regen / reactivation / backfill —
+          // hundreds/thousands of writes) collapses into ONE rebuild via the
+          // dedup key, instead of one expensive multi-read rebuild PER period
+          // update. A delayed job stays `pending`, so has_active_job dedups against
+          // it for the whole window. The rebuild still runs within ~30s.
+          delay_seconds: 30,
         }
       );
 
@@ -214,8 +219,10 @@ export const on_outflow_period_deleted_summary = onDocumentDeleted(
         },
         {
           trace_id,
-          // No delay - job is processed immediately by on_job_created trigger
-          // Deduplication prevents duplicates while a job is active
+          // DEBOUNCE (cost fix): coalesce a burst of period updates for the same
+          // summary into ONE rebuild via the dedup key (a delayed job stays
+          // `pending`, so has_active_job dedups against it for the window).
+          delay_seconds: 30,
         }
       );
 

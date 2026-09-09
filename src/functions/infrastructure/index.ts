@@ -110,6 +110,7 @@ export {
   list_dlq_jobs,
   get_job_stats,
   cleanup_completed_jobs,
+  purge_finished_jobs,
   claim_job,
 } from "./job_queue";
 

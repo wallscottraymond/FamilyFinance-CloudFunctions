@@ -119,8 +119,10 @@ export const on_inflow_period_updated_period_summary = onDocumentUpdated(
         },
         {
           trace_id,
-          // No delay - job is processed immediately by on_job_created trigger
-          // Deduplication prevents duplicates while a job is active
+          // DEBOUNCE (cost fix): coalesce a burst of period updates for the same
+          // summary into ONE rebuild via the dedup key (a delayed job stays
+          // `pending`, so has_active_job dedups against it for the window).
+          delay_seconds: 30,
         }
       );
 
@@ -215,8 +217,10 @@ export const on_inflow_period_deleted_period_summary = onDocumentDeleted(
         },
         {
           trace_id,
-          // No delay - job is processed immediately by on_job_created trigger
-          // Deduplication prevents duplicates while a job is active
+          // DEBOUNCE (cost fix): coalesce a burst of period updates for the same
+          // summary into ONE rebuild via the dedup key (a delayed job stays
+          // `pending`, so has_active_job dedups against it for the window).
+          delay_seconds: 30,
         }
       );
 

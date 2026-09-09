@@ -35,6 +35,7 @@ import {
   DerivedBudgetViewPeriod,
 } from "../../domain/budgets/budget_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
+import { derive_period_orchestrator } from "../periods/derive_period.orchestrator";
 
 /** Read-only budget: derivation reads a bounded window; keep it generous. */
 const BUDGET: PerformanceBudget = {
@@ -86,6 +87,29 @@ export async function derive_budget_view_orchestrator(
       return null;
     }
 
+    // 1b. EVERYTHING-ELSE: its limit is the derived leftover (income − bills −
+    //     goals − other budgets), which the whole-period derivation already
+    //     computes. Delegate to it (single source of truth) rather than
+    //     re-fetching income/bills/goals here — so the detail screen matches the
+    //     period-page tile exactly. See Everything-Else-Leftover-Limit.
+    if (budget.is_system_everything_else === true) {
+      const period_result = await derive_period_orchestrator(ctx, user_id, {
+        view_cadence: input.view_cadence,
+        window_start_ms: input.window_start_ms,
+        window_end_ms: input.window_end_ms,
+      });
+      const ee = period_result.budgets.find(
+        (b) => b.is_everything_else && b.budget_id === input.budget_id
+      );
+      log_operation_success(span, user_id);
+      return {
+        budget_id: input.budget_id,
+        budget_name: budget.name,
+        view_cadence: input.view_cadence,
+        periods: ee?.periods ?? [],
+      };
+    }
+
     // 2. Gather derivation inputs (buckets + monthly periods + splits), bounded
     //    to the window.
     const deps = await resolve_budget_view_deps(
@@ -96,7 +120,7 @@ export async function derive_budget_view_orchestrator(
       input.window_start_ms,
       input.window_end_ms,
       input.match_mode ?? "stored",
-      budget.is_system_everything_else === true
+      false // EE returned early above (its limit = derived leftover via derive_period)
     );
     perf.reads += input.match_mode === "on_read" ? 4 : 3;
 

@@ -261,7 +261,11 @@ async function enqueue_summary_update_jobs(
           source_period_id,
           deduplication_key,
         },
-        { trace_id: ctx.trace_id }
+        // DEBOUNCE (cost fix): bulk period generation/regen enqueues one job per
+        // (period_type, source_period) — a delayed job stays `pending`, so any
+        // trigger-side updates that land in the same window dedup against it
+        // instead of spawning a second expensive rebuild for the same summary.
+        { trace_id: ctx.trace_id, delay_seconds: 30 }
       );
 
       if (job) {

@@ -31,6 +31,10 @@ import {
 } from "../../domain/budgets/budget_view.service";
 import { owned_splits_for_budget } from "../../domain/budgets/budget_spend_match.service";
 import {
+  compute_ee_leftovers,
+  EELeftoverBucketInputs,
+} from "../../domain/budgets/everything_else_leftover.service";
+import {
   generate_expected_occurrences_in_window,
 } from "../../domain/outflows/outflow_period.service";
 import { estimate_slot_amounts } from "../../domain/recurring/income_slot_amounts";
@@ -94,7 +98,7 @@ export async function derive_period_orchestrator(
       input.window_start_ms,
       input.window_end_ms
     );
-    perf.reads += 6;
+    perf.reads += 7;
 
     // Budgets — on-read match + derive (all from the shared splits, in memory).
     const budgets: DerivedBudgetResult[] = deps.budgets.map((b) => {
@@ -184,6 +188,63 @@ export async function derive_period_orchestrator(
       if (other_groups.some((g) => g.is_due_period)) {
         income.push({ recurring_id: OTHER_INCOME_ID, name: "Other Income", groups: other_groups });
       }
+    }
+
+    // Everything-Else LEFTOVER: EE's limit = expected income − bills due − goal
+    // set-aside − Σ other budgets' allocated, per view bucket (zero-based remainder).
+    // All inputs are already computed per bucket above; override the canonical EE.
+    const canonical_ee_id = deps.monthly_ee_id ?? deps.any_ee_id;
+    const ee_budget = budgets.find(
+      (b) => b.is_everything_else && b.budget_id === canonical_ee_id
+    );
+    if (ee_budget) {
+      const sum_due_by_period = (
+        results: DerivedRecurringResult[],
+        skip_id?: string
+      ): Map<string, number> => {
+        const m = new Map<string, number>();
+        for (const r of results) {
+          if (skip_id && r.recurring_id === skip_id) continue;
+          for (const g of r.groups) {
+            m.set(g.period_id, (m.get(g.period_id) ?? 0) + g.total_due);
+          }
+        }
+        return m;
+      };
+      // Expected income = recurring streams only (exclude surprise "Other Income"
+      // so the leftover stays stable — locked "expected, not received" decision).
+      const income_by_period = sum_due_by_period(income, OTHER_INCOME_ID);
+      const bills_by_period = sum_due_by_period(bills);
+      const budgets_alloc_by_period = new Map<string, number>();
+      for (const b of budgets) {
+        if (b.is_everything_else) continue;
+        for (const p of b.periods) {
+          budgets_alloc_by_period.set(
+            p.period_id,
+            (budgets_alloc_by_period.get(p.period_id) ?? 0) + p.allocated_amount
+          );
+        }
+      }
+      const bucket_inputs: EELeftoverBucketInputs[] = deps.view_buckets.map((vb) => ({
+        period_id: vb.period_id,
+        start_ms: vb.start_ms,
+        end_ms: vb.end_ms,
+        expected_income: income_by_period.get(vb.period_id) ?? 0,
+        bills_due: bills_by_period.get(vb.period_id) ?? 0,
+        other_budgets_allocated: budgets_alloc_by_period.get(vb.period_id) ?? 0,
+      }));
+      const leftovers = compute_ee_leftovers(bucket_inputs, deps.goals);
+      ee_budget.periods = ee_budget.periods.map((p) => {
+        const lo = leftovers.get(p.period_id);
+        if (!lo) return p;
+        return {
+          ...p,
+          allocated_amount: lo.leftover,
+          effective_amount: lo.leftover,
+          remaining: Math.round((lo.leftover - p.spent + Number.EPSILON) * 100) / 100,
+          no_income: !lo.has_income,
+        };
+      });
     }
 
     if (is_budget_exceeded(perf, BUDGET)) {

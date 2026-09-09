@@ -71,6 +71,12 @@ export interface DerivedBudgetViewPeriod {
   remaining: number;
   /** Marker so read paths know this came from derivation, not a stored doc. */
   is_derived: true;
+  /**
+   * Everything-Else only: true when the period has NO expected income, so the FE
+   * shows "add income to see what's left to spend" instead of the (meaningless)
+   * negative leftover. See Everything-Else-Leftover-Limit.
+   */
+  no_income?: boolean;
 }
 
 /** UTC day index (days since epoch) for a timestamp. PURE. */

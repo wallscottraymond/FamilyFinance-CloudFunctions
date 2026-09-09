@@ -450,6 +450,86 @@ export async function cleanup_completed_jobs(older_than_hours = 24): Promise<num
 }
 
 /**
+ * Purges FINISHED (`completed` + `cancelled` + `failed`) jobs from the `_jobs`
+ * collection. These are all terminal states that carry no residual scheduling
+ * value once past their retention window.
+ *
+ * Unlike {@link cleanup_completed_jobs} (single 500-doc batch), this drains
+ * repeatedly in 500-doc batches until either the collection is clear of eligible
+ * docs or `max_deletes` is reached — so a scheduled sweep can both keep the queue
+ * small day-to-day AND grind down a large accumulated backlog over successive runs.
+ *
+ * `completed`/`cancelled` jobs get a short retention; `failed` jobs are kept
+ * longer for debugging before removal.
+ *
+ * Reuses the same (status, updated_at) composite index as cleanup_completed_jobs.
+ *
+ * @returns Counts of deleted docs and whether the per-run cap was hit.
+ */
+export async function purge_finished_jobs(options?: {
+  completed_older_than_hours?: number;
+  failed_older_than_hours?: number;
+  max_deletes?: number;
+}): Promise<{
+  deleted: number;
+  completed: number;
+  cancelled: number;
+  failed: number;
+  reached_cap: boolean;
+}> {
+  const db = getFirestore();
+  const short_cutoff = Timestamp.fromMillis(
+    Date.now() - (options?.completed_older_than_hours ?? 24) * 60 * 60 * 1000
+  );
+  const failed_cutoff = Timestamp.fromMillis(
+    Date.now() - (options?.failed_older_than_hours ?? 24 * 7) * 60 * 60 * 1000
+  );
+  const max_deletes = options?.max_deletes ?? 50_000;
+
+  const counts = {
+    deleted: 0,
+    completed: 0,
+    cancelled: 0,
+    failed: 0,
+    reached_cap: false,
+  };
+
+  const drain = async (
+    status: "completed" | "cancelled" | "failed",
+    cutoff: Timestamp
+  ): Promise<void> => {
+    while (counts.deleted < max_deletes) {
+      const page = await db
+        .collection(COLLECTIONS.JOBS)
+        .where("status", "==", status)
+        .where("updated_at", "<", cutoff)
+        .limit(500)
+        .get();
+
+      if (page.empty) return;
+
+      const batch = db.batch();
+      page.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+
+      counts.deleted += page.size;
+      counts[status] += page.size;
+
+      // Short page => nothing left to drain for this status.
+      if (page.size < 500) return;
+    }
+    counts.reached_cap = true;
+  };
+
+  await drain("completed", short_cutoff);
+  if (counts.deleted < max_deletes) await drain("cancelled", short_cutoff);
+  if (counts.deleted < max_deletes) await drain("failed", failed_cutoff);
+  if (counts.deleted >= max_deletes) counts.reached_cap = true;
+
+  return counts;
+}
+
+/**
  * Checks if an active job (pending or processing) already exists with the given deduplication key.
  *
  * Used to prevent enqueueing duplicate jobs for the same logical operation.

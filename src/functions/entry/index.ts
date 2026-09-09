@@ -31,6 +31,7 @@ export { process_job_queue } from "./scheduled/process_job_queue.scheduled";
 export { cleanup_idempotency_scheduled } from "./scheduled/cleanup_idempotency.scheduled";
 export { cleanup_logs_scheduled } from "./scheduled/cleanup_logs.scheduled";
 export { cleanup_trigger_processing_scheduled } from "./scheduled/cleanup_trigger_processing.scheduled";
+export { cleanup_jobs_scheduled } from "./scheduled/cleanup_jobs.scheduled";
 
 // Plaid transient-error auto-retry: silently re-syncs items that are down /
 // rate limited every 4h, surfacing a reconnect prompt only after 24h. Safe to

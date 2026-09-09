@@ -52,6 +52,8 @@ function map_budget(b: DerivedBudgetResult) {
       returnAmount: p.return_amount,
       remaining: p.remaining,
       isDerived: true,
+      // Everything-Else only: no expected income → FE prompts instead of a negative.
+      noIncome: p.no_income ?? false,
     })),
   };
 }

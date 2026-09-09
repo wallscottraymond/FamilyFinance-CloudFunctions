@@ -176,15 +176,30 @@ export async function purge_user_data_orchestrator(
     counts["_plaid_items_revoked"] = deletable_item_ids.size;
     const revoked_item_ids = [...deletable_item_ids];
 
-    // 5. Period collections — deleted DIRECTLY by userId (they all carry it), so
-    //    one predicate per collection instead of a per-parent loop. These are
-    //    usually the largest sweeps and stream per-page progress.
+    // 5. Period collections. Union of ownerId/userId: older docs (and any created
+    //    off the recurring definition, which is ownerId-keyed) carry ONLY ownerId,
+    //    NOT userId — a userId-only sweep silently orphans them. Deleting by
+    //    ownerId == user_id is safe: ownerId is the single canonical owner, so it
+    //    can never match another live user's data. These are usually the largest
+    //    sweeps and stream per-page progress.
     await step("Deleting budget history…");
-    await record("budget_periods", await hard_delete_by_field("budget_periods", "userId", user_id, writer, on_batch));
+    await record(
+      "budget_periods",
+      (await hard_delete_by_field("budget_periods", "ownerId", user_id, writer, on_batch)) +
+        (await hard_delete_by_field("budget_periods", "userId", user_id, writer, on_batch))
+    );
     await step("Deleting income history…");
-    await record("inflow_periods", await hard_delete_by_field("inflow_periods", "userId", user_id, writer, on_batch));
+    await record(
+      "inflow_periods",
+      (await hard_delete_by_field("inflow_periods", "ownerId", user_id, writer, on_batch)) +
+        (await hard_delete_by_field("inflow_periods", "userId", user_id, writer, on_batch))
+    );
     await step("Deleting bill history…");
-    await record("outflow_periods", await hard_delete_by_field("outflow_periods", "userId", user_id, writer, on_batch));
+    await record(
+      "outflow_periods",
+      (await hard_delete_by_field("outflow_periods", "ownerId", user_id, writer, on_batch)) +
+        (await hard_delete_by_field("outflow_periods", "userId", user_id, writer, on_batch))
+    );
     // Plaid connection records — by parent id, gated to the SUCCESSFULLY-revoked
     // items only (a failed item is kept whole for the retry so its token survives).
     await step("Cleaning up bank connection records…");
@@ -198,9 +213,17 @@ export async function purge_user_data_orchestrator(
     // 6. Top-level user-keyed collections. Union of ownerId/userId where both
     //    are used, so nothing is missed regardless of which field a doc set.
     await step("Deleting transactions…");
-    await record("transactions", await hard_delete_by_field("transactions", "userId", user_id, writer, on_batch));
+    await record(
+      "transactions",
+      (await hard_delete_by_field("transactions", "ownerId", user_id, writer, on_batch)) +
+        (await hard_delete_by_field("transactions", "userId", user_id, writer, on_batch))
+    );
     await step("Deleting accounts…");
-    await record("accounts", await hard_delete_by_field("accounts", "userId", user_id, writer, on_batch));
+    await record(
+      "accounts",
+      (await hard_delete_by_field("accounts", "ownerId", user_id, writer, on_batch)) +
+        (await hard_delete_by_field("accounts", "userId", user_id, writer, on_batch))
+    );
     await step("Deleting recurring income…");
     await record(
       "inflows",
@@ -230,7 +253,11 @@ export async function purge_user_data_orchestrator(
     }
     await record("plaid_items", plaid_items_deleted);
     await step("Deleting summaries…");
-    await record("user_summaries", await hard_delete_by_field("user_summaries", "userId", user_id, writer, on_batch));
+    await record(
+      "user_summaries",
+      (await hard_delete_by_field("user_summaries", "ownerId", user_id, writer, on_batch)) +
+        (await hard_delete_by_field("user_summaries", "userId", user_id, writer, on_batch))
+    );
 
     // Finalize all enqueued BulkWriter deletes before removing the profile/login,
     // so the data is actually gone (not just enqueued) when we finish.

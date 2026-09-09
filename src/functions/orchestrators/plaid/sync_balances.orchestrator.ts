@@ -38,6 +38,10 @@ import {
   plaid_liabilities_to_domain,
 } from "../../integrations/plaid";
 import { account_repo } from "../../repositories/account.repo";
+import {
+  balance_snapshot_repo,
+  BalanceSnapshotInput,
+} from "../../repositories/balance_snapshot.repo";
 import { ACCOUNT_EVENTS } from "../../events/account.events";
 
 /**
@@ -91,6 +95,9 @@ export async function sync_balances_orchestrator(
   // 2. PROCESS EACH ITEM
   const item_results: BalanceSyncItemResult[] = [];
   const events_to_emit: BalanceUpdatedEventPayload[] = [];
+  // Goals (Phase 0): append a dated balance point for every account whose balance
+  // was created or changed this sync, so per-period balance deltas can be derived.
+  const snapshots_to_append: BalanceSnapshotInput[] = [];
 
   for (const item of deps.items) {
     // 2a. FETCH ACCOUNTS/BALANCES FROM PLAID (with retry)
@@ -171,17 +178,29 @@ export async function sync_balances_orchestrator(
         );
 
         // Track for event emission if balance changed
-        if (
+        const balance_changed =
           result.action === "updated" &&
           result.previous_balance !== undefined &&
-          result.previous_balance !== result.new_balance
-        ) {
+          result.previous_balance !== result.new_balance;
+
+        if (balance_changed) {
           events_to_emit.push({
             account_id: result.doc_id,
             user_id: ctx.user_id,
-            previous_balance: result.previous_balance,
+            previous_balance: result.previous_balance!,
             new_balance: result.new_balance,
-            change_amount: result.new_balance - result.previous_balance,
+            change_amount: result.new_balance - result.previous_balance!,
+          });
+        }
+
+        // Snapshot on first observation (created) or a real change (updated).
+        // Unchanged balances are intentionally NOT re-recorded.
+        if (result.action === "created" || balance_changed) {
+          snapshots_to_append.push({
+            account_id: result.doc_id,
+            user_id: ctx.user_id,
+            item_id: item.item_id,
+            current_balance: result.new_balance,
           });
         }
       }
@@ -199,6 +218,18 @@ export async function sync_balances_orchestrator(
         error_msg
       );
       item_results.push(create_item_failure_result(item.item_id, error_msg));
+    }
+  }
+
+  // 2d. APPEND BALANCE SNAPSHOTS (Goals Phase 0) — non-fatal, never break sync.
+  if (snapshots_to_append.length > 0) {
+    try {
+      await balance_snapshot_repo.append(ctx, snapshots_to_append);
+    } catch (error) {
+      console.error(
+        `[${ctx.trace_id}] Failed to append balance snapshots:`,
+        error
+      );
     }
   }
 

@@ -13,6 +13,7 @@ export { process_job_queue } from "./scheduled/process_job_queue.scheduled";
 export { cleanup_idempotency_scheduled } from "./scheduled/cleanup_idempotency.scheduled";
 export { cleanup_logs_scheduled } from "./scheduled/cleanup_logs.scheduled";
 export { cleanup_trigger_processing_scheduled } from "./scheduled/cleanup_trigger_processing.scheduled";
+export { cleanup_jobs_scheduled } from "./scheduled/cleanup_jobs.scheduled";
 export { retry_transient_plaid_errors_scheduled, } from "./scheduled/retry_transient_plaid_errors.scheduled";
 export { cleanup_relink_attempts_scheduled, } from "./scheduled/cleanup_relink_attempts.scheduled";
 export { sync_all_transactions_scheduled, } from "./scheduled/sync_all_transactions.scheduled";

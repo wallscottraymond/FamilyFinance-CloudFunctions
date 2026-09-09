@@ -14,6 +14,7 @@
  * @module resolvers/periods/period_derivation
  */
 import { TraceContext } from "../../types";
+import { GoalForLeftover } from "../../domain/budgets/everything_else_leftover.service";
 import { ViewBucket, MonthlyPeriodForDerivation } from "../../domain/budgets/budget_view.service";
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
 import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
@@ -50,6 +51,8 @@ export interface PeriodDerivationDeps {
     any_ee_id: string | null;
     splits_for_match: SplitForOnReadMatch[];
     recurring: RecurringForDerivation[];
+    /** Active income-drawing goals' planned set-aside (for the EE leftover). */
+    goals: GoalForLeftover[];
     /** Real INCOME_* credits in the window not tied to any recurring inflow (→ "Other income"). */
     other_income_credits: DepositForSlot[];
     span_start_ms: number;
