@@ -956,7 +956,8 @@ service cloud.firestore {
         'userCategory', 'userNotes', 'tags', 'isHidden', 'updatedAt',
         'incomeType', 'isRegularSalary', 'employerName', 'taxable',
         // User custom name (rename) + user expected-amount override ("this + future")
-        'userCustomName', 'expectedAmountOverride'
+        // + per-occurrence expected overrides (map keyed by due-date, edited one check at a time)
+        'userCustomName', 'expectedAmountOverride', 'occurrenceAmountOverrides'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields);

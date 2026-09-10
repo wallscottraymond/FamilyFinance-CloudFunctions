@@ -43,6 +43,9 @@ export interface RecurringForDerivation {
      *  ("this + future"). An explicit override MUST win over the per-slot auto-estimate — else
      *  the user's edit is silently ignored for multi-occurrence income (semi-monthly/weekly). */
     has_amount_override?: boolean;
+    /** INCOME only: per-occurrence expected overrides keyed by UTC due-date `YYYY-MM-DD`.
+     *  Wins over the per-slot auto-estimate AND the definition override, for that ONE occurrence. */
+    occurrence_amount_overrides?: Record<string, number>;
     /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
     removal_intervals: RemovalInterval[];
 }

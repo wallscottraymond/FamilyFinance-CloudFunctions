@@ -83,6 +83,9 @@ export interface RecurringForDerivation {
    *  ("this + future"). An explicit override MUST win over the per-slot auto-estimate — else
    *  the user's edit is silently ignored for multi-occurrence income (semi-monthly/weekly). */
   has_amount_override?: boolean;
+  /** INCOME only: per-occurrence expected overrides keyed by UTC due-date `YYYY-MM-DD`.
+   *  Wins over the per-slot auto-estimate AND the definition override, for that ONE occurrence. */
+  occurrence_amount_overrides?: Record<string, number>;
   /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
   removal_intervals: RemovalInterval[];
 }
@@ -292,6 +295,8 @@ export async function resolve_period_derivation_deps(
       payments: [],
       // When set, the override wins over per-slot auto-estimates in derive_period.
       has_amount_override: i.expected_amount_override != null,
+      // Per-occurrence expected overrides (keyed by due-date) — win over everything for that occ.
+      occurrence_amount_overrides: i.occurrence_amount_overrides,
       // Income remove/pause spans — filtered per period on read, same as bills.
       removal_intervals: i.removal_intervals,
     });

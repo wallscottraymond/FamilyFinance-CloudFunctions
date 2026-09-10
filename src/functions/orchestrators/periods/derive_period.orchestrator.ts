@@ -148,6 +148,19 @@ export async function derive_period_orchestrator(
           });
         }
       }
+      // Per-occurrence MANUAL override wins over everything (slot estimate + definition
+      // override): if the user set an amount for a specific occurrence — keyed by its UTC
+      // due-date `YYYY-MM-DD` — use it. Outstanding occurrences only; received ones show the
+      // actual deposit via reconcile below. Lets the user edit one check at a time (e.g. just
+      // the Sep 30 commission) without moving the others.
+      const occ_overrides = r.occurrence_amount_overrides;
+      if (r.kind === "inflow" && occ_overrides && Object.keys(occ_overrides).length > 0) {
+        expected = expected.map((e) => {
+          const key = new Date(e.due_date_ms).toISOString().slice(0, 10);
+          const amt = occ_overrides[key];
+          return amt != null ? { ...e, amount_due: amt } : e;
+        });
+      }
       // Income reconciles those expected occurrences against ACTUAL Plaid deposits
       // (authoritative receipts, with extras surfaced); bills reconcile against linked
       // payments. Both then place into the view buckets identically.

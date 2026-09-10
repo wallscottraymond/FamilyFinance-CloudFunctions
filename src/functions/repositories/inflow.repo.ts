@@ -58,6 +58,10 @@ export interface Inflow {
   // `average_amount` everywhere the expected amount is derived. Preserved across
   // Plaid re-sync (Plaid never sets it), so it's sticky. null = use Plaid's average.
   expected_amount_override: number | null;
+  // Per-occurrence expected overrides, keyed by the occurrence's UTC due-date
+  // (`YYYY-MM-DD`). Wins over `expected_amount_override` for that ONE occurrence
+  // (others unaffected). Sticky across Plaid re-sync. Absent/empty = none.
+  occurrence_amount_overrides?: Record<string, number>;
 
   // Description
   description: string | null;
@@ -139,6 +143,8 @@ interface LegacyInflowDoc {
   currency: string;
   // User-set expected-amount override (see Inflow.expected_amount_override).
   expectedAmountOverride?: number | null;
+  // Per-occurrence expected overrides keyed by due-date (see Inflow.occurrence_amount_overrides).
+  occurrenceAmountOverrides?: Record<string, number>;
 
   // Description
   description: string | null;
@@ -214,6 +220,7 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
     last_amount: doc.lastAmount,
     average_amount: doc.averageAmount,
     expected_amount_override: doc.expectedAmountOverride ?? null,
+    occurrence_amount_overrides: doc.occurrenceAmountOverrides ?? {},
     amount_min: undefined, // Legacy docs may not have this
     amount_max: undefined,
     currency: doc.currency,
@@ -282,6 +289,8 @@ function map_persistence_to_doc(
     // Preserve the user's expected-amount override across Plaid re-sync (Plaid
     // refreshes averageAmount, but the override keeps driving the expected value).
     expectedAmountOverride: existing?.expectedAmountOverride ?? null,
+    // Sticky across Plaid re-sync — Plaid never sets per-occurrence overrides.
+    occurrenceAmountOverrides: existing?.occurrenceAmountOverrides ?? {},
     currency: entity.currency,
 
     description: entity.description,
