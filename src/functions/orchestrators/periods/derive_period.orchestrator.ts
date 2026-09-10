@@ -134,7 +134,10 @@ export async function derive_period_orchestrator(
       // (mid-month vs end-of-month) from history, instead of the single blended stream average.
       // Received occurrences still use the ACTUAL deposit (in reconcile); this sets the amount
       // shown for OUTSTANDING occurrences.
-      if (r.kind === "inflow" && (r.payment_history?.length ?? 0) > 0) {
+      // SKIP when the user set an explicit expected-amount override ("this + future") — an
+      // explicit override MUST win over the auto slot-estimate, otherwise editing the expected
+      // does nothing for multi-occurrence income (its amount_due already carries the override).
+      if (r.kind === "inflow" && !r.has_amount_override && (r.payment_history?.length ?? 0) > 0) {
         const occ_days = expected.map((e) => new Date(e.due_date_ms).getUTCDate());
         const slot_amounts = estimate_slot_amounts(occ_days, r.payment_history!);
         if (slot_amounts.size > 0) {

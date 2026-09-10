@@ -79,6 +79,10 @@ export interface RecurringForDerivation {
   /** INCOME only: the stream's historical linked deposits, for per-slot amount estimation
    *  (a semi-monthly stream's mid vs end occurrence draw from their own slot's average). */
   payment_history?: DepositForSlot[];
+  /** INCOME only: true when the user set an explicit expected-amount override on the stream
+   *  ("this + future"). An explicit override MUST win over the per-slot auto-estimate — else
+   *  the user's edit is silently ignored for multi-occurrence income (semi-monthly/weekly). */
+  has_amount_override?: boolean;
   /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
   removal_intervals: RemovalInterval[];
 }
@@ -286,6 +290,8 @@ export async function resolve_period_derivation_deps(
         predicted_next_date: i.predicted_next_date,
       },
       payments: [],
+      // When set, the override wins over per-slot auto-estimates in derive_period.
+      has_amount_override: i.expected_amount_override != null,
       // Income remove/pause spans — filtered per period on read, same as bills.
       removal_intervals: i.removal_intervals,
     });
