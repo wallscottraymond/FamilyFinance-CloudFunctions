@@ -37,7 +37,7 @@ import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
 import { decryptAccessToken } from "../../../utils/encryption";
 import { remove_item } from "../../integrations/plaid";
 import {
-  hard_delete_by_field,
+  hard_delete_by_fields_union,
   hard_delete_by_parent_ids,
   cancel_pending_jobs,
   find_owned_shared_groups,
@@ -185,20 +185,17 @@ export async function purge_user_data_orchestrator(
     await step("Deleting budget history…");
     await record(
       "budget_periods",
-      (await hard_delete_by_field("budget_periods", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("budget_periods", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("budget_periods", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     await step("Deleting income history…");
     await record(
       "inflow_periods",
-      (await hard_delete_by_field("inflow_periods", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("inflow_periods", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("inflow_periods", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     await step("Deleting bill history…");
     await record(
       "outflow_periods",
-      (await hard_delete_by_field("outflow_periods", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("outflow_periods", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("outflow_periods", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     // Plaid connection records — by parent id, gated to the SUCCESSFULLY-revoked
     // items only (a failed item is kept whole for the retry so its token survives).
@@ -215,32 +212,27 @@ export async function purge_user_data_orchestrator(
     await step("Deleting transactions…");
     await record(
       "transactions",
-      (await hard_delete_by_field("transactions", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("transactions", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("transactions", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     await step("Deleting accounts…");
     await record(
       "accounts",
-      (await hard_delete_by_field("accounts", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("accounts", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("accounts", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     await step("Deleting recurring income…");
     await record(
       "inflows",
-      (await hard_delete_by_field("inflows", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("inflows", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("inflows", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     await step("Deleting recurring bills…");
     await record(
       "outflows",
-      (await hard_delete_by_field("outflows", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("outflows", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("outflows", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     await step("Deleting budgets…");
     await record(
       "budgets",
-      (await hard_delete_by_field("budgets", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("budgets", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("budgets", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     // plaid_items: delete ONLY the successfully-revoked ones (by doc id), so a
     // transient revoke failure keeps its token for the retry.
@@ -255,8 +247,7 @@ export async function purge_user_data_orchestrator(
     await step("Deleting summaries…");
     await record(
       "user_summaries",
-      (await hard_delete_by_field("user_summaries", "ownerId", user_id, writer, on_batch)) +
-        (await hard_delete_by_field("user_summaries", "userId", user_id, writer, on_batch))
+      await hard_delete_by_fields_union("user_summaries", ["ownerId", "userId"], user_id, writer, on_batch)
     );
 
     // Finalize all enqueued BulkWriter deletes before removing the profile/login,

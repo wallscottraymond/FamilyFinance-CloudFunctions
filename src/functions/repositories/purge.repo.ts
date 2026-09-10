@@ -101,6 +101,63 @@ export async function hard_delete_by_field(
 }
 
 /**
+ * Hard-delete every doc in `collection` matching ANY of `fields == value`,
+ * DEDUPED by document id across the fields. Use this instead of summing two
+ * `hard_delete_by_field` calls: BulkWriter deletes aren't committed until
+ * `close()`, so a second field-sweep re-finds any doc carrying BOTH fields and
+ * would (a) enqueue a redundant delete and (b) double-count it in progress.
+ * A shared `seen` Set makes both the enqueue and the returned count DISTINCT.
+ * `on_batch` fires per read page with the number NEWLY enqueued in that page.
+ */
+export async function hard_delete_by_fields_union(
+  collection: string,
+  fields: string[],
+  value: string,
+  writer: BulkWriter,
+  on_batch?: OnBatch
+): Promise<number> {
+  const db = getFirestore();
+  const seen = new Set<string>();
+  for (const field of fields) {
+    let last: string | undefined;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let q = db
+        .collection(collection)
+        .where(field, "==", value)
+        .orderBy(FieldPath.documentId())
+        .limit(READ_PAGE)
+        .select();
+      if (last !== undefined) {
+        q = q.startAfter(last);
+      }
+      const snap = await q.get();
+      if (snap.empty) {
+        break;
+      }
+      let enqueued_in_page = 0;
+      for (const doc of snap.docs) {
+        if (seen.has(doc.id)) {
+          continue; // already deleted by an earlier field sweep — don't recount
+        }
+        seen.add(doc.id);
+        // Parallel delete; flush()/close() awaits it later.
+        void writer.delete(doc.ref);
+        enqueued_in_page++;
+      }
+      last = snap.docs[snap.docs.length - 1].id;
+      if (on_batch && enqueued_in_page > 0) {
+        await on_batch(enqueued_in_page);
+      }
+      if (snap.size < READ_PAGE) {
+        break;
+      }
+    }
+  }
+  return seen.size;
+}
+
+/**
  * Hard-delete every doc in `collection` whose `parent_field` is one of
  * `parent_ids` (the "subcollection" pattern — these are top-level collections
  * keyed by a parent id). Iterates parent ids; each is its own batched sweep.

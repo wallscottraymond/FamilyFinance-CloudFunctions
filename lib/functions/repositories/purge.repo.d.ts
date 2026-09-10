@@ -37,6 +37,16 @@ export type OnBatch = (enqueued_in_page: number) => Promise<void> | void;
  */
 export declare function hard_delete_by_field(collection: string, field: string, value: string, writer: BulkWriter, on_batch?: OnBatch): Promise<number>;
 /**
+ * Hard-delete every doc in `collection` matching ANY of `fields == value`,
+ * DEDUPED by document id across the fields. Use this instead of summing two
+ * `hard_delete_by_field` calls: BulkWriter deletes aren't committed until
+ * `close()`, so a second field-sweep re-finds any doc carrying BOTH fields and
+ * would (a) enqueue a redundant delete and (b) double-count it in progress.
+ * A shared `seen` Set makes both the enqueue and the returned count DISTINCT.
+ * `on_batch` fires per read page with the number NEWLY enqueued in that page.
+ */
+export declare function hard_delete_by_fields_union(collection: string, fields: string[], value: string, writer: BulkWriter, on_batch?: OnBatch): Promise<number>;
+/**
  * Hard-delete every doc in `collection` whose `parent_field` is one of
  * `parent_ids` (the "subcollection" pattern — these are top-level collections
  * keyed by a parent id). Iterates parent ids; each is its own batched sweep.
