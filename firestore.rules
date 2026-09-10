@@ -389,9 +389,17 @@ service cloud.firestore {
                      (resource.data.groupId != null && inSameFamily(resource.data.groupId))
                   );
 
-      // Group-based access: Allow list queries
-      // This supports queries filtered by userId or groupIds
-      allow list: if isAuthenticated();
+      // Group-based access: Allow list queries, but SCOPED to what the caller can
+      // actually read (mirrors the `read` rule above). Firestore evaluates this per
+      // candidate doc, so a query must be constrained to the caller's own/group docs
+      // (e.g. where('ownerId','==',uid) or where('groupIds','array-contains',gid))
+      // or it is rejected — preventing an unfiltered "list every user's transactions".
+      allow list: if isAuthenticated() && (
+                     isOwner(resource.data.ownerId) ||
+                     isOwner(resource.data.userId) ||
+                     canAccessGroup(resource.data.groupIds) ||
+                     (resource.data.groupId != null && inSameFamily(resource.data.groupId))
+                  );
 
       // Users can create transactions for themselves
       // Parents/Admins can create for family members
@@ -1062,12 +1070,15 @@ service cloud.firestore {
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
       return changedFields.hasOnly(allowedFields) &&
-             // Ensure core immutable fields don't change
+             // Ensure core IDENTITY fields don't change. CRITICAL: only reference fields
+             // that ALWAYS exist on the doc. `incomeAmount` / `dailyEarningRate` are NOT
+             // stored on inflow_period docs — referencing an absent field errors the rule,
+             // which DENIED *every* user edit (note / rename / received / active / amount).
+             // They're also redundant: hasOnly(allowedFields) already forbids changing any
+             // field not in the allowlist. Mirrors isValidOutflowPeriodUpdate (present IDs only).
              data.inflowId == resource_data.inflowId &&
              data.periodId == resource_data.periodId &&
-             data.userId == resource_data.userId &&
-             data.incomeAmount == resource_data.incomeAmount &&
-             data.dailyEarningRate == resource_data.dailyEarningRate;
+             data.userId == resource_data.userId;
     }
     
     function isValidPlaidConfigData() {
