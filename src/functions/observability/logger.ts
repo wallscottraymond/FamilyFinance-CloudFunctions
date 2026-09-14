@@ -14,6 +14,14 @@ import { TraceContext } from "../types";
 import { SpanContext, should_log_tier2 } from "./tracer";
 
 /**
+ * Cost gate for the `_logs_minimal` Firestore mirror. When false (default), only
+ * ERROR entries are written to Firestore; start/success entries live in Cloud Logging
+ * only. Set the `LOG_MINIMAL_TO_FIRESTORE=true` env var to restore full mirroring for
+ * a debugging window. See [[Firestore-Read-Cost-Reduction]].
+ */
+const LOG_MINIMAL_TO_FIRESTORE = process.env.LOG_MINIMAL_TO_FIRESTORE === "true";
+
+/**
  * Log entry for Tier 1 (minimal) logs.
  * Written synchronously, kept for 30 days.
  */
@@ -133,18 +141,25 @@ export function log_minimal(entry: {
     timestamp: Timestamp.now(),
   };
 
-  // Use console.log for immediate visibility in Cloud Functions logs
-  // This is synchronous and fast
+  // Use console.log for immediate visibility in Cloud Functions logs.
+  // This is synchronous, fast, and ALWAYS on — Cloud Logging keeps the full
+  // start/success/error trail for free, so it stays the primary log sink.
   console.log(JSON.stringify({
     severity: entry.status === "error" ? "ERROR" : "INFO",
     ...log_entry,
   }));
 
-  // Also write to Firestore asynchronously (fire-and-forget)
-  fire_and_forget(async () => {
-    const db = getFirestore();
-    await db.collection(COLLECTIONS.MINIMAL).add(log_entry);
-  });
+  // Firestore mirror (`_logs_minimal`) is COST-GATED to errors only
+  // ([[Firestore-Read-Cost-Reduction]] P2): writing a doc on every operation
+  // start/success was ~150K writes/day of pure noise. Errors — the only entries
+  // worth querying in Firestore — are still persisted; everything else lives in
+  // Cloud Logging. Flip `LOG_MINIMAL_TO_FIRESTORE` to restore full mirroring.
+  if (LOG_MINIMAL_TO_FIRESTORE || entry.status === "error") {
+    fire_and_forget(async () => {
+      const db = getFirestore();
+      await db.collection(COLLECTIONS.MINIMAL).add(log_entry);
+    });
+  }
 }
 
 /**

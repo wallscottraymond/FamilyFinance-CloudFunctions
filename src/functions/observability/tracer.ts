@@ -132,8 +132,10 @@ export function should_log_tier2(
     return true;
   }
 
-  // Random sampling (default 1%)
-  const sample_rate = options?.sample_rate ?? 0.01;
+  // Random sampling (default 0.1%). Errors + debug_mode are always logged above,
+  // so this only governs the routine-success debug sample; 1% was excess write
+  // volume for the value ([[Firestore-Read-Cost-Reduction]] P2).
+  const sample_rate = options?.sample_rate ?? 0.001;
   return Math.random() < sample_rate;
 }
 

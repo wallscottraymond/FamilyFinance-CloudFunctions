@@ -255,12 +255,16 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
 /**
  * Scheduled function to process the job queue.
  *
- * Runs every minute to check for pending jobs.
+ * Runs every 5 minutes as a BACKSTOP: `on_job_created` processes jobs in real
+ * time the instant they're created, so this poll only sweeps up jobs whose
+ * trigger failed/timed out or whose `scheduled_for` has come due, and reclaims
+ * stuck `processing` jobs. Every-minute polling was ~5× the `_jobs` read cost for
+ * a pure fallback ([[Firestore-Read-Cost-Reduction]] P2).
  * Claims jobs atomically to prevent duplicate processing.
  */
 export const process_job_queue = onSchedule(
   {
-    schedule: "every 1 minutes",
+    schedule: "every 5 minutes",
     timeoutSeconds: 540, // 9 minutes
     memory: "512MiB",
     secrets: [PLAID_CLIENT_ID, PLAID_SECRET, TOKEN_ENCRYPTION_KEY],

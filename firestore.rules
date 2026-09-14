@@ -816,6 +816,20 @@ service cloud.firestore {
     }
 
     // =======================
+    // DERIVED-PERIOD CACHE + VERSION (Firestore-Read-Cost-Reduction)
+    // Server-only: written/read by Cloud Functions via the Admin SDK (which
+    // bypasses these rules). Clients never touch them — deny all.
+    // =======================
+
+    match /user_data_versions/{userId} {
+      allow read, write: if false;
+    }
+
+    match /derived_period_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
+    // =======================
     // GROUP SUMMARIES COLLECTION RULES - PERIOD-CENTRIC
     // =======================
 

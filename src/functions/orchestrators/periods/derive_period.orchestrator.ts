@@ -51,8 +51,20 @@ import {
   is_suppressed_in_period,
 } from "../../domain/recurring/recurring_suppression.service";
 import { PeriodInstanceType } from "../../domain/budgets";
+import { get_derive_version } from "../../repositories/derive_version.repo";
+import {
+  get_cached_derived_period,
+  put_cached_derived_period,
+} from "../../repositories/derive_period_cache.repo";
 
 const BUDGET: PerformanceBudget = { max_reads: 200, max_writes: 0, max_time_ms: 1500 };
+
+/**
+ * TTL SAFETY BACKSTOP for the L2 derive cache ([[Firestore-Read-Cost-Reduction]]).
+ * Correctness comes from the per-user `data_version` match — this only bounds staleness
+ * to minutes (rather than forever) in the event some write path forgot to bump the version.
+ */
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
 /** Synthetic income id for the "Other Income" bucket (unmatched real INCOME_* credits). */
 const OTHER_INCOME_ID = "__other_income__";
@@ -91,6 +103,29 @@ export async function derive_period_orchestrator(
   log_operation_start(span, user_id);
 
   try {
+    // L2 CACHE ([[Firestore-Read-Cost-Reduction]]): read the user's current derive-input
+    // version + any cached result for this exact (cadence, window) — 2 reads. Serve the
+    // cache iff the versions match AND it's within the TTL backstop, skipping the
+    // ~9-collection fan-out + in-memory derivation below.
+    const [data_version, cached] = await Promise.all([
+      get_derive_version(user_id),
+      get_cached_derived_period<DerivePeriodResult>(
+        user_id,
+        input.view_cadence,
+        input.window_start_ms,
+        input.window_end_ms
+      ),
+    ]);
+    perf.reads += 2;
+    if (
+      cached &&
+      cached.data_version === data_version &&
+      Date.now() - cached.computed_at_ms < CACHE_TTL_MS
+    ) {
+      log_operation_success(span, user_id);
+      return cached.result;
+    }
+
     const deps = await resolve_period_derivation_deps(
       ctx,
       user_id,
@@ -284,7 +319,29 @@ export async function derive_period_orchestrator(
       })
     );
 
-    return { view_cadence: input.view_cadence, budgets, bills, income };
+    const result: DerivePeriodResult = {
+      view_cadence: input.view_cadence,
+      budgets,
+      bills,
+      income,
+    };
+
+    // Store the freshly-computed result stamped with the version it was computed at
+    // (fire-and-forget — a cache-write failure must never fail the derive). Uses the
+    // version read at the TOP of this call: if a bump landed mid-compute, the stamp is
+    // now stale, so the next read misses and recomputes — never serving stale data.
+    fire_and_forget(() =>
+      put_cached_derived_period(
+        user_id,
+        input.view_cadence,
+        input.window_start_ms,
+        input.window_end_ms,
+        data_version,
+        result
+      )
+    );
+
+    return result;
   } catch (error) {
     log_operation_error(
       span,

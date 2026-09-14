@@ -19,6 +19,7 @@ import { create_job } from "../../infrastructure/job_queue";
 import { runUpdateOutflowPeriods } from "../../outflows/outflow_periods/utils/runUpdateOutflowPeriods";
 import { runUpdateInflowPeriods } from "../../inflows/inflow_periods/utils/runUpdateInflowPeriods";
 import { Outflow, Inflow } from "../../../types";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 type RecurringType = "outflow" | "inflow";
 
@@ -52,6 +53,14 @@ export async function handle_recurring_write(
   after: Record<string, unknown> | null,
   event_id: string
 ): Promise<boolean> {
+  // Invalidate the derived-period cache on ANY recurring change — name/category/override
+  // all feed derive, so bump regardless of the transactionIds/amount field-guards below
+  // ([[Firestore-Read-Cost-Reduction]]). Covers deletes too (owner read from `before`).
+  const owner =
+    ((after?.userId ?? after?.ownerId) as string | undefined) ||
+    ((before?.userId ?? before?.ownerId) as string | undefined);
+  if (owner) void bump_derive_version(owner).catch(() => {});
+
   if (!after) return false; // deletion → the removal cascade handles soft-delete
   const user_id =
     (after.userId as string | undefined) || (after.ownerId as string | undefined);

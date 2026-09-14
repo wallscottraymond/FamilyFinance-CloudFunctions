@@ -24,6 +24,7 @@ import {
   mark_trigger_processed,
 } from "../../repositories/infrastructure";
 import { process_budget_period_edited_orchestrator } from "../../orchestrators/budgets/process_budget_period_edited.orchestrator";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 export const on_budget_period_edited = onDocumentUpdated(
   {
@@ -56,6 +57,12 @@ export const on_budget_period_edited = onDocumentUpdated(
     if (!relevant_changed) {
       return;
     }
+
+    // Invalidate the derived-period cache — modifiedAmount/isActive feed derive
+    // ([[Firestore-Read-Cost-Reduction]]). Pure `spent` recomputes were already
+    // filtered by the guard above (they flow from transactions, which bump directly).
+    const owner = (af.userId ?? af.ownerId) as string | undefined;
+    if (owner) void bump_derive_version(owner).catch(() => {});
 
     const trace = create_trigger_trace(period_id, event.id);
 
