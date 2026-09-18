@@ -43,6 +43,12 @@ export interface SplitForSpend {
   /** Effective category is a Plaid `INCOME_*` category ⇒ real income, not a purchase
    *  return — excluded from budget spend entirely (belongs to inflows). */
   is_income_category: boolean;
+  /** Effective category is a Plaid `TRANSFER_IN_*`/`TRANSFER_OUT_*` category ⇒ money
+   *  movement (own accounts / savings / investments / withdrawals), NOT spending — so
+   *  it's excluded from budget spend (incl. Everything-Else). This catches transfers
+   *  that the internal matched-pair `is_transfer` flag missed (external / unpaired).
+   *  Optional: callers without category context omit it (defaults to not-excluded). */
+  is_transfer_category?: boolean;
   /** Split-level spend treatment (resolver derives it from spendStatus/legacy flags). */
   spend_status: SpendStatusForSpend;
   /** Recurring links — present ⇒ tracked by the recurring system, excluded here. */
@@ -72,13 +78,16 @@ export {
 } from "../transactions/category_semantics.service";
 
 /**
- * Whether a split counts toward budget `spent`. Excludes transfers, real income,
- * ignored splits, and recurring-linked splits. `refund` and one-off income
- * returns stay countable (the latter reverse spend — see compute_budget_spent). PURE.
+ * Whether a split counts toward budget `spent`. Excludes transfers (both the internal
+ * matched-pair flag AND the Plaid TRANSFER_* category — so external/unpaired transfers
+ * don't leak into Everything-Else), real income, ignored splits, and recurring-linked
+ * (bill/income) splits. `refund` and one-off income returns stay countable (the latter
+ * reverse spend — see compute_budget_spent). PURE.
  */
 export function is_countable(split: SplitForSpend): boolean {
   return (
     !split.is_transfer &&
+    !split.is_transfer_category &&
     !split.is_income_category &&
     split.spend_status !== "ignored" &&
     split.outflow_id === null &&

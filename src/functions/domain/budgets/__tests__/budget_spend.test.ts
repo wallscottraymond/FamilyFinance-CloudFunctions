@@ -63,6 +63,15 @@ describe("is_countable", () => {
     expect(is_countable(s({ inflow_id: "i1" }))).toBe(false);
   });
 
+  // A TRANSFER_* category split (money movement) must be excluded from budget spend —
+  // incl. Everything-Else — even when it's NOT an internal matched-pair (is_transfer
+  // false). This is what stopped external/unpaired transfers leaking into EE spend.
+  it("excludes a transfer-category split even when the internal is_transfer flag is false", () => {
+    expect(is_countable(s({ is_transfer: false, is_transfer_category: true }))).toBe(false);
+    expect(is_countable(s({ is_transfer_category: false }))).toBe(true); // normal spend counts
+    expect(is_countable(s({ is_transfer_category: undefined }))).toBe(true); // back-compat default
+  });
+
   // S5 (Derive-On-Read-Regression-Audit): a bill payment whose split link was never set
   // (outflow_id null) must STILL be excluded when its txn is in a recurring Plaid stream,
   // so creating a budget over a bill category doesn't double-count the payment as spend.

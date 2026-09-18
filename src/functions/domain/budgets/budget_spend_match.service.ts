@@ -31,6 +31,7 @@ import {
   SplitForSpend,
   SpendStatusForSpend,
   is_income_category,
+  is_transfer_category,
 } from "./budget_spend.service";
 
 /** A split with everything the read-time owner resolution + spend need. */
@@ -111,6 +112,7 @@ export function owned_splits_for_budget(
       is_transfer: s.is_transfer,
       is_income: s.is_income,
       is_income_category: is_income_category(s.internal_match_category ?? s.plaid_match_category),
+      is_transfer_category: is_transfer_category(s.internal_match_category ?? s.plaid_match_category),
       spend_status: s.spend_status,
       outflow_id: s.outflow_id,
       inflow_id: s.inflow_id,
