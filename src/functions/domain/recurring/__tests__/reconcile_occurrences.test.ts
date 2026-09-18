@@ -105,6 +105,48 @@ describe("reconcile_income_occurrences", () => {
     expect(r.length).toBe(1); // one occurrence, paid — no duplicate extra
     expect(r[0].is_paid).toBe(true);
   });
+
+  // Duplicate-deposit defect class (the "paycheck shows 3× / mid-month twice" bug):
+  // a pending+posted pair or a recycled-id dup must NOT surface a phantom extra occurrence.
+  it("collapses a pending+posted pair (same amount, 1 day apart) into ONE received occurrence", () => {
+    const r = reconcile_income_occurrences(
+      IN,
+      [
+        payment("pending", day(2026, 6, 15), 3358), // pending
+        payment("posted", day(2026, 6, 16), 3358), // posted next day — same deposit
+      ],
+      [inExp("mid", day(2026, 6, 16)), inExp("end", day(2026, 6, 30))],
+      W_START,
+      W_END
+    );
+    expect(r.length).toBe(2); // mid + end — NOT 3
+    expect(r.filter((o) => o.is_paid).length).toBe(1); // only the mid-month received
+    expect(r.find((o) => o.due_date_ms === day(2026, 6, 16))!.amount_paid).toBe(3358);
+  });
+
+  it("collapses an exact duplicate deposit (same amount, same day)", () => {
+    const r = reconcile_income_occurrences(
+      IN,
+      [payment("a", day(2026, 6, 15), 5000), payment("b", day(2026, 6, 15), 5000)],
+      [inExp("mid", day(2026, 6, 15))],
+      W_START,
+      W_END
+    );
+    expect(r.length).toBe(1);
+    expect(r[0].amount_paid).toBe(5000); // not double-counted
+  });
+
+  it("does NOT collapse two genuine same-amount checks a pay-cycle apart (both received)", () => {
+    const r = reconcile_income_occurrences(
+      IN,
+      [payment("mid", day(2026, 6, 15), 4000), payment("end", day(2026, 6, 30), 4000)],
+      [inExp("e1", day(2026, 6, 15)), inExp("e2", day(2026, 6, 30))],
+      W_START,
+      W_END
+    );
+    expect(r.length).toBe(2);
+    expect(r.every((o) => o.is_paid)).toBe(true); // both distinct deposits kept
+  });
 });
 
 describe("reconcile_occurrences", () => {

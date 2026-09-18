@@ -17,8 +17,10 @@
 export declare function get_derive_version(user_id: string): Promise<number>;
 /**
  * Bump a user's derive-input version. Call (fire-and-forget) from any write path that
- * changes derive inputs. Idempotent-enough: over-bumping is harmless; the point is that
- * the version STRICTLY CHANGES after a write so the cache misses and recomputes.
+ * changes derive inputs. Direct increment (NOT debounced): a debounced bump would delay
+ * invalidation, so the editor's own post-edit re-derive would hit a still-valid stale
+ * cache and the change would visually revert until the bump landed. Freshness wins here;
+ * the churn COST is addressed by reducing how many cards re-derive per invalidation.
  */
 export declare function bump_derive_version(user_id: string): Promise<void>;
 //# sourceMappingURL=derive_version.repo.d.ts.map
