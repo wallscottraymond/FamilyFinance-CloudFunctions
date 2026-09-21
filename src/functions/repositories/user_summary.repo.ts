@@ -318,81 +318,24 @@ export const user_summary_repo = {
 
       const source_period = source_period_doc.data() as SourcePeriod;
 
-      // 3. Read all dependent period documents
-      // Note: Firestore transactions require us to read docs by reference, not query
-      // So we query outside and then read each doc inside the transaction for conflict detection
-      // Also load the user's recurring DEFINITIONS so we can drop classified
-      // internal transfers. `isHidden` lives on the definition (set by the
-      // matched-pair transfer classifier), NOT on the period docs — so we must
-      // join here. Mirrors `period_derivation.resolver` which skips isHidden
-      // streams. Filtered in-memory (ownerId-only query) to avoid a composite index.
-      const [
-        outflow_snapshot,
-        budget_snapshot,
-        inflow_snapshot,
-        outflow_defs_snapshot,
-        inflow_defs_snapshot,
-        budget_defs_snapshot,
-      ] = await Promise.all([
-        db.collection("outflow_periods")
-          .where("ownerId", "==", user_id)
-          .where("sourcePeriodId", "==", source_period_id)
-          .where("isActive", "==", true)
-          .get(),
-        db.collection("budget_periods")
-          .where("userId", "==", user_id)
-          .where("sourcePeriodId", "==", source_period_id)
-          .where("periodType", "==", period_type)
-          .where("isActive", "==", true)
-          .get(),
-        db.collection("inflow_periods")
-          .where("ownerId", "==", user_id)
-          .where("sourcePeriodId", "==", source_period_id)
-          .where("isActive", "==", true)
-          .get(),
-        db.collection("outflows").where("ownerId", "==", user_id).get(),
-        db.collection("inflows").where("ownerId", "==", user_id).get(),
-        db.collection("budgets").where("ownerId", "==", user_id).where("isActive", "==", true).get(),
-      ]);
-
-      // Collapse the per-lens Everything-Else budgets to ONE canonical EE (monthly EE, else
-      // any EE) — MIRRORS the derive path (`period_derivation.resolver` `canonical_ee_id`). By the
-      // Prime/Non-Prime model every budget (incl. all 3 per-lens EE) has a period in EVERY cadence,
-      // so without this the monthly summary lists all 3 EE budgets (weekly + bi-monthly EE tiles
-      // leak into the monthly view when the FE reads the materialized summary).
-      const ee_defs = budget_defs_snapshot.docs
-        .map((d) => ({ id: d.id, data: d.data() as { isSystemEverythingElse?: boolean; period?: string } }))
-        .filter((b) => b.data.isSystemEverythingElse === true);
-      const canonical_ee_id =
-        ee_defs.find((b) => b.data.period === "monthly")?.id ?? ee_defs[0]?.id ?? null;
-      const excluded_ee_ids = new Set(ee_defs.map((b) => b.id).filter((id) => id !== canonical_ee_id));
-
-      const hidden_outflow_ids = new Set(
-        outflow_defs_snapshot.docs
-          .filter((d) => (d.data() as { isHidden?: boolean }).isHidden === true)
-          .map((d) => d.id)
-      );
-      const hidden_inflow_ids = new Set(
-        inflow_defs_snapshot.docs
-          .filter((d) => (d.data() as { isHidden?: boolean }).isHidden === true)
-          .map((d) => d.id)
-      );
-
-      // Exclude classified internal transfers (they are not real bills/income).
-      const outflow_periods = outflow_snapshot.docs
-        .map((doc) => doc.data() as OutflowPeriod)
-        .filter((p) => !hidden_outflow_ids.has(p.outflowId));
-      const budget_periods = budget_snapshot.docs
-        .map((doc) => doc.data() as BudgetPeriodDocument)
-        .filter((p) => !excluded_ee_ids.has(p.budgetId));
-      const inflow_periods = inflow_snapshot.docs
-        .map((doc) => doc.data() as InflowPeriod)
-        .filter((p) => !hidden_inflow_ids.has(p.inflowId));
-
-      console.log(
-        `[${ctx.trace_id}] user_summary_repo.save_with_transaction: ` +
-          `read ${outflow_periods.length} outflows, ${budget_periods.length} budgets, ${inflow_periods.length} inflows`
-      );
+      // 3. Financial arrays are DEAD — the app renders periods via the derive-on-read
+      // path (`derive_period` / `derived_period_cache`), NOT this materialized summary.
+      // The only live consumer of user_summaries is nav METADATA
+      // (`SourcePeriodsContext` → `convertSummaryToSourcePeriod`), which reads period
+      // context fields (period type, dates, year/month/week/bi-monthly half) — never the
+      // outflow/budget/inflow entries.
+      //
+      // We therefore SKIP the six per-build collection reads that used to fill those
+      // arrays (outflow_periods / budget_periods / inflow_periods + the outflows /
+      // inflows / budgets DEFINITION scans for isHidden + EE collapse). At ~2,680 builds
+      // /day × 6 collection scans this was ~220K+ reads/day — the single largest read
+      // cost — spent computing entries nothing displays. Passing empty arrays writes a
+      // valid metadata-only summary (the domain builder + validator tolerate empties;
+      // validator only requires id / user_id / source_period_id / period_type, all
+      // derived from source_period). See [[Firestore-Read-Cost-Derive]].
+      const outflow_periods: OutflowPeriod[] = [];
+      const budget_periods: BudgetPeriodDocument[] = [];
+      const inflow_periods: InflowPeriod[] = [];
 
       // 4. Compute new summary using provided function
       const new_summary = compute_fn({
