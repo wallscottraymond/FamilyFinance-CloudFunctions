@@ -45,10 +45,6 @@ import {
   RestoreAccountRecurringInput,
 } from "../../orchestrators/accounts";
 import {
-  update_user_summary_orchestrator,
-  UpdateUserSummaryInput,
-} from "../../orchestrators/summaries";
-import {
   process_budget_created_orchestrator,
   process_budget_updated_orchestrator,
   process_budget_deleted_orchestrator,
@@ -128,21 +124,9 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
     await restore_account_recurring_orchestrator(ctx, input);
   },
 
-  // User summary update job
-  // This serializes summary updates to prevent race conditions when multiple
-  // triggers fire simultaneously for the same user summary
-  update_user_summary: async (ctx, payload) => {
-    const input = payload as UpdateUserSummaryInput & { deduplication_key: string };
-    await update_user_summary_orchestrator({
-      trace_id: ctx.trace_id,
-      span_id: ctx.span_id,
-      input: {
-        user_id: input.user_id,
-        period_type: input.period_type,
-        source_period_id: input.source_period_id,
-      },
-    });
-  },
+  // RETIRED: `update_user_summary` job handler removed — the user_summaries build is
+  // disabled (enqueue chokepoint is a no-op, period triggers un-exported). Any orphaned
+  // jobs already in the queue will fail as an unknown type, which is safe.
 
   // Budget CRUD cascade jobs
   process_budget_created: async (ctx, payload) => {

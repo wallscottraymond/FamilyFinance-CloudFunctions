@@ -35,7 +35,6 @@ import {
   validate_user_period_summary,
 } from "../../domain/summaries";
 import { user_summary_repo, TransactionDependencies } from "../../repositories/user_summary.repo";
-import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 
 // ============================================================================
 // PERFORMANCE BUDGET
@@ -241,40 +240,17 @@ export async function update_user_summary_orchestrator(
  * @returns Count of jobs enqueued (excludes deduplicated no-ops)
  */
 async function enqueue_summary_update_jobs(
-  ctx: TraceContext,
-  user_id: string,
-  periods_by_type: Map<string, Set<string>>
+  _ctx: TraceContext,
+  _user_id: string,
+  _periods_by_type: Map<string, Set<string>>
 ): Promise<number> {
-  let enqueued = 0;
-
-  for (const [period_type, source_period_ids] of periods_by_type.entries()) {
-    const normalized_period_type = period_type.toLowerCase();
-    for (const source_period_id of source_period_ids) {
-      const deduplication_key =
-        `${user_id}_${normalized_period_type}_${source_period_id}`;
-
-      const job = await create_job_if_not_exists(
-        "update_user_summary",
-        {
-          user_id,
-          period_type,
-          source_period_id,
-          deduplication_key,
-        },
-        // DEBOUNCE (cost fix): bulk period generation/regen enqueues one job per
-        // (period_type, source_period) — a delayed job stays `pending`, so any
-        // trigger-side updates that land in the same window dedup against it
-        // instead of spawning a second expensive rebuild for the same summary.
-        { trace_id: ctx.trace_id, delay_seconds: 30 }
-      );
-
-      if (job) {
-        enqueued += 1;
-      }
-    }
-  }
-
-  return enqueued;
+  // RETIRED: the `user_summaries` materialized build is disabled. This is the single
+  // chokepoint through which every summary-affecting change enqueued an
+  // `update_user_summary` job; making it a no-op stops the build pipeline + its `_jobs`
+  // churn from ALL callers (period triggers + generation cascades) without touching each
+  // call site. The app reads period nav from `source_periods` and financials via the
+  // derive-on-read path. Reversible: restore from git history.
+  return 0;
 }
 
 /**

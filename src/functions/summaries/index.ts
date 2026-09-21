@@ -17,10 +17,13 @@ export * from "./api/getUserPeriodSummary";
 export * from "./api/recalculateUserPeriodSummary";
 export * from "./api/regenerateAllUserSummaries";
 
-// Export Firestore triggers
-export * from "./triggers/outflowPeriodSummaryTriggers";
-export * from "./triggers/budgetPeriodSummaryTriggers";
-export * from "./triggers/inflowPeriodSummaryTriggers";
+// Firestore triggers — RETIRED. The `user_summaries` materialized build is disabled: the app
+// reads period nav from `source_periods` and financials via the derive-on-read path. Un-exporting
+// these 6 period-summary triggers removes them from the deployed set (they do no other work).
+// Reversible: restore these exports + the enqueue chokepoint in update_user_summary.orchestrator.
+// export * from "./triggers/outflowPeriodSummaryTriggers";
+// export * from "./triggers/budgetPeriodSummaryTriggers";
+// export * from "./triggers/inflowPeriodSummaryTriggers";
 
 // Export types
 export * from "./types";
