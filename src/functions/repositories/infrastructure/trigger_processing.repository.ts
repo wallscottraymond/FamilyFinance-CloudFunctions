@@ -14,6 +14,8 @@ import { TraceContext } from "../../types";
  * Collection name for trigger processing records.
  */
 const COLLECTION = "_trigger_processing";
+/** How long a trigger dedup record is retained (TTL) — well beyond the replay window. */
+const TRIGGER_DEDUP_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 
 /**
  * Trigger processing record.
@@ -30,6 +32,10 @@ export interface TriggerProcessingRecord {
 
   /** When the trigger was processed */
   processed_at: Timestamp;
+
+  /** TTL field: Firestore auto-deletes this dedup record once past. Set to processed_at +
+   *  TRIGGER_DEDUP_RETENTION so only records older than the trigger-replay window expire. */
+  expire_at: Timestamp;
 
   /** Trace ID for correlation */
   trace_id?: string;
@@ -103,11 +109,15 @@ export async function mark_processed(
 ): Promise<void> {
   const db = getFirestore();
 
+  const now_ms = Date.now();
   const record: TriggerProcessingRecord = {
     key,
     document_id,
     event_id,
-    processed_at: Timestamp.now(),
+    processed_at: Timestamp.fromMillis(now_ms),
+    // TTL: dedup guards only matter for the trigger-replay window (minutes-hours). Keep 2 days
+    // of headroom, then Firestore auto-deletes them (no cleanup-cron reads).
+    expire_at: Timestamp.fromMillis(now_ms + TRIGGER_DEDUP_RETENTION_MS),
     trace_id: ctx.trace_id,
   };
 

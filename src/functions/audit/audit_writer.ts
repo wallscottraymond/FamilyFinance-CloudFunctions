@@ -1,8 +1,9 @@
 /**
  * Audit Trail Writer
  *
- * Provides append-only audit logging for all repository writes.
- * Audit entries are NEVER deleted - they form an immutable record.
+ * Provides append-only audit logging for all repository writes. Entries carry an `expire_at`
+ * TTL field (timestamp + AUDIT_RETENTION_MS) so Firestore auto-expires them past the retention
+ * window — bounding the collection (it previously grew unbounded, reaching millions of docs).
  *
  * @module audit/writer
  */
@@ -19,10 +20,12 @@ import { compute_hash } from "../types";
 import { fire_and_forget } from "../observability";
 
 /**
- * Firestore collection for audit entries.
- * This collection is append-only and should NEVER be deleted.
+ * Firestore collection for audit entries. Append-only; entries auto-expire via the `expire_at`
+ * TTL field after AUDIT_RETENTION_MS (enable a TTL policy on `_audit.expire_at`).
  */
 const AUDIT_COLLECTION = "_audit";
+/** Audit-trail retention (TTL). Bounds the collection; was previously never deleted. */
+const AUDIT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
  * Computes the list of changed fields between before and after states.
@@ -59,9 +62,11 @@ function create_audit_entry(input: AuditEntryInput): AuditEntry {
     ? compute_changed_fields(input.before, input.after)
     : undefined;
 
+  const now_ms = Date.now();
   return {
     audit_id: uuid(),
-    timestamp: Timestamp.now(),
+    timestamp: Timestamp.fromMillis(now_ms),
+    expire_at: Timestamp.fromMillis(now_ms + AUDIT_RETENTION_MS),
     user_id: input.user_id,
     action: input.action,
     entity_type: input.entity_type,

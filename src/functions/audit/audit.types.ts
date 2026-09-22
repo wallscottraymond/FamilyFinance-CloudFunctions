@@ -42,6 +42,10 @@ export interface AuditEntry {
   /** Timestamp of the audited action */
   timestamp: Timestamp;
 
+  /** TTL field: Firestore auto-deletes the entry once past (= timestamp + retention). Bounds
+   *  the otherwise unbounded audit trail without a cleanup cron. */
+  expire_at: Timestamp;
+
   /** User who performed the action */
   user_id: string;
 

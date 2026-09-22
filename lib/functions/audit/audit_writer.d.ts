@@ -1,8 +1,9 @@
 /**
  * Audit Trail Writer
  *
- * Provides append-only audit logging for all repository writes.
- * Audit entries are NEVER deleted - they form an immutable record.
+ * Provides append-only audit logging for all repository writes. Entries carry an `expire_at`
+ * TTL field (timestamp + AUDIT_RETENTION_MS) so Firestore auto-expires them past the retention
+ * window — bounding the collection (it previously grew unbounded, reaching millions of docs).
  *
  * @module audit/writer
  */

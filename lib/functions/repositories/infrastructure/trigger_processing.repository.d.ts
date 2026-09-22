@@ -20,6 +20,9 @@ export interface TriggerProcessingRecord {
     event_id: string;
     /** When the trigger was processed */
     processed_at: Timestamp;
+    /** TTL field: Firestore auto-deletes this dedup record once past. Set to processed_at +
+     *  TRIGGER_DEDUP_RETENTION so only records older than the trigger-replay window expire. */
+    expire_at: Timestamp;
     /** Trace ID for correlation */
     trace_id?: string;
 }
