@@ -37,7 +37,10 @@ import {
   SplitForAssignment,
   AssignmentContext,
 } from "../../domain/transactions/compute_transaction_assignment.service";
-import { resolve_recurring_matches } from "./recurring_matches.resolver";
+import {
+  resolve_recurring_matches,
+  PreloadedRecurringCandidates,
+} from "./recurring_matches.resolver";
 
 /** What the orchestrator needs back: the raw splits (for read-modify-write) + the pure input. */
 export interface ResolvedAssignment {
@@ -184,7 +187,8 @@ export async function resolve_assignment_context(
   ctx: TraceContext,
   user_id: string,
   transaction_id: string,
-  shared?: SharedAssignmentContext
+  shared?: SharedAssignmentContext,
+  preloaded_candidates?: PreloadedRecurringCandidates
 ): Promise<ResolvedAssignment | null> {
   const span = create_span(ctx, "resolver", "resolve_assignment_context");
   log_operation_start(span, user_id);
@@ -224,6 +228,7 @@ export async function resolve_assignment_context(
         txn_plaid_id,
         outflow_tx_to_id: resolved_shared.outflow_tx_to_id,
         inflow_tx_to_id: resolved_shared.inflow_tx_to_id,
+        preloaded_candidates,
       }
     ),
   ]);

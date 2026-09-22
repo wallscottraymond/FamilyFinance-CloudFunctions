@@ -19,10 +19,14 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 import { assign_transaction_orchestrator } from '../src/functions/orchestrators/transactions/assign_transaction.orchestrator';
+import { assign_transactions_batch_orchestrator } from '../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator';
 
 const ctx = () => ({ trace_id: `t_${Date.now()}`, span_id: `s_${Date.now()}` });
 const uid = () => `u_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Relative to now so the txn + period land inside the batch orchestrator's preload window.
+const tsAgo = (days: number) => Timestamp.fromDate(new Date(Date.now() - days * DAY_MS));
 
 /* eslint-disable @typescript-eslint/naming-convention */
 async function seedBudget(id: string, userId: string, fields: Record<string, unknown>) {
@@ -71,6 +75,34 @@ async function seedOutflow(id: string, userId: string, transactionIds: string[],
     plaidPrimaryCategory: 'LOAN_PAYMENTS', plaidDetailedCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
     type: 'recurring', source: 'plaid', isUserModified: false, transactionIds, tags: [], rules: [],
     removedByUser: false, removalIntervals: [], ...over,
+  });
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
+/* eslint-disable @typescript-eslint/naming-convention */
+// A DUE outflow period (bill occurrence) — the fuzzy matcher's candidate. `firstDueDateInPeriod`
+// + userId are what the ±90d candidate query filters on; merchant/amount drive the score.
+async function seedOutflowPeriod(
+  id: string,
+  userId: string,
+  outflowId: string,
+  merchant: string,
+  amount: number,
+  dueDaysAgo: number
+) {
+  await db.collection('outflow_periods').doc(id).set({
+    id, userId, ownerId: userId, outflowId, isActive: true,
+    firstDueDateInPeriod: tsAgo(dueDaysAgo), merchantName: merchant,
+    amountPerOccurrence: amount, expectedAmount: amount, totalAmountDue: amount,
+    transactionSplits: [], metadata: {}, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+  });
+}
+async function seedFuzzyExpenseTxn(id: string, userId: string, merchant: string, amount: number, daysAgo: number) {
+  await db.collection('transactions').doc(id).set({
+    transactionId: id, userId, isActive: true, transactionDate: tsAgo(daysAgo),
+    merchantName: merchant, name: merchant, type: 'expense',
+    splits: [split('s1', 'RENT_AND_UTILITIES', amount)],
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   });
 }
 /* eslint-enable @typescript-eslint/naming-convention */
@@ -180,5 +212,39 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     const doc = (await db.collection('transactions').doc(txnId).get()).data()!;
     const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === 's1');
     expect(s1.outflowId).toBe(`kia_${txnId}`); // deterministically linked from the stream
+  });
+
+  // READ-COST FIX: the batch orchestrator loads recurring candidates ONCE (preloaded) and
+  // filters them to each txn's ±90d window in memory. This proves that yields the SAME fuzzy
+  // match as the single-item path (which queries per-transaction) — a pure perf change.
+  it('batch preloaded-candidate path fuzzy-matches a bill IDENTICALLY to the single-item path', async () => {
+    const userId = uid();
+    const billId = `bill_${Date.now()}`;
+    const merchant = 'Acme Utilities Co';
+    const amount = 137.5;
+    // Bill def with NO stream transactionIds → the txn cannot deterministically link → fuzzy.
+    await seedOutflow(billId, userId, [], { merchantName: merchant, userCustomName: merchant });
+    // One DUE occurrence ~3 days ago (inside both the ±90d match window and the batch preload window).
+    await seedOutflowPeriod(`${billId}_p`, userId, billId, merchant, amount, 3);
+    await seedBudget(`ee_${billId}`, userId, { isSystemEverythingElse: true, period: 'monthly' });
+    // Two IDENTICAL fuzzy txns (distinct ids) — one per path.
+    const txnSingle = `fzS_${Date.now()}`;
+    const txnBatch = `fzB_${Date.now()}`;
+    await seedFuzzyExpenseTxn(txnSingle, userId, merchant, amount, 3);
+    await seedFuzzyExpenseTxn(txnBatch, userId, merchant, amount, 3);
+
+    await assign_transaction_orchestrator(ctx(), { user_id: userId, transaction_id: txnSingle });
+    await assign_transactions_batch_orchestrator(ctx(), { user_id: userId, transaction_ids: [txnBatch] });
+
+    const pick = (docId: string) =>
+      db.collection('transactions').doc(docId).get().then((d) => {
+        const s = (d.data()!.splits as Array<{ splitId: string; outflowId?: string }>)
+          .find((x) => x.splitId === 's1');
+        return s?.outflowId ?? null;
+      });
+    const singleOutflow = await pick(txnSingle);
+    const batchOutflow = await pick(txnBatch);
+    expect(singleOutflow).toBe(billId);   // single-item path fuzzy-matched the bill
+    expect(batchOutflow).toBe(singleOutflow); // batch path produced the IDENTICAL match
   });
 });

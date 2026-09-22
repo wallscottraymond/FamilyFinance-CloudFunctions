@@ -15,6 +15,7 @@ import { TraceContext } from "../../types";
 import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
 import { CategoryRule } from "../../domain/transactions/match_category.service";
 import { SplitForAssignment, AssignmentContext } from "../../domain/transactions/compute_transaction_assignment.service";
+import { PreloadedRecurringCandidates } from "./recurring_matches.resolver";
 /** What the orchestrator needs back: the raw splits (for read-modify-write) + the pure input. */
 export interface ResolvedAssignment {
     transaction_doc_id: string;
@@ -65,5 +66,5 @@ export declare function resolve_shared_assignment_context(ctx: TraceContext, use
  *   recurring matches are read.
  * @returns The resolved context, or null if the transaction is missing/inactive.
  */
-export declare function resolve_assignment_context(ctx: TraceContext, user_id: string, transaction_id: string, shared?: SharedAssignmentContext): Promise<ResolvedAssignment | null>;
+export declare function resolve_assignment_context(ctx: TraceContext, user_id: string, transaction_id: string, shared?: SharedAssignmentContext, preloaded_candidates?: PreloadedRecurringCandidates): Promise<ResolvedAssignment | null>;
 //# sourceMappingURL=assignment_context.resolver.d.ts.map

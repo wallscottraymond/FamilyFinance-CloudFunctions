@@ -28,6 +28,7 @@ import {
   resolve_assignment_context,
   resolve_shared_assignment_context,
 } from "../../resolvers/transactions/assignment_context.resolver";
+import { load_recurring_candidates } from "../../resolvers/transactions/recurring_matches.resolver";
 import {
   compute_transaction_assignment,
 } from "../../domain/transactions/compute_transaction_assignment.service";
@@ -53,6 +54,14 @@ export interface AssignTransactionsBatchResult {
  */
 const CONCURRENCY = 20;
 
+/**
+ * Window (relative to now) over which recurring-match candidate periods are loaded ONCE for the
+ * whole batch. Must comfortably exceed the matcher's ±90d window so a batch of recent txns is
+ * fully covered; older historical txns fall back to a per-transaction candidate query.
+ */
+const CANDIDATE_LOOKBACK_MS = 400 * 24 * 60 * 60 * 1000;
+const CANDIDATE_LOOKAHEAD_MS = 120 * 24 * 60 * 60 * 1000;
+
 export async function assign_transactions_batch_orchestrator(
   ctx: TraceContext,
   input: AssignTransactionsBatchInput
@@ -69,6 +78,19 @@ export async function assign_transactions_batch_orchestrator(
     // Resolve the transaction-independent context ONCE for the whole batch.
     const shared = await resolve_shared_assignment_context(ctx, input.user_id);
 
+    // Load recurring-match candidate periods ONCE for the whole batch instead of per
+    // transaction (the top Firestore read line: outflow_periods/inflow_periods by
+    // firstDueDateInPeriod). resolve_recurring_matches filters these to each txn's exact ±90d
+    // window in memory, so matches are byte-for-byte identical; txns dated outside this window
+    // (rare historical backfills) fall back to a per-transaction candidate query.
+    const now_ms = Timestamp.now().toMillis();
+    const preloaded_candidates = await load_recurring_candidates(
+      ctx,
+      input.user_id,
+      now_ms - CANDIDATE_LOOKBACK_MS,
+      now_ms + CANDIDATE_LOOKAHEAD_MS
+    );
+
     let processed = 0;
     let changed = 0;
     let not_found = 0;
@@ -78,7 +100,8 @@ export async function assign_transactions_batch_orchestrator(
         ctx,
         input.user_id,
         transaction_id,
-        shared
+        shared,
+        preloaded_candidates
       );
       if (!resolved) {
         not_found++;

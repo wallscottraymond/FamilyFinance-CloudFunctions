@@ -37,7 +37,80 @@ function ms(value: unknown): number | null {
   return value instanceof Timestamp ? value.toMillis() : null;
 }
 
-/** Outflow (bill) period candidates around the transaction date. */
+/** Map a raw outflow_period doc → bill candidate (pure). */
+function to_outflow_candidate(id: string, d: Record<string, unknown>): RecurringCandidate {
+  const meta = (d.metadata as Record<string, unknown>) ?? {};
+  const splits_on_period = (d.transactionSplits as unknown[]) ?? [];
+  return {
+    period_id: id,
+    recurring_id: d.outflowId as string,
+    merchant_name:
+      (d.merchantName as string | null) ??
+      (meta.outflowMerchantName as string | null) ??
+      null,
+    // A single transaction settles ONE occurrence, so score against the
+    // per-occurrence amount (fall back to the period total / amount due).
+    expected_amount:
+      (d.amountPerOccurrence as number) ??
+      (d.expectedAmount as number) ??
+      (d.totalAmountDue as number) ??
+      0,
+    due_date_ms: ms(d.firstDueDateInPeriod),
+    is_settled: splits_on_period.length > 0,
+  };
+}
+
+/** Map a raw inflow_period doc → income candidate (pure). */
+function to_inflow_candidate(id: string, d: Record<string, unknown>): RecurringCandidate {
+  const transaction_ids = (d.transactionIds as unknown[]) ?? [];
+  return {
+    period_id: id,
+    recurring_id: d.inflowId as string,
+    merchant_name:
+      (d.merchant as string | null) ?? (d.payee as string | null) ?? null,
+    expected_amount: (d.expectedAmount as number) ?? 0,
+    due_date_ms: ms(d.firstDueDateInPeriod),
+    is_settled: transaction_ids.length > 0,
+  };
+}
+
+/**
+ * Bill + income candidate periods loaded ONCE for a whole assign-batch (covering
+ * [window_start_ms, window_end_ms]) instead of per transaction. `resolve_recurring_matches`
+ * filters these to each transaction's ±90d window in memory, so the matched result is
+ * IDENTICAL to loading per-transaction — this only removes the repeated
+ * `outflow_periods`/`inflow_periods` reads (the top Firestore read line).
+ */
+export interface PreloadedRecurringCandidates {
+  outflow_candidates: RecurringCandidate[];
+  inflow_candidates: RecurringCandidate[];
+  window_start_ms: number;
+  window_end_ms: number;
+}
+
+/**
+ * Load ALL bill + income candidate periods due in [start_ms, end_ms] ONCE (for the batch path).
+ * These are the same two queries the per-transaction path runs — executed a single time.
+ */
+export async function load_recurring_candidates(
+  ctx: TraceContext,
+  user_id: string,
+  start_ms: number,
+  end_ms: number
+): Promise<PreloadedRecurringCandidates> {
+  const [outflow_docs, inflow_docs] = await Promise.all([
+    outflow_period_repo.get_in_due_window(ctx, user_id, start_ms, end_ms),
+    inflow_period_repo.get_in_due_window(ctx, user_id, start_ms, end_ms),
+  ]);
+  return {
+    outflow_candidates: outflow_docs.map(({ id, data }) => to_outflow_candidate(id, data)),
+    inflow_candidates: inflow_docs.map(({ id, data }) => to_inflow_candidate(id, data)),
+    window_start_ms: start_ms,
+    window_end_ms: end_ms,
+  };
+}
+
+/** Outflow (bill) period candidates around the transaction date (per-transaction fallback). */
 async function load_outflow_candidates(
   ctx: TraceContext,
   user_id: string,
@@ -49,30 +122,10 @@ async function load_outflow_candidates(
     txn_date_ms - WINDOW_MS,
     txn_date_ms + WINDOW_MS
   );
-  return docs.map(({ id, data: d }) => {
-    const meta = (d.metadata as Record<string, unknown>) ?? {};
-    const splits_on_period = (d.transactionSplits as unknown[]) ?? [];
-    return {
-      period_id: id,
-      recurring_id: d.outflowId as string,
-      merchant_name:
-        (d.merchantName as string | null) ??
-        (meta.outflowMerchantName as string | null) ??
-        null,
-      // A single transaction settles ONE occurrence, so score against the
-      // per-occurrence amount (fall back to the period total / amount due).
-      expected_amount:
-        (d.amountPerOccurrence as number) ??
-        (d.expectedAmount as number) ??
-        (d.totalAmountDue as number) ??
-        0,
-      due_date_ms: ms(d.firstDueDateInPeriod),
-      is_settled: splits_on_period.length > 0,
-    };
-  });
+  return docs.map(({ id, data }) => to_outflow_candidate(id, data));
 }
 
-/** Inflow (income) period candidates around the transaction date. */
+/** Inflow (income) period candidates around the transaction date (per-transaction fallback). */
 async function load_inflow_candidates(
   ctx: TraceContext,
   user_id: string,
@@ -84,18 +137,30 @@ async function load_inflow_candidates(
     txn_date_ms - WINDOW_MS,
     txn_date_ms + WINDOW_MS
   );
-  return docs.map(({ id, data: d }) => {
-    const transaction_ids = (d.transactionIds as unknown[]) ?? [];
-    return {
-      period_id: id,
-      recurring_id: d.inflowId as string,
-      merchant_name:
-        (d.merchant as string | null) ?? (d.payee as string | null) ?? null,
-      expected_amount: (d.expectedAmount as number) ?? 0,
-      due_date_ms: ms(d.firstDueDateInPeriod),
-      is_settled: transaction_ids.length > 0,
-    };
-  });
+  return docs.map(({ id, data }) => to_inflow_candidate(id, data));
+}
+
+/**
+ * Candidates for a transaction: reuse the batch-preloaded set (filtered to the txn's ±90d
+ * window — identical to a fresh query) when it fully covers that window; otherwise fall back
+ * to a per-transaction query (e.g. a historical date outside the preloaded window).
+ */
+async function candidates_for_txn(
+  ctx: TraceContext,
+  user_id: string,
+  is_expense: boolean,
+  txn_date_ms: number,
+  preloaded?: PreloadedRecurringCandidates
+): Promise<RecurringCandidate[]> {
+  const lo = txn_date_ms - WINDOW_MS;
+  const hi = txn_date_ms + WINDOW_MS;
+  if (preloaded && lo >= preloaded.window_start_ms && hi <= preloaded.window_end_ms) {
+    const all = is_expense ? preloaded.outflow_candidates : preloaded.inflow_candidates;
+    return all.filter((c) => c.due_date_ms != null && c.due_date_ms >= lo && c.due_date_ms <= hi);
+  }
+  return is_expense
+    ? load_outflow_candidates(ctx, user_id, txn_date_ms)
+    : load_inflow_candidates(ctx, user_id, txn_date_ms);
 }
 
 /**
@@ -115,6 +180,8 @@ export async function resolve_recurring_matches(
     txn_plaid_id?: string | null;
     outflow_tx_to_id?: Map<string, string>;
     inflow_tx_to_id?: Map<string, string>;
+    /** Batch-preloaded candidate periods (loaded once per batch) — avoids the per-txn query. */
+    preloaded_candidates?: PreloadedRecurringCandidates;
   } = {}
 ): Promise<RecurringBySplit> {
   const out: RecurringBySplit = {};
@@ -145,9 +212,13 @@ export async function resolve_recurring_matches(
     }
   }
 
-  const candidates = is_expense
-    ? await load_outflow_candidates(ctx, user_id, txn_date_ms)
-    : await load_inflow_candidates(ctx, user_id, txn_date_ms);
+  const candidates = await candidates_for_txn(
+    ctx,
+    user_id,
+    is_expense,
+    txn_date_ms,
+    opts.preloaded_candidates
+  );
 
   if (candidates.length === 0) {
     return out;
