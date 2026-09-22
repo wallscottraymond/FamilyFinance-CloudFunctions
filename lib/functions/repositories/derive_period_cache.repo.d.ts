@@ -17,9 +17,12 @@
  *
  * @module repositories/derive_period_cache
  */
+import { Timestamp } from "firebase-admin/firestore";
 export interface CachedDerivedPeriod<TResult> {
     data_version: number;
     computed_at_ms: number;
+    /** TTL field: Firestore auto-deletes the cache entry once past (= computed_at + retention). */
+    expire_at: Timestamp;
     result: TResult;
 }
 /** Read the cached derived period for this exact call, or null. 1 read. */

@@ -25,9 +25,17 @@ const COLLECTION = "derived_period_cache";
 /** Firestore hard limit is ~1 MiB/doc; stay well under to leave headroom for metadata. */
 const MAX_CACHE_DOC_BYTES = 800_000;
 
+/** Cache-entry retention (TTL). One doc per (user, cadence, window), so it grows as users
+ *  navigate to more windows. Correctness is via version-match, not freshness — 7 days is far
+ *  beyond any active session; past that Firestore auto-expires stale entries via `expire_at`
+ *  (enable a TTL policy on `derived_period_cache.expire_at`). */
+const CACHE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export interface CachedDerivedPeriod<TResult> {
   data_version: number;
   computed_at_ms: number;
+  /** TTL field: Firestore auto-deletes the cache entry once past (= computed_at + retention). */
+  expire_at: Timestamp;
   result: TResult;
 }
 
@@ -69,9 +77,11 @@ export async function put_cached_derived_period<TResult>(
   data_version: number,
   result: TResult
 ): Promise<void> {
+  const now_ms = Timestamp.now().toMillis();
   const doc: CachedDerivedPeriod<TResult> = {
     data_version,
-    computed_at_ms: Timestamp.now().toMillis(),
+    computed_at_ms: now_ms,
+    expire_at: Timestamp.fromMillis(now_ms + CACHE_RETENTION_MS),
     result,
   };
 

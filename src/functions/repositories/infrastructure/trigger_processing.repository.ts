@@ -123,17 +123,3 @@ export async function mark_processed(
 
   await db.collection(COLLECTION).doc(key).set(record);
 }
-
-/**
- * Gets count of trigger processing records.
- *
- * @param ctx - Trace context
- * @returns Count of records
- */
-export async function get_record_count(_ctx: TraceContext): Promise<number> {
-  const db = getFirestore();
-
-  const result = await db.collection(COLLECTION).count().get();
-
-  return result.data().count;
-}

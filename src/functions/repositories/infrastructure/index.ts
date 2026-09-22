@@ -22,7 +22,6 @@ export {
 export {
   LOG_COLLECTIONS,
   delete_old_records as delete_old_log_records,
-  get_record_count as get_log_record_count,
   write_minimal_log,
   write_debug_log,
   write_trace_summary,
@@ -34,7 +33,6 @@ export {
   delete_old_records as delete_old_trigger_records,
   is_processed as is_trigger_processed,
   mark_processed as mark_trigger_processed,
-  get_record_count as get_trigger_record_count,
 } from "./trigger_processing.repository";
 
 // Soft delete

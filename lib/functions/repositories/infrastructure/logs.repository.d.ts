@@ -29,14 +29,6 @@ export declare function delete_old_records(ctx: TraceContext, collection: string
     deleted_count: number;
 }>;
 /**
- * Gets count of records in a log collection.
- *
- * @param ctx - Trace context
- * @param collection - Collection name
- * @returns Count of records
- */
-export declare function get_record_count(ctx: TraceContext, collection: string): Promise<number>;
-/**
  * Writes a minimal log entry.
  *
  * @param ctx - Trace context

@@ -26,6 +26,10 @@ export interface DomainEvent<T = unknown> {
     causation_id: string;
     /** When the event occurred */
     created_at: Timestamp;
+    /** TTL field: Firestore auto-deletes the event once past (= created_at + retention). This log
+     *  is written on EVERY balance update / sync / item change, so it scales with activity × users;
+     *  the TTL bounds it (enable a TTL policy on `_domain_events.expire_at`). */
+    expire_at: Timestamp;
     /** User who triggered the event (if applicable) */
     user_id?: string;
 }
@@ -48,7 +52,7 @@ interface EmitOptions {
  * @param event - The domain event to emit
  * @param options - Emission options
  */
-export declare function emit_domain_event<T>(event: Omit<DomainEvent<T>, "event_id" | "created_at">, options?: EmitOptions): void;
+export declare function emit_domain_event<T>(event: Omit<DomainEvent<T>, "event_id" | "created_at" | "expire_at">, options?: EmitOptions): void;
 /**
  * Creates an event emitter bound to a trace context.
  * Convenience function for orchestrators.

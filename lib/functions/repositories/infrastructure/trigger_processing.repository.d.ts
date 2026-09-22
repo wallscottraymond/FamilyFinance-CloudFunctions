@@ -54,11 +54,4 @@ export declare function is_processed(ctx: TraceContext, key: string): Promise<bo
  * @param event_id - Firebase event ID
  */
 export declare function mark_processed(ctx: TraceContext, key: string, document_id: string, event_id: string): Promise<void>;
-/**
- * Gets count of trigger processing records.
- *
- * @param ctx - Trace context
- * @returns Count of records
- */
-export declare function get_record_count(_ctx: TraceContext): Promise<number>;
 //# sourceMappingURL=trigger_processing.repository.d.ts.map

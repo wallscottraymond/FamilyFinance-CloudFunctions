@@ -51,6 +51,12 @@ export interface Job<TPayload = unknown> {
   /** When to execute (for delayed jobs) */
   scheduled_for?: Timestamp;
 
+  /** TTL field: set ONLY when a job reaches a terminal `completed` state (= updated_at +
+   *  COMPLETED_JOB_RETENTION). Firestore auto-deletes completed jobs past this, replacing the
+   *  scan-and-delete cleanup cron with a zero-read TTL policy on `_jobs.expire_at`. Pending /
+   *  processing jobs never carry it, so they are never TTL-reaped. */
+  expire_at?: Timestamp;
+
   /** Trace ID for correlation */
   trace_id?: string;
 }
@@ -73,6 +79,10 @@ const COLLECTIONS = {
   JOBS: "_jobs",
   DLQ: "_dead_letter_queue",
 } as const;
+
+/** How long a `completed` job doc is retained before Firestore TTL reaps it (matches the old
+ *  cleanup-cron's 24h completed-job retention). */
+const COMPLETED_JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Default configuration.
@@ -246,13 +256,19 @@ export async function mark_job_processing(job_id: string): Promise<void> {
 /**
  * Marks a job as completed.
  *
+ * Stamps `expire_at` (now + COMPLETED_JOB_RETENTION) so a Firestore TTL policy reaps the
+ * finished doc — completed jobs are the only terminal state retained in `_jobs` (failures
+ * retry-as-pending or move to the DLQ and delete), so this is what accumulated to ~1.6M.
+ *
  * @param job_id - Job ID
  */
 export async function mark_job_completed(job_id: string): Promise<void> {
   const db = getFirestore();
+  const now = Timestamp.now();
   await db.collection(COLLECTIONS.JOBS).doc(job_id).update({
     status: "completed",
-    updated_at: Timestamp.now(),
+    updated_at: now,
+    expire_at: Timestamp.fromMillis(now.toMillis() + COMPLETED_JOB_RETENTION_MS),
   });
 }
 

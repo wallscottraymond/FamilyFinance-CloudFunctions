@@ -57,24 +57,6 @@ export async function delete_old_records(
 }
 
 /**
- * Gets count of records in a log collection.
- *
- * @param ctx - Trace context
- * @param collection - Collection name
- * @returns Count of records
- */
-export async function get_record_count(
-  ctx: TraceContext,
-  collection: string
-): Promise<number> {
-  const db = getFirestore();
-
-  const result = await db.collection(collection).count().get();
-
-  return result.data().count;
-}
-
-/**
  * Writes a minimal log entry.
  *
  * @param ctx - Trace context

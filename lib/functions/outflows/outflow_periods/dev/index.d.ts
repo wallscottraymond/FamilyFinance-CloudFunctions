@@ -3,5 +3,5 @@
  *
  * Exports development and testing functions for outflow_periods
  */
-export * from './extendOutflowPeriods';
+export {};
 //# sourceMappingURL=index.d.ts.map

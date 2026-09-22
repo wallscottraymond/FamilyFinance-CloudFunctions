@@ -35,6 +35,11 @@ export interface DomainEvent<T = unknown> {
   /** When the event occurred */
   created_at: Timestamp;
 
+  /** TTL field: Firestore auto-deletes the event once past (= created_at + retention). This log
+   *  is written on EVERY balance update / sync / item change, so it scales with activity × users;
+   *  the TTL bounds it (enable a TTL policy on `_domain_events.expire_at`). */
+  expire_at: Timestamp;
+
   /** User who triggered the event (if applicable) */
   user_id?: string;
 }
@@ -52,6 +57,10 @@ interface EmitOptions {
  */
 const EVENTS_COLLECTION = "_domain_events";
 
+/** Domain-event retention (TTL). Events are an observability/replay log — 30 days is ample; past
+ *  that Firestore auto-expires them via `expire_at` so the collection can't grow unbounded. */
+const DOMAIN_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
  * Emits a domain event.
  *
@@ -65,13 +74,15 @@ const EVENTS_COLLECTION = "_domain_events";
  * @param options - Emission options
  */
 export function emit_domain_event<T>(
-  event: Omit<DomainEvent<T>, "event_id" | "created_at">,
+  event: Omit<DomainEvent<T>, "event_id" | "created_at" | "expire_at">,
   options: EmitOptions = {}
 ): void {
+  const now_ms = Date.now();
   const full_event: DomainEvent<T> = {
     ...event,
     event_id: generate_id(),
-    created_at: Timestamp.now(),
+    created_at: Timestamp.fromMillis(now_ms),
+    expire_at: Timestamp.fromMillis(now_ms + DOMAIN_EVENT_RETENTION_MS),
   };
 
   // Always log asynchronously

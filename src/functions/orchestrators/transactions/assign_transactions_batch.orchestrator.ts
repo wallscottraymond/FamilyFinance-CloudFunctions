@@ -55,12 +55,22 @@ export interface AssignTransactionsBatchResult {
 const CONCURRENCY = 20;
 
 /**
- * Window (relative to now) over which recurring-match candidate periods are loaded ONCE for the
- * whole batch. Must comfortably exceed the matcher's ±90d window so a batch of recent txns is
- * fully covered; older historical txns fall back to a per-transaction candidate query.
+ * Fallback window (relative to now) over which recurring-match candidate periods are loaded ONCE
+ * for the whole batch when we can't scope to the batch's own dates (see below). Must comfortably
+ * exceed the matcher's ±90d window; older historical txns fall back to a per-transaction query.
  */
 const CANDIDATE_LOOKBACK_MS = 400 * 24 * 60 * 60 * 1000;
 const CANDIDATE_LOOKAHEAD_MS = 120 * 24 * 60 * 60 * 1000;
+
+/** Matcher half-window: a txn can match a due period within ±90d of its date. */
+const MATCH_MARGIN_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Above this batch size we skip the per-id date probe and use the fixed fallback window — a full
+ * backfill would span all history anyway (so the probe wouldn't narrow anything) and the extra
+ * per-id reads wouldn't pay off. Normal Plaid-sync batches are far smaller than this.
+ */
+const CANDIDATE_PROBE_MAX_IDS = 500;
 
 export async function assign_transactions_batch_orchestrator(
   ctx: TraceContext,
@@ -81,14 +91,29 @@ export async function assign_transactions_batch_orchestrator(
     // Load recurring-match candidate periods ONCE for the whole batch instead of per
     // transaction (the top Firestore read line: outflow_periods/inflow_periods by
     // firstDueDateInPeriod). resolve_recurring_matches filters these to each txn's exact ±90d
-    // window in memory, so matches are byte-for-byte identical; txns dated outside this window
-    // (rare historical backfills) fall back to a per-transaction candidate query.
+    // window in memory, so matches are byte-for-byte identical; txns dated outside the loaded
+    // window fall back to a per-transaction candidate query.
+    //
+    // Scope the load to the BATCH's actual transaction dates (±90d) rather than a fixed ~520d
+    // span: an incremental sync touches only recent txns, so this collapses the candidate scan
+    // from ~the entire *_periods collection to the relevant slice. A field-masked date probe
+    // (batch-size reads) is far cheaper than reading every period doc. Fall back to the fixed
+    // window for very large batches (full backfills), where the dates span everything anyway.
     const now_ms = Timestamp.now().toMillis();
+    let window_start_ms = now_ms - CANDIDATE_LOOKBACK_MS;
+    let window_end_ms = now_ms + CANDIDATE_LOOKAHEAD_MS;
+    if (input.transaction_ids.length <= CANDIDATE_PROBE_MAX_IDS) {
+      const dates_ms = await transaction_repo.get_dates_ms_by_ids(ctx, input.transaction_ids);
+      if (dates_ms.length > 0) {
+        window_start_ms = Math.min(...dates_ms) - MATCH_MARGIN_MS;
+        window_end_ms = Math.max(...dates_ms) + MATCH_MARGIN_MS;
+      }
+    }
     const preloaded_candidates = await load_recurring_candidates(
       ctx,
       input.user_id,
-      now_ms - CANDIDATE_LOOKBACK_MS,
-      now_ms + CANDIDATE_LOOKAHEAD_MS
+      window_start_ms,
+      window_end_ms
     );
 
     let processed = 0;

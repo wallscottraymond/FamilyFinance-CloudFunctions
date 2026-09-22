@@ -798,6 +798,33 @@ export const transaction_repo = {
   },
 
   /**
+   * Reads ONLY `transactionDate` (as epoch ms) for a set of transaction doc ids via a
+   * field-masked batch get — a cheap probe (one read per id, no full docs) used to scope the
+   * recurring-match candidate window to a batch's actual date range instead of a fixed
+   * multi-hundred-day span. Missing docs / missing dates are simply skipped.
+   */
+  async get_dates_ms_by_ids(
+    _ctx: TraceContext,
+    doc_ids: string[]
+  ): Promise<number[]> {
+    if (doc_ids.length === 0) {
+      return [];
+    }
+    const db = getFirestore();
+    const refs = doc_ids.map((id) => doc_ref(id));
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Firestore SDK ReadOption
+    const snaps = await db.getAll(...refs, { fieldMask: ["transactionDate"] });
+    const dates_ms: number[] = [];
+    for (const snap of snaps) {
+      const ts = snap.get("transactionDate") as Timestamp | undefined;
+      if (ts) {
+        dates_ms.push(ts.toMillis());
+      }
+    }
+    return dates_ms;
+  },
+
+  /**
    * Writes the Transaction Assignment Engine's output: the updated splits array
    * (with the engine-owned assignment fields applied) plus the denormalized
    * `splitBudgetIds`. This is the engine's SINGLE write of split assignment.

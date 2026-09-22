@@ -38,6 +38,11 @@ export interface Job<TPayload = unknown> {
     updated_at: Timestamp;
     /** When to execute (for delayed jobs) */
     scheduled_for?: Timestamp;
+    /** TTL field: set ONLY when a job reaches a terminal `completed` state (= updated_at +
+     *  COMPLETED_JOB_RETENTION). Firestore auto-deletes completed jobs past this, replacing the
+     *  scan-and-delete cleanup cron with a zero-read TTL policy on `_jobs.expire_at`. Pending /
+     *  processing jobs never carry it, so they are never TTL-reaped. */
+    expire_at?: Timestamp;
     /** Trace ID for correlation */
     trace_id?: string;
 }
@@ -108,6 +113,10 @@ export declare function get_pending_jobs<TPayload = unknown>(job_type?: string, 
 export declare function mark_job_processing(job_id: string): Promise<void>;
 /**
  * Marks a job as completed.
+ *
+ * Stamps `expire_at` (now + COMPLETED_JOB_RETENTION) so a Firestore TTL policy reaps the
+ * finished doc — completed jobs are the only terminal state retained in `_jobs` (failures
+ * retry-as-pending or move to the DLQ and delete), so this is what accumulated to ~1.6M.
  *
  * @param job_id - Job ID
  */
