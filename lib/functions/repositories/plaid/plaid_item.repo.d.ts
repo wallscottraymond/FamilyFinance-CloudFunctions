@@ -72,6 +72,7 @@ export declare const plaid_item_repo: {
         item_doc_id: string;
         plaid_item_id: string;
         user_id: string;
+        status: PlaidItemStatus;
     }>>;
     /**
      * Gets a Plaid item by user and institution.

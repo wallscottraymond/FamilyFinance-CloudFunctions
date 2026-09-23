@@ -43,6 +43,11 @@ export async function sync_all_transactions_orchestrator(
   };
 
   for (const item of items) {
+    // Skip re-auth-needed items — Plaid rejects their sync/balance calls until the user relinks,
+    // so retrying every 6h just burns reads + a failed Plaid call. The relink flow re-enables them.
+    if (item.status === "item_login_required") {
+      continue;
+    }
     try {
       const sync = await sync_transactions_orchestrator({
         trace_id: ctx.trace_id,

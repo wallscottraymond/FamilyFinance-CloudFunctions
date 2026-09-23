@@ -261,7 +261,14 @@ export const plaid_item_repo = {
    */
   async get_all_active(
     _ctx: TraceContext
-  ): Promise<Array<{ item_doc_id: string; plaid_item_id: string; user_id: string }>> {
+  ): Promise<
+    Array<{
+      item_doc_id: string;
+      plaid_item_id: string;
+      user_id: string;
+      status: PlaidItemStatus;
+    }>
+  > {
     const db = get_db();
     const snapshot = await db.collection(COLLECTION).where("isActive", "==", true).get();
     return snapshot.docs.map((doc) => {
@@ -270,6 +277,7 @@ export const plaid_item_repo = {
         item_doc_id: doc.id,
         plaid_item_id: legacy.plaidItemId,
         user_id: legacy.userId,
+        status: legacy.status,
       };
     });
   },

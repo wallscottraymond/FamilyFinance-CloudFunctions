@@ -42,6 +42,10 @@ export async function sync_all_recurring_orchestrator(
   };
 
   for (const item of items) {
+    // Skip re-auth-needed items — Plaid rejects their calls until relinked.
+    if (item.status === "item_login_required") {
+      continue;
+    }
     try {
       const sync = await sync_recurring_orchestrator({
         trace_id: ctx.trace_id,

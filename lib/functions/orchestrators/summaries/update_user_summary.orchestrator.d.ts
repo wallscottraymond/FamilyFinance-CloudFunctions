@@ -68,7 +68,7 @@ export declare function enqueue_user_summary_updates_by_type(ctx: TraceContext, 
  * @param outflow_period_ids - Array of outflow_period document IDs
  * @returns Count of jobs enqueued
  */
-export declare function enqueue_user_summary_updates_from_outflow_periods(ctx: TraceContext, user_id: string, outflow_period_ids: string[]): Promise<number>;
+export declare function enqueue_user_summary_updates_from_outflow_periods(_ctx: TraceContext, _user_id: string, _outflow_period_ids: string[]): Promise<number>;
 /**
  * Update user summaries from inflow period IDs.
  *
@@ -82,7 +82,7 @@ export declare function enqueue_user_summary_updates_from_outflow_periods(ctx: T
  * @param inflow_period_ids - Array of inflow_period document IDs
  * @returns Count of summaries updated
  */
-export declare function enqueue_user_summary_updates_from_inflow_periods(ctx: TraceContext, user_id: string, inflow_period_ids: string[]): Promise<number>;
+export declare function enqueue_user_summary_updates_from_inflow_periods(_ctx: TraceContext, _user_id: string, _inflow_period_ids: string[]): Promise<number>;
 /**
  * Enqueue user-summary update jobs for the given budget periods.
  * Graph-oriented: routes through the shared `update_user_summary` job node.
@@ -92,5 +92,5 @@ export declare function enqueue_user_summary_updates_from_inflow_periods(ctx: Tr
  * @param budget_period_ids - Array of budget_period document IDs
  * @returns Count of jobs enqueued
  */
-export declare function enqueue_user_summary_updates_from_budget_periods(ctx: TraceContext, user_id: string, budget_period_ids: string[]): Promise<number>;
+export declare function enqueue_user_summary_updates_from_budget_periods(_ctx: TraceContext, _user_id: string, _budget_period_ids: string[]): Promise<number>;
 //# sourceMappingURL=update_user_summary.orchestrator.d.ts.map

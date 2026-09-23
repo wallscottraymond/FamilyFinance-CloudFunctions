@@ -26,11 +26,6 @@ import {
   log_async_debug,
 } from "../../observability";
 import {
-  resolve_outflow_periods_for_summary,
-  resolve_inflow_periods_for_summary,
-  resolve_budget_periods_for_summary,
-} from "../../resolvers/summaries";
-import {
   compute_user_period_summary,
   validate_user_period_summary,
 } from "../../domain/summaries";
@@ -287,22 +282,13 @@ export async function enqueue_user_summary_updates_by_type(
  * @returns Count of jobs enqueued
  */
 export async function enqueue_user_summary_updates_from_outflow_periods(
-  ctx: TraceContext,
-  user_id: string,
-  outflow_period_ids: string[]
+  _ctx: TraceContext,
+  _user_id: string,
+  _outflow_period_ids: string[]
 ): Promise<number> {
-  const { periods_by_type } = await resolve_outflow_periods_for_summary(
-    ctx,
-    outflow_period_ids
-  );
-  const enqueued = await enqueue_summary_update_jobs(ctx, user_id, periods_by_type);
-
-  console.log(
-    `[${ctx.trace_id}] enqueue_user_summary_updates_from_outflow_periods: ` +
-      `enqueued ${enqueued} summary jobs`
-  );
-
-  return enqueued;
+  // RETIRED (see enqueue_summary_update_jobs): the summary build is off, so resolving these period
+  // docs only to feed a no-op enqueue is a pure wasted read on EVERY cascade. Skip the read.
+  return 0;
 }
 
 // ============================================================================
@@ -323,22 +309,12 @@ export async function enqueue_user_summary_updates_from_outflow_periods(
  * @returns Count of summaries updated
  */
 export async function enqueue_user_summary_updates_from_inflow_periods(
-  ctx: TraceContext,
-  user_id: string,
-  inflow_period_ids: string[]
+  _ctx: TraceContext,
+  _user_id: string,
+  _inflow_period_ids: string[]
 ): Promise<number> {
-  const { periods_by_type } = await resolve_inflow_periods_for_summary(
-    ctx,
-    inflow_period_ids
-  );
-  const enqueued = await enqueue_summary_update_jobs(ctx, user_id, periods_by_type);
-
-  console.log(
-    `[${ctx.trace_id}] enqueue_user_summary_updates_from_inflow_periods: ` +
-      `enqueued ${enqueued} summary jobs`
-  );
-
-  return enqueued;
+  // RETIRED (see enqueue_summary_update_jobs): summary build off → skip the wasted read.
+  return 0;
 }
 
 // ============================================================================
@@ -355,20 +331,12 @@ export async function enqueue_user_summary_updates_from_inflow_periods(
  * @returns Count of jobs enqueued
  */
 export async function enqueue_user_summary_updates_from_budget_periods(
-  ctx: TraceContext,
-  user_id: string,
-  budget_period_ids: string[]
+  _ctx: TraceContext,
+  _user_id: string,
+  _budget_period_ids: string[]
 ): Promise<number> {
-  const { periods_by_type } = await resolve_budget_periods_for_summary(
-    ctx,
-    budget_period_ids
-  );
-  const enqueued = await enqueue_summary_update_jobs(ctx, user_id, periods_by_type);
-
-  console.log(
-    `[${ctx.trace_id}] enqueue_user_summary_updates_from_budget_periods: ` +
-      `enqueued ${enqueued} summary jobs`
-  );
-
-  return enqueued;
+  // RETIRED (see enqueue_summary_update_jobs): the summary build is off, so resolving these period
+  // docs (a getAll of every just-written/edited budget_period) only to feed a no-op enqueue was a
+  // pure wasted read on EVERY budget cascade. Skip the read.
+  return 0;
 }
