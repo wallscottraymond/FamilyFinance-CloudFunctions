@@ -136,19 +136,29 @@ export async function derive_period_orchestrator(
     perf.reads += 7;
 
     // Budgets — on-read match + derive (all from the shared splits, in memory).
-    const budgets: DerivedBudgetResult[] = deps.budgets.map((b) => {
-      const ee_id = b.is_ee ? b.id : deps.monthly_ee_id ?? deps.any_ee_id;
-      const owned = owned_splits_for_budget(b.id, deps.real_budgets, ee_id, deps.splits_for_match);
-      const periods = derive_budget_view_periods(
-        b.id,
-        deps.view_buckets,
-        b.monthly_periods,
-        owned,
-        b.active_start_ms,
-        b.active_end_ms
-      );
-      return { budget_id: b.id, name: b.name, is_everything_else: b.is_ee, periods };
-    });
+    const budgets: DerivedBudgetResult[] = deps.budgets
+      .map((b) => {
+        const ee_id = b.is_ee ? b.id : deps.monthly_ee_id ?? deps.any_ee_id;
+        const owned = owned_splits_for_budget(
+          b.id,
+          deps.real_budgets,
+          ee_id,
+          deps.splits_for_match
+        );
+        const periods = derive_budget_view_periods(
+          b.id,
+          deps.view_buckets,
+          b.monthly_periods,
+          owned,
+          b.active_start_ms,
+          b.active_end_ms
+        );
+        return { budget_id: b.id, name: b.name, is_everything_else: b.is_ee, periods };
+      })
+      // A budget with NO periods in this view is entirely outside its active range (e.g. a newly
+      // created budget viewed in a past period) — omit it so no empty $0 card is surfaced. EE is
+      // active from epoch, so it always has periods and is never dropped.
+      .filter((b) => b.periods.length > 0);
 
     // Bills + income — generate → reconcile → place (in memory).
     // Period end (ms) per bucket → drop occurrence-groups in a suppressed period
