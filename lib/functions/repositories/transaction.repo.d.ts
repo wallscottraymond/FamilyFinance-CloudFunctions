@@ -204,12 +204,16 @@ export declare const transaction_repo: {
      */
     get_by_id(ctx: TraceContext, doc_id: string): Promise<LegacyTransactionDoc | null>;
     /**
-     * Reads ONLY `transactionDate` (as epoch ms) for a set of transaction doc ids via a
-     * field-masked batch get — a cheap probe (one read per id, no full docs) used to scope the
-     * recurring-match candidate window to a batch's actual date range instead of a fixed
-     * multi-hundred-day span. Missing docs / missing dates are simply skipped.
+     * Bulk-reads the FULL active transaction docs for a set of ids via chunked `getAll` (≤300/call).
+     * Used by the batch assignment path to read each txn ONCE — instead of a per-transaction
+     * `get_raw_by_id` inside `resolve_assignment_context` (N single-doc reads per sync). The dates
+     * come along for free (so the candidate-window probe is no longer a separate read). Missing /
+     * inactive docs are skipped.
      */
-    get_dates_ms_by_ids(_ctx: TraceContext, doc_ids: string[]): Promise<number[]>;
+    get_raw_by_ids(_ctx: TraceContext, doc_ids: string[]): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
     /**
      * Writes the Transaction Assignment Engine's output: the updated splits array
      * (with the engine-owned assignment fields applied) plus the denormalized

@@ -34,6 +34,8 @@ import {
 } from "../../domain/transactions/compute_transaction_assignment.service";
 import { merge_assignment_onto_raw_splits } from "./merge_assignment";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { source_period_repo } from "../../repositories/source_period.repo";
+import { SourcePeriodForMatch } from "../../domain/transactions/match_source_periods.service";
 
 /** Input: assign every listed transaction for one user. */
 export interface AssignTransactionsBatchInput {
@@ -88,48 +90,62 @@ export async function assign_transactions_batch_orchestrator(
     // Resolve the transaction-independent context ONCE for the whole batch.
     const shared = await resolve_shared_assignment_context(ctx, input.user_id);
 
-    // Load recurring-match candidate periods ONCE for the whole batch instead of per
-    // transaction (the top Firestore read line: outflow_periods/inflow_periods by
-    // firstDueDateInPeriod). resolve_recurring_matches filters these to each txn's exact ±90d
-    // window in memory, so matches are byte-for-byte identical; txns dated outside the loaded
-    // window fall back to a per-transaction candidate query.
-    //
-    // Scope the load to the BATCH's actual transaction dates (±90d) rather than a fixed ~520d
-    // span: an incremental sync touches only recent txns, so this collapses the candidate scan
-    // from ~the entire *_periods collection to the relevant slice. A field-masked date probe
-    // (batch-size reads) is far cheaper than reading every period doc. Fall back to the fixed
-    // window for very large batches (full backfills), where the dates span everything anyway.
+    // Bulk-read the batch's txn docs ONCE (dates come along for free) — replaces the
+    // per-transaction `get_raw_by_id` inside resolve_assignment_context AND the old field-masked
+    // date probe. Inactive/missing docs are skipped by the repo.
     const now_ms = Timestamp.now().toMillis();
+    const txn_docs = await transaction_repo.get_raw_by_ids(ctx, input.transaction_ids);
+    const dates_ms = txn_docs.map((t) => (t.data.transactionDate as Timestamp).toMillis());
+
+    // Load recurring-match candidate periods ONCE (outflow_periods/inflow_periods), scoped to the
+    // batch's actual transaction dates ±90d (small for an incremental sync); fall back to the fixed
+    // window for very large batches / empty dates. resolve_recurring_matches filters to each txn's
+    // exact window in memory → byte-identical matches.
     let window_start_ms = now_ms - CANDIDATE_LOOKBACK_MS;
     let window_end_ms = now_ms + CANDIDATE_LOOKAHEAD_MS;
-    if (input.transaction_ids.length <= CANDIDATE_PROBE_MAX_IDS) {
-      const dates_ms = await transaction_repo.get_dates_ms_by_ids(ctx, input.transaction_ids);
-      if (dates_ms.length > 0) {
-        window_start_ms = Math.min(...dates_ms) - MATCH_MARGIN_MS;
-        window_end_ms = Math.max(...dates_ms) + MATCH_MARGIN_MS;
-      }
+    if (dates_ms.length > 0 && input.transaction_ids.length <= CANDIDATE_PROBE_MAX_IDS) {
+      window_start_ms = Math.min(...dates_ms) - MATCH_MARGIN_MS;
+      window_end_ms = Math.max(...dates_ms) + MATCH_MARGIN_MS;
     }
-    const preloaded_candidates = await load_recurring_candidates(
-      ctx,
-      input.user_id,
-      window_start_ms,
-      window_end_ms
-    );
+
+    // Preload the source periods overlapping the batch's date SPAN ONCE (source_periods is a
+    // global calendar collection; a per-txn `get_overlapping` here was O(N)/sync). The resolver
+    // filters this set to each txn's date in memory.
+    const span_start_ms = dates_ms.length ? Math.min(...dates_ms) : now_ms;
+    const span_end_ms = dates_ms.length ? Math.max(...dates_ms) : now_ms;
+    const [preloaded_candidates, overlapping_source_periods] = await Promise.all([
+      load_recurring_candidates(ctx, input.user_id, window_start_ms, window_end_ms),
+      source_period_repo.get_overlapping(
+        ctx,
+        Timestamp.fromMillis(span_start_ms),
+        Timestamp.fromMillis(span_end_ms)
+      ),
+    ]);
+    const preloaded_source_periods: SourcePeriodForMatch[] =
+      overlapping_source_periods.map((p) => ({
+        id: p.id,
+        type: p.period_type,
+        start_ms: p.start_date.toMillis(),
+        end_ms: p.end_date.toMillis(),
+      }));
 
     let processed = 0;
     let changed = 0;
-    let not_found = 0;
+    const not_found = input.transaction_ids.length - txn_docs.length;
 
-    const assign_one = async (transaction_id: string): Promise<void> => {
+    const assign_one = async (
+      txn: { id: string; data: Record<string, unknown> }
+    ): Promise<void> => {
       const resolved = await resolve_assignment_context(
         ctx,
         input.user_id,
-        transaction_id,
+        txn.id,
         shared,
-        preloaded_candidates
+        preloaded_candidates,
+        txn,
+        preloaded_source_periods
       );
       if (!resolved) {
-        not_found++;
         return;
       }
 
@@ -163,9 +179,9 @@ export async function assign_transactions_batch_orchestrator(
     };
 
     // Process in bounded-concurrency windows.
-    for (let i = 0; i < input.transaction_ids.length; i += CONCURRENCY) {
-      const window = input.transaction_ids.slice(i, i + CONCURRENCY);
-      await Promise.all(window.map((id) => assign_one(id)));
+    for (let i = 0; i < txn_docs.length; i += CONCURRENCY) {
+      const window = txn_docs.slice(i, i + CONCURRENCY);
+      await Promise.all(window.map((t) => assign_one(t)));
     }
 
     console.log(

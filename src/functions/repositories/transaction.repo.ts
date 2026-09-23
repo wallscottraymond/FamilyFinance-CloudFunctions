@@ -798,30 +798,33 @@ export const transaction_repo = {
   },
 
   /**
-   * Reads ONLY `transactionDate` (as epoch ms) for a set of transaction doc ids via a
-   * field-masked batch get — a cheap probe (one read per id, no full docs) used to scope the
-   * recurring-match candidate window to a batch's actual date range instead of a fixed
-   * multi-hundred-day span. Missing docs / missing dates are simply skipped.
+   * Bulk-reads the FULL active transaction docs for a set of ids via chunked `getAll` (≤300/call).
+   * Used by the batch assignment path to read each txn ONCE — instead of a per-transaction
+   * `get_raw_by_id` inside `resolve_assignment_context` (N single-doc reads per sync). The dates
+   * come along for free (so the candidate-window probe is no longer a separate read). Missing /
+   * inactive docs are skipped.
    */
-  async get_dates_ms_by_ids(
+  async get_raw_by_ids(
     _ctx: TraceContext,
     doc_ids: string[]
-  ): Promise<number[]> {
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
     if (doc_ids.length === 0) {
       return [];
     }
     const db = getFirestore();
-    const refs = doc_ids.map((id) => doc_ref(id));
-    // eslint-disable-next-line @typescript-eslint/naming-convention -- Firestore SDK ReadOption
-    const snaps = await db.getAll(...refs, { fieldMask: ["transactionDate"] });
-    const dates_ms: number[] = [];
-    for (const snap of snaps) {
-      const ts = snap.get("transactionDate") as Timestamp | undefined;
-      if (ts) {
-        dates_ms.push(ts.toMillis());
+    const out: Array<{ id: string; data: Record<string, unknown> }> = [];
+    const CHUNK = 300; // Firestore getAll practical batch size
+    for (let i = 0; i < doc_ids.length; i += CHUNK) {
+      const refs = doc_ids.slice(i, i + CHUNK).map((id) => doc_ref(id));
+      const snaps = await db.getAll(...refs);
+      for (const snap of snaps) {
+        if (!snap.exists) continue;
+        const data = snap.data() as Record<string, unknown>;
+        if (data.isActive === false) continue;
+        out.push({ id: snap.id, data });
       }
     }
-    return dates_ms;
+    return out;
   },
 
   /**

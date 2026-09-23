@@ -188,12 +188,17 @@ export async function resolve_assignment_context(
   user_id: string,
   transaction_id: string,
   shared?: SharedAssignmentContext,
-  preloaded_candidates?: PreloadedRecurringCandidates
+  preloaded_candidates?: PreloadedRecurringCandidates,
+  // Batch path: the txn doc + the source periods overlapping the batch's date span, both read ONCE
+  // for the whole batch. When present, the per-transaction `get_raw_by_id` + `get_overlapping`
+  // reads are skipped (filtered in memory) — the remaining O(N)/sync reads this path eliminates.
+  preloaded_txn?: { id: string; data: Record<string, unknown> },
+  preloaded_source_periods?: SourcePeriodForMatch[]
 ): Promise<ResolvedAssignment | null> {
   const span = create_span(ctx, "resolver", "resolve_assignment_context");
   log_operation_start(span, user_id);
 
-  const txn = await transaction_repo.get_raw_by_id(ctx, transaction_id);
+  const txn = preloaded_txn ?? (await transaction_repo.get_raw_by_id(ctx, transaction_id));
   if (!txn) {
     return null;
   }
@@ -212,26 +217,42 @@ export async function resolve_assignment_context(
   const txn_plaid_id = (data.transactionId as string | null) ?? null;
   const resolved_shared =
     shared ?? (await resolve_shared_assignment_context(ctx, user_id));
-  const [periods, recurring_by_split] = await Promise.all([
-    source_period_repo.get_overlapping(ctx, anchor, anchor),
-    resolve_recurring_matches(
-      ctx,
-      user_id,
-      txn_type,
-      txn_merchant_name,
-      txn_date_ms,
-      raw_splits.map((s) => ({
-        split_id: s.splitId as string,
-        amount: (s.amount as number) ?? 0,
-      })),
-      {
-        txn_plaid_id,
-        outflow_tx_to_id: resolved_shared.outflow_tx_to_id,
-        inflow_tx_to_id: resolved_shared.inflow_tx_to_id,
-        preloaded_candidates,
-      }
-    ),
-  ]);
+
+  // Recurring matches (uses preloaded candidates on the batch path) run concurrently with the
+  // source-period resolution below.
+  const recurring_by_split_promise = resolve_recurring_matches(
+    ctx,
+    user_id,
+    txn_type,
+    txn_merchant_name,
+    txn_date_ms,
+    raw_splits.map((s) => ({
+      split_id: s.splitId as string,
+      amount: (s.amount as number) ?? 0,
+    })),
+    {
+      txn_plaid_id,
+      outflow_tx_to_id: resolved_shared.outflow_tx_to_id,
+      inflow_tx_to_id: resolved_shared.inflow_tx_to_id,
+      preloaded_candidates,
+    }
+  );
+
+  // Source periods overlapping the transaction date. Batch path: filter the ONCE-preloaded set in
+  // memory (no read). Single-item path: query the overlapping periods (`source_periods` is a
+  // global calendar collection — a per-txn read here was O(N)/sync).
+  const source_periods: SourcePeriodForMatch[] = preloaded_source_periods
+    ? preloaded_source_periods.filter(
+      (p) => p.start_ms <= txn_date_ms && txn_date_ms <= p.end_ms
+    )
+    : (await source_period_repo.get_overlapping(ctx, anchor, anchor)).map((p) => ({
+      id: p.id,
+      type: p.period_type,
+      start_ms: p.start_date.toMillis(),
+      end_ms: p.end_date.toMillis(),
+    }));
+
+  const recurring_by_split = await recurring_by_split_promise;
 
   const {
     real_budgets,
@@ -240,14 +261,6 @@ export async function resolve_assignment_context(
     category_rules,
     category_slugs_by_plaid,
   } = resolved_shared;
-
-  // Source periods overlapping the transaction date.
-  const source_periods: SourcePeriodForMatch[] = periods.map((p) => ({
-    id: p.id,
-    type: p.period_type,
-    start_ms: p.start_date.toMillis(),
-    end_ms: p.end_date.toMillis(),
-  }));
 
   // The engine matches budgets on the DETAILED Plaid category: category doc ids
   // ARE the detailed enums, budgets store them in `categoryIds`, and splits
