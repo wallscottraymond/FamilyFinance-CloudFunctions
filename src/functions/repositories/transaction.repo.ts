@@ -288,13 +288,27 @@ export const transaction_repo = {
     for (const chunk of chunks) {
       const batch = db.batch();
 
+      // Existence lookup for the WHOLE chunk in ⌈N/30⌉ batched `in` queries (matches by the
+      // `transactionId` field, so it finds both deterministic `plaid_${id}` docs AND legacy
+      // random-id docs) — instead of one indexed query PER transaction (the O(N)/sync read line).
+      const existing_docs = await this.get_by_plaid_transaction_ids(
+        ctx,
+        user_id,
+        chunk.map((t) => t.transaction_id)
+      );
+      const existing_by_txn_id = new Map<
+        string,
+        { doc_id: string; created_at: Timestamp }
+      >();
+      for (const d of existing_docs) {
+        existing_by_txn_id.set(d.transactionId, {
+          doc_id: d.id,
+          created_at: d.createdAt,
+        });
+      }
+
       for (const txn of chunk) {
-        // Check if transaction exists
-        const existing = await this.get_by_plaid_transaction_id(
-          ctx,
-          user_id,
-          txn.transaction_id
-        );
+        const existing = existing_by_txn_id.get(txn.transaction_id) ?? null;
 
         if (existing) {
           // UPDATE: Update the existing document
