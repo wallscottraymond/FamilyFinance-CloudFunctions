@@ -282,6 +282,20 @@ export declare const transaction_repo: {
      */
     get_ids_by_user_id(ctx: TraceContext, user_id: string, limit?: number): Promise<string[]>;
     /**
+     * Gets active transaction IDs whose `updatedAt` is STRICTLY AFTER `since_ms`, oldest first
+     * (field-masked — ids only). Powers the debounced per-user batch assignment: a Plaid-sync burst
+     * writes many txns → one batch job re-assigns just the recently-changed ones via
+     * `assign_transactions_batch` (shared context + candidates resolved ONCE) instead of one
+     * per-transaction job each re-reading every reference collection. `limit` caps a single pass;
+     * the caller advances its watermark and re-runs if it hit the cap.
+     *
+     * Composite index: `transactions(userId, updatedAt)`.
+     */
+    get_ids_updated_since(_ctx: TraceContext, user_id: string, since_ms: number, limit: number): Promise<Array<{
+        id: string;
+        updated_ms: number;
+    }>>;
+    /**
      * Gets active transaction IDs that have at least one split assigned to a
      * budget. Splits are nested maps, so this scans the user's active
      * transactions (by ownerId AND userId, deduped) and filters in memory.

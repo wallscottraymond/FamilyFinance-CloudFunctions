@@ -164,17 +164,20 @@ export async function process_transaction_written_orchestrator(
     return;
   }
 
-  // Assignment change (category / budget pin / split add-remove): re-run
-  // assignment, which fans out a recompute for the budgets it touches.
+  // Assignment change (category / budget pin / split add-remove): re-run assignment. Enqueue ONE
+  // DEBOUNCED per-user batch (dedup `assign_user:{uid}`) instead of a per-transaction job — a
+  // Plaid-sync burst of N txns collapses to a single batch that resolves the shared context +
+  // recurring candidates ONCE (assign_user_transactions.orchestrator) instead of N jobs each
+  // re-reading every reference collection + the outflow_periods/inflow_periods candidate scans (the
+  // top Firestore read line). The batch re-assigns all txns changed since the user's watermark.
   if (assignment_relevant) {
     await create_job_if_not_exists(
-      "assign_transaction",
+      "assign_user_transactions",
       {
-        deduplication_key: `assign:${transaction_id}:${event_id}`,
+        deduplication_key: `assign_user:${user_id}`,
         user_id,
-        transaction_id,
       },
-      { trace_id: ctx.trace_id }
+      { trace_id: ctx.trace_id, delay_seconds: 15 }
     );
   }
 

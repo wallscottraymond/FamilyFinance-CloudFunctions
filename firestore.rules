@@ -829,6 +829,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Debounced per-user assignment watermark (server-only).
+    match /_assignment_watermarks/{userId} {
+      allow read, write: if false;
+    }
+
     // =======================
     // GROUP SUMMARIES COLLECTION RULES - PERIOD-CENTRIC
     // =======================

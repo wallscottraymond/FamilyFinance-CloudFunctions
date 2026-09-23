@@ -61,6 +61,10 @@ import {
   AssignTransactionsBatchInput,
 } from "../../orchestrators/transactions/assign_transactions_batch.orchestrator";
 import {
+  assign_user_transactions_orchestrator,
+  AssignUserTransactionsInput,
+} from "../../orchestrators/transactions/assign_user_transactions.orchestrator";
+import {
   recompute_budget_spent_orchestrator,
   RecomputeBudgetSpentInput,
 } from "../../orchestrators/budgets/recompute_budget_spent.orchestrator";
@@ -161,6 +165,13 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
     await assign_transactions_batch_orchestrator(
       ctx,
       payload as AssignTransactionsBatchInput
+    );
+  },
+
+  assign_user_transactions: async (ctx, payload) => {
+    await assign_user_transactions_orchestrator(
+      ctx,
+      payload as AssignUserTransactionsInput
     );
   },
 
