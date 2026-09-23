@@ -15,7 +15,6 @@ import {
   TraceContext,
   DependencyResult,
   batch_dependencies,
-  no_dependencies,
 } from "../../types";
 import { decryptAccessToken } from "../../../utils/encryption";
 import { inflow_repo, outflow_repo } from "../../repositories";
@@ -364,45 +363,14 @@ async function resolve_user_context(
  * When recurring items change, cashflow projections need recalculation.
  */
 async function resolve_affected_cashflow_projections(
-  db: FirebaseFirestore.Firestore,
+  _db: FirebaseFirestore.Firestore,
   user_id: string,
-  family_id: string | null
+  _family_id: string | null
 ): Promise<DependencyResult> {
-  // Find cashflow projections for this user/family
-  const affected_ids: string[] = [];
-
-  // User's personal cashflow projections
-  const user_projections = await db.collection("cashflow_projections")
-    .where("userId", "==", user_id)
-    .where("isActive", "==", true)
-    .get();
-
-  user_projections.docs.forEach(doc => {
-    affected_ids.push(doc.id);
-  });
-
-  // Family cashflow projections (if in a family)
-  if (family_id) {
-    const family_projections = await db.collection("cashflow_projections")
-      .where("familyId", "==", family_id)
-      .where("isActive", "==", true)
-      .get();
-
-    family_projections.docs.forEach(doc => {
-      if (!affected_ids.includes(doc.id)) {
-        affected_ids.push(doc.id);
-      }
-    });
-  }
-
-  // Also mark user_summary as affected (for monthly totals)
-  affected_ids.push(`user_summary:${user_id}`);
-
-  if (affected_ids.length === 0) {
-    return no_dependencies();
-  }
-
-  return batch_dependencies(affected_ids, "medium");
+  // `cashflow_projections` was never built (a planned derived node) — the old per-sync queries here
+  // (user + family) ALWAYS returned 0 docs = pure wasted reads on every recurring sync. The only
+  // real dependency is the user_summary marker.
+  return batch_dependencies([`user_summary:${user_id}`], "medium");
 }
 
 /**

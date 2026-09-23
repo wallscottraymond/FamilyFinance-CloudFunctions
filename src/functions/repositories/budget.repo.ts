@@ -284,37 +284,21 @@ export const budget_repo = {
       return q.limit(MAX_BUDGETS_PER_USER);
     };
 
-    const [created_by_snap, user_id_snap] = await Promise.all([
-      build("createdBy").get(),
-      build("userId").get(),
-    ]);
-
-    for (const [field, snap] of [
-      ["createdBy", created_by_snap],
-      ["userId", user_id_snap],
-    ] as const) {
-      if (snap.size >= MAX_BUDGETS_PER_USER) {
-        console.warn(
-          `[budget_repo.get_by_user_id] user=${user_id} hit the ${MAX_BUDGETS_PER_USER} ` +
-            `budget cap on "${field}" — results may be truncated`
-        );
-      }
+    // SINGLE query on `userId` (the owner field on every budget incl. the system EE ones). The old
+    // dual `createdBy` + `userId` `Promise.all` returned the IDENTICAL set for non-shared users
+    // (createdBy == userId == ownerId) — a 2x read on every derive + assignment. Re-add the 2nd
+    // field behind the RBAC-sharing flag when it ships (createdBy can then differ from the owner).
+    const snap = await build("userId").get();
+    if (snap.size >= MAX_BUDGETS_PER_USER) {
+      console.warn(
+        `[budget_repo.get_by_user_id] user=${user_id} hit the ${MAX_BUDGETS_PER_USER} ` +
+          `budget cap — results may be truncated`
+      );
     }
-
-    const by_id = new Map<string, BudgetEntity>();
-    for (const snap of [created_by_snap, user_id_snap]) {
-      snap.docs.forEach((doc) => {
-        if (!by_id.has(doc.id)) {
-          // Source the id from the doc ref — legacy-created docs (Everything
-          // Else) don't store an `id` field in their data.
-          by_id.set(
-            doc.id,
-            map_to_entity({ ...(doc.data() as LegacyBudgetDoc), id: doc.id })
-          );
-        }
-      });
-    }
-    return Array.from(by_id.values());
+    // Source the id from the doc ref — legacy Everything-Else docs don't store an `id` field.
+    return snap.docs.map((doc) =>
+      map_to_entity({ ...(doc.data() as LegacyBudgetDoc), id: doc.id })
+    );
   },
 
   /**
