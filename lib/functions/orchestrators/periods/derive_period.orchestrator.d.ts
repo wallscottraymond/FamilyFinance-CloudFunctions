@@ -17,6 +17,9 @@ export interface DerivePeriodInput {
     view_cadence: PeriodInstanceType;
     window_start_ms: number;
     window_end_ms: number;
+    /** Bypass the cached result and recompute fresh (still overwrites the cache with the result,
+     *  stamped at the current version). Used by the FE right after a config mutation. */
+    force?: boolean;
 }
 export interface DerivedBudgetResult {
     budget_id: string;

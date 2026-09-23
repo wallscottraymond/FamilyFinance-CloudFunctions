@@ -31,6 +31,10 @@ const schema = z
     view_cadence: z.enum(["weekly", "monthly", "bi_monthly"]),
     window_start_ms: z.number().int().nonnegative(),
     window_end_ms: z.number().int().nonnegative(),
+    // Bypass the server cache and recompute fresh (then overwrite the cache). The FE sets this
+    // right after a user config change (budget/bill/goal) so the edit reflects immediately
+    // instead of waiting out the version-bump race / TTL backstop.
+    force: z.boolean().optional(),
     debug_mode: z.boolean().optional(),
   })
   .refine((d) => d.window_end_ms >= d.window_start_ms, { message: "window_end_ms must be >= window_start_ms" })
@@ -110,6 +114,7 @@ export const derive_period = onCall(
         view_cadence: input.view_cadence,
         window_start_ms: input.window_start_ms,
         window_end_ms: input.window_end_ms,
+        force: input.force,
       });
 
       log_operation_success(span, user_id);

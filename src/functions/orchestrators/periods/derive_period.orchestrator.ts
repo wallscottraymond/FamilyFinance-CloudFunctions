@@ -73,6 +73,9 @@ export interface DerivePeriodInput {
   view_cadence: PeriodInstanceType;
   window_start_ms: number;
   window_end_ms: number;
+  /** Bypass the cached result and recompute fresh (still overwrites the cache with the result,
+   *  stamped at the current version). Used by the FE right after a config mutation. */
+  force?: boolean;
 }
 
 export interface DerivedBudgetResult {
@@ -107,23 +110,34 @@ export async function derive_period_orchestrator(
     // version + any cached result for this exact (cadence, window) — 2 reads. Serve the
     // cache iff the versions match AND it's within the TTL backstop, skipping the
     // ~9-collection fan-out + in-memory derivation below.
-    const [data_version, cached] = await Promise.all([
-      get_derive_version(user_id),
-      get_cached_derived_period<DerivePeriodResult>(
-        user_id,
-        input.view_cadence,
-        input.window_start_ms,
-        input.window_end_ms
-      ),
-    ]);
-    perf.reads += 2;
-    if (
-      cached &&
-      cached.data_version === data_version &&
-      Date.now() - cached.computed_at_ms < CACHE_TTL_MS
-    ) {
-      log_operation_success(span, user_id);
-      return cached.result;
+    //
+    // `force` (set by the FE right after a config mutation) skips the cache SERVE entirely so the
+    // edit reflects immediately without waiting out the async version-bump race / TTL backstop.
+    // We still read the current version (to stamp the overwrite) but skip the cached-doc read.
+    let data_version: number;
+    if (input.force) {
+      data_version = await get_derive_version(user_id);
+      perf.reads += 1;
+    } else {
+      const [version, cached] = await Promise.all([
+        get_derive_version(user_id),
+        get_cached_derived_period<DerivePeriodResult>(
+          user_id,
+          input.view_cadence,
+          input.window_start_ms,
+          input.window_end_ms
+        ),
+      ]);
+      perf.reads += 2;
+      data_version = version;
+      if (
+        cached &&
+        cached.data_version === data_version &&
+        Date.now() - cached.computed_at_ms < CACHE_TTL_MS
+      ) {
+        log_operation_success(span, user_id);
+        return cached.result;
+      }
     }
 
     const deps = await resolve_period_derivation_deps(
