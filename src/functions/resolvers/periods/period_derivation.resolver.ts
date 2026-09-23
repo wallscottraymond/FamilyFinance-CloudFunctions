@@ -68,6 +68,11 @@ export interface BudgetForDerivation {
   name: string;
   is_ee: boolean;
   monthly_periods: MonthlyPeriodForDerivation[];
+  /** Start of the budget's first active period (snapped); a view period ending before this is
+   *  omitted so a budget never appears in periods predating it. EE uses 0 (always active). */
+  active_start_ms: number;
+  /** End of the budget's active range, or null if ongoing. Periods after it are omitted. */
+  active_end_ms: number | null;
 }
 
 export interface RecurringForDerivation {
@@ -186,29 +191,31 @@ export async function resolve_period_derivation_deps(
   let any_ee_id: string | null = null;
   for (const b of budget_entities) {
     const is_ee = b.is_system_everything_else === true;
+    // A budget's allocation covers its WHOLE period, so its SPEND must too — and it must NOT
+    // appear in periods before it existed. Snap the effective start DOWN to the start of the
+    // (own-cadence) period that contains start_date: a budget created mid-period owns that
+    // period's earlier transactions (else `is_within_budget_range` strands pre-creation spend in
+    // Everything Else) AND periods entirely before it are omitted downstream. Only the FIRST
+    // period is affected — later ones already fall in range; a start predating the fetched window
+    // keeps its raw value (already below it). EE is always active, so it never filters out.
+    const raw_budget_start_ms = b.start_date.toMillis();
+    const home_period_start_ms = overlapping.find(
+      (p) =>
+        p.period_type === to_cadence(b.period) &&
+        raw_budget_start_ms >= p.start_date.toMillis() &&
+        raw_budget_start_ms <= p.end_date.toMillis()
+    )?.start_date.toMillis();
+    const active_start_ms = is_ee ? 0 : home_period_start_ms ?? raw_budget_start_ms;
+    const active_end_ms = b.is_ongoing ? null : b.end_date.toMillis();
     if (is_ee) {
       any_ee_id = any_ee_id ?? b.id;
       if (b.period === "monthly") monthly_ee_id = b.id;
     } else {
-      // A budget's allocation covers its WHOLE period, so its SPEND must too. Snap the effective
-      // start DOWN to the start of the (own-cadence) period that contains it: a budget created
-      // mid-period still owns that period's earlier transactions, instead of
-      // `is_within_budget_range` dropping pre-creation spend to Everything Else (which left the
-      // allocation moved but the spend stranded in EE). Only the FIRST period is affected — later
-      // ones already fall fully in range. If the start predates the fetched window, the raw start
-      // is already below it, so keep it.
-      const raw_budget_start_ms = b.start_date.toMillis();
-      const home_period_start_ms = overlapping.find(
-        (p) =>
-          p.period_type === to_cadence(b.period) &&
-          raw_budget_start_ms >= p.start_date.toMillis() &&
-          raw_budget_start_ms <= p.end_date.toMillis()
-      )?.start_date.toMillis();
       real_budgets.push({
         id: b.id,
         category_ids: b.category_ids,
-        start_ms: home_period_start_ms ?? raw_budget_start_ms,
-        end_ms: b.is_ongoing ? null : b.end_date.toMillis(),
+        start_ms: active_start_ms,
+        end_ms: active_end_ms,
         is_ongoing: b.is_ongoing,
         cadence: to_cadence(b.period),
       });
@@ -230,7 +237,14 @@ export async function resolve_period_derivation_deps(
             end_ms: sp.end_ms,
           };
         });
-    budgets.push({ id: b.id, name: b.name, is_ee, monthly_periods });
+    budgets.push({
+      id: b.id,
+      name: b.name,
+      is_ee,
+      monthly_periods,
+      active_start_ms,
+      active_end_ms,
+    });
   }
 
   // 3. Load the window's transactions (needs the period span derived above).

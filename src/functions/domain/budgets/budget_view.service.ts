@@ -128,9 +128,21 @@ export function derive_budget_view_periods(
   budget_id: string,
   buckets: ViewBucket[],
   monthly_periods: MonthlyPeriodForDerivation[],
-  splits: SplitForSpend[]
+  splits: SplitForSpend[],
+  active_start_ms?: number,
+  active_end_ms?: number | null
 ): DerivedBudgetViewPeriod[] {
-  return buckets.map((bucket) => {
+  const result: DerivedBudgetViewPeriod[] = [];
+  for (const bucket of buckets) {
+    // A budget must not appear in periods outside its active range — a bucket that ends before the
+    // budget's first period (e.g. a newly-created budget shown in past periods) or starts after it
+    // ended is omitted entirely. When the range is unset, all buckets are emitted (prior behavior).
+    if (active_start_ms !== undefined && bucket.end_ms < active_start_ms) {
+      continue;
+    }
+    if (active_end_ms != null && bucket.start_ms > active_end_ms) {
+      continue;
+    }
     const spend = compute_budget_spent(
       budget_id,
       bucket.start_ms,
@@ -162,7 +174,7 @@ export function derive_budget_view_periods(
     allocated = round2(allocated);
     effective = round2(effective);
 
-    return {
+    result.push({
       budget_id,
       period_id: bucket.period_id,
       period_type: bucket.period_type,
@@ -175,6 +187,7 @@ export function derive_budget_view_periods(
       return_amount: spend.return_amount,
       remaining: round2(effective - spend.spent),
       is_derived: true,
-    };
-  });
+    });
+  }
+  return result;
 }

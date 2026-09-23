@@ -29,6 +29,11 @@ export interface BudgetForDerivation {
     name: string;
     is_ee: boolean;
     monthly_periods: MonthlyPeriodForDerivation[];
+    /** Start of the budget's first active period (snapped); a view period ending before this is
+     *  omitted so a budget never appears in periods predating it. EE uses 0 (always active). */
+    active_start_ms: number;
+    /** End of the budget's active range, or null if ongoing. Periods after it are omitted. */
+    active_end_ms: number | null;
 }
 export interface RecurringForDerivation {
     id: string;

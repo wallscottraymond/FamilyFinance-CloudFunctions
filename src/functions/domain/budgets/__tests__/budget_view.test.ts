@@ -172,4 +172,39 @@ describe("derive_budget_view_periods", () => {
     // 20/day × 30 days = 600, the full monthly allocation.
     expect(total).toBe(600);
   });
+
+  it("omits buckets before the budget's active start (no appearing in past periods)", () => {
+    const junWeek = weekBucket("jun", JUN_08, JUN_14); // ends before a Jul-01 start
+    const julWeek = weekBucket("jul", JUL_01, Date.UTC(2026, 6, 7, 23, 59, 59));
+    const periods = derive_budget_view_periods(
+      BUDGET,
+      [junWeek, julWeek],
+      [junMonthly(), { allocated_amount: 600, effective_amount: 600, start_ms: JUL_01, end_ms: JUL_31 }],
+      [],
+      JUL_01 // active_start_ms — budget's first period starts in July
+    );
+    // June bucket is entirely before the active start → omitted; only July survives.
+    expect(periods.map((p) => p.period_id)).toEqual(["jul"]);
+  });
+
+  it("omits buckets after a non-ongoing budget's active end", () => {
+    const junWeek = weekBucket("jun", JUN_08, JUN_14);
+    const julWeek = weekBucket("jul", JUL_01, Date.UTC(2026, 6, 7, 23, 59, 59));
+    const periods = derive_budget_view_periods(
+      BUDGET,
+      [junWeek, julWeek],
+      [junMonthly()],
+      [],
+      JUN_01,
+      JUN_30 // active_end_ms — budget ended in June
+    );
+    expect(periods.map((p) => p.period_id)).toEqual(["jun"]);
+  });
+
+  it("emits all buckets when no active range is given (unchanged behavior)", () => {
+    const junWeek = weekBucket("jun", JUN_08, JUN_14);
+    const julWeek = weekBucket("jul", JUL_01, Date.UTC(2026, 6, 7, 23, 59, 59));
+    const periods = derive_budget_view_periods(BUDGET, [junWeek, julWeek], [junMonthly()], []);
+    expect(periods.map((p) => p.period_id)).toEqual(["jun", "jul"]);
+  });
 });

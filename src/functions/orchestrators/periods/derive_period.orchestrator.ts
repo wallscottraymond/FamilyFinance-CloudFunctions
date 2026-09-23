@@ -139,7 +139,14 @@ export async function derive_period_orchestrator(
     const budgets: DerivedBudgetResult[] = deps.budgets.map((b) => {
       const ee_id = b.is_ee ? b.id : deps.monthly_ee_id ?? deps.any_ee_id;
       const owned = owned_splits_for_budget(b.id, deps.real_budgets, ee_id, deps.splits_for_match);
-      const periods = derive_budget_view_periods(b.id, deps.view_buckets, b.monthly_periods, owned);
+      const periods = derive_budget_view_periods(
+        b.id,
+        deps.view_buckets,
+        b.monthly_periods,
+        owned,
+        b.active_start_ms,
+        b.active_end_ms
+      );
       return { budget_id: b.id, name: b.name, is_everything_else: b.is_ee, periods };
     });
 
