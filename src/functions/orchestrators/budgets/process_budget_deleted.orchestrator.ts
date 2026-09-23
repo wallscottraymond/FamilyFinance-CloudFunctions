@@ -17,7 +17,6 @@ import {
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
-import { transaction_repo } from "../../repositories/transaction.repo";
 import { resolve_budget_periods_for_summary } from "../../resolvers/summaries";
 import {
   enqueue_user_summary_updates_by_type,
@@ -70,26 +69,23 @@ export async function process_budget_deleted_orchestrator(
     await budget_period_repo.delete_by_ids(ctx, period_ids);
   }
 
-  // 2. Re-assign the deleted budget's transactions through the ENGINE so each
-  //    split lands on the CORRECT budget (another budget that owns the category,
-  //    else Everything Else) and the engine's fan-out recomputes spend. Re-query
-  //    authoritatively — the budget doc + periods are already gone, but the
-  //    splits still reference its id until the engine reassigns them.
-  const affected = await transaction_repo.get_ids_referencing_budget(
-    ctx,
-    payload.user_id,
-    payload.budget_id
-  );
-  for (const transaction_id of affected) {
+  // 2. Re-assign the deleted budget's transactions so each split lands on the correct budget (one
+  //    that owns the category, else Everything Else). Use the ids the RESOLVER already computed
+  //    (`payload.affected_transaction_ids`) — do NOT re-query `get_ids_referencing_budget`, which
+  //    scanned the user's ENTIRE transactions collection TWICE (the live `transactions SELECT
+  //    splitBudgetIds` read line). Assign them in ONE batch (shared context + candidates resolved
+  //    once) instead of N per-transaction jobs.
+  const affected = payload.affected_transaction_ids ?? [];
+  if (affected.length > 0) {
     await create_job(
-      "assign_transaction",
-      { user_id: payload.user_id, transaction_id },
+      "assign_transactions_batch",
+      { user_id: payload.user_id, transaction_ids: affected },
       { trace_id: ctx.trace_id }
     );
   }
   console.log(
     `[${ctx.trace_id}] process_budget_deleted: re-assigned ${affected.length} ` +
-      `transactions off deleted budget ${payload.budget_id} (engine)`
+      `transactions off deleted budget ${payload.budget_id} (batch)`
   );
 
   // 3. Release the deleted budget's categories back to Everything Else.

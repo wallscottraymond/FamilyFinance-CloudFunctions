@@ -190,19 +190,18 @@ export async function reclaim_stuck_jobs(
   const db = getFirestore();
   const cutoff_ms = Date.now() - stuck_after_ms;
 
+  // Bound the age SERVER-SIDE (composite index `_jobs(status, updated_at)`) so an idle sweep reads
+  // ~0 docs instead of scanning up to `scan_limit` processing docs every run (this poll runs every
+  // 5 min → the in-memory-filter version cost up to ~144K reads/day even when nothing was stuck).
   const snapshot = await db
     .collection(COLLECTIONS.JOBS)
     .where("status", "==", "processing")
+    .where("updated_at", "<=", Timestamp.fromMillis(cutoff_ms))
     .limit(scan_limit)
     .get();
 
-  const stuck = snapshot.docs.filter((doc) => {
-    const updated = (doc.data() as Job).updated_at;
-    return (updated?.toMillis() ?? 0) <= cutoff_ms;
-  });
-
   let reclaimed = 0;
-  for (const doc of stuck) {
+  for (const doc of snapshot.docs) {
     // Same semantics as a runtime failure: retry-with-backoff, or DLQ if spent.
     await mark_job_failed(doc.id, "reclaimed: stuck in processing past timeout");
     reclaimed++;

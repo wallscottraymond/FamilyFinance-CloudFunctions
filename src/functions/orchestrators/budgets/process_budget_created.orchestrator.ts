@@ -77,14 +77,14 @@ async function rehome_claimed_transactions(
     payload.start_ms,
     payload.generation_end_ms
   );
-  for (const transaction_id of txn_ids) {
+  // Re-home the matching transactions in ONE batch (shared context + candidates resolved once)
+  // rather than N per-transaction jobs each re-reading every reference collection.
+  if (txn_ids.length > 0) {
     await create_job(
-      "assign_transaction",
-      { user_id: payload.user_id, transaction_id },
+      "assign_transactions_batch",
+      { user_id: payload.user_id, transaction_ids: txn_ids },
       { trace_id: ctx.trace_id }
     );
-  }
-  if (txn_ids.length > 0) {
     console.log(
       `[${ctx.trace_id}] process_budget_created: re-homed ${txn_ids.length} ` +
         `transactions for budget ${payload.budget_id}`
