@@ -3196,5 +3196,32 @@ firebase deploy --only functions --force
 
 ---
 
-*Last updated: 2026-05-16*
-*Version: 1.4*
+## Firestore Cost Rules — Compute, Reads & Indexing
+
+> Distilled from the Firestore-Read-Cost-Reduction project (2026-09). Reads bill **per document
+> returned**, so the levers are: fewer executions (coalesce/cache), fewer docs/exec (scope the query),
+> and exact indexes. Write/data-modeling rules live in the backend root `CLAUDE.md`.
+
+### Compute & functions
+1. **A per-doc trigger MUST NOT do O(collection) work inline** — offload to a job AND coalesce per-user.
+2. **An engine that writes back to the collection it's triggered by MUST tag its own writes and self-ignore them** (content hash excluding `updatedAt`/bookkeeping fields) → converges in zero extra passes.
+3. **Every `create_job` costs one real-time trigger invocation (`on_job_created`)** — treat enqueue as non-free; for high-volume internal fan-out prefer Cloud Tasks (native dedup/rate/DLQ).
+4. **The hottest user-facing callable (`derive_period`) MUST be region-pinned to the DB and memory-tuned for CPU,** fronted by a version-keyed cache; `minInstances` only where p99 cold-start is proven to hurt.
+5. **Scheduled "sync-all" jobs MUST bound concurrency or fan out per-item** — a serial loop over a whole collection inside one timeout silently drops the tail as the population grows.
+6. **Recompute chains MUST be invalidation-based and provably non-reentrant** — target a *different* field set than the pipeline that triggered them (rollover writes `rolledOverAmount`, never `spent`).
+7. **Triggers stay logging-lean (<5ms)** — no per-invocation diagnostic `console.log` blocks in committed code.
+
+### Reads & indexing
+8. **NEVER `.filter()` in memory an equality/boolean predicate Firestore can do in `.where()`** (`isActive`, `ownerId`, `type`) — you pay reads for every excluded doc.
+9. **Every hot/derive-path read uses `.select(<exact fields>)`** unless it genuinely needs the whole doc.
+10. **To COUNT/SUM, use an aggregation query** — never read docs and take `.length`.
+11. **Resolve shared/invariant data ONCE per batch, above the per-item loop** — no `await …get_by_user_id` inside a `.map()`.
+12. **Every collection query carries the owner/tenant predicate IN the query,** even when a value looks globally unique — bounds scan cost and prevents cross-tenant leakage.
+13. **Scope hot per-item reads to the docs you need** — don't read a whole entity's lifetime to keep a few (e.g. `recompute_budget_spent` reads `budget_periods` in a date window, not all-time; the recurring-assign path scopes candidate periods to the dirty streams).
+14. **Every multi-equality (+range/order) query has an EXACT composite index** (equalities…, then range) with an index-scan ratio of 1.0; adding a `.where()` is index-breaking — ship the composite in the SAME change, and deploy+build indexes BEFORE the code that queries them.
+15. **A composite index that is a strict prefix of another used index is redundant** — delete it; no duplicate index definitions in `firestore.indexes.json`. (Note: the scanned/returned ratio is latency + write-amp, NOT read-count billing — don't chase it for read cost.)
+
+---
+
+*Last updated: 2026-09-24 (added Firestore Cost Rules)*
+*Version: 1.5*

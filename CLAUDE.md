@@ -103,6 +103,22 @@ Firebase project first.
 - `groupIds: string[]` for access control (NOT singular `groupId`)
 - Period IDs: `2025M03`, `2025BM03A`, `2025W12` (no dashes)
 
+## Firestore Cost Rules — Writes & Data Modeling
+
+> Distilled from the Firestore-Read-Cost-Reduction project (2026-09). These exist because a single
+> user's reads hit ~$150/mo; violating them is how runaway read/write cost creeps back in.
+> Compute/read/index rules live in `src/functions/CLAUDE.md`; FE rules in `FamilyFinanceMobile/src/core/state/CLAUDE.md`.
+
+1. **NEVER increment a per-user counter from a per-doc trigger.** Coalesce to the batch/sync boundary, or shard. One logical operation = at most one counter write. *(a 50-txn sync must not bump the version doc 50×)*
+2. **A single doc has a ~1 write/sec ceiling** — any doc written inside a loop or high-fan-in trigger is a design smell. Debounce or shard.
+3. **NEVER fan out a per-doc job from a per-doc trigger** — coalesce into a per-user (or per-aggregate) debounced batch job (see assignment + recurring-reconcile watermarks).
+4. **Prefer a deterministic job/doc id (`{type}::{key}`) for dedup** over a "does an active one exist?" query — a read-per-enqueue amplifies exactly when the queue is hottest.
+5. **A denormalized mirror needs exactly ONE writer,** ideally in the same atomic batch as its source. If you can't write both atomically, derive on read instead.
+6. **When you retire a materialized mirror, DELETE it wholesale** — collection, repo, resolver, writers, doc-comments. A `return 0` stub is not retirement.
+7. **Audit writes ride the same batch as the data write** (one commit for N entities); sample/skip audits for machine-sourced reconstructable updates; store changed-fields+hash, not whole nested docs.
+8. **One canonical owner field (`userId`)** — no `ownerId`/`createdBy` fallbacks in query paths. A query that unions two fields and dedupes is proof the schema drifted; gate a second field behind the RBAC flag.
+9. **Every array field needs a bound/prune policy at design time; every append-only/derived collection needs a TTL from day one** (default, not retrofit).
+
 ## Domain Areas
 
 | Domain | Path | Purpose |
