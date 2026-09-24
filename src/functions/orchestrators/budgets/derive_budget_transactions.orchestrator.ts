@@ -19,8 +19,15 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
+import { fire_and_forget } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { get_derive_version } from "../../repositories/derive_version.repo";
+import {
+  get_cached_result,
+  put_cached_result,
+  DERIVED_CACHE_TTL_MS,
+} from "../../repositories/derived_result_cache.repo";
 import { is_income_category } from "../../domain/budgets/budget_spend.service";
 import { resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
 import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
@@ -31,6 +38,9 @@ import {
 
 // widen the window so cross-day transfer pairs match
 const PAIRING_BUFFER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** L2 cache collection for this callable ([[Firestore-Read-Cost-Reduction]] B′). */
+const BUDGET_TXN_CACHE = "derived_budget_txn_cache";
 
 export type DerivedSpendStatus = "counted" | "ignored" | "refund";
 export type IgnoredReason = "transfer" | "income" | "manual" | null;
@@ -55,8 +65,31 @@ export async function derive_budget_transactions_orchestrator(
   user_id: string,
   budget_id: string,
   start_ms: number,
-  end_ms: number
+  end_ms: number,
+  force = false
 ): Promise<DerivedBudgetTransaction[]> {
+  // L2 CACHE: serve the version-matched result (2 reads) instead of the ~348-doc window read
+  // + derivation. Correctness = version match (bumped on every budget/txn write); the cache
+  // stamp uses the version read BEFORE compute so a mid-compute bump forces the next miss.
+  const cache_id = `${user_id}__${budget_id}__${start_ms}__${end_ms}`;
+  let data_version: number;
+  if (force) {
+    data_version = await get_derive_version(user_id);
+  } else {
+    const [version, cached] = await Promise.all([
+      get_derive_version(user_id),
+      get_cached_result<DerivedBudgetTransaction[]>(BUDGET_TXN_CACHE, cache_id),
+    ]);
+    data_version = version;
+    if (
+      cached &&
+      cached.data_version === data_version &&
+      Date.now() - cached.computed_at_ms < DERIVED_CACHE_TTL_MS
+    ) {
+      return cached.result;
+    }
+  }
+
   // 1. Budgets → real budgets (category ownership) + the EE id + is-target-EE.
   const budgets = await budget_repo.get_by_user_id(ctx, user_id);
   const real_budgets: BudgetForMatch[] = [];
@@ -149,5 +182,9 @@ export async function derive_budget_transactions_orchestrator(
 
   // Newest first.
   out.sort((a, b) => b.date_ms - a.date_ms);
+
+  // Cache the result stamped with the pre-compute version (fire-and-forget; skips if a heavy
+  // budget's list exceeds the size guard, in which case that call just stays uncached).
+  fire_and_forget(() => put_cached_result(BUDGET_TXN_CACHE, cache_id, data_version, out));
   return out;
 }

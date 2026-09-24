@@ -18,7 +18,7 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { getFirestore } from "firebase-admin/firestore";
 import { create_trigger_trace } from "../../observability";
-import { create_job } from "../../infrastructure/job_queue";
+import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 import {
   generate_inflow_periods_orchestrator,
   GenerateInflowPeriodsContext,
@@ -117,31 +117,20 @@ export const on_inflow_created = onDocumentCreated(
           `[on_inflow_created] Generated ${result.periods_created} periods for inflow ${inflow_id}`
         );
 
-        // Now that periods exist, (1) re-assign the inflow's transactions so their
-        // splits carry `inflowId` (they were synced before this inflow/its periods
-        // existed), and (2) reconcile the periods' "received" status from the
-        // transaction membership. Both AFTER period generation.
+        // Now that periods exist, (1) re-assign the inflow's transactions so their splits
+        // carry `inflowId`, and (2) reconcile the periods' "received" status. TR-3: instead
+        // of TWO durable jobs PER income stream (which fanned out to ~2N jobs on a bulk
+        // import), enqueue ONE debounced per-USER job that processes every recurring updated
+        // since the user's watermark — so N new streams collapse to a single reconcile pass.
         const transaction_ids = inflow_data.transactionIds as string[] | undefined;
         if (transaction_ids && transaction_ids.length > 0) {
-          await create_job(
-            "assign_recurring_transactions",
+          await create_job_if_not_exists(
+            "reconcile_user_recurring",
             {
-              recurring_id: inflow_id,
-              recurring_type: "inflow",
+              deduplication_key: `reconcile_user_recurring:${user_id}`,
               user_id,
-              trace_id: trace.trace_id,
             },
-            { trace_id: trace.trace_id }
-          );
-          await create_job(
-            "reconcile_recurring_period",
-            {
-              recurring_id: inflow_id,
-              recurring_type: "inflow",
-              user_id,
-              trace_id: trace.trace_id,
-            },
-            { trace_id: trace.trace_id }
+            { trace_id: trace.trace_id, delay_seconds: 15 }
           );
         }
       } else {

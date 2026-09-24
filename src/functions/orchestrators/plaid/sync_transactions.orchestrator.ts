@@ -41,6 +41,7 @@ import {
   transaction_repo,
 } from "../../repositories";
 import { plaid_item_repo } from "../../repositories/plaid";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 // Import pipeline utilities (snake_case versions)
 import { format_transactions } from "../../transactions/utils/format_transactions";
@@ -213,6 +214,14 @@ export async function sync_transactions_orchestrator(
     if (has_more) {
       await new Promise(resolve => setTimeout(resolve, PLAID_SYNC_PAGE_DELAY_MS));
     }
+  }
+
+  // 2g. INVALIDATE DERIVE CACHE ONCE for the whole sync (TR-2). Replaces the per-txn
+  // trigger bump: one bump per sync regardless of how many txns changed, so a large
+  // Plaid page no longer contends on the single `user_data_versions/{uid}` doc. Skip
+  // when nothing changed. Awaited+swallowed so it commits but never fails the sync.
+  if (total_added + total_modified + total_removed > 0) {
+    await bump_derive_version(ctx.user_id).catch(() => {});
   }
 
   // 3. UPDATE CURSOR

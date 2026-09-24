@@ -13,6 +13,7 @@ import {
   create_performance_metrics,
 } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import {
   create_span,
   log_operation_start,
@@ -106,6 +107,10 @@ export async function cascade_hide_transactions_orchestrator(
         success: true,
       };
     }
+
+    // Hidden txns drop out of derive — invalidate the cache (TR-2, trigger no longer bumps).
+    // One bump per page; a paginated cascade re-invokes this handler and bumps each page.
+    await bump_derive_version(input.user_id).catch(() => {});
 
     log_operation_success(span, input.user_id);
 

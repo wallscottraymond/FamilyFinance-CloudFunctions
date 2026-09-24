@@ -28,6 +28,8 @@ const schema = z
     budget_id: z.string().min(1),
     window_start_ms: z.number().int().nonnegative(),
     window_end_ms: z.number().int().nonnegative(),
+    /** Skip the cache serve + recompute (post-mutation freshness). */
+    force: z.boolean().optional(),
     debug_mode: z.boolean().optional(),
   })
   .refine((d) => d.window_end_ms >= d.window_start_ms, {
@@ -64,7 +66,8 @@ export const derive_budget_transactions = onCall(
         user_id,
         input.budget_id,
         input.window_start_ms,
-        input.window_end_ms
+        input.window_end_ms,
+        input.force ?? false
       );
 
       log_operation_success(span, user_id);

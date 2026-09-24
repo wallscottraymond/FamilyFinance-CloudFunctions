@@ -33,6 +33,8 @@ const derive_recurring_view_input_schema = z
     view_cadence: z.enum(["weekly", "monthly", "bi_monthly"]),
     window_start_ms: z.number().int().nonnegative(),
     window_end_ms: z.number().int().nonnegative(),
+    /** Skip the cache serve + recompute (post-mutation freshness). */
+    force: z.boolean().optional(),
     debug_mode: z.boolean().optional(),
   })
   .refine((d) => d.window_end_ms >= d.window_start_ms, {
@@ -110,13 +112,18 @@ export const derive_recurring_view = onCall(
       }
       const input = validation.data;
 
-      const result = await derive_recurring_view_orchestrator(ctx, user_id, {
-        kind: input.kind,
-        recurring_id: input.recurring_id,
-        view_cadence: input.view_cadence,
-        window_start_ms: input.window_start_ms,
-        window_end_ms: input.window_end_ms,
-      });
+      const result = await derive_recurring_view_orchestrator(
+        ctx,
+        user_id,
+        {
+          kind: input.kind,
+          recurring_id: input.recurring_id,
+          view_cadence: input.view_cadence,
+          window_start_ms: input.window_start_ms,
+          window_end_ms: input.window_end_ms,
+        },
+        input.force ?? false
+      );
 
       if (!result) {
         throw new HttpsError("not-found", "Recurring item not found", {

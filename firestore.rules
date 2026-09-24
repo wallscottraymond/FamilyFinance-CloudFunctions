@@ -829,8 +829,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Sibling derive-result caches (server-only, B′): budget-txn list + recurring view.
+    match /derived_budget_txn_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
+    match /derived_recurring_view_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
     // Debounced per-user assignment watermark (server-only).
     match /_assignment_watermarks/{userId} {
+      allow read, write: if false;
+    }
+
+    // Debounced per-user recurring-reconcile watermark (server-only, TR-3).
+    match /_recurring_reconcile_watermarks/{userId} {
       allow read, write: if false;
     }
 

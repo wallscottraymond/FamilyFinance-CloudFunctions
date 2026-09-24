@@ -92,6 +92,10 @@ import {
   assign_recurring_transactions_orchestrator,
   AssignRecurringTransactionsInput,
 } from "../../orchestrators/recurring/assign_recurring_transactions.orchestrator";
+import {
+  reconcile_user_recurring_orchestrator,
+  ReconcileUserRecurringInput,
+} from "../../orchestrators/recurring/reconcile_user_recurring.orchestrator";
 
 /**
  * Job type handlers - same as in process_job_queue.scheduled.ts
@@ -218,6 +222,15 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
     await assign_recurring_transactions_orchestrator(
       ctx,
       payload as AssignRecurringTransactionsInput
+    );
+  },
+
+  // Debounced per-user recurring reconcile (TR-3): assigns + reconciles every recurring
+  // updated since the user's watermark, collapsing the per-bill import fan-out.
+  reconcile_user_recurring: async (ctx, payload) => {
+    await reconcile_user_recurring_orchestrator(
+      ctx,
+      payload as ReconcileUserRecurringInput
     );
   },
 

@@ -2409,6 +2409,20 @@
       ]
     },
     {
+      "collectionGroup": "_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "dedup_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "account_balance_snapshots",
       "queryScope": "COLLECTION",
       "fields": [

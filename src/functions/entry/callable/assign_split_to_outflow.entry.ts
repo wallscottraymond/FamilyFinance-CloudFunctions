@@ -22,6 +22,7 @@ import {
   log_operation_error,
 } from "../../observability";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import {
   success_response,
   FunctionResponse,
@@ -77,6 +78,11 @@ export const assign_split_to_outflow = onCall(
         clear_budget === true,
         outflow_period_id ?? null
       );
+
+      // Invalidate the derive cache for this user (TR-2 — the transactions trigger no
+      // longer bumps). Awaited so the version commits before the FE re-derives, else the
+      // pin would visually revert against a still-valid stale cache.
+      await bump_derive_version(user_id).catch(() => {});
 
       log_operation_success(span, user_id);
       return success_response(

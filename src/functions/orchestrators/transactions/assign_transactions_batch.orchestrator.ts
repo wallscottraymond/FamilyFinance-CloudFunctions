@@ -35,6 +35,7 @@ import {
 import { merge_assignment_onto_raw_splits } from "./merge_assignment";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { SourcePeriodForMatch } from "../../domain/transactions/match_source_periods.service";
 
 /** Input: assign every listed transaction for one user. */
@@ -176,6 +177,13 @@ export async function assign_transactions_batch_orchestrator(
     for (let i = 0; i < txn_docs.length; i += CONCURRENCY) {
       const window = txn_docs.slice(i, i + CONCURRENCY);
       await Promise.all(window.map((t) => assign_one(t)));
+    }
+
+    // Invalidate the derive cache ONCE for the whole batch (TR-2). The engine's split
+    // write-back used to re-fire on_transaction_written N times → N version bumps; now a
+    // single bump per batch covers all of them (only when something actually changed).
+    if (changed > 0) {
+      await bump_derive_version(input.user_id).catch(() => {});
     }
 
     console.log(

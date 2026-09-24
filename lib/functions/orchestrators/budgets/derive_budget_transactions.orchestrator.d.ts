@@ -29,5 +29,5 @@ export interface DerivedBudgetTransaction {
     spend_status: DerivedSpendStatus;
     ignored_reason: IgnoredReason;
 }
-export declare function derive_budget_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number): Promise<DerivedBudgetTransaction[]>;
+export declare function derive_budget_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, force?: boolean): Promise<DerivedBudgetTransaction[]>;
 //# sourceMappingURL=derive_budget_transactions.orchestrator.d.ts.map

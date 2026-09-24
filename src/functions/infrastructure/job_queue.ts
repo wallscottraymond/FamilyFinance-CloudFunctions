@@ -51,6 +51,11 @@ export interface Job<TPayload = unknown> {
   /** When to execute (for delayed jobs) */
   scheduled_for?: Timestamp;
 
+  /** Top-level dedup key (`${job_type}::${deduplication_key}`), set by `create_job_if_not_exists`.
+   *  Lets `has_active_job` do a single indexed `(dedup_key, status)` lookup instead of scanning
+   *  up to 50 docs of a job_type and filtering `payload.deduplication_key` in memory (SR-5). */
+  dedup_key?: string;
+
   /** TTL field: set ONLY when a job reaches a terminal `completed` state (= updated_at +
    *  COMPLETED_JOB_RETENTION). Firestore auto-deletes completed jobs past this, replacing the
    *  scan-and-delete cleanup cron with a zero-read TTL policy on `_jobs.expire_at`. Pending /
@@ -113,6 +118,8 @@ export async function create_job<TPayload>(
     max_retries?: number;
     delay_seconds?: number;
     trace_id?: string;
+    /** Top-level dedup key to stamp (set by `create_job_if_not_exists`). */
+    dedup_key?: string;
   }
 ): Promise<Job<TPayload>> {
   const db = getFirestore();
@@ -130,6 +137,10 @@ export async function create_job<TPayload>(
     updated_at: now,
     trace_id: options?.trace_id,
   };
+
+  if (options?.dedup_key) {
+    job.dedup_key = options.dedup_key;
+  }
 
   if (options?.delay_seconds) {
     job.scheduled_for = Timestamp.fromMillis(
@@ -557,29 +568,28 @@ export async function purge_finished_jobs(options?: {
  * @param deduplication_key - Unique key for deduplication (e.g., summary_id)
  * @returns True if an active job exists, false otherwise
  */
+/** Build the top-level dedup key: `${job_type}::${deduplication_key}`. Encoding the type into
+ *  the key preserves the previous per-type dedup semantics with a single 2-field index. */
+function build_dedup_key(job_type: string, deduplication_key: string): string {
+  return `${job_type}::${deduplication_key}`;
+}
+
 export async function has_active_job(
   job_type: string,
   deduplication_key: string
 ): Promise<boolean> {
   const db = getFirestore();
 
-  // Query for pending or processing jobs of this type
+  // Single indexed lookup on `(dedup_key, status)` — an active (pending|processing) job with this
+  // exact key. Replaces the old 50-doc scan-and-filter-in-memory (SR-5: index ratio ~13 → ~1).
   const snapshot = await db
     .collection(COLLECTIONS.JOBS)
+    .where("dedup_key", "==", build_dedup_key(job_type, deduplication_key))
     .where("status", "in", ["pending", "processing"])
-    .where("job_type", "==", job_type)
-    .limit(50)
+    .limit(1)
     .get();
 
-  // Check if any job has the matching deduplication key in payload
-  for (const doc of snapshot.docs) {
-    const job = doc.data() as Job;
-    if (job.payload && (job.payload as { deduplication_key?: string }).deduplication_key === deduplication_key) {
-      return true;
-    }
-  }
-
-  return false;
+  return !snapshot.empty;
 }
 
 /**
@@ -612,8 +622,12 @@ export async function create_job_if_not_exists<TPayload extends { deduplication_
     return null;
   }
 
-  // Create the job
-  return create_job(job_type, payload, options);
+  // Create the job, stamping the top-level `dedup_key` so the next `has_active_job` finds it
+  // via the indexed lookup (not an in-memory scan).
+  return create_job(job_type, payload, {
+    ...options,
+    dedup_key: build_dedup_key(job_type, payload.deduplication_key),
+  });
 }
 
 /**

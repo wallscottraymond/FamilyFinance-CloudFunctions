@@ -38,6 +38,10 @@ export interface Job<TPayload = unknown> {
     updated_at: Timestamp;
     /** When to execute (for delayed jobs) */
     scheduled_for?: Timestamp;
+    /** Top-level dedup key (`${job_type}::${deduplication_key}`), set by `create_job_if_not_exists`.
+     *  Lets `has_active_job` do a single indexed `(dedup_key, status)` lookup instead of scanning
+     *  up to 50 docs of a job_type and filtering `payload.deduplication_key` in memory (SR-5). */
+    dedup_key?: string;
     /** TTL field: set ONLY when a job reaches a terminal `completed` state (= updated_at +
      *  COMPLETED_JOB_RETENTION). Firestore auto-deletes completed jobs past this, replacing the
      *  scan-and-delete cleanup cron with a zero-read TTL policy on `_jobs.expire_at`. Pending /
@@ -73,6 +77,8 @@ export declare function create_job<TPayload>(job_type: string, payload: TPayload
     max_retries?: number;
     delay_seconds?: number;
     trace_id?: string;
+    /** Top-level dedup key to stamp (set by `create_job_if_not_exists`). */
+    dedup_key?: string;
 }): Promise<Job<TPayload>>;
 /**
  * Gets a job by ID.
@@ -197,19 +203,6 @@ export declare function purge_finished_jobs(options?: {
     failed: number;
     reached_cap: boolean;
 }>;
-/**
- * Checks if an active job (pending or processing) already exists with the given deduplication key.
- *
- * Used to prevent enqueueing duplicate jobs for the same logical operation.
- * The deduplication_key is stored in the job payload.
- *
- * Checks both "pending" and "processing" statuses to prevent creating duplicates
- * while a job is currently being processed.
- *
- * @param job_type - Job type to check
- * @param deduplication_key - Unique key for deduplication (e.g., summary_id)
- * @returns True if an active job exists, false otherwise
- */
 export declare function has_active_job(job_type: string, deduplication_key: string): Promise<boolean>;
 /**
  * Creates a job only if no active job (pending or processing) exists with the same deduplication key.

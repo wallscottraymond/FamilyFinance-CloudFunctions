@@ -21,6 +21,7 @@ import {
   log_async_debug,
 } from "../../observability";
 import { transaction_repo } from "../../repositories";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 /**
  * Performance budget for restore_account_transactions job.
@@ -124,6 +125,9 @@ export async function restore_account_transactions_orchestrator(
     );
     /* eslint-enable @typescript-eslint/naming-convention */
     perf.writes += Math.ceil(restored_count / BATCH_SIZE);
+
+    // Restored txns re-enter derive — invalidate the cache (TR-2, trigger no longer bumps).
+    await bump_derive_version(input.user_id).catch(() => {});
 
     log_operation_success(span, input.user_id);
 

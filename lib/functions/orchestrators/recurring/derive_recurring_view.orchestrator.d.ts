@@ -31,5 +31,5 @@ export interface DeriveRecurringViewResult {
  * Derive a recurring item's view for a window. Returns `null` when the outflow
  * doesn't exist or isn't owned by the caller (entry maps that to not-found).
  */
-export declare function derive_recurring_view_orchestrator(ctx: TraceContext, user_id: string, input: DeriveRecurringViewInput): Promise<DeriveRecurringViewResult | null>;
+export declare function derive_recurring_view_orchestrator(ctx: TraceContext, user_id: string, input: DeriveRecurringViewInput, force?: boolean): Promise<DeriveRecurringViewResult | null>;
 //# sourceMappingURL=derive_recurring_view.orchestrator.d.ts.map

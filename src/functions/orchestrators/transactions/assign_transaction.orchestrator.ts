@@ -33,6 +33,7 @@ import {
 } from "../../domain/transactions/compute_transaction_assignment.service";
 import { merge_assignment_onto_raw_splits } from "./merge_assignment";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 /** Input: assign all splits of one transaction. */
 export interface AssignTransactionInput {
@@ -137,6 +138,9 @@ export async function assign_transaction_orchestrator(
       split_outflow_ids,
       split_inflow_ids
     );
+
+    // Invalidate the derive cache for this write (TR-2 — the trigger no longer bumps).
+    await bump_derive_version(input.user_id).catch(() => {});
 
     // 7. Scoped fan-out: recompute the touched budgets' spend — only when the
     //    assignment actually changed (a name-only heal doesn't move spend).

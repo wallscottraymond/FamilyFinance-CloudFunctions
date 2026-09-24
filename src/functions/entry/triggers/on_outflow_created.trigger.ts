@@ -15,7 +15,7 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { getFirestore } from "firebase-admin/firestore";
 import { create_trigger_trace } from "../../observability";
-import { create_job } from "../../infrastructure/job_queue";
+import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 import {
   generate_outflow_periods_orchestrator,
   GenerateOutflowPeriodsContext,
@@ -149,32 +149,21 @@ export const on_outflow_created = onDocumentCreated(
           `[on_outflow_created] Successfully generated ${result.periods_created} periods for outflow ${outflow_id}`
         );
 
-        // Now that periods exist, (1) re-assign the outflow's transactions so
-        // their splits carry `outflowId` (budget recurring-exclusion needs this —
-        // they were synced before this outflow/its periods existed), and
-        // (2) reconcile the periods' "paid" status from the transaction membership.
-        // Both enqueued AFTER period generation (Recurring-Period-Reconciliation).
+        // Now that periods exist, (1) re-assign the outflow's transactions so their splits
+        // carry `outflowId` (budget recurring-exclusion needs this — they were synced before
+        // this outflow/its periods existed), and (2) reconcile the periods' "paid" status.
+        // TR-3: instead of TWO durable jobs PER bill (which fanned out to ~2N jobs on a bulk
+        // import), enqueue ONE debounced per-USER job. It processes every recurring updated
+        // since the user's watermark — so N new bills collapse to a single reconcile pass.
         const transaction_ids = outflow_data.transactionIds as string[] | undefined;
         if (transaction_ids && transaction_ids.length > 0) {
-          await create_job(
-            "assign_recurring_transactions",
+          await create_job_if_not_exists(
+            "reconcile_user_recurring",
             {
-              recurring_id: outflow_id,
-              recurring_type: "outflow",
+              deduplication_key: `reconcile_user_recurring:${user_id}`,
               user_id,
-              trace_id: trace.trace_id,
             },
-            { trace_id: trace.trace_id }
-          );
-          await create_job(
-            "reconcile_recurring_period",
-            {
-              recurring_id: outflow_id,
-              recurring_type: "outflow",
-              user_id,
-              trace_id: trace.trace_id,
-            },
-            { trace_id: trace.trace_id }
+            { trace_id: trace.trace_id, delay_seconds: 15 }
           );
         }
       } else {

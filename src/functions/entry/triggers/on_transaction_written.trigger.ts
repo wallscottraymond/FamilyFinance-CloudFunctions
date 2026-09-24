@@ -17,7 +17,6 @@ import { create_trigger_trace } from "../../observability";
 import {
   process_transaction_written_orchestrator,
 } from "../../orchestrators/transactions/process_transaction_written.orchestrator";
-import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 export const on_transaction_written = onDocumentWritten(
   {
@@ -43,9 +42,13 @@ export const on_transaction_written = onDocumentWritten(
       return;
     }
 
-    // Invalidate the derived-period cache for this user ([[Firestore-Read-Cost-Reduction]]) —
-    // fire-and-forget so a bump failure never blocks the engine.
-    void bump_derive_version(user_id).catch(() => {});
+    // NOTE: the derive-version bump is NO LONGER done here (TR-2). A per-document trigger
+    // bump fired once PER transaction — a 50-txn Plaid sync = 50 serialized increments to the
+    // single `user_data_versions/{uid}` doc (write contention). The bump is now coalesced to
+    // each WRITE BOUNDARY: the sync orchestrator, the assignment batch, the account
+    // hide/restore orchestrators, and the single-edit callables (updateTransactionSplits,
+    // assign_split_to_outflow) each `bump_derive_version` ONCE. The derive cache's ~10-min TTL
+    // backstops any writer that forgets (bounded staleness, never permanent).
 
     // Idempotency: the trace's key (`trigger:${id}:${event.id}`) flows into the
     // orchestrator's per-event job deduplication keys, so trigger replays of the

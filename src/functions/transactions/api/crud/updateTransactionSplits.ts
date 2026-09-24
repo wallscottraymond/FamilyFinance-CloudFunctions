@@ -10,6 +10,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Transaction, TransactionSplit } from "../../../../types";
 import { getDocument, updateDocument } from "../../../../utils/firestore";
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
 import * as admin from "firebase-admin";
 
 interface UpdateTransactionSplitsRequest {
@@ -182,6 +183,12 @@ export const updateTransactionSplits = onCall<
     );
 
     console.log(`[updateTransactionSplits] Transaction ${transactionId} updated successfully`);
+
+    // Invalidate the derived-period cache (TR-2 — the transactions trigger no longer bumps).
+    // This is the live mobile split editor (spendStatus cycling, category/refund edits), so
+    // it MUST bump or the period would keep the pre-edit numbers until the ~10-min cache TTL.
+    // Awaited+swallowed so the version commits before the app re-derives.
+    await bump_derive_version(userId).catch(() => {});
 
     // Budget spend is owned by the Transaction Assignment Engine: the
     // `on_transaction_written` trigger enqueues `assign_transaction`, which
