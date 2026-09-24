@@ -27,6 +27,15 @@
       ]
     },
     {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "splitBudgetIds", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
       "collectionGroup": "outflows",
       "queryScope": "COLLECTION",
       "fields": [
