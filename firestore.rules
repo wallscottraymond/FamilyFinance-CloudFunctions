@@ -269,16 +269,29 @@ service cloud.firestore {
       // Allow users to update their own profile
       // Allow admins to update any user profile
       // Prevent role elevation without proper authorization
-      allow update: if (isOwner(userId) || isAdmin()) &&
-                       isValidUserData() &&
-                       // Users cannot change their own role unless they're admin
-                       (isOwner(userId) ? 
-                         (request.resource.data.role == resource.data.role || isAdmin()) :
-                         true) &&
-                       // Prevent deactivating oneself unless admin
-                       (isOwner(userId) ? 
-                         (request.resource.data.isActive == true || isAdmin()) :
-                         true);
+      allow update: if (isOwner(userId) || isAdmin()) && (
+                       // Fast-path: owner editing ONLY their Home dashboard layout (+ updatedAt).
+                       // Skips the strict full-profile validation below (which the stored doc's
+                       // legacy `preferences` schema may not satisfy). Cannot touch any other
+                       // field — including role/isActive — because the diff is restricted here.
+                       (
+                         isOwner(userId) &&
+                         request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['homeLayout', 'updatedAt'])
+                       )
+                       ||
+                       (
+                         isValidUserData() &&
+                         // Users cannot change their own role unless they're admin
+                         (isOwner(userId) ?
+                           (request.resource.data.role == resource.data.role || isAdmin()) :
+                           true) &&
+                         // Prevent deactivating oneself unless admin
+                         (isOwner(userId) ?
+                           (request.resource.data.isActive == true || isAdmin()) :
+                           true)
+                       )
+                     );
       
       // Only admins can delete user profiles (soft delete preferred)
       allow delete: if isAdmin();
