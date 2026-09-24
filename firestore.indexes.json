@@ -2423,6 +2423,48 @@
       ]
     },
     {
+      "collectionGroup": "budget_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "budgetId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStart",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "outflowId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "firstDueDateInPeriod",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inflow_periods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "inflowId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "firstDueDateInPeriod",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "account_balance_snapshots",
       "queryScope": "COLLECTION",
       "fields": [

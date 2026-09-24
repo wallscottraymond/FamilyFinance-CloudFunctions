@@ -128,6 +128,33 @@ export const budget_period_repo = {
   },
 
   /**
+   * Returns only the periods that could CONTAIN a given date — those whose `periodStart` is
+   * within one max-cadence-length before it. The caller filters `periodEnd >= date` in memory
+   * to pick the exact containing period(s). Replaces reading a budget's ENTIRE lifetime of
+   * periods (all cadences × all time, ~138 docs) just to keep the 1-3 around one txn date
+   * (read-cost #3: the per-txn `recompute_budget_spent` fan-out).
+   *
+   * Composite index: `budget_periods(budgetId, periodStart)`.
+   */
+  async get_by_budget_id_in_date_window(
+    _ctx: TraceContext,
+    budget_id: string,
+    date_ms: number
+  ): Promise<BudgetPeriodEntity[]> {
+    // Longest cadence is monthly (~31d); look back 40d so the containing period's start is caught.
+    const lo_ms = date_ms - 40 * 24 * 60 * 60 * 1000;
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("budgetId", "==", budget_id)
+      .where("periodStart", ">=", Timestamp.fromMillis(lo_ms))
+      .where("periodStart", "<=", Timestamp.fromMillis(date_ms))
+      .get();
+    return snapshot.docs.map((doc) =>
+      map_to_entity(doc.data() as LegacyBudgetPeriodDoc)
+    );
+  },
+
+  /**
    * Returns all of a user's periods of ONE cadence in a single query. Used by
    * the batched period derivation to load every budget's monthly home at once
    * (instead of N per-budget queries).

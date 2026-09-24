@@ -110,6 +110,34 @@ export async function load_recurring_candidates(
   };
 }
 
+/**
+ * Load candidate periods SCOPED to a known set of outflow/inflow ids (read-cost #1). Same shape
+ * as `load_recurring_candidates`, but instead of scanning ALL of a user's due periods it reads
+ * only the given streams' periods in [start_ms, end_ms]. Correct for the recurring-reconcile
+ * assign path: its txns ARE these streams' membership, so single-split txns resolve via the
+ * authoritative stream map and multi-split scoring only ever needs its own stream's occurrences.
+ * `window_start/end` stay the true batch span so `candidates_for_txn`'s coverage check passes
+ * (never falling back to a per-txn full scan).
+ */
+export async function load_recurring_candidates_scoped(
+  ctx: TraceContext,
+  outflow_ids: string[],
+  inflow_ids: string[],
+  start_ms: number,
+  end_ms: number
+): Promise<PreloadedRecurringCandidates> {
+  const [outflow_docs, inflow_docs] = await Promise.all([
+    outflow_period_repo.get_in_due_window_for_ids(ctx, outflow_ids, start_ms, end_ms),
+    inflow_period_repo.get_in_due_window_for_ids(ctx, inflow_ids, start_ms, end_ms),
+  ]);
+  return {
+    outflow_candidates: outflow_docs.map(({ id, data }) => to_outflow_candidate(id, data)),
+    inflow_candidates: inflow_docs.map(({ id, data }) => to_inflow_candidate(id, data)),
+    window_start_ms: start_ms,
+    window_end_ms: end_ms,
+  };
+}
+
 /** Outflow (bill) period candidates around the transaction date (per-transaction fallback). */
 async function load_outflow_candidates(
   ctx: TraceContext,

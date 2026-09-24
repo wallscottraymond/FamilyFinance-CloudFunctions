@@ -20,6 +20,14 @@ import { TraceContext } from "../../types";
 export interface AssignTransactionsBatchInput {
     user_id: string;
     transaction_ids: string[];
+    /**
+     * Optional recurring-candidate SCOPE (read-cost #1). When present, the candidate preload reads
+     * only these streams' outflow/inflow periods instead of ALL the user's due periods. Set ONLY by
+     * callers whose txns are exactly these streams' membership (the recurring-reconcile path); the
+     * sync/backfill/rehome paths omit it and keep the full-candidate scan.
+     */
+    candidate_outflow_ids?: string[];
+    candidate_inflow_ids?: string[];
 }
 /** Result summary (handy for logs/tests). */
 export interface AssignTransactionsBatchResult {

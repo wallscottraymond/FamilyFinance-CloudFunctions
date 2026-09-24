@@ -544,6 +544,37 @@ export const inflow_period_repo = {
   },
 
   /**
+   * Like `get_in_due_window` but SCOPED to a specific set of inflow ids (chunked `IN` ≤30)
+   * instead of the whole user — the recurring-reconcile assign path knows its dirty streams
+   * (read-cost #1). Composite index: `inflow_periods(inflowId, firstDueDateInPeriod)`.
+   */
+  async get_in_due_window_for_ids(
+    _ctx: TraceContext,
+    inflow_ids: string[],
+    start_ms: number,
+    end_ms: number
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    if (inflow_ids.length === 0) return [];
+    const db = getFirestore();
+    const start_ts = Timestamp.fromMillis(start_ms);
+    const end_ts = Timestamp.fromMillis(end_ms);
+    const out: Array<{ id: string; data: Record<string, unknown> }> = [];
+    for (let i = 0; i < inflow_ids.length; i += 30) {
+      const chunk = inflow_ids.slice(i, i + 30);
+      const snapshot = await db
+        .collection(COLLECTION)
+        .where("inflowId", "in", chunk)
+        .where("firstDueDateInPeriod", ">=", start_ts)
+        .where("firstDueDateInPeriod", "<=", end_ts)
+        .get();
+      for (const doc of snapshot.docs) {
+        out.push({ id: doc.id, data: doc.data() as Record<string, unknown> });
+      }
+    }
+    return out;
+  },
+
+  /**
    * Persists reconciliation status (Recurring-Period-Reconciliation Phase 3d).
    * Writes the `reconciliation` map + the denormalized legacy `isPaid`/`amountPaid`
    * fields in place, batched, **NOT** `increment` (invalidation model). The

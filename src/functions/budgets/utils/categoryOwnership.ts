@@ -123,37 +123,26 @@ export function clearCategoriesCache(): void {
  * @returns Array of budget info objects
  */
 export async function getUserBudgets(userId: string): Promise<BudgetInfo[]> {
-  // Query by both createdBy (new RBAC) and userId (legacy) for compatibility
-  const [createdBySnapshot, userIdSnapshot] = await Promise.all([
-    db.collection('budgets')
-      .where('createdBy', '==', userId)
-      .where('isActive', '==', true)
-      .get(),
-    db.collection('budgets')
-      .where('userId', '==', userId)
-      .where('isActive', '==', true)
-      .get(),
-  ]);
+  // SINGLE query on the canonical `userId` field. createdBy == userId == ownerId for every
+  // non-shared budget (all written from the same source), so the old dual createdBy+userId
+  // query was a strict duplicate — halved here (mirrors SR-3 in budget.repo.get_by_user_id).
+  const snapshot = await db.collection('budgets')
+    .where('userId', '==', userId)
+    .where('isActive', '==', true)
+    .get();
 
-  // Merge and deduplicate by document ID
   const budgetMap = new Map<string, BudgetInfo>();
-
-  const processDocs = (snapshot: FirebaseFirestore.QuerySnapshot) => {
-    snapshot.forEach((doc) => {
-      if (!budgetMap.has(doc.id)) {
-        const data = doc.data();
-        budgetMap.set(doc.id, {
-          id: doc.id,
-          name: data.name || 'Unnamed Budget',
-          categoryIds: data.categoryIds || [],
-          isSystemEverythingElse: data.isSystemEverythingElse === true,
-        });
-      }
-    });
-  };
-
-  processDocs(createdBySnapshot);
-  processDocs(userIdSnapshot);
+  snapshot.forEach((doc) => {
+    if (!budgetMap.has(doc.id)) {
+      const data = doc.data();
+      budgetMap.set(doc.id, {
+        id: doc.id,
+        name: data.name || 'Unnamed Budget',
+        categoryIds: data.categoryIds || [],
+        isSystemEverythingElse: data.isSystemEverythingElse === true,
+      });
+    }
+  });
 
   const budgets = Array.from(budgetMap.values());
   console.log(`[categoryOwnership] Found ${budgets.length} active budgets for user ${userId}`);

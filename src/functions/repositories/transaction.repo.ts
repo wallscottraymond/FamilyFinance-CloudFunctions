@@ -1144,30 +1144,24 @@ export const transaction_repo = {
     // Load ONLY the denormalized `splitBudgetIds` (union of the splits' budget ids),
     // not the full docs — a heavy account has thousands of transactions, and pulling
     // full docs (nested splits, categories) OOM-crashed the 256MiB delete function.
-    const [owner_snap, user_snap] = await Promise.all([
-      db
-        .collection(COLLECTION)
-        .where("ownerId", "==", user_id)
-        .where("isActive", "==", true)
-        .select("splitBudgetIds")
-        .get(),
-      db
-        .collection(COLLECTION)
-        .where("userId", "==", user_id)
-        .where("isActive", "==", true)
-        .select("splitBudgetIds")
-        .get(),
-    ]);
+    // SINGLE query on the canonical owner field. `ownerId == userId` for every non-shared txn
+    // (both written from the same source in map_to_doc), so the old dual ownerId+userId query
+    // was a strict duplicate scanning the user's whole active txn set TWICE — halved here.
+    // Re-add the userId leg behind the RBAC-sharing flag if/when cross-owner txns exist.
+    const owner_snap = await db
+      .collection(COLLECTION)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", true)
+      .select("splitBudgetIds")
+      .get();
 
     const matched = new Set<string>();
-    for (const snap of [owner_snap, user_snap]) {
-      snap.docs.forEach((doc) => {
-        const ids = (doc.data().splitBudgetIds ?? []) as string[];
-        if (ids.includes(budget_id)) {
-          matched.add(doc.id);
-        }
-      });
-    }
+    owner_snap.docs.forEach((doc) => {
+      const ids = (doc.data().splitBudgetIds ?? []) as string[];
+      if (ids.includes(budget_id)) {
+        matched.add(doc.id);
+      }
+    });
 
     const ids = Array.from(matched);
     console.log(

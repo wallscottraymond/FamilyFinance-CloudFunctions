@@ -68,9 +68,17 @@ export async function recompute_budget_spent_orchestrator(
       const cadence = budget
         ? budget_cadence_to_instance(budget.period)
         : "monthly";
-      const periods = await budget_period_repo.get_by_budget_id(ctx, budget_id);
-      // Date-scoped (engine fan-out) recomputes only the period(s) containing
-      // the txn date; full mode (backfill, no date) recomputes every period.
+      // Date-scoped (engine fan-out) reads only the periods that could CONTAIN the txn date
+      // (periodStart within 40d before it) — not the budget's whole lifetime (~138 docs) —
+      // then keeps the exact containing period(s). Full mode (backfill, no date) reads all.
+      const periods =
+        input.transaction_date_ms === undefined
+          ? await budget_period_repo.get_by_budget_id(ctx, budget_id)
+          : await budget_period_repo.get_by_budget_id_in_date_window(
+            ctx,
+            budget_id,
+            input.transaction_date_ms
+          );
       const affected =
         input.transaction_date_ms === undefined
           ? periods

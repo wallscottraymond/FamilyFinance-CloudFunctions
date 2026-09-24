@@ -26,6 +26,16 @@ export declare const budget_period_repo: {
      */
     get_by_budget_id(_ctx: TraceContext, budget_id: string): Promise<BudgetPeriodEntity[]>;
     /**
+     * Returns only the periods that could CONTAIN a given date — those whose `periodStart` is
+     * within one max-cadence-length before it. The caller filters `periodEnd >= date` in memory
+     * to pick the exact containing period(s). Replaces reading a budget's ENTIRE lifetime of
+     * periods (all cadences × all time, ~138 docs) just to keep the 1-3 around one txn date
+     * (read-cost #3: the per-txn `recompute_budget_spent` fan-out).
+     *
+     * Composite index: `budget_periods(budgetId, periodStart)`.
+     */
+    get_by_budget_id_in_date_window(_ctx: TraceContext, budget_id: string, date_ms: number): Promise<BudgetPeriodEntity[]>;
+    /**
      * Returns all of a user's periods of ONE cadence in a single query. Used by
      * the batched period derivation to load every budget's monthly home at once
      * (instead of N per-budget queries).

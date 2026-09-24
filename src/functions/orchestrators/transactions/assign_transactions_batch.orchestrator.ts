@@ -28,7 +28,10 @@ import {
   resolve_assignment_context,
   resolve_shared_assignment_context,
 } from "../../resolvers/transactions/assignment_context.resolver";
-import { load_recurring_candidates } from "../../resolvers/transactions/recurring_matches.resolver";
+import {
+  load_recurring_candidates,
+  load_recurring_candidates_scoped,
+} from "../../resolvers/transactions/recurring_matches.resolver";
 import {
   compute_transaction_assignment,
 } from "../../domain/transactions/compute_transaction_assignment.service";
@@ -42,6 +45,14 @@ import { SourcePeriodForMatch } from "../../domain/transactions/match_source_per
 export interface AssignTransactionsBatchInput {
   user_id: string;
   transaction_ids: string[];
+  /**
+   * Optional recurring-candidate SCOPE (read-cost #1). When present, the candidate preload reads
+   * only these streams' outflow/inflow periods instead of ALL the user's due periods. Set ONLY by
+   * callers whose txns are exactly these streams' membership (the recurring-reconcile path); the
+   * sync/backfill/rehome paths omit it and keep the full-candidate scan.
+   */
+  candidate_outflow_ids?: string[];
+  candidate_inflow_ids?: string[];
 }
 
 /** Result summary (handy for logs/tests). */
@@ -108,8 +119,21 @@ export async function assign_transactions_batch_orchestrator(
     // filters this set to each txn's date in memory.
     const span_start_ms = dates_ms.length ? Math.min(...dates_ms) : now_ms;
     const span_end_ms = dates_ms.length ? Math.max(...dates_ms) : now_ms;
+    // When the caller scopes candidates to known streams (recurring-reconcile), read ONLY those
+    // streams' periods (read-cost #1); otherwise scan the user's full due-window set (sync path).
+    const scoped =
+      (input.candidate_outflow_ids?.length ?? 0) > 0 ||
+      (input.candidate_inflow_ids?.length ?? 0) > 0;
     const [preloaded_candidates, overlapping_source_periods] = await Promise.all([
-      load_recurring_candidates(ctx, input.user_id, window_start_ms, window_end_ms),
+      scoped
+        ? load_recurring_candidates_scoped(
+          ctx,
+          input.candidate_outflow_ids ?? [],
+          input.candidate_inflow_ids ?? [],
+          window_start_ms,
+          window_end_ms
+        )
+        : load_recurring_candidates(ctx, input.user_id, window_start_ms, window_end_ms),
       source_period_repo.get_overlapping(
         ctx,
         Timestamp.fromMillis(span_start_ms),

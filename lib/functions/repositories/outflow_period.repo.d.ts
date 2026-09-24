@@ -152,6 +152,18 @@ export declare const outflow_period_repo: {
         data: Record<string, unknown>;
     }>>;
     /**
+     * Like `get_in_due_window` but SCOPED to a specific set of outflow ids (chunked `IN` ≤30)
+     * instead of the whole user. Used by the recurring-reconcile assign path, which knows exactly
+     * which streams' txns it is assigning — so it need not scan ALL of a user's due periods
+     * (read-cost #1: cuts ~1,600 docs/exec down to the dirty streams' handful).
+     *
+     * Composite index: `outflow_periods(outflowId, firstDueDateInPeriod)`.
+     */
+    get_in_due_window_for_ids(_ctx: TraceContext, outflow_ids: string[], start_ms: number, end_ms: number): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
      * Soft-deletes (or restores) every outflow period for an account in one shot.
      * Sets `isActive` to `is_active` on all periods whose `accountId` matches and
      * whose current state differs (idempotent — re-running is a no-op).

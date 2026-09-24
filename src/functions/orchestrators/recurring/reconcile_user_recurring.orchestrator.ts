@@ -118,9 +118,13 @@ export async function reconcile_user_recurring_orchestrator(
       );
       const doc_ids = txns.filter((t) => t.isActive !== false).map((t) => t.id);
       if (doc_ids.length > 0) {
+        // Scope the candidate preload to just the dirty streams (read-cost #1): these txns ARE
+        // those streams' membership, so the engine needs only their periods — not ALL the user's.
         await assign_transactions_batch_orchestrator(ctx, {
           user_id: input.user_id,
           transaction_ids: doc_ids,
+          candidate_outflow_ids: dirty.filter((d) => d.type === "outflow").map((d) => d.id),
+          candidate_inflow_ids: dirty.filter((d) => d.type === "inflow").map((d) => d.id),
         });
       }
     }

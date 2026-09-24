@@ -41,6 +41,16 @@ export interface PreloadedRecurringCandidates {
  */
 export declare function load_recurring_candidates(ctx: TraceContext, user_id: string, start_ms: number, end_ms: number): Promise<PreloadedRecurringCandidates>;
 /**
+ * Load candidate periods SCOPED to a known set of outflow/inflow ids (read-cost #1). Same shape
+ * as `load_recurring_candidates`, but instead of scanning ALL of a user's due periods it reads
+ * only the given streams' periods in [start_ms, end_ms]. Correct for the recurring-reconcile
+ * assign path: its txns ARE these streams' membership, so single-split txns resolve via the
+ * authoritative stream map and multi-split scoring only ever needs its own stream's occurrences.
+ * `window_start/end` stay the true batch span so `candidates_for_txn`'s coverage check passes
+ * (never falling back to a per-txn full scan).
+ */
+export declare function load_recurring_candidates_scoped(ctx: TraceContext, outflow_ids: string[], inflow_ids: string[], start_ms: number, end_ms: number): Promise<PreloadedRecurringCandidates>;
+/**
  * Resolve the recurring (bill/income) matches for a transaction's splits.
  *
  * @param txn_type - Transaction type: `expense` → outflows, `income` → inflows.

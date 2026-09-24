@@ -140,6 +140,15 @@ export declare const inflow_period_repo: {
         data: Record<string, unknown>;
     }>>;
     /**
+     * Like `get_in_due_window` but SCOPED to a specific set of inflow ids (chunked `IN` ≤30)
+     * instead of the whole user — the recurring-reconcile assign path knows its dirty streams
+     * (read-cost #1). Composite index: `inflow_periods(inflowId, firstDueDateInPeriod)`.
+     */
+    get_in_due_window_for_ids(_ctx: TraceContext, inflow_ids: string[], start_ms: number, end_ms: number): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
      * Persists reconciliation status (Recurring-Period-Reconciliation Phase 3d).
      * Writes the `reconciliation` map + the denormalized legacy `isPaid`/`amountPaid`
      * fields in place, batched, **NOT** `increment` (invalidation model). The

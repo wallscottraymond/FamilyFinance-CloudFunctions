@@ -588,6 +588,40 @@ export const outflow_period_repo = {
   },
 
   /**
+   * Like `get_in_due_window` but SCOPED to a specific set of outflow ids (chunked `IN` ≤30)
+   * instead of the whole user. Used by the recurring-reconcile assign path, which knows exactly
+   * which streams' txns it is assigning — so it need not scan ALL of a user's due periods
+   * (read-cost #1: cuts ~1,600 docs/exec down to the dirty streams' handful).
+   *
+   * Composite index: `outflow_periods(outflowId, firstDueDateInPeriod)`.
+   */
+  async get_in_due_window_for_ids(
+    _ctx: TraceContext,
+    outflow_ids: string[],
+    start_ms: number,
+    end_ms: number
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    if (outflow_ids.length === 0) return [];
+    const db = getFirestore();
+    const start_ts = Timestamp.fromMillis(start_ms);
+    const end_ts = Timestamp.fromMillis(end_ms);
+    const out: Array<{ id: string; data: Record<string, unknown> }> = [];
+    for (let i = 0; i < outflow_ids.length; i += 30) {
+      const chunk = outflow_ids.slice(i, i + 30);
+      const snapshot = await db
+        .collection(COLLECTION)
+        .where("outflowId", "in", chunk)
+        .where("firstDueDateInPeriod", ">=", start_ts)
+        .where("firstDueDateInPeriod", "<=", end_ts)
+        .get();
+      for (const doc of snapshot.docs) {
+        out.push({ id: doc.id, data: doc.data() as Record<string, unknown> });
+      }
+    }
+    return out;
+  },
+
+  /**
    * Soft-deletes (or restores) every outflow period for an account in one shot.
    * Sets `isActive` to `is_active` on all periods whose `accountId` matches and
    * whose current state differs (idempotent — re-running is a no-op).
