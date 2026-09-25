@@ -228,3 +228,37 @@ describe("evaluate_rules — multi-rule resolution", () => {
     expect(evaluate_rules(txn(), [r])).toEqual(evaluate_rules(txn(), [r]));
   });
 });
+
+describe("evaluate_rules — tags", () => {
+  it("`has tag` matches when the txn already carries the tag", () => {
+    const r = rule("r", AND({ variable: "tag", operator: "has", value: "tag_food" }), { ignore: true });
+    expect(evaluate_rules(txn({ tags: ["tag_food"] }), [r]).applied_rule_ids).toEqual(["r"]);
+  });
+
+  it("`has tag` does NOT match a fresh txn with no tags", () => {
+    const r = rule("r", AND({ variable: "tag", operator: "has", value: "tag_food" }), { ignore: true });
+    expect(evaluate_rules(txn(), [r]).applied_rule_ids).toEqual([]);
+  });
+
+  it("`add tag` surfaces a deduped add_tag intent", () => {
+    const r1 = rule("r1", AND({ variable: "merchant", operator: "contains", value: "blue" }), { add_tag: ["a", "b"] });
+    const r2 = rule("r2", AND({ variable: "amount", operator: "gt", value: 1 }), { add_tag: ["b", "c"] }, { priority: 200 });
+    expect(evaluate_rules(txn(), [r1, r2]).add_tag).toEqual(["a", "b", "c"]);
+  });
+
+  it("chains: an earlier rule's `add tag` is visible to a later rule's `has tag`", () => {
+    const adder = rule("adder", AND({ variable: "merchant", operator: "contains", value: "blue" }), { add_tag: ["vip"] }, { priority: 10 });
+    const reactor = rule("reactor", AND({ variable: "tag", operator: "has", value: "vip" }), { require_review: true }, { priority: 20 });
+    const out = evaluate_rules(txn(), [reactor, adder]); // order-insensitive (sorted by priority)
+    expect(out.applied_rule_ids).toEqual(["adder", "reactor"]);
+    expect(out.require_review).toBe(true);
+  });
+
+  it("does NOT chain backwards: a lower-priority `add tag` is invisible to a higher-priority `has tag`", () => {
+    const reactor = rule("reactor", AND({ variable: "tag", operator: "has", value: "vip" }), { require_review: true }, { priority: 10 });
+    const adder = rule("adder", AND({ variable: "merchant", operator: "contains", value: "blue" }), { add_tag: ["vip"] }, { priority: 20 });
+    const out = evaluate_rules(txn(), [reactor, adder]);
+    expect(out.applied_rule_ids).toEqual(["adder"]); // only the adder fired
+    expect(out.require_review).toBeUndefined();
+  });
+});

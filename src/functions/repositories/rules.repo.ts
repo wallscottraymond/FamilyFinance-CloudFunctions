@@ -114,7 +114,96 @@ export const rules_repo = {
   async delete_rule(_ctx: TraceContext, rule_id: string): Promise<void> {
     await col().doc(rule_id).delete();
   },
+
+  /**
+   * Removes a deleted tag id from all of the user's rules: drops any `has tag <id>` conditions and
+   * strips `<id>` from `add_tag` actions. A rule left with zero conditions or zero actions is
+   * DEACTIVATED (never left condition-less — that would match every transaction). Returns the count
+   * of rules changed. Bounded batch (450-doc commits); rules are few (≤ MAX_RULES_PER_USER).
+   */
+  async strip_tag(_ctx: TraceContext, user_id: string, tag_id: string): Promise<number> {
+    const db = getFirestore();
+    const snap = await col().where("userId", "==", user_id).get();
+    let batch = db.batch();
+    let pending = 0;
+    let count = 0;
+    for (const doc of snap.docs) {
+      const rule = map_to_domain(doc.id, doc.data() as FirebaseFirestore.DocumentData);
+      const stripped = strip_tag_from_rule(rule, tag_id);
+      if (!stripped.changed) continue;
+      const still_valid =
+        count_conditions_in(stripped.conditions) > 0 && has_any_action_in(stripped.actions);
+      /* eslint-disable @typescript-eslint/naming-convention */
+      batch.update(doc.ref, {
+        conditions: stripped.conditions,
+        actions: stripped.actions,
+        isActive: still_valid ? rule.is_active : false,
+        updatedAt: Timestamp.now(),
+      });
+      /* eslint-enable @typescript-eslint/naming-convention */
+      count++;
+      pending++;
+      if (pending === 450) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) {
+      await batch.commit();
+    }
+    return count;
+  },
 };
+
+/** Pure: strip a tag id from a rule's conditions (`has tag`) + `add_tag` action. */
+function strip_tag_from_rule(
+  rule: Rule,
+  tag_id: string
+): { conditions: RuleConditionGroup; actions: RuleActions; changed: boolean } {
+  let changed = false;
+
+  const strip_group = (group: RuleConditionGroup): RuleConditionGroup => {
+    const conditions = group.conditions.filter((c) => {
+      const drop = c.variable === "tag" && String(c.value) === tag_id;
+      if (drop) changed = true;
+      return !drop;
+    });
+    const nested = (group.nested ?? []).map(strip_group);
+    return { op: group.op, conditions, ...(nested.length > 0 ? { nested } : {}) };
+  };
+
+  const conditions = strip_group(rule.conditions);
+
+  let actions = rule.actions;
+  if (rule.actions.add_tag && rule.actions.add_tag.includes(tag_id)) {
+    const next = rule.actions.add_tag.filter((id) => id !== tag_id);
+    changed = true;
+    actions = { ...rule.actions };
+    if (next.length > 0) {
+      actions.add_tag = next;
+    } else {
+      delete actions.add_tag;
+    }
+  }
+
+  return { conditions, actions, changed };
+}
+
+/** Pure: total conditions in a group tree (direct + nested). */
+function count_conditions_in(group: RuleConditionGroup): number {
+  return (
+    group.conditions.length +
+    (group.nested ?? []).reduce((sum, g) => sum + count_conditions_in(g), 0)
+  );
+}
+
+/** Pure: true when the actions object still has at least one meaningful action set. */
+function has_any_action_in(actions: RuleActions): boolean {
+  return Object.values(actions).some((v) =>
+    Array.isArray(v) ? v.length > 0 : v !== undefined && v !== false
+  );
+}
 
 /** Map a Firestore rule doc to the domain `Rule`. Malformed docs degrade to never-match. */
 function map_to_domain(

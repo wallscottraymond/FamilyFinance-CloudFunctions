@@ -12,6 +12,7 @@
  *   - `ignore`           → `is_ignored = true` on every split.
  *   - `mark_refund`      → `is_refund = true` on every split.
  *   - `mark_income`      → txn `type = "income"`.
+ *   - `add_tag`          → unions tag ids into every split's `.tags` (the doc's `tagIds` follows).
  *   - `require_review`   → txn `needs_review = true` (non-blocking; drives the review queue).
  *   - `require_note`     → txn `needs_note = true`.
  *   - `split`            → REPLACES splits: divide by percent/amount + an unassigned remainder.

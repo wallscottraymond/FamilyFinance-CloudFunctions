@@ -2,8 +2,8 @@
  * delete_tag — onCall entry to delete a catalog tag (owner only).
  *
  * Bounded-batch strip: removes the tag id from every tagged transaction (`split.tags` + the
- * denormalized `tagIds`) and budget (`tags`), then deletes the catalog doc. Rule tag-refs are
- * stripped in Phase 3 (once the Rule Book gains tag conditions/actions).
+ * denormalized `tagIds`), budget (`tags`), and rule (`has tag` conditions + `add_tag` actions),
+ * then deletes the catalog doc.
  *
  * @module entry/callable/delete_tag
  */
@@ -13,6 +13,7 @@ import { create_trace_context } from "../../observability";
 import { tags_repo } from "../../repositories/tags.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { budget_repo } from "../../repositories/budget.repo";
+import { rules_repo } from "../../repositories/rules.repo";
 import { delete_tag_input_schema } from "../../types/tags_crud.types";
 
 export const delete_tag = onCall(
@@ -20,7 +21,10 @@ export const delete_tag = onCall(
   { maxInstances: 20 },
   async (
     request
-  ): Promise<{ success: true; stripped: { transactions: number; budgets: number } }> => {
+  ): Promise<{
+    success: true;
+    stripped: { transactions: number; budgets: number; rules: number };
+  }> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
@@ -47,8 +51,9 @@ export const delete_tag = onCall(
     // recoverable (still in the catalog) rather than orphaned ids on docs.
     const transactions = await transaction_repo.strip_tag(ctx, user_id, parsed.data.tag_id);
     const budgets = await budget_repo.strip_tag(ctx, user_id, parsed.data.tag_id);
+    const rules = await rules_repo.strip_tag(ctx, user_id, parsed.data.tag_id);
 
     await tags_repo.delete_tag(ctx, parsed.data.tag_id);
-    return { success: true, stripped: { transactions, budgets } };
+    return { success: true, stripped: { transactions, budgets, rules } };
   }
 );

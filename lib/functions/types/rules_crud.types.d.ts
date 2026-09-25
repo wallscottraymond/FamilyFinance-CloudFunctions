@@ -26,6 +26,7 @@ export declare const create_rule_input_schema: z.ZodObject<{
             inflow: "inflow";
         }>>;
         mark_income: z.ZodOptional<z.ZodBoolean>;
+        add_tag: z.ZodOptional<z.ZodArray<z.ZodString>>;
         require_note: z.ZodOptional<z.ZodBoolean>;
         require_review: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>;
@@ -53,6 +54,7 @@ export declare const update_rule_input_schema: z.ZodObject<{
             inflow: "inflow";
         }>>;
         mark_income: z.ZodOptional<z.ZodBoolean>;
+        add_tag: z.ZodOptional<z.ZodArray<z.ZodString>>;
         require_note: z.ZodOptional<z.ZodBoolean>;
         require_review: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>>;

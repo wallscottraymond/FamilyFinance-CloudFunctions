@@ -179,4 +179,25 @@ describe("apply_rule_intents", () => {
     expect(out.splits[0].budget_id).toBe("unassigned");
     expect(out.type).toBe("expense");
   });
+
+  it("add_tag unions tag ids onto every split (deduped, existing preserved)", () => {
+    const t = txn({ splits: [split({ tags: ["existing"] }), split({ split_id: "s2", tags: ["dup"] })] });
+    const out = apply_rule_intents(t, intents({ add_tag: ["dup", "new"], applied_rule_ids: ["r"] }));
+    expect(out.splits[0].tags).toEqual(["existing", "dup", "new"]); // applies to every split
+    expect(out.splits[1].tags).toEqual(["dup", "new"]); // "dup" not duplicated
+  });
+
+  it("add_tag alone (no other action) still applies", () => {
+    const t = txn();
+    const out = apply_rule_intents(t, intents({ add_tag: ["x"] }));
+    expect(out.splits[0].tags).toEqual(["x"]);
+  });
+
+  it("add_tag on a split action carries tags onto materialized splits", () => {
+    const t = txn({ amount: 100, splits: [split({ amount: 100 })] });
+    const out = apply_rule_intents(
+      t, intents({ split: [{ percent: 50 }], add_tag: ["x"], applied_rule_ids: ["r"] })
+    );
+    expect(out.splits.every((s) => s.tags.includes("x"))).toBe(true);
+  });
 });

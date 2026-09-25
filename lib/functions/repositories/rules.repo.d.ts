@@ -43,6 +43,13 @@ export declare const rules_repo: {
     update_rule(_ctx: TraceContext, rule_id: string, patch: Partial<RuleWriteFields>): Promise<void>;
     /** Hard-deletes a rule (rules carry no history to preserve). */
     delete_rule(_ctx: TraceContext, rule_id: string): Promise<void>;
+    /**
+     * Removes a deleted tag id from all of the user's rules: drops any `has tag <id>` conditions and
+     * strips `<id>` from `add_tag` actions. A rule left with zero conditions or zero actions is
+     * DEACTIVATED (never left condition-less — that would match every transaction). Returns the count
+     * of rules changed. Bounded batch (450-doc commits); rules are few (≤ MAX_RULES_PER_USER).
+     */
+    strip_tag(_ctx: TraceContext, user_id: string, tag_id: string): Promise<number>;
 };
 export {};
 //# sourceMappingURL=rules.repo.d.ts.map

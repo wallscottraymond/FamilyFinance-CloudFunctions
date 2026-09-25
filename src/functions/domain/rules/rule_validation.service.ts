@@ -20,6 +20,7 @@ const ACTION_KEYS: (keyof RuleActions)[] = [
   "mark_refund",
   "make_recurring",
   "mark_income",
+  "add_tag",
   "require_note",
   "require_review",
 ];

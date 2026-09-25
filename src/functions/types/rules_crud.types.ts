@@ -13,7 +13,7 @@ export const MAX_RULES_PER_USER = 300;
 const rule_value_schema = z.union([z.string(), z.number()]);
 
 const rule_condition_schema = z.object({
-  variable: z.enum(["merchant", "date", "amount", "category", "account"]),
+  variable: z.enum(["merchant", "date", "amount", "category", "account", "tag"]),
   operator: z.string().min(1),
   value: rule_value_schema,
   value2: rule_value_schema.optional(),
@@ -43,6 +43,7 @@ const rule_actions_schema = z.object({
   mark_refund: z.boolean().optional(),
   make_recurring: z.enum(["outflow", "inflow"]).optional(),
   mark_income: z.boolean().optional(),
+  add_tag: z.array(z.string().min(1)).optional(),
   require_note: z.boolean().optional(),
   require_review: z.boolean().optional(),
 });

@@ -12,6 +12,7 @@
  *   - `ignore`           → `is_ignored = true` on every split.
  *   - `mark_refund`      → `is_refund = true` on every split.
  *   - `mark_income`      → txn `type = "income"`.
+ *   - `add_tag`          → unions tag ids into every split's `.tags` (the doc's `tagIds` follows).
  *   - `require_review`   → txn `needs_review = true` (non-blocking; drives the review queue).
  *   - `require_note`     → txn `needs_note = true`.
  *   - `split`            → REPLACES splits: divide by percent/amount + an unassigned remainder.
@@ -35,8 +36,10 @@ export function apply_rule_intents(
 ): TransactionForPersistence {
   const has_split = intents.split !== undefined && intents.split.length > 0;
   // Nothing this service can apply → return the input unchanged (referential no-op).
+  const has_add_tag = intents.add_tag !== undefined && intents.add_tag.length > 0;
   const applies =
     has_split ||
+    has_add_tag ||
     intents.assign_budget_id !== undefined ||
     intents.assign_category !== undefined ||
     intents.ignore === true ||
@@ -87,6 +90,7 @@ function apply_to_split(
         : split.internal_primary_category,
     is_ignored: intents.ignore ? true : split.is_ignored,
     is_refund: intents.mark_refund ? true : split.is_refund,
+    tags: union(split.tags, intents.add_tag ?? []),
     rules: union(split.rules, intents.applied_rule_ids),
   };
 }
@@ -157,6 +161,7 @@ function make_split(
       spec.category ?? internal_primary_category ?? base.internal_primary_category,
     is_ignored: intents.ignore ? true : base.is_ignored,
     is_refund: intents.mark_refund ? true : base.is_refund,
+    tags: union(base.tags, intents.add_tag ?? []),
     rules: union(base.rules, intents.applied_rule_ids),
   };
 }

@@ -39,14 +39,24 @@ export function evaluate_rules(
 ): RuleActionIntents {
   const intents: RuleActionIntents = { applied_rule_ids: [] };
 
+  // Running view of the txn whose `tags` grows as `add tag` rules fire, so a later rule's
+  // `has tag` can match a tag an earlier (higher-priority) rule just added. Starts from the
+  // txn's current tags (empty for a fresh Plaid txn at ingest).
+  const running: RuleEvaluableTransaction = { ...txn, tags: [...(txn.tags ?? [])] };
+
   // Ascending priority = top of the Rule Book first; later (lower in the list) overrides earlier.
   const ordered = [...rules].sort((a, b) => a.priority - b.priority);
 
   for (const rule of ordered) {
     if (!rule.is_active) continue;
-    if (!evaluate_group(txn, rule.conditions)) continue;
+    if (!evaluate_group(running, rule.conditions)) continue;
     intents.applied_rule_ids.push(rule.id);
     accumulate_actions(rule.actions, intents);
+    // Reflect newly-added tags into the running view for subsequent rules' `has tag` conditions.
+    if (rule.actions.add_tag && rule.actions.add_tag.length > 0) {
+      const seen = new Set(running.tags ?? []);
+      for (const id of rule.actions.add_tag) if (!seen.has(id)) (running.tags ??= []).push(id);
+    }
   }
 
   return intents;
@@ -61,6 +71,11 @@ function accumulate_actions(actions: RuleActions, intents: RuleActionIntents): v
   if (actions.ignore) intents.ignore = true;
   if (actions.mark_refund) intents.mark_refund = true;
   if (actions.mark_income) intents.mark_income = true;
+  if (actions.add_tag && actions.add_tag.length > 0) {
+    const seen = new Set(intents.add_tag ?? []);
+    intents.add_tag = intents.add_tag ?? [];
+    for (const id of actions.add_tag) if (!seen.has(id)) intents.add_tag.push(id);
+  }
   if (actions.require_note) intents.require_note = true;
   if (actions.require_review) intents.require_review = true;
 }
@@ -106,8 +121,22 @@ export function evaluate_condition(
     return match_amount(Math.abs(txn.amount), c);
   case "date":
     return match_date(txn.transaction_date, c);
+  case "tag":
+    return match_tag(txn.tags ?? [], c);
   default:
     return assert_never_variable(c.variable);
+  }
+}
+
+/** Tag variable: `has` — true when the running tag set contains the given tag id. */
+function match_tag(tags: string[], c: RuleCondition): boolean {
+  const target = String(c.value ?? "").trim();
+  if (target.length === 0) return false;
+  switch (c.operator) {
+  case "has":
+    return tags.includes(target);
+  default:
+    return false; // operator not valid for the tag variable
   }
 }
 

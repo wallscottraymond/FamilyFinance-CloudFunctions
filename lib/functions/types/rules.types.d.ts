@@ -16,15 +16,17 @@
  * - The `tag` variable is omitted from v1 (the `split.tags[]` field exists but nothing
  *   populates it yet).
  */
-/** Transaction fields a rule can test. (`tag` deferred until tags are user-settable.) */
-export type RuleVariable = "merchant" | "date" | "amount" | "category" | "account";
+/** Transaction fields a rule can test. */
+export type RuleVariable = "merchant" | "date" | "amount" | "category" | "account" | "tag";
 /** Operators for string variables (merchant, category, account). */
 export type StringOperator = "contains" | "equals";
 /** Operators for the amount variable. Compared against the transaction's ABSOLUTE amount. */
 export type NumberOperator = "lt" | "lte" | "eq" | "gte" | "gt" | "between";
 /** Operators for the date variable (absolute — no relative/now, so evaluation stays pure). */
 export type DateOperator = "before" | "after" | "on" | "up_to" | "between";
-export type RuleOperator = StringOperator | NumberOperator | DateOperator;
+/** Operator for the tag variable. `value` is a tag id from the catalog. */
+export type TagOperator = "has";
+export type RuleOperator = StringOperator | NumberOperator | DateOperator | TagOperator;
 /**
  * A single condition: `<variable> <operator> <value>[ .. <value2>]`.
  * `value2` is only used by the `between` operators (amount/date).
@@ -77,6 +79,8 @@ export interface RuleActions {
     make_recurring?: "outflow" | "inflow";
     /** Mark the transaction as income. */
     mark_income?: boolean;
+    /** Add these tag ids to the split(s) `.tags` (union; the denormalized `tagIds` follows). */
+    add_tag?: string[];
     /** Flag that a note is expected (non-blocking). */
     require_note?: boolean;
     /** Flag for review (non-blocking). */
@@ -105,6 +109,9 @@ export interface RuleEvaluableTransaction {
     account_id: string;
     plaid_primary_category: string;
     internal_primary_category: string | null;
+    /** Current tag ids (union of splits' tags). Empty for a fresh Plaid txn; the evaluator threads
+     *  add_tag through this so a later rule's `has tag` sees an earlier rule's `add tag`. */
+    tags?: string[];
 }
 /**
  * The resolved outcome of evaluating ALL matching rules against one transaction, in priority order.
@@ -120,6 +127,7 @@ export interface RuleActionIntents {
     ignore?: boolean;
     mark_refund?: boolean;
     mark_income?: boolean;
+    add_tag?: string[];
     require_note?: boolean;
     require_review?: boolean;
     make_recurring?: "outflow" | "inflow";
