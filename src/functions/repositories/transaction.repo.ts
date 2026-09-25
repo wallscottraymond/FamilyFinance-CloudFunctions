@@ -83,12 +83,15 @@ interface LegacyTransactionDoc {
   isActive?: boolean;
   isDeleted?: boolean;
   deletionReason?: string;
+  needsReview?: boolean;
+  needsNote?: boolean;
 }
 
 interface LegacySplitDoc {
   splitId: string;
   budgetId: string;
   budgetName?: string;
+  budgetAssignmentSource?: string;
   monthlyPeriodId: string | null;
   weeklyPeriodId: string | null;
   biWeeklyPeriodId: string | null;
@@ -193,6 +196,10 @@ function map_to_doc(
     updatedAt: now,
     isActive: entity.is_active,
     isDeleted: !entity.is_active,
+    // Rules Engine flags (non-blocking; drive the "Needs review" queue). Written on every doc so the
+    // queue query (needsReview == true) is consistent.
+    needsReview: entity.needs_review ?? false,
+    needsNote: entity.needs_note ?? false,
   };
 }
 
@@ -219,6 +226,11 @@ function map_split_to_doc(
     paymentDate: Timestamp.fromDate(split.payment_date),
     rules: split.rules,
     tags: split.tags,
+    // Only written when a rule pinned the budget → the assignment engine honors "manual" and won't
+    // reassign it (compute_transaction_assignment). Absent = "category" (engine default).
+    ...(split.budget_assignment_source
+      ? { budgetAssignmentSource: split.budget_assignment_source }
+      : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -258,7 +270,8 @@ export const transaction_repo = {
     ctx: TraceContext,
     transactions: TransactionForPersistence[],
     user_id: string,
-    plaid_item_id: string
+    plaid_item_id: string,
+    on_create?: (txn: TransactionForPersistence) => TransactionForPersistence
   ): Promise<{
     created: number;
     updated: number;
@@ -346,8 +359,14 @@ export const transaction_repo = {
           // `plaid_` prefix avoids Firestore's reserved `.`/`..`/`__*__` id forms;
           // `/` (illegal in an id) is sanitized. Existing random-id docs stay found
           // by `get_by_plaid_transaction_id`, so no migration + no split-brain.
-          const doc_id = `plaid_${txn.transaction_id.replace(/\//g, "_")}`;
-          const doc_data = map_to_doc({ ...txn, id: doc_id }, now);
+          //
+          // FIRST-WRITE-ONLY hook: apply the caller's pure transform (the Rules Engine) ONLY on
+          // CREATE — never on the update branch above — so rules run exactly once per transaction
+          // and can't clobber a later manual edit. The transform is pure; the repo holds no rule
+          // logic, it just invokes it at the create lifecycle point.
+          const effective = on_create ? on_create(txn) : txn;
+          const doc_id = `plaid_${effective.transaction_id.replace(/\//g, "_")}`;
+          const doc_data = map_to_doc({ ...effective, id: doc_id }, now);
 
           batch.set(doc_ref(doc_id), doc_data);
 
@@ -1162,6 +1181,20 @@ export const transaction_repo = {
       `[${ctx.trace_id}] get_ids_referencing_budget: budget=${budget_id}, found=${ids.length}`
     );
     return ids;
+  },
+
+  /**
+   * Clears the Rules Engine review flags on a transaction (the "Needs review" queue action).
+   * `updatedAt` is bumped; nothing assignment/spend-relevant changes so the write is cheap.
+   */
+  async clear_review_flags(_ctx: TraceContext, doc_id: string): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(doc_id).update({
+      needsReview: false,
+      needsNote: false,
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
   },
 
   /**

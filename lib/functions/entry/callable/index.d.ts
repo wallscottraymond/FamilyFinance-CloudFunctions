@@ -31,6 +31,11 @@ export { link_plaid_account } from "./link_plaid_account.entry";
 export { refresh_plaid_data } from "./refresh_plaid_data.entry";
 export { sync_transactions } from "./sync_transactions.entry";
 export { sync_recurring } from "./sync_recurring.entry";
+export { create_rule } from "./create_rule.entry";
+export { update_rule } from "./update_rule.entry";
+export { delete_rule } from "./delete_rule.entry";
+export { list_rules } from "./list_rules.entry";
+export { clear_transaction_review } from "./clear_transaction_review.entry";
 export { backfill_transaction_assignments, } from "./backfill_transaction_assignments.entry";
 export { backfill_recurring_reconciliation, } from "./backfill_recurring_reconciliation.entry";
 //# sourceMappingURL=index.d.ts.map

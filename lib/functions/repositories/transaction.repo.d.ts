@@ -59,11 +59,14 @@ interface LegacyTransactionDoc {
     isActive?: boolean;
     isDeleted?: boolean;
     deletionReason?: string;
+    needsReview?: boolean;
+    needsNote?: boolean;
 }
 interface LegacySplitDoc {
     splitId: string;
     budgetId: string;
     budgetName?: string;
+    budgetAssignmentSource?: string;
     monthlyPeriodId: string | null;
     weeklyPeriodId: string | null;
     biWeeklyPeriodId: string | null;
@@ -107,7 +110,7 @@ export declare const transaction_repo: {
      * @param plaid_item_id - Plaid item ID (for scoping)
      * @returns Upsert results with created/updated counts
      */
-    upsert_from_plaid_sync(ctx: TraceContext, transactions: TransactionForPersistence[], user_id: string, plaid_item_id: string): Promise<{
+    upsert_from_plaid_sync(ctx: TraceContext, transactions: TransactionForPersistence[], user_id: string, plaid_item_id: string, on_create?: (txn: TransactionForPersistence) => TransactionForPersistence): Promise<{
         created: number;
         updated: number;
         results: Array<{
@@ -310,6 +313,11 @@ export declare const transaction_repo: {
      * @param budget_id - Budget whose referencing transactions to find
      */
     get_ids_referencing_budget(ctx: TraceContext, user_id: string, budget_id: string): Promise<string[]>;
+    /**
+     * Clears the Rules Engine review flags on a transaction (the "Needs review" queue action).
+     * `updatedAt` is bumped; nothing assignment/spend-relevant changes so the write is cheap.
+     */
+    clear_review_flags(_ctx: TraceContext, doc_id: string): Promise<void>;
     /**
      * Gets one transaction's raw doc data + id, or null if missing/inactive.
      * Returns the raw camelCase map so the assignment resolver can read-modify-

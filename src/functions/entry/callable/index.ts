@@ -55,6 +55,13 @@ export { refresh_plaid_data } from "./refresh_plaid_data.entry";
 export { sync_transactions } from "./sync_transactions.entry";
 export { sync_recurring } from "./sync_recurring.entry";
 
+// Transaction Rules Engine ("Rule Book") CRUD
+export { create_rule } from "./create_rule.entry";
+export { update_rule } from "./update_rule.entry";
+export { delete_rule } from "./delete_rule.entry";
+export { list_rules } from "./list_rules.entry";
+export { clear_transaction_review } from "./clear_transaction_review.entry";
+
 // Transaction Assignment Engine: one-shot post-cutover backfill
 export {
   backfill_transaction_assignments,

@@ -181,6 +181,10 @@ export interface TransactionForPersistence {
     internal_primary_category: string | null;
     /** User-set detailed category */
     internal_detailed_category: string | null;
+    /** Rule flag: transaction needs review (non-blocking; set by the Rules Engine). */
+    needs_review?: boolean;
+    /** Rule flag: transaction expects a note (non-blocking; set by the Rules Engine). */
+    needs_note?: boolean;
     /** Transaction splits */
     splits: TransactionSplitForPersistence[];
     /** Initial Plaid data preservation */
@@ -199,6 +203,9 @@ export interface TransactionSplitForPersistence {
     split_id: string;
     amount: number;
     budget_id: string;
+    /** Provenance of the budget assignment. "manual" = a durable pin the engine preserves (also set by
+     * a rule's assign-budget action). Absent = engine default ("category"). */
+    budget_assignment_source?: "category" | "manual";
     outflow_id: string | null;
     monthly_period_id: string | null;
     weekly_period_id: string | null;

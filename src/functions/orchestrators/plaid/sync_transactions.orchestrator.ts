@@ -24,7 +24,11 @@ import {
   TransactionSyncResponse,
   TRANSACTION_SYNC_BUDGET,
   PLAID_SYNC_PAGE_DELAY_MS,
+  TransactionForPersistence,
 } from "../../types/plaid";
+import { rules_repo } from "../../repositories/rules.repo";
+import { evaluate_rules } from "../../domain/rules/rule_evaluation.service";
+import { apply_rule_intents } from "../../domain/rules/rule_application.service";
 import { resolve_transaction_sync_dependencies } from "../../resolvers/plaid";
 import {
   identify_pending_migrations,
@@ -103,6 +107,20 @@ export async function sync_transactions_orchestrator(
   let has_more = true;
   let next_cursor: string | null = null;
 
+  // Load the user's active rules ONCE per sync invocation (not per page, not per txn) — the single
+  // read the Rules Engine adds to this path (see the project's Read-Cost Plan). Build a pure
+  // `on_create` transform applied ONLY to newly-created txns in the repo's create branch
+  // (first-write-only). Skip entirely when the user has no rules.
+  const active_rules = await rules_repo.get_active_rules(create_child_span(ctx), ctx.user_id);
+  const on_create =
+    active_rules.length > 0
+      ? (t: TransactionForPersistence): TransactionForPersistence =>
+        apply_rule_intents(t, evaluate_rules(t, active_rules))
+      : undefined;
+  if (active_rules.length > 0) {
+    console.log(`[${ctx.trace_id}] Rules Engine: ${active_rules.length} active rule(s) loaded`);
+  }
+
   // 2. PAGINATE THROUGH PLAID SYNC API
   while (has_more && should_continue_sync(errors)) {
     console.log(
@@ -159,7 +177,8 @@ export async function sync_transactions_orchestrator(
           ctx,
           active_added,
           deps,
-          errors
+          errors,
+          on_create
         );
         total_added += page_result.created;
         total_migrated += page_result.migrated;
@@ -274,7 +293,8 @@ async function process_added_transactions(
   ctx: OrchestratorContext<TransactionSyncInput>,
   plaid_transactions: import("plaid").Transaction[],
   deps: NonNullable<Awaited<ReturnType<typeof resolve_transaction_sync_dependencies>>>,
-  errors: string[]
+  errors: string[],
+  on_create?: (txn: TransactionForPersistence) => TransactionForPersistence
 ): Promise<{ created: number; migrated: number }> {
   // Identify pending->posted migrations BEFORE processing
   const migrations = identify_pending_migrations(
@@ -351,12 +371,15 @@ async function process_added_transactions(
       }
       console.log(`[${ctx.trace_id}] Step 6a: Transformed ${transactions_for_persistence.length} transactions (${migrated} inherited splits from a posted pending)`);
 
-      // Step 6b: Upsert transactions via new repository
+      // Step 6b: Upsert transactions via new repository. The `on_create` hook (the Rules Engine)
+      // applies ONLY to genuinely-new docs inside upsert's create branch (first-write-only) —
+      // pending->posted migrations go through the UPDATE branch and are untouched here.
       const upsert_result = await transaction_repo.upsert_from_plaid_sync(
         create_child_span(ctx),
         transactions_for_persistence,
         ctx.user_id,
-        deps.plaid_item.plaid_item_id
+        deps.plaid_item.plaid_item_id,
+        on_create
       );
       console.log(`[${ctx.trace_id}] Step 6b: Upserted transactions (created=${upsert_result.created}, updated=${upsert_result.updated})`);
 
