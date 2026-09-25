@@ -1,13 +1,17 @@
 /**
  * delete_tag — onCall entry to delete a catalog tag (owner only).
  *
- * NOTE: stripping the tag id from tagged transactions/budgets/rules is added in later phases (once
- * the denormalized `tagIds`, budget tags, and rule tag-refs exist to strip). For now this deletes
- * the catalog doc; any not-yet-existent references get handled by that later bounded-batch strip.
+ * Bounded-batch strip: removes the tag id from every tagged transaction (`split.tags` + the
+ * denormalized `tagIds`) and budget (`tags`), then deletes the catalog doc. Rule tag-refs are
+ * stripped in Phase 3 (once the Rule Book gains tag conditions/actions).
  *
  * @module entry/callable/delete_tag
  */
 export declare const delete_tag: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: true;
+    stripped: {
+        transactions: number;
+        budgets: number;
+    };
 }>, unknown>;
 //# sourceMappingURL=delete_tag.entry.d.ts.map

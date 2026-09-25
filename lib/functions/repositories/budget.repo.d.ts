@@ -51,6 +51,16 @@ export declare const budget_repo: {
      */
     add_category_ids(ctx: TraceContext, id: string, category_ids: string[], user_id: string): Promise<WriteResult>;
     /**
+     * Replaces a budget's `tags` with the given (deduped) set. Top-level array so it is directly
+     * queryable via array-contains (budget tags, Tag System). Owner check happens in the caller.
+     */
+    set_tags(ctx: TraceContext, id: string, tag_ids: string[], user_id: string): Promise<void>;
+    /**
+     * Removes `tag_id` from every budget of the user that carries it. Bounded batch (500-doc
+     * commits). Returns the count stripped. Composite index: `budgets(userId, tags array-contains)`.
+     */
+    strip_tag(_ctx: TraceContext, user_id: string, tag_id: string): Promise<number>;
+    /**
      * Writes back period-range metadata after budget periods are generated.
      * Mirrors the legacy `updateBudgetPeriodRange`: sets activePeriodRange +
      * lastExtended for all budgets, and the extension flags for recurring ones.

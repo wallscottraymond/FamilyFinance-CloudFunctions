@@ -85,6 +85,9 @@ interface LegacyTransactionDoc {
   deletionReason?: string;
   needsReview?: boolean;
   needsNote?: boolean;
+  // Denormalized union of every split's tag ids. `split.tags` is nested inside splits[], which
+  // array-contains cannot query, so this top-level mirror powers tag filtering + delete-strip.
+  tagIds?: string[];
 }
 
 interface LegacySplitDoc {
@@ -200,6 +203,8 @@ function map_to_doc(
     // queue query (needsReview == true) is consistent.
     needsReview: entity.needs_review ?? false,
     needsNote: entity.needs_note ?? false,
+    // Denormalized union of splits' tags → array-contains queryable (see LegacyTransactionDoc).
+    tagIds: Array.from(new Set(entity.splits.flatMap(s => s.tags ?? []))),
   };
 }
 
@@ -1243,6 +1248,83 @@ export const transaction_repo = {
     return snapshot.docs
       .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }))
       .filter((t) => t.data.isActive !== false);
+  },
+
+  /**
+   * Sets a split's tags (or every split's tags when `split_id` is null — the whole-transaction
+   * case) and recomputes the top-level `tagIds` union. `splits_raw` is the already-read raw splits
+   * array from `get_raw_by_id`, so this costs one write (the caller did the read + owner check).
+   */
+  async write_split_tags(
+    _ctx: TraceContext,
+    doc_id: string,
+    splits_raw: unknown,
+    split_id: string | null,
+    tag_ids: string[]
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const splits = Array.isArray(splits_raw)
+      ? (splits_raw as Array<Record<string, unknown>>)
+      : [];
+    for (const s of splits) {
+      if (split_id === null || s.splitId === split_id) {
+        s.tags = tag_ids;
+      }
+    }
+    const tagIds = Array.from(
+      new Set(splits.flatMap((s) => (Array.isArray(s.tags) ? (s.tags as string[]) : [])))
+    );
+    await doc_ref(doc_id).update({ splits, tagIds, updatedAt: Timestamp.now() });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
+   * Removes `tag_id` from every split's `tags` and from the top-level `tagIds` on all of the
+   * user's tagged transactions. Bounded batch (500-doc commits). Returns the count stripped.
+   * Composite index: `transactions(userId, tagIds array-contains)`.
+   */
+  async strip_tag(
+    _ctx: TraceContext,
+    user_id: string,
+    tag_id: string
+  ): Promise<number> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("tagIds", "array-contains", tag_id)
+      .get();
+    let batch = db.batch();
+    let pending = 0;
+    let count = 0;
+    for (const doc of snapshot.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      const splits = Array.isArray(data.splits)
+        ? (data.splits as Array<Record<string, unknown>>)
+        : [];
+      for (const s of splits) {
+        if (Array.isArray(s.tags)) {
+          s.tags = (s.tags as string[]).filter((t) => t !== tag_id);
+        }
+      }
+      const tagIds = Array.from(
+        new Set(splits.flatMap((s) => (Array.isArray(s.tags) ? (s.tags as string[]) : [])))
+      );
+      batch.update(doc.ref, { splits, tagIds, updatedAt: Timestamp.now() });
+      pending++;
+      count++;
+      if (pending === 450) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) {
+      await batch.commit();
+    }
+    return count;
+    /* eslint-enable @typescript-eslint/naming-convention */
   },
 
   // (cursor writes belong to the plaid_items aggregate → plaid_item_repo.update_cursor)

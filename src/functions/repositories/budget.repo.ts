@@ -426,6 +426,70 @@ export const budget_repo = {
   },
 
   /**
+   * Replaces a budget's `tags` with the given (deduped) set. Top-level array so it is directly
+   * queryable via array-contains (budget tags, Tag System). Owner check happens in the caller.
+   */
+  async set_tags(
+    ctx: TraceContext,
+    id: string,
+    tag_ids: string[],
+    user_id: string
+  ): Promise<void> {
+    const next = [...new Set(tag_ids)];
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({ tags: next, updatedAt: Timestamp.now() });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "budget",
+      entity_id: id,
+      before: null,
+      after: { tags: next } as Record<string, unknown>,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { tags: "set" } },
+    });
+  },
+
+  /**
+   * Removes `tag_id` from every budget of the user that carries it. Bounded batch (500-doc
+   * commits). Returns the count stripped. Composite index: `budgets(userId, tags array-contains)`.
+   */
+  async strip_tag(
+    _ctx: TraceContext,
+    user_id: string,
+    tag_id: string
+  ): Promise<number> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("tags", "array-contains", tag_id)
+      .get();
+    let batch = db.batch();
+    let pending = 0;
+    let count = 0;
+    for (const doc of snapshot.docs) {
+      const current = (doc.data()?.tags as string[] | undefined) ?? [];
+      const next = current.filter((t) => t !== tag_id);
+      batch.update(doc.ref, { tags: next, updatedAt: Timestamp.now() });
+      pending++;
+      count++;
+      if (pending === 450) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) {
+      await batch.commit();
+    }
+    return count;
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
    * Writes back period-range metadata after budget periods are generated.
    * Mirrors the legacy `updateBudgetPeriodRange`: sets activePeriodRange +
    * lastExtended for all budgets, and the extension flags for recurring ones.

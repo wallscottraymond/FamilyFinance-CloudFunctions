@@ -61,6 +61,7 @@ interface LegacyTransactionDoc {
     deletionReason?: string;
     needsReview?: boolean;
     needsNote?: boolean;
+    tagIds?: string[];
 }
 interface LegacySplitDoc {
     splitId: string;
@@ -338,6 +339,18 @@ export declare const transaction_repo: {
         id: string;
         data: Record<string, unknown>;
     }>>;
+    /**
+     * Sets a split's tags (or every split's tags when `split_id` is null — the whole-transaction
+     * case) and recomputes the top-level `tagIds` union. `splits_raw` is the already-read raw splits
+     * array from `get_raw_by_id`, so this costs one write (the caller did the read + owner check).
+     */
+    write_split_tags(_ctx: TraceContext, doc_id: string, splits_raw: unknown, split_id: string | null, tag_ids: string[]): Promise<void>;
+    /**
+     * Removes `tag_id` from every split's `tags` and from the top-level `tagIds` on all of the
+     * user's tagged transactions. Bounded batch (500-doc commits). Returns the count stripped.
+     * Composite index: `transactions(userId, tagIds array-contains)`.
+     */
+    strip_tag(_ctx: TraceContext, user_id: string, tag_id: string): Promise<number>;
 };
 export {};
 //# sourceMappingURL=transaction.repo.d.ts.map

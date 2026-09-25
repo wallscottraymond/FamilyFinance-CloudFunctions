@@ -40,6 +40,8 @@ export { create_tag } from "./create_tag.entry";
 export { update_tag } from "./update_tag.entry";
 export { delete_tag } from "./delete_tag.entry";
 export { list_tags } from "./list_tags.entry";
+export { set_transaction_tags } from "./set_transaction_tags.entry";
+export { set_budget_tags } from "./set_budget_tags.entry";
 export { backfill_transaction_assignments, } from "./backfill_transaction_assignments.entry";
 export { backfill_recurring_reconciliation, } from "./backfill_recurring_reconciliation.entry";
 //# sourceMappingURL=index.d.ts.map
