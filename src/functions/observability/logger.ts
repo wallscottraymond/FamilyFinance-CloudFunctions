@@ -98,6 +98,13 @@ const COLLECTIONS = {
   TRACES: "_traces",
 } as const;
 
+// RC-A (Read-Cost-Reduction-Round-2): Tier-2 `_logs_debug` writes are DISABLED. The collection had
+// ZERO readers (no FE, no admin), yet its cleanup scan dominated read cost (~10k reads/day) and the
+// per-operation `.add()` churn was pure write cost. `log_async_debug` no-ops below so the ~40
+// fire_and_forget call sites stay untouched. Flip to `true` to restore debug logging.
+// Typed `boolean` (not the literal `false`) so the guard isn't flagged as unreachable code.
+const DEBUG_LOGGING_ENABLED: boolean = false;
+
 /**
  * Fire-and-forget helper for async operations.
  * MUST swallow errors to prevent logging failures from affecting business execution.
@@ -190,6 +197,7 @@ export async function log_async_debug(entry: {
   error_details?: { message: string; stack?: string; details?: unknown };
   context?: Record<string, unknown>;
 }): Promise<void> {
+  if (!DEBUG_LOGGING_ENABLED) return; // RC-A: _logs_debug disabled (0 readers, ~10k reads/day)
   const log_entry: DebugLogEntry = {
     trace_id: entry.trace_id,
     span_id: entry.span_id,

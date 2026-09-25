@@ -120,7 +120,7 @@ export async function cleanup_logs(
   const batch_size = config?.batch_size ?? infra_config.cleanup_batch_size;
   const max_batches = config?.max_batches ?? infra_config.cleanup_max_batches;
   const minimal_days = config?.retention?.minimal_days ?? infra_config.log_retention.minimal;
-  const debug_days = config?.retention?.debug_days ?? infra_config.log_retention.debug;
+  // debug retention no longer read — `_logs_debug` cleanup is skipped (RC-A, see below).
   const traces_days = config?.retention?.traces_days ?? infra_config.log_retention.traces;
 
   try {
@@ -146,26 +146,14 @@ export async function cleanup_logs(
       },
     }));
 
-    const debug = await cleanup_collection(
-      ctx,
-      LOG_COLLECTIONS.DEBUG,
-      debug_days,
-      batch_size,
-      max_batches
-    );
-
-    fire_and_forget(() => log_async_debug({
-      trace_id: ctx.trace_id,
-      span_id: span.span_id,
-      layer: "orchestrator",
-      function: "cleanup_logs",
-      status: "collection_complete",
-      context: {
-        name: "debug",
-        deleted_count: debug.deleted_count,
-        batches_processed: debug.batches_processed,
-      },
-    }));
+    // RC-A (Read-Cost-Reduction-Round-2): the `_logs_debug` cleanup scan dominated read cost
+    // (~10k reads/day). With debug writes disabled (`log_async_debug` no-op), there is nothing to
+    // clean, so we SKIP the scan entirely. Zero result preserves the response shape.
+    const debug: CollectionCleanupResult = {
+      collection: LOG_COLLECTIONS.DEBUG,
+      deleted_count: 0,
+      batches_processed: 0,
+    };
 
     const traces = await cleanup_collection(
       ctx,
