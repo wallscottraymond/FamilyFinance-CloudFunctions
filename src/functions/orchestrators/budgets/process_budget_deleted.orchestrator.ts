@@ -17,11 +17,6 @@ import {
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
-import { resolve_budget_periods_for_summary } from "../../resolvers/summaries";
-import {
-  enqueue_user_summary_updates_by_type,
-  enqueue_user_summary_updates_from_budget_periods,
-} from "../summaries";
 import { create_job } from "../../infrastructure/job_queue";
 import { ProcessBudgetDeletedPayload } from "../../types/budgets/delete_budget.types";
 
@@ -49,20 +44,7 @@ export async function process_budget_deleted_orchestrator(
       ? payload.budget_period_ids
       : await budget_period_repo.get_ids_by_budget_id(ctx, payload.budget_id);
 
-  // 1a. Capture which user_summaries are affected BEFORE deleting the periods
-  // (the period docs must still exist to resolve their period_type/source).
-  let periods_by_type: Map<string, Set<string>> = new Map();
-  if (period_ids.length > 0) {
-    try {
-      const resolved = await resolve_budget_periods_for_summary(ctx, period_ids);
-      periods_by_type = resolved.periods_by_type;
-    } catch (resolve_error) {
-      console.error(
-        `[${ctx.trace_id}] process_budget_deleted: summary pre-resolve failed (non-fatal):`,
-        resolve_error
-      );
-    }
-  }
+  // (user_summaries build retired)
 
   // 1b. Delete budget periods.
   if (period_ids.length > 0) {
@@ -122,31 +104,11 @@ export async function process_budget_deleted_orchestrator(
         `[${ctx.trace_id}] process_budget_deleted: transferred rollover (${payload.rollover_transfer_mode}) ` +
           `to EE across ${ee_period_ids.length} period(s)`
       );
-      if (ee_period_ids.length > 0) {
-        await enqueue_user_summary_updates_from_budget_periods(
-          ctx,
-          payload.user_id,
-          ee_period_ids
-        );
-      }
+      // (user_summaries build retired)
     } catch (rollover_error) {
       console.error(
         `[${ctx.trace_id}] process_budget_deleted: rollover transfer failed (non-fatal):`,
         rollover_error
-      );
-    }
-  }
-
-  // 4. Recompute the affected user_summaries now that the periods are gone, so
-  // the deleted budget drops out of each summary's budgets[]. Explicit here (not
-  // relying solely on the budget_period DELETE trigger) so the cascade owns it.
-  if (periods_by_type.size > 0) {
-    try {
-      await enqueue_user_summary_updates_by_type(ctx, payload.user_id, periods_by_type);
-    } catch (summary_error) {
-      console.error(
-        `[${ctx.trace_id}] process_budget_deleted: summary update failed (non-fatal):`,
-        summary_error
       );
     }
   }

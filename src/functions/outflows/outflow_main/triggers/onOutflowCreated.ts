@@ -14,7 +14,6 @@ import {
   createOutflowPeriodsFromSource,
   calculatePeriodGenerationRange
 } from '../../outflow_periods/crud/createOutflowPeriods';
-import { batchUpdateUserPeriodSummariesFromOutflowPeriods } from '../../../summaries/utils/batchUpdateUserPeriodSummaries';
 
 /**
  * Triggered when an outflow is created
@@ -97,29 +96,7 @@ export const onOutflowCreated = onDocumentCreated({
     console.log(`  ✓ Periods Created: ${result.periodsCreated}`);
     console.log(`  ✓ Period IDs: ${result.periodIds.join(', ')}`);
 
-    // STEP 4: Batch update user period summaries
-    if (outflowData.ownerId && result.periodIds.length > 0) {
-      console.log('');
-      console.log('[onOutflowCreated] STEP 4: Batch updating user period summaries');
-      console.log(`  - Updating summaries for ${result.periodIds.length} periods`);
-      console.log(`  - User ID: ${outflowData.ownerId}`);
-
-      try {
-        const summariesUpdated = await batchUpdateUserPeriodSummariesFromOutflowPeriods(
-          outflowData.ownerId,
-          result.periodIds
-        );
-
-        console.log('');
-        console.log('[onOutflowCreated] ✓ Batch summary update completed');
-        console.log(`  ✓ Summaries Updated: ${summariesUpdated}`);
-      } catch (summaryError) {
-        console.error('');
-        console.error('[onOutflowCreated] ⚠️  Error updating summaries (non-fatal):');
-        console.error(summaryError);
-        console.log('[onOutflowCreated] Continuing despite summary update error...');
-      }
-    }
+    // (user_summaries build retired)
 
     console.log('');
     console.log('[onOutflowCreated] ℹ️  Auto-matching will happen per-period via onOutflowPeriodCreate triggers');

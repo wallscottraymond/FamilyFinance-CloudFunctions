@@ -24,14 +24,6 @@ export {
   resolve_outflow_period_dependencies_from_doc,
 } from "./outflows";
 
-// Summary resolvers
-export {
-  ResolveUserSummaryInput,
-  UserSummaryDependencies,
-  resolve_user_summary_dependencies,
-  batch_resolve_user_summary_dependencies,
-} from "./summaries";
-
 // Budget resolvers
 export {
   resolve_create_budget_dependencies,

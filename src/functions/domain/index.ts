@@ -70,13 +70,6 @@ export {
   validate_outflow_periods,
 } from "./outflows";
 
-// User summary domain services
-export {
-  ComputeUserSummaryInput,
-  compute_user_period_summary,
-  validate_user_period_summary,
-} from "./summaries";
-
 // Budget CRUD domain services
 export {
   PeriodInstanceType,

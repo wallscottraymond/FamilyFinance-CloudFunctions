@@ -10,9 +10,8 @@
  * Summaries can be recalculated later if needed via manual API calls.
  */
 
+// (user_summaries build retired — updateUserPeriodSummary deleted)
 import { OutflowPeriod } from '../../../../types';
-import { updateUserPeriodSummary } from '../../../summaries/orchestration/updateUserPeriodSummary';
-import { determinePeriodType } from '../utils/periodTypeHelpers';
 
 /**
  * Update user_summaries for a newly created outflow period
@@ -36,31 +35,11 @@ import { determinePeriodType } from '../utils/periodTypeHelpers';
  *   // Don't re-throw - period creation succeeds even if summaries fail
  * }
  */
+// (user_summaries build retired)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function createOutflowPeriodSummary(
-  periodData: OutflowPeriod,
-  outflowPeriodId: string
+  _periodData: OutflowPeriod,
+  _outflowPeriodId: string
 ): Promise<void> {
-  console.log('[createOutflowPeriodSummary] Updating user_summaries...');
-
-  // Determine period type from source period ID
-  const periodType = determinePeriodType(periodData.sourcePeriodId);
-
-  // Update user_summaries collection
-  console.log(`[createOutflowPeriodSummary] ✓ Updating user_summaries for period: ${periodData.sourcePeriodId}`);
-
-  await updateUserPeriodSummary(
-    periodData.ownerId,
-    periodType,
-    periodData.sourcePeriodId,
-    true // Always include entries for tile rendering
-  );
-
-  console.log(`[createOutflowPeriodSummary] ✓ user_summaries updated successfully`);
-
-  // TODO: Add group summary support when group summaries are implemented
-  if (periodData.groupId) {
-    console.log(`[createOutflowPeriodSummary] ⚠️  Group summaries not yet implemented for groupId: ${periodData.groupId}`);
-  }
-
-  console.log('[createOutflowPeriodSummary] ✓ Summary updates complete');
+  // no-op: user_summaries build is retired
 }

@@ -13,7 +13,7 @@
  */
 export declare const testUserSummaryCreation: import("firebase-functions/v2/https").CallableFunction<any, Promise<{
     success: boolean;
-    summaryId: string;
+    summaryId: any;
     message: string;
 }>, unknown>;
 //# sourceMappingURL=testUserSummaryCreation.d.ts.map

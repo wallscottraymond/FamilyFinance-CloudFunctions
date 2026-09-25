@@ -32,5 +32,5 @@ import { OutflowPeriod } from '../../../../types';
  *   // Don't re-throw - period creation succeeds even if summaries fail
  * }
  */
-export declare function createOutflowPeriodSummary(periodData: OutflowPeriod, outflowPeriodId: string): Promise<void>;
+export declare function createOutflowPeriodSummary(_periodData: OutflowPeriod, _outflowPeriodId: string): Promise<void>;
 //# sourceMappingURL=createOutflowPeriodSummary.d.ts.map

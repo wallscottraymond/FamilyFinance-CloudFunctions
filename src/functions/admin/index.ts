@@ -4,7 +4,6 @@ export { updateCurrentPeriods } from "./updateCurrentPeriods";
 export { uploadCategoriesData } from "./uploadCategoriesData";
 export { analyzeTransactionCategories } from "./analyzeTransactionCategories";
 export { verifyAccessControl } from "./verifyAccessControl";
-export { createTestUserPeriodSummaries } from "./createTestUserPeriodSummaries";
 export { makeUserAdmin } from "./makeUserAdmin";
 
 // Deprecated admin/debug/migration functions — deleted from prod 2026-08-04

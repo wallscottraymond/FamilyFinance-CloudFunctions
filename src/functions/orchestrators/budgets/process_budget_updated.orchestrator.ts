@@ -25,7 +25,6 @@ import {
   compute_budget_periods,
   compute_reallocated_periods,
 } from "../../domain/budgets/period_generation.service";
-import { enqueue_user_summary_updates_from_budget_periods } from "../../orchestrators/summaries";
 import { create_job } from "../../infrastructure/job_queue";
 import {
   resolve_updated_rehome_transaction_ids,
@@ -140,15 +139,7 @@ async function propagate_name(
   }
 
   await budget_period_repo.update_names(ctx, ids, payload.budget_name);
-
-  try {
-    await enqueue_user_summary_updates_from_budget_periods(ctx, payload.user_id, ids);
-  } catch (summary_error) {
-    console.error(
-      `[${ctx.trace_id}] process_budget_updated: name summary update failed (non-fatal):`,
-      summary_error
-    );
-  }
+  // (user_summaries build retired)
 }
 
 /**
@@ -200,19 +191,7 @@ async function reallocate_periods(
   }
 
   await budget_period_repo.update_allocations(ctx, updates);
-
-  try {
-    await enqueue_user_summary_updates_from_budget_periods(
-      ctx,
-      payload.user_id,
-      updates.map((u) => u.id)
-    );
-  } catch (summary_error) {
-    console.error(
-      `[${ctx.trace_id}] process_budget_updated: summary update failed (non-fatal):`,
-      summary_error
-    );
-  }
+  // (user_summaries build retired)
 }
 
 /**
@@ -257,16 +236,7 @@ async function generate_fresh_periods(
 
   await budget_period_repo.save_batch(ctx, computed.entities, payload.budget_name);
 
-  // Recompute user_summary documents for the freshly generated periods.
-  const period_ids = computed.entities.map((p) => p.id);
-  try {
-    await enqueue_user_summary_updates_from_budget_periods(ctx, payload.user_id, period_ids);
-  } catch (summary_error) {
-    console.error(
-      `[${ctx.trace_id}] process_budget_updated: summary update failed (non-fatal):`,
-      summary_error
-    );
-  }
+  // (user_summaries build retired)
 
   // Write back the refreshed period-range metadata (legacy parity).
   const prime = computed.entities.filter((e) => e.period_type === payload.cadence);

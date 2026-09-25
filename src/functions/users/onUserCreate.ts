@@ -20,7 +20,6 @@ import {
 import {
   setUserClaims
 } from "../../utils/auth";
-import { preCreateUserPeriodSummaries } from "../summaries/orchestration/preCreateUserPeriodSummaries";
 import { createEverythingElseBudget } from "../budgets/utils/createEverythingElseBudget";
 
 /**
@@ -154,30 +153,18 @@ export const onUserCreate = functions.region("us-central1").runWith({
     try {
       console.log(`🔄 Starting user initialization for ${userRecord.uid}...`);
 
-      // Run both initialization tasks in parallel and wait for completion
-      const [summariesResult, budgetId] = await Promise.all([
-        // Pre-create 24 months of period summaries (12 backward, 12 forward)
-        preCreateUserPeriodSummaries(userRecord.uid)
-          .then(() => {
-            console.log(`✅ Pre-created period summaries for ${userRecord.uid}`);
-            return true;
-          })
-          .catch((error) => {
-            console.error(`❌ Error pre-creating summaries for ${userRecord.uid}:`, error);
-            return false; // Don't fail entire initialization
-          }),
+      // (user_summaries build retired)
 
-        // Create "everything else" system budget (catch-all for unassigned transactions)
-        createEverythingElseBudget(db, userRecord.uid, detectedCurrency)
-          .then((id) => {
-            console.log(`✅ Created "everything else" budget for ${userRecord.uid}: ${id}`);
-            return id;
-          })
-          .catch((error) => {
-            console.error(`❌ Failed to create "everything else" budget for ${userRecord.uid}:`, error);
-            return null; // Don't fail entire initialization
-          })
-      ]);
+      // Create "everything else" system budget (catch-all for unassigned transactions)
+      const budgetId = await createEverythingElseBudget(db, userRecord.uid, detectedCurrency)
+        .then((id) => {
+          console.log(`✅ Created "everything else" budget for ${userRecord.uid}: ${id}`);
+          return id;
+        })
+        .catch((error) => {
+          console.error(`❌ Failed to create "everything else" budget for ${userRecord.uid}:`, error);
+          return null; // Don't fail entire initialization
+        });
 
       // Mark user as initialized so frontend knows data is ready
       await db.collection('users').doc(userRecord.uid).update({
@@ -185,7 +172,7 @@ export const onUserCreate = functions.region("us-central1").runWith({
         initializedAt: Timestamp.now()
       });
 
-      console.log(`✅ User ${userRecord.uid} initialization complete (summaries: ${summariesResult}, budget: ${budgetId || 'failed'})`);
+      console.log(`✅ User ${userRecord.uid} initialization complete (budget: ${budgetId || 'failed'})`);
 
     } catch (initError) {
       console.error(`❌ User initialization failed for ${userRecord.uid}:`, initError);

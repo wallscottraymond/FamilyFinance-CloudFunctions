@@ -28,7 +28,6 @@ import {
 } from '../../../domain/budgets';
 import { source_period_repo } from '../../../repositories/source_period.repo';
 import { budget_period_repo } from '../../../repositories/budget_period.repo';
-import { enqueue_user_summary_updates_from_budget_periods } from '../../../orchestrators/summaries';
 
 /** How far BEHIND today to fetch source periods, so the current prime is present
  *  for accurate non-prime derivation at the near boundary (days). */
@@ -150,17 +149,7 @@ export async function run_recurring_budget_period_extension(
         await db.collection('budgets').doc(budget.id!).update({ lastExtended: now });
         console.log(`  ✅ Extended ${budget.id} with ${newEntities.length} new periods`);
 
-        if (user_id) {
-          try {
-            await enqueue_user_summary_updates_from_budget_periods(
-              ctx,
-              user_id,
-              newEntities.map((e) => e.id)
-            );
-          } catch (summaryError) {
-            console.error(`  ⚠️ Summary enqueue failed for ${budget.id} (non-fatal):`, summaryError);
-          }
-        }
+        // (user_summaries build retired)
 
         totalPeriodsCreated += newEntities.length;
         budgetsProcessed++;

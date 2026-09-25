@@ -35,7 +35,6 @@ import {
   validate_outflow_periods,
 } from "../../domain/outflows";
 import { outflow_period_repo } from "../../repositories/outflow_period.repo";
-import { enqueue_user_summary_updates_from_outflow_periods } from "../summaries";
 import { Timestamp } from "firebase-admin/firestore";
 
 /**
@@ -204,33 +203,7 @@ export async function generate_outflow_periods_orchestrator(
 
     perf.writes += write_result.count;
 
-    // 5. UPDATE USER PERIOD SUMMARIES
-    // Uses the 5-layer architecture orchestrator for proper summary updates
-    // This is called AFTER all periods are saved to prevent race conditions
-    if (write_result.count > 0) {
-      const period_ids = periods.map((p) => p.id);
-      console.log(
-        `[${ctx.trace_id}] generate_outflow_periods: enqueue ${period_ids.length} summaries`
-      );
-
-      try {
-        const summaries_updated = await enqueue_user_summary_updates_from_outflow_periods(
-          ctx,
-          ctx.input.user_id,
-          period_ids
-        );
-        console.log(
-          `[${ctx.trace_id}] generate_outflow_periods: updated ${summaries_updated} summaries`
-        );
-        perf.writes += summaries_updated;
-      } catch (summary_error) {
-        // Non-fatal: log but don't fail the orchestrator
-        console.error(
-          `[${ctx.trace_id}] generate_outflow_periods: summary update failed (non-fatal):`,
-          summary_error
-        );
-      }
-    }
+    // (user_summaries build retired)
 
     // 6. CHECK PERFORMANCE BUDGET
     perf.time_ms = Date.now() - start_time;

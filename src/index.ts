@@ -22,7 +22,6 @@ export * from "./functions/admin";
 // orchestrators/plaid/*, integrations/plaid/*).
 export * from "./functions/outflows"; // Outflow management functions
 export * from "./functions/inflows"; // Inflow management and period generation
-export * from "./functions/summaries"; // Period-centric summary system (API + triggers)
 export * from "./functions/entry"; // New layered architecture entry points (accounts, etc.)
 
 // Health check function (v2)

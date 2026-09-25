@@ -33,7 +33,6 @@ import {
   log_operation_error,
 } from "../../observability";
 import { recalculateRolloverChain } from "../../budgets/utils/rolloverChainCalculation";
-import { enqueue_user_summary_updates_from_budget_periods } from "../summaries";
 
 /** Payload from the spend pipeline's fan-out (dedup key = budget_id). */
 export interface RecomputeBudgetRolloverInput {
@@ -73,21 +72,7 @@ export async function recompute_budget_rollover_orchestrator(
       );
     }
 
-    // Refresh only the summaries whose periods actually changed.
-    if (result.updatedPeriodIds.length > 0) {
-      try {
-        await enqueue_user_summary_updates_from_budget_periods(
-          ctx,
-          input.user_id,
-          result.updatedPeriodIds
-        );
-      } catch (summary_error) {
-        console.error(
-          `[${ctx.trace_id}] recompute_budget_rollover: summary update failed (non-fatal):`,
-          summary_error
-        );
-      }
-    }
+    // (user_summaries build retired)
 
     log_operation_success(span, input.user_id);
     return { periods_updated: result.periodsUpdated };

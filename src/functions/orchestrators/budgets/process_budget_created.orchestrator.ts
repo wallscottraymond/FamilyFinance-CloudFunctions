@@ -22,7 +22,6 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { compute_budget_periods } from "../../domain/budgets/period_generation.service";
-import { enqueue_user_summary_updates_from_budget_periods } from "../../orchestrators/summaries";
 import { create_job } from "../../infrastructure/job_queue";
 import {
   resolve_created_rehome_transaction_ids,
@@ -170,19 +169,7 @@ async function generate_periods(
 
   await budget_period_repo.save_batch(ctx, entities, payload.budget_name);
 
-  // Update user_summary documents AFTER all periods are saved (the CREATE
-  // summary trigger was removed to avoid batch race conditions). Enqueues one
-  // deduplicated job per affected period — cascades across all future summaries.
-  const period_ids = entities.map((p) => p.id);
-  try {
-    await enqueue_user_summary_updates_from_budget_periods(ctx, payload.user_id, period_ids);
-  } catch (summary_error) {
-    // Non-fatal: a failed summary update must not fail the cascade.
-    console.error(
-      `[${ctx.trace_id}] process_budget_created: summary update failed (non-fatal):`,
-      summary_error
-    );
-  }
+  // (user_summaries build retired)
 
   // Write back period-range metadata (legacy parity).
   await write_back_period_range(ctx, payload, entities, generation_end);

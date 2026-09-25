@@ -24,7 +24,6 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { compute_budget_spent } from "../../domain/budgets/budget_spend.service";
 import { budget_cadence_to_instance } from "../../domain/budgets";
 import { resolve_spend_splits } from "../../resolvers/budgets/budget_spend.resolver";
-import { enqueue_user_summary_updates_from_budget_periods } from "../summaries";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 
 /** Payload from the assignment engine's fan-out. */
@@ -156,21 +155,7 @@ export async function recompute_budget_spent_orchestrator(
       }
     }
 
-    // Refresh the summaries the app renders.
-    if (affected_period_ids.length > 0) {
-      try {
-        await enqueue_user_summary_updates_from_budget_periods(
-          ctx,
-          input.user_id,
-          affected_period_ids
-        );
-      } catch (summary_error) {
-        console.error(
-          `[${ctx.trace_id}] recompute_budget_spent: summary update failed (non-fatal):`,
-          summary_error
-        );
-      }
-    }
+    // (user_summaries build retired)
 
     log_operation_success(span, input.user_id);
     return { periods_updated };
