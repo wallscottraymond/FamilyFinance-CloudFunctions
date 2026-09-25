@@ -62,6 +62,12 @@ export { delete_rule } from "./delete_rule.entry";
 export { list_rules } from "./list_rules.entry";
 export { clear_transaction_review } from "./clear_transaction_review.entry";
 
+// Tag catalog CRUD
+export { create_tag } from "./create_tag.entry";
+export { update_tag } from "./update_tag.entry";
+export { delete_tag } from "./delete_tag.entry";
+export { list_tags } from "./list_tags.entry";
+
 // Transaction Assignment Engine: one-shot post-cutover backfill
 export {
   backfill_transaction_assignments,

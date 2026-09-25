@@ -735,6 +735,13 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /tags/{tagId} {
+      // Owner-only read (Tag catalog). The FE subscribes to raw tag docs (TagsContext).
+      allow read: if isOwner(resource.data.userId);
+      // All writes go through the create/update/delete_tag callables (admin SDK).
+      allow create, update, delete: if false;
+    }
+
     // =======================
     // OUTFLOW PERIODS COLLECTION RULES - ROOT LEVEL
     // =======================
