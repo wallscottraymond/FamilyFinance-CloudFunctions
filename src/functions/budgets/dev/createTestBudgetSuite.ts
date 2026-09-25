@@ -281,51 +281,9 @@ export const createTestBudgetSuite = onCall(async (request) => {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
-    // ===================================================================
-    // STEP 5: Query user_summaries to verify our fixes
-    // ===================================================================
-
-    const summarySnapshot = await db
-      .collection("user_summaries")
-      .where("userId", "==", userId)
-      .limit(10)
-      .get();
-
-    const summaries = summarySnapshot.docs.map((doc) => {
-      const data = doc.data();
-      const budgetEntries = data.budgets || [];
-
-      // Find entries matching our test budgets
-      const matchingBudgets = budgetResults.map((result) => {
-        const entry = budgetEntries.find(
-          (b: any) => b.budgetId === result.budgetId
-        );
-
-        return {
-          period: result.period,
-          budgetId: result.budgetId,
-          found: !!entry,
-          entry: entry
-            ? {
-                budgetName: entry.budgetName,
-                maxAmount: entry.maxAmount, // NEW FIELD - from our fix
-                totalAllocated: entry.totalAllocated,
-                totalSpent: entry.totalSpent, // FIXED - should not be 0
-                totalRemaining: entry.totalRemaining,
-                progressPercentage: entry.progressPercentage,
-                userNotes: entry.userNotes, // NEW FIELD - from our fix
-              }
-            : null,
-        };
-      });
-
-      return {
-        summaryId: doc.id,
-        periodType: data.periodType,
-        sourcePeriodId: data.sourcePeriodId,
-        matchingBudgets,
-      };
-    });
+    // STEP 5 removed: `user_summaries` is retired (nothing builds or reads it —
+    // Derive-Everywhere-Consistency). No verification query.
+    const summaries: any[] = [];
 
     // ===================================================================
     // STEP 6: Return comprehensive test results

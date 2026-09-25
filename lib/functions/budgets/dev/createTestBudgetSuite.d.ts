@@ -29,25 +29,7 @@ export declare const createTestBudgetSuite: import("firebase-functions/v2/https"
     budgets: any[];
     userSummaries: {
         count: number;
-        summaries: {
-            summaryId: string;
-            periodType: any;
-            sourcePeriodId: any;
-            matchingBudgets: {
-                period: any;
-                budgetId: any;
-                found: boolean;
-                entry: {
-                    budgetName: any;
-                    maxAmount: any;
-                    totalAllocated: any;
-                    totalSpent: any;
-                    totalRemaining: any;
-                    progressPercentage: any;
-                    userNotes: any;
-                } | null;
-            }[];
-        }[];
+        summaries: any[];
     };
     verification: {
         step1: string;
