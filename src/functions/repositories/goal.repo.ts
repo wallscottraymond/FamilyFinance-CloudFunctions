@@ -157,13 +157,16 @@ export const goal_repo = {
   /** All of the user's active goals (single-field query + in-memory active filter). */
   async get_by_user(_ctx: TraceContext, user_id: string): Promise<GoalEntity[]> {
     const db = getFirestore();
+    // Filter isActive SERVER-SIDE (Read-Cost rule #8) — previously fetched ALL of the user's goals
+    // then dropped inactive ones in memory (paying reads for excluded docs). Behavior-identical:
+    // isActive is an always-written boolean, so the old `.filter(g.is_active)` already excluded
+    // missing/false. Two equality filters → served by single-field indexes (no composite needed).
     const snap = await db
       .collection(COLLECTION)
       .where("ownerId", "==", user_id)
+      .where("isActive", "==", true)
       .get();
-    return snap.docs
-      .map((d) => map_to_domain(d.data() as GoalDoc))
-      .filter((g) => g.is_active);
+    return snap.docs.map((d) => map_to_domain(d.data() as GoalDoc));
   },
 
   /** The user's active goals tied to one account (for priority rank + partition). */
