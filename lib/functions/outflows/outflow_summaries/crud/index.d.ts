@@ -1,9 +1,8 @@
 /**
  * Outflow Summaries CRUD Operations
  *
- * Exports all Create, Read, Update, Delete operations for outflow summaries
+ * Delete keeps the `outflow_summary` collection in sync on period deletion. The create/update/batch
+ * helpers were deleted (they wrote the retired `user_summaries` + had no callers — Derive-Everywhere).
  */
-export * from './createOutflowPeriodSummary';
-export * from './updateOutflowPeriodSummary';
 export * from './deleteOutflowPeriodSummary';
 //# sourceMappingURL=index.d.ts.map
