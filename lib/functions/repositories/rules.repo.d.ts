@@ -27,7 +27,11 @@ export declare const rules_repo: {
      * Call this ONCE per sync batch; evaluate the returned rules against the in-memory transactions.
      */
     get_active_rules(_ctx: TraceContext, user_id: string): Promise<Rule[]>;
-    /** Loads ALL of a user's rules (active + inactive), priority-ordered — for the Rule Book UI. */
+    /**
+     * Loads ALL of a user's rules (active + inactive), priority-ordered — for the Rule Book UI.
+     * Single-field `userId` filter (no composite index needed) + in-memory priority sort — the set is
+     * tiny (≤ MAX_RULES_PER_USER) and this avoids a `(userId, priority)` index just for the UI list.
+     */
     list_rules(_ctx: TraceContext, user_id: string): Promise<Rule[]>;
     /** Counts a user's rules (for the per-user cap). */
     count_rules(_ctx: TraceContext, user_id: string): Promise<number>;

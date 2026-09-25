@@ -47,13 +47,16 @@ export const rules_repo = {
     return snap.docs.map((d) => map_to_domain(d.id, d.data()));
   },
 
-  /** Loads ALL of a user's rules (active + inactive), priority-ordered — for the Rule Book UI. */
+  /**
+   * Loads ALL of a user's rules (active + inactive), priority-ordered — for the Rule Book UI.
+   * Single-field `userId` filter (no composite index needed) + in-memory priority sort — the set is
+   * tiny (≤ MAX_RULES_PER_USER) and this avoids a `(userId, priority)` index just for the UI list.
+   */
   async list_rules(_ctx: TraceContext, user_id: string): Promise<Rule[]> {
-    const snap = await col()
-      .where("userId", "==", user_id)
-      .orderBy("priority", "asc")
-      .get();
-    return snap.docs.map((d) => map_to_domain(d.id, d.data()));
+    const snap = await col().where("userId", "==", user_id).get();
+    return snap.docs
+      .map((d) => map_to_domain(d.id, d.data()))
+      .sort((a, b) => a.priority - b.priority);
   },
 
   /** Counts a user's rules (for the per-user cap). */
