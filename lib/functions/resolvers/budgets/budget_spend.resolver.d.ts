@@ -12,8 +12,17 @@
  * @module resolvers/budgets/budget_spend
  */
 import { TraceContext } from "../../types";
+import { transaction_repo } from "../../repositories/transaction.repo";
 import { SplitForSpend } from "../../domain/budgets/budget_spend.service";
 import { PeriodInstanceType } from "../../domain/budgets";
+/** Active transactions in a window (what `transaction_repo.get_active_in_date_range` returns). */
+export type WindowTxns = Awaited<ReturnType<typeof transaction_repo.get_active_in_date_range>>;
+/**
+ * Per-call memo of window transaction loads. A single recompute touches several budgets whose
+ * periods share IDENTICAL date windows (every budget's monthly period is the same month), so
+ * each window is read once instead of once per budget. Exact-window keyed → identical results.
+ */
+export declare function create_window_txn_loader(ctx: TraceContext, user_id: string): (start_ms: number, end_ms: number) => Promise<WindowTxns>;
 /**
  * Resolve the spend splits for a (budget, period date range).
  *
@@ -25,5 +34,5 @@ import { PeriodInstanceType } from "../../domain/budgets";
  *
  * @returns Every countable-candidate split assigned to `budget_id` in the range.
  */
-export declare function resolve_spend_splits(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, cadence?: PeriodInstanceType): Promise<SplitForSpend[]>;
+export declare function resolve_spend_splits(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, cadence?: PeriodInstanceType, load_txns?: (start_ms: number, end_ms: number) => Promise<WindowTxns>): Promise<SplitForSpend[]>;
 //# sourceMappingURL=budget_spend.resolver.d.ts.map

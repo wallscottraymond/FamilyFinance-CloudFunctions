@@ -23,7 +23,10 @@ import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { budget_repo } from "../../repositories/budget.repo";
 import { compute_budget_spent } from "../../domain/budgets/budget_spend.service";
 import { budget_cadence_to_instance } from "../../domain/budgets";
-import { resolve_spend_splits } from "../../resolvers/budgets/budget_spend.resolver";
+import {
+  resolve_spend_splits,
+  create_window_txn_loader,
+} from "../../resolvers/budgets/budget_spend.resolver";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 
 /** Payload from the assignment engine's fan-out. */
@@ -58,6 +61,8 @@ export async function recompute_budget_spent_orchestrator(
   try {
     const affected_period_ids: string[] = [];
     let periods_updated = 0;
+    // One read per distinct period window for the whole job (budgets share windows).
+    const load_txns = create_window_txn_loader(ctx, input.user_id);
 
     for (const budget_id of input.budget_ids) {
       // Read the budget once: its `period` selects which split-lens field spend is
@@ -106,7 +111,8 @@ export async function recompute_budget_spent_orchestrator(
           budget_id,
           start_ms,
           end_ms,
-          cadence
+          cadence,
+          load_txns
         );
         const { spent, pending_spent, return_amount } = compute_budget_spent(
           budget_id,

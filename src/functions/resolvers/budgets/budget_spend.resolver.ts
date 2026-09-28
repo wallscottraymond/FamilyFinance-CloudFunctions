@@ -22,6 +22,30 @@ import {
 import { detect_internal_transfers_from_txns } from "../shared/on_read_matching";
 import { PeriodInstanceType } from "../../domain/budgets";
 
+/** Active transactions in a window (what `transaction_repo.get_active_in_date_range` returns). */
+export type WindowTxns = Awaited<ReturnType<typeof transaction_repo.get_active_in_date_range>>;
+
+/**
+ * Per-call memo of window transaction loads. A single recompute touches several budgets whose
+ * periods share IDENTICAL date windows (every budget's monthly period is the same month), so
+ * each window is read once instead of once per budget. Exact-window keyed → identical results.
+ */
+export function create_window_txn_loader(
+  ctx: TraceContext,
+  user_id: string
+): (start_ms: number, end_ms: number) => Promise<WindowTxns> {
+  const memo = new Map<string, Promise<WindowTxns>>();
+  return (start_ms, end_ms) => {
+    const key = `${start_ms}:${end_ms}`;
+    let p = memo.get(key);
+    if (!p) {
+      p = transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
+      memo.set(key, p);
+    }
+    return p;
+  };
+}
+
 /** Which split field carries the budget assignment for each period lens. */
 const LENS_FIELD: Record<PeriodInstanceType, string> = {
   monthly: "monthlyBudgetId",
@@ -46,14 +70,12 @@ export async function resolve_spend_splits(
   budget_id: string,
   start_ms: number,
   end_ms: number,
-  cadence: PeriodInstanceType = "monthly"
+  cadence: PeriodInstanceType = "monthly",
+  load_txns?: (start_ms: number, end_ms: number) => Promise<WindowTxns>
 ): Promise<SplitForSpend[]> {
-  const txns = await transaction_repo.get_active_in_date_range(
-    ctx,
-    user_id,
-    start_ms,
-    end_ms
-  );
+  const txns = load_txns
+    ? await load_txns(start_ms, end_ms)
+    : await transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
 
   // Matched-pair internal-transfer detection: only OWN-account transfers (a matching
   // opposite leg on another account) are excluded — external ACH bills that Plaid

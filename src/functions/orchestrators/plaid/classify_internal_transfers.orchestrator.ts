@@ -11,6 +11,13 @@
  *
  * Self-correcting: also UN-hides transfer records that are no longer internal.
  *
+ * READ COST: it runs after every per-item recurring sync (4 cycles/day × N items), but its
+ * answer only changes when the recurring records change. So it fingerprints its inputs
+ * (each active record's id, category, stream transaction ids and hidden flag) and SKIPS the
+ * 180-day transaction scan when the fingerprint matches the last full run AND that run is
+ * < 24h old. The 24h backstop covers the one input the fingerprint can't see: a transfer's
+ * matched counterpart posting later on another account (previously picked up ≤6h later).
+ *
  * @module orchestrators/plaid/classify_internal_transfers
  */
 
@@ -21,15 +28,61 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
+import {
+  get_transfer_classification_state,
+  set_transfer_classification_state,
+} from "../../repositories/transfer_classification_state.repo";
+import { createHash } from "crypto";
 
 /** Credit-card payments are always KEPT (a real recurring bill), never hidden. */
 const CC_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
 /** Window of transactions loaded for matched-pair detection. */
 const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
+/** Max age of a skipped (unchanged-fingerprint) result before a full re-run is forced. */
+const FULL_RECLASSIFY_MS = 24 * 60 * 60 * 1000;
+/** Bump when the classification logic changes, to invalidate every stored fingerprint. */
+const CLASSIFIER_VERSION = 1;
+
+interface ClassifiableRecord {
+  id: string;
+  plaid_detailed_category: string;
+  transaction_ids: string[];
+  is_hidden: boolean;
+}
 
 export interface ClassifyInternalTransfersResult {
   hidden_outflows: number;
   hidden_inflows: number;
+  /** True when the inputs were unchanged and the transaction scan was skipped. */
+  skipped: boolean;
+}
+
+/**
+ * Stable fingerprint of the classifier's record inputs. `hidden_of` lets the caller hash the
+ * POST-classification hidden flags, so an unchanged next run matches. PURE.
+ */
+function fingerprint(
+  outflows: ClassifiableRecord[],
+  inflows: ClassifiableRecord[],
+  hidden_of: (kind: "o" | "i", r: ClassifiableRecord) => boolean
+): string {
+  const rows = [
+    ...outflows.map((r) => ["o", r, hidden_of("o", r)] as const),
+    ...inflows.map((r) => ["i", r, hidden_of("i", r)] as const),
+  ]
+    .map(([kind, r, hidden]) =>
+      [
+        kind,
+        r.id,
+        r.plaid_detailed_category,
+        hidden ? 1 : 0,
+        [...(r.transaction_ids ?? [])].sort().join(","),
+      ].join("|")
+    )
+    .sort();
+  return createHash("sha1")
+    .update(`v${CLASSIFIER_VERSION}\n${rows.join("\n")}`)
+    .digest("hex");
 }
 
 /**
@@ -51,25 +104,34 @@ export async function classify_internal_transfers_orchestrator(
   user_id: string,
   now_ms: number
 ): Promise<ClassifyInternalTransfersResult> {
-  // 1. Load recurring records + a recent window of transactions (for pairing).
-  const [outflows, inflows, txns] = await Promise.all([
+  // 1. Load recurring records (+ the last run's state) — cheap; decides whether the
+  //    expensive transaction scan is needed at all.
+  const [outflows, inflows, state] = await Promise.all([
     outflow_repo.get_by_user_id(ctx, user_id),
     inflow_repo.get_by_user_id(ctx, user_id),
-    transaction_repo.get_active_in_date_range(ctx, user_id, now_ms - PAIRING_WINDOW_MS, now_ms),
+    get_transfer_classification_state(user_id),
   ]);
+  const current_fp = fingerprint(outflows, inflows, (_k, r) => r.is_hidden);
+  if (
+    state &&
+    state.fingerprint === current_fp &&
+    now_ms - state.classified_at_ms < FULL_RECLASSIFY_MS
+  ) {
+    return { hidden_outflows: 0, hidden_inflows: 0, skipped: true };
+  }
+
+  const txns = await transaction_repo.get_active_in_date_range(
+    ctx,
+    user_id,
+    now_ms - PAIRING_WINDOW_MS,
+    now_ms
+  );
 
   // 2. Matched-pair internal-transfer detection over the window's transfers.
   const { internal_plaid_ids } = detect_internal_transfers_from_txns(txns);
 
   // 3. Split each collection into hide / unhide (self-correcting).
-  const partition = (
-    records: Array<{
-      id: string;
-      plaid_detailed_category: string;
-      transaction_ids: string[];
-      is_hidden: boolean;
-    }>
-  ): { hide: string[]; unhide: string[] } => {
+  const partition = (records: ClassifiableRecord[]): { hide: string[]; unhide: string[] } => {
     const hide: string[] = [];
     const unhide: string[] = [];
     for (const r of records) {
@@ -101,5 +163,18 @@ export async function classify_internal_transfers_orchestrator(
     inflow_period_repo.set_hidden_by_inflow_ids(ctx, inf.unhide, false),
   ]);
 
-  return { hidden_outflows: out.hide.length, hidden_inflows: inf.hide.length };
+  // 4. Remember what we classified (hashing the flags as they are NOW, after the writes),
+  //    so the next run with unchanged inputs skips. Only reached if every write succeeded.
+  const hidden_after = (kind: "o" | "i", r: ClassifiableRecord): boolean => {
+    const p = kind === "o" ? out : inf;
+    if (p.hide.includes(r.id)) return true;
+    if (p.unhide.includes(r.id)) return false;
+    return r.is_hidden;
+  };
+  await set_transfer_classification_state(user_id, {
+    fingerprint: fingerprint(outflows, inflows, hidden_after),
+    classified_at_ms: now_ms,
+  });
+
+  return { hidden_outflows: out.hide.length, hidden_inflows: inf.hide.length, skipped: false };
 }

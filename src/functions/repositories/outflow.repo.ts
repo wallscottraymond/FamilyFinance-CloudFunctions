@@ -26,6 +26,7 @@ import {
   is_suppressed_in_period,
 } from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
+import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
 
 /**
  * Firestore collection name.
@@ -641,24 +642,37 @@ export const outflow_repo = {
     const now = Timestamp.now();
     const results: WriteResult[] = [];
 
-    // Get existing documents for upsert logic
-    const stream_ids = entities.map((e) => e.id);
-    const existing_map = await this.find_by_plaid_stream_ids(ctx, stream_ids);
+    // Get existing documents for upsert logic — ONE batched read of the raw docs (was an
+    // `in` query for existence PLUS a per-doc `.get()` for the data: 2 reads per stream).
+    const existing_docs = new Map<string, LegacyOutflowDoc>();
+    for (const ids of chunk_for_batch(entities.map((e) => e.id))) {
+      const snaps = await db.getAll(...ids.map((id) => doc_ref(id)));
+      for (const snap of snaps) {
+        if (snap.exists) existing_docs.set(snap.id, snap.data() as LegacyOutflowDoc);
+      }
+    }
 
     // Process in batches
     const chunks = chunk_for_batch(entities);
+    let unchanged = 0;
 
     for (const chunk of chunks) {
       const batch = db.batch();
+      let writes = 0;
 
       for (const entity of chunk) {
-        const existing = existing_map.get(entity.id);
-        const existing_doc = existing
-          ? (await doc_ref(entity.id).get()).data() as LegacyOutflowDoc
-          : null;
+        const existing_doc = existing_docs.get(entity.id) ?? null;
+        const existing = existing_doc !== null;
 
         const doc_data = map_persistence_to_doc(entity, now, existing_doc);
+        // Skip a no-op rewrite (only the sync timestamps would change) — avoids a
+        // pointless on_recurring_updated fan-out + derive-cache invalidation per stream.
+        if (existing_doc && is_unchanged_recurring_doc(existing_doc, doc_data)) {
+          unchanged++;
+          continue;
+        }
         batch.set(doc_ref(entity.id), doc_data);
+        writes++;
 
         results.push(
           create_write_result(
@@ -683,11 +697,11 @@ export const outflow_repo = {
         });
       }
 
-      await batch.commit();
+      if (writes > 0) await batch.commit();
     }
 
     console.log(
-      `[${ctx.trace_id}] outflow_repo.save_batch: saved=${results.length}`
+      `[${ctx.trace_id}] outflow_repo.save_batch: saved=${results.length} unchanged=${unchanged}`
     );
 
     return {
