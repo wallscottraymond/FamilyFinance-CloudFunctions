@@ -35,3 +35,24 @@ export function build_stream_membership_map(
   for (const tx_id of ambiguous) map.delete(tx_id);
   return map;
 }
+
+/**
+ * Manual bill DETACH ("remove from bill"): the user said this split is NOT a payment for
+ * any bill. Stored as `outflowAssignmentSource: "manual"` with no `outflowId` (a manual
+ * pin to "none"). It must beat every automatic link — the engine's recurring matcher AND
+ * Plaid stream `transactionIds` membership (derive + reconcile) — or the payment silently
+ * re-attaches. PURE.
+ */
+export function is_split_detached_from_outflow(split: unknown): boolean {
+  // Firestore split field names (camelCase).
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  const s = (split ?? {}) as { outflowAssignmentSource?: unknown; outflowId?: unknown };
+  return s.outflowAssignmentSource === "manual" && !s.outflowId;
+}
+
+/** True when ANY split of the transaction is manually detached from bills. PURE. */
+export function is_txn_detached_from_outflow(
+  splits: ReadonlyArray<unknown> | null | undefined
+): boolean {
+  return (splits ?? []).some(is_split_detached_from_outflow);
+}

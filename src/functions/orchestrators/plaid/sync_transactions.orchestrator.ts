@@ -104,6 +104,11 @@ export async function sync_transactions_orchestrator(
   let total_modified = 0;
   let total_removed = 0;
   let total_migrated = 0;
+  // Any txn write ATTEMPTED this sync (added/modified for active accounts + removed), independent
+  // of the created/updated counters — those undercount real writes (re-delivered "added" docs
+  // count as `updated` and are dropped, migration-only pages net to 0, a page that throws after
+  // committing some chunks reports 0). Drives the derive-version bump below.
+  let wrote_transactions = false;
   let has_more = true;
   let next_cursor: string | null = null;
 
@@ -169,6 +174,10 @@ export async function sync_transactions_orchestrator(
 
     const active_added = filter_for_active_accounts(plaid_response.added);
     const active_modified = filter_for_active_accounts(plaid_response.modified);
+
+    if (active_added.length + active_modified.length + plaid_response.removed.length > 0) {
+      wrote_transactions = true;
+    }
 
     // 2c. PROCESS ADDED TRANSACTIONS (only for active accounts)
     if (active_added.length > 0) {
@@ -238,8 +247,12 @@ export async function sync_transactions_orchestrator(
   // 2g. INVALIDATE DERIVE CACHE ONCE for the whole sync (TR-2). Replaces the per-txn
   // trigger bump: one bump per sync regardless of how many txns changed, so a large
   // Plaid page no longer contends on the single `user_data_versions/{uid}` doc. Skip
-  // when nothing changed. Awaited+swallowed so it commits but never fails the sync.
-  if (total_added + total_modified + total_removed > 0) {
+  // when Plaid delivered nothing for active accounts. Keyed on `wrote_transactions` (not the
+  // created/updated counters, which undercount) — the mobile app listens to this doc as its
+  // ONLY transaction-change signal, so a missed bump leaves the screen stale. Over-bumping
+  // costs one extra re-derive; under-bumping is a stale UI. Awaited+swallowed so it commits
+  // but never fails the sync.
+  if (wrote_transactions) {
     await bump_derive_version(ctx.user_id).catch(() => {});
   }
 

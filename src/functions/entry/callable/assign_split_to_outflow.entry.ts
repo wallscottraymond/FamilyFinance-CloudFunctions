@@ -2,7 +2,8 @@
  * Assign Split → Bill (Outflow) Entry Point
  *
  * Manually pin a transaction split to a recurring bill (outflow), or clear the pin
- * (`outflow_id: null`). The pin is DURABLE: the split records
+ * (`outflow_id: null`), or detach it from bills (`outflow_id: null, detach: true` — "remove
+ * from bill"). The pin is DURABLE: the split records
  * `outflowAssignmentSource="manual"`, which the Transaction Assignment Engine
  * preserves across Plaid re-syncs (mirrors the manual budget pin). The write sets the
  * queryable `splitOutflowIds` denorm and fires `on_transaction_written`, which enqueues
@@ -41,6 +42,9 @@ const schema = z.object({
   outflow_period_id: z.string().min(1).nullable().optional(),
   /** Clear the split's budget assignment when pinning to a bill (default: keep). */
   clear_budget: z.boolean().optional(),
+  /** With `outflow_id: null`: DETACH ("remove from bill") — a durable manual "no bill" that
+   *  the engine + Plaid stream membership won't re-link. Without it, null reverts to auto. */
+  detach: z.boolean().optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -66,7 +70,7 @@ export const assign_split_to_outflow = onCall(
           { trace_id: ctx.trace_id }
         );
       }
-      const { transaction_id, split_id, outflow_id, outflow_period_id, clear_budget } =
+      const { transaction_id, split_id, outflow_id, outflow_period_id, clear_budget, detach } =
         validation.data;
 
       await transaction_repo.pin_split_to_outflow(
@@ -76,7 +80,8 @@ export const assign_split_to_outflow = onCall(
         outflow_id,
         user_id,
         clear_budget === true,
-        outflow_period_id ?? null
+        outflow_period_id ?? null,
+        outflow_id === null && detach === true
       );
 
       // Invalidate the derive cache for this user (TR-2 — the transactions trigger no

@@ -14,6 +14,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { is_txn_detached_from_outflow } from "../../domain/recurring/stream_membership";
 
 export type RecurringKind = "outflow" | "inflow";
 
@@ -48,6 +49,12 @@ export async function derive_recurring_transactions_orchestrator(
   // 3. Map + flag in-period.
   const rows: DerivedRecurringTransaction[] = txns
     .filter((data) => (data as { isActive?: boolean }).isActive !== false)
+    // A manual "remove from bill" beats Plaid stream membership.
+    .filter(
+      (data) =>
+        kind === "inflow" ||
+        !is_txn_detached_from_outflow((data as { splits?: unknown[] }).splits)
+    )
     .map((data) => {
       const d = data as unknown as Record<string, unknown>;
       const date_ms = (d.transactionDate as Timestamp).toMillis();

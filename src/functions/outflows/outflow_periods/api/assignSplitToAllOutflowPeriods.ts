@@ -44,6 +44,7 @@ import { authenticateRequest, UserRole } from '../../../../utils/auth';
 import { PaymentType, TransactionSplitReference, Transaction, OutflowPeriod, TransactionSplit, RecurringOutflow } from '../../../../types';
 import * as admin from 'firebase-admin';
 import { findMatchingOutflowPeriods, findMatchingOutflowPeriodsBySourcePeriod, validatePeriodsFound } from '../utils/findMatchingOutflowPeriods';
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
 
 /**
  * Request to assign a split to all outflow periods
@@ -196,6 +197,10 @@ export const assignSplitToAllOutflowPeriods = onCall(
       });
 
       console.log(`[assignSplitToAll] Updated transaction split with all period references`);
+
+      // Derive-input write → bump the per-user derive version: invalidates the derive cache
+      // and is the mobile app's transaction-change signal (on_transaction_written doesn't bump).
+      await bump_derive_version(userId).catch(() => {});
 
       // Step 8: Create TransactionSplitReference for outflow periods
       const splitRef: TransactionSplitReference = {

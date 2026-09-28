@@ -19,6 +19,7 @@ import {
 } from "../../../../utils/auth";
 import { validateRequest, updateTransactionSchema } from "../../../../utils/validation";
 import { firebaseCors } from "../../../../middleware/cors";
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
 
 /**
  * Update transaction
@@ -111,6 +112,10 @@ export const updateTransaction = onRequest({
         transactionId,
         updateDataForFirestore
       );
+
+      // Derive-input write → bump the per-user derive version: invalidates the derive cache
+      // and is the mobile app's transaction-change signal (on_transaction_written doesn't bump).
+      await bump_derive_version(existingTransaction.ownerId).catch(() => {});
 
       // Budget spend is owned by the Transaction Assignment Engine: the
       // `on_transaction_written` trigger enqueues `assign_transaction`, which

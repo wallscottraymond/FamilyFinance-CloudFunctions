@@ -5,7 +5,11 @@
  * is excluded (no arbitrary last-writer-wins guess).
  */
 
-import { build_stream_membership_map } from "../stream_membership";
+import {
+  build_stream_membership_map,
+  is_split_detached_from_outflow,
+  is_txn_detached_from_outflow,
+} from "../stream_membership";
 
 describe("build_stream_membership_map", () => {
   it("maps each transaction id to its single owning stream", () => {
@@ -47,5 +51,29 @@ describe("build_stream_membership_map", () => {
   it("a duplicate id within the SAME stream is not a conflict", () => {
     const map = build_stream_membership_map([{ id: "a", transaction_ids: ["t1", "t1"] }]);
     expect(map.get("t1")).toBe("a");
+  });
+});
+
+describe("manual bill detach", () => {
+  it("a manual source with no outflow is a detach", () => {
+    expect(is_split_detached_from_outflow({ outflowAssignmentSource: "manual", outflowId: null })).toBe(true);
+    expect(is_split_detached_from_outflow({ outflowAssignmentSource: "manual" })).toBe(true);
+  });
+
+  it("a manual PIN to a bill, or an auto split, is not a detach", () => {
+    expect(is_split_detached_from_outflow({ outflowAssignmentSource: "manual", outflowId: "b" })).toBe(false);
+    expect(is_split_detached_from_outflow({ outflowAssignmentSource: "auto", outflowId: null })).toBe(false);
+    expect(is_split_detached_from_outflow({})).toBe(false);
+  });
+
+  it("a transaction is detached when any split is", () => {
+    expect(
+      is_txn_detached_from_outflow([
+        { outflowAssignmentSource: "auto" },
+        { outflowAssignmentSource: "manual", outflowId: null },
+      ])
+    ).toBe(true);
+    expect(is_txn_detached_from_outflow([{ outflowAssignmentSource: "auto" }])).toBe(false);
+    expect(is_txn_detached_from_outflow(undefined)).toBe(false);
   });
 });

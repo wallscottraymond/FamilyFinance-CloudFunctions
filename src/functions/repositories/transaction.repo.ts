@@ -546,7 +546,10 @@ export const transaction_repo = {
 
   /**
    * Manually PIN a split to a recurring bill (outflow) or CLEAR the pin (outflow_id
-   * = null). Sets the split's `outflowId` + `outflowAssignmentSource="manual"` (so the
+   * = null), or DETACH it from bills (`outflow_id = null` + `detach`: a manual pin to
+   * "none" — "remove from bill" — that beats auto/stream re-linking; see
+   * domain/recurring/stream_membership `is_split_detached_from_outflow`).
+   * Sets the split's `outflowId` + `outflowAssignmentSource="manual"` (so the
    * Assignment Engine preserves it across re-syncs) and recomputes the durable
    * `splitOutflowIds` denorm (which the recurring reconcile queries). The resulting
    * write fires `on_transaction_written`, which enqueues the reconcile for the
@@ -560,7 +563,8 @@ export const transaction_repo = {
     outflow_id: string | null,
     user_id: string,
     clear_budget = false,
-    outflow_period_id: string | null = null
+    outflow_period_id: string | null = null,
+    detach = false
   ): Promise<WriteResult> {
     const ref = doc_ref(doc_id);
     const snap = await ref.get();
@@ -579,8 +583,8 @@ export const transaction_repo = {
             ...s,
             outflowId: outflow_id,
             // Pin manually so a future sync/engine pass preserves it; clearing (null)
-            // reverts to auto-derivation.
-            outflowAssignmentSource: outflow_id ? "manual" : "auto",
+            // reverts to auto-derivation unless it's a DETACH (manual pin to "no bill").
+            outflowAssignmentSource: outflow_id || detach ? "manual" : "auto",
             // Optional period pin (Bill-Assignment-Two-Stage-Picker): force the recurring
             // reconcile to place this payment in a SPECIFIC period (sourcePeriodId),
             // overriding date-based alignment. Cleared when the bill pin is cleared.
@@ -614,11 +618,12 @@ export const transaction_repo = {
       before: before as unknown as Record<string, unknown>,
       after: { ...before, ...update_data } as unknown as Record<string, unknown>,
       trace_id: ctx.trace_id,
-      metadata: { source: "api", context: { manual_outflow_pin: true, outflow_id } },
+      metadata: { source: "api", context: { manual_outflow_pin: true, outflow_id, detach } },
     });
 
     console.log(
-      `[${ctx.trace_id}] pin_split_to_outflow: txn=${doc_id} split=${split_id} → outflow=${outflow_id ?? "cleared"}`
+      `[${ctx.trace_id}] pin_split_to_outflow: txn=${doc_id} split=${split_id} → ` +
+        `outflow=${outflow_id ?? (detach ? "detached" : "cleared")}`
     );
     return create_write_result("transaction", doc_id, "merge", before, { ...before, ...update_data });
   },

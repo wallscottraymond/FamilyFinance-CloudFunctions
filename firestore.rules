@@ -837,12 +837,15 @@ service cloud.firestore {
 
     // =======================
     // DERIVED-PERIOD CACHE + VERSION (Firestore-Read-Cost-Reduction)
-    // Server-only: written/read by Cloud Functions via the Admin SDK (which
-    // bypasses these rules). Clients never touch them — deny all.
+    // Written only by Cloud Functions via the Admin SDK (which bypasses these rules).
+    // `user_data_versions/{uid}` ({version, updated_at}) is owner-READABLE: the mobile
+    // PeriodEntitiesContext listens to it as the transaction-change signal (replaced a
+    // 12-month transactions listener). The caches stay deny-all.
     // =======================
 
     match /user_data_versions/{userId} {
-      allow read, write: if false;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
 
     match /derived_period_cache/{cacheId} {

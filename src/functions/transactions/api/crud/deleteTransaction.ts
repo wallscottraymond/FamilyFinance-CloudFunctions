@@ -17,6 +17,7 @@ import {
   checkFamilyAccess
 } from "../../../../utils/auth";
 import { firebaseCors } from "../../../../middleware/cors";
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
 
 /**
  * Delete transaction
@@ -79,6 +80,11 @@ export const deleteTransaction = onRequest({
 
       // Delete transaction
       await deleteDocument("transactions", transactionId);
+
+      // Derive-input write → bump the per-user derive version: invalidates the derive cache
+      // and is the mobile app's transaction-change signal (on_transaction_written doesn't bump).
+      // (The DELETE trigger path never reaches the assignment engine.)
+      await bump_derive_version(existingTransaction.ownerId).catch(() => {});
 
       return response.status(200).json(createSuccessResponse({ deleted: true }));
 

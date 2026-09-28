@@ -9,6 +9,7 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { db } from '../../../index';
 import { Transaction as FamilyTransaction } from '../../../types';
 import { OutflowPeriodUpdate } from './matchTransactionSplitsToOutflows';
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 /**
  * Batch create transactions and update outflow periods atomically
@@ -122,6 +123,11 @@ export async function batchCreateTransactions(
     }
 
     console.log(`✅ [batchCreateTransactions] Successfully created ${totalCreated} transactions with ${outflowUpdates.length} outflow updates`);
+
+    // New transactions are a derive-input change — bump each owner's derive version once
+    // (invalidates the derive cache AND is the mobile app's transaction-change signal).
+    const owners = new Set(transactions.map((t) => t.ownerId).filter(Boolean) as string[]);
+    await Promise.all([...owners].map((o) => bump_derive_version(o).catch(() => {})));
 
     return totalCreated;
 

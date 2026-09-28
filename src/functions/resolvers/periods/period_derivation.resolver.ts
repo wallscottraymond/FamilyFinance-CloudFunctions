@@ -43,7 +43,10 @@ import {
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
-import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
+import {
+  build_stream_membership_map,
+  is_txn_detached_from_outflow,
+} from "../../domain/recurring/stream_membership";
 import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PeriodInstanceType } from "../../domain/budgets";
@@ -352,9 +355,14 @@ export async function resolve_period_derivation_deps(
     // Is this transaction part of a Plaid income stream? (Plaid id → inflow.)
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
     const linked_inflow_id = plaid_txn_id ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
-    const linked_outflow_id = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
-    let income_amount = 0;
     const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
+    // A manual "remove from bill" beats Plaid stream membership: the txn is neither a bill
+    // payment nor excluded from budget spend as a recurring member.
+    const linked_outflow_id =
+      plaid_txn_id && !is_txn_detached_from_outflow(raw)
+        ? outflow_tx_to_id.get(plaid_txn_id)
+        : undefined;
+    let income_amount = 0;
     for (const s of raw) {
       const outflow_id = (s.outflowId as string | null) ?? null;
       const inflow_id = (s.inflowId as string | null) ?? null;

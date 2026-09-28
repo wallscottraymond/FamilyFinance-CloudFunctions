@@ -19,6 +19,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { authenticateRequest, UserRole } from '../../../../utils/auth';
 import { Transaction, OutflowPeriod } from '../../../../types';
 import * as admin from 'firebase-admin';
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
 
 /**
  * Request to unassign a split from all outflow periods
@@ -133,20 +134,33 @@ export const unassignSplitFromAllOutflowPeriods = onCall(
       console.log(`[unassignSplitFromAll] Found ${outflowPeriodIds.length} outflow periods to remove split from`);
 
       // Step 4: Clear outflow assignment from the split (source period IDs remain)
+      // as a durable manual DETACH ("no bill") so the assignment engine / Plaid stream
+      // membership don't re-link it (see domain/recurring/stream_membership).
       splits[splitIndex] = {
         ...splits[splitIndex],
         outflowId: null,
+        outflowAssignmentSource: "manual",
+        outflowPinnedPeriodId: null,
         paymentType: undefined,
         updatedAt: admin.firestore.Timestamp.now(),
-      };
+      } as typeof splits[number];
 
-      // Step 5: Update transaction document
+      // Step 5: Update transaction document (+ the queryable `splitOutflowIds` denorm the
+      // recurring reconcile reads — else the old link keeps counting the payment)
+      const splitOutflowIds = Array.from(
+        new Set(splits.map((s) => s.outflowId).filter((id): id is string => !!id))
+      );
       await transactionRef.update({
         splits,
+        splitOutflowIds,
         updatedAt: admin.firestore.Timestamp.now()
       });
 
       console.log(`[unassignSplitFromAll] Cleared outflow assignment from split`);
+
+      // Derive-input write → bump the per-user derive version: invalidates the derive cache
+      // and is the mobile app's transaction-change signal (on_transaction_written doesn't bump).
+      await bump_derive_version(userId).catch(() => {});
 
       // Step 6: Fetch period documents for response
       let monthlyPeriod: OutflowPeriod | undefined;

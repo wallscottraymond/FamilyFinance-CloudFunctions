@@ -30,6 +30,7 @@ import {
 } from "../../../../utils/validation";
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
 
 /**
  * Create a new transaction
@@ -198,6 +199,10 @@ export const createTransaction = onRequest({
       // periods, EE fallback, recurring links — within ~1-3s. (Inline matchers
       // removed 2026-07-27.)
       const createdTransaction = await createDocument<Transaction>("transactions", transaction as Transaction);
+
+      // Derive-input write → bump the per-user derive version: invalidates the derive cache
+      // and is the mobile app's transaction-change signal (on_transaction_written doesn't bump).
+      await bump_derive_version(user.id!).catch(() => {});
 
       // Budget spend is owned by the Transaction Assignment Engine: the
       // `on_transaction_written` trigger enqueues `assign_transaction`, which

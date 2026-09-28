@@ -4,6 +4,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { Budget, BudgetPeriod, PeriodType } from "../../../types";
 import { buildAccessControl } from "../../../utils/documentStructure";
 import { v4 as uuidv4 } from "uuid";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 const db = admin.firestore();
 
@@ -273,6 +274,10 @@ export const createTestBudgetSuite = onCall(async (request) => {
           budgetPeriodId: matchingPeriodId,
         });
       }
+
+      // New transactions are a derive-input change — bump once after the loop (invalidates the
+      // derive cache AND is the mobile app's transaction-change signal).
+      await bump_derive_version(userId).catch(() => {});
 
       // Wait for spending update triggers to fire
       console.log(

@@ -20,4 +20,14 @@ export declare function build_stream_membership_map(items: Array<{
     id: string;
     transaction_ids?: string[] | null;
 }>): Map<string, string>;
+/**
+ * Manual bill DETACH ("remove from bill"): the user said this split is NOT a payment for
+ * any bill. Stored as `outflowAssignmentSource: "manual"` with no `outflowId` (a manual
+ * pin to "none"). It must beat every automatic link — the engine's recurring matcher AND
+ * Plaid stream `transactionIds` membership (derive + reconcile) — or the payment silently
+ * re-attaches. PURE.
+ */
+export declare function is_split_detached_from_outflow(split: unknown): boolean;
+/** True when ANY split of the transaction is manually detached from bills. PURE. */
+export declare function is_txn_detached_from_outflow(splits: ReadonlyArray<unknown> | null | undefined): boolean;
 //# sourceMappingURL=stream_membership.d.ts.map

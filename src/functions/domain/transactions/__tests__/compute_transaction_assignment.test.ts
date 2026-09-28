@@ -104,6 +104,17 @@ describe("compute_transaction_assignment", () => {
     expect(r.splits[0].outflow_source).toBe("auto");
   });
 
+  it("MANUAL DETACH: 'remove from bill' beats a recurring auto-match (stays unlinked)", () => {
+    const r = compute_transaction_assignment(
+      [split({ outflow_id: null, outflow_source: "manual" })],
+      ctx({ recurring_by_split: { s1: { outflow_id: "bill_auto", inflow_id: null } } })
+    );
+    const s = r.splits[0];
+    expect(s.outflow_id).toBeNull();
+    expect(s.outflow_source).toBe("manual"); // detach is preserved for the next pass
+    expect(s.reason.recurring).toBe("manual_detached");
+  });
+
   it("STALE PIN: a manual pin to a non-existent outflow falls back to auto-derivation", () => {
     const r = compute_transaction_assignment(
       [split({ outflow_id: "deleted_bill", outflow_source: "manual" })],

@@ -312,6 +312,12 @@ export function compute_transaction_assignment(
       outflow_id = split.outflow_id;
       outflow_source = "manual";
       recurring_reason = "outflow";
+    } else if (split.outflow_source === "manual" && !split.outflow_id) {
+      // Manual DETACH ("remove from bill"): the user said this split pays NO bill. Durable —
+      // beats the recurring matcher / Plaid stream membership, which would otherwise re-link it.
+      outflow_id = null;
+      outflow_source = "manual";
+      recurring_reason = "manual_detached";
     }
 
     // Missing-EE error: any lens unassigned for a NON-income, NON-transfer split
