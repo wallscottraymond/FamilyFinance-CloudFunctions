@@ -57,6 +57,13 @@ function map_to_entity(id: string, doc: LegacySourcePeriodDoc): SourcePeriodEnti
   };
 }
 
+/**
+ * `get_overlapping` looks back this far on `startDate` (a period that STARTED up to a month before
+ * the window can still overlap it). Exported so in-memory re-filtering of a wider load
+ * (`shape_period_derivation_deps`) applies the IDENTICAL bound.
+ */
+export const SOURCE_PERIOD_OVERLAP_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
+
 export const source_period_repo = {
   /**
    * Gets a single source period by ID.
@@ -108,8 +115,7 @@ export const source_period_repo = {
     anchor: Timestamp,
     end: Timestamp
   ): Promise<SourcePeriodEntity[]> {
-    const buffer_ms = 31 * 24 * 60 * 60 * 1000;
-    const lower = Timestamp.fromMillis(anchor.toMillis() - buffer_ms);
+    const lower = Timestamp.fromMillis(anchor.toMillis() - SOURCE_PERIOD_OVERLAP_BUFFER_MS);
 
     const snapshot = await getFirestore()
       .collection(COLLECTION)

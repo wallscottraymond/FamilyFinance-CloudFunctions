@@ -21,7 +21,9 @@ import {
   outflow_repo,
   inflow_repo,
   source_period_repo,
+  SourcePeriodEntity,
 } from "../../repositories";
+import { SOURCE_PERIOD_OVERLAP_BUFFER_MS } from "../../repositories/source_period.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { goal_repo } from "../../repositories/goal.repo";
@@ -42,13 +44,11 @@ import {
 } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
-import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
 import {
   build_stream_membership_map,
   is_txn_detached_from_outflow,
 } from "../../domain/recurring/stream_membership";
 import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
-import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
 function to_cadence(period: string): PeriodLens {
@@ -66,71 +66,110 @@ function monthly_equivalent_amount(amount: number, period: string): number {
   return amount; // monthly (and default)
 }
 
-export interface BudgetForDerivation {
-  id: string;
-  name: string;
-  is_ee: boolean;
-  monthly_periods: MonthlyPeriodForDerivation[];
-  /** Start of the budget's first active period (snapped); a view period ending before this is
-   *  omitted so a budget never appears in periods predating it. EE uses 0 (always active). */
-  active_start_ms: number;
-  /** End of the budget's active range, or null if ongoing. Periods after it are omitted. */
-  active_end_ms: number | null;
+export type {
+  BudgetForDerivation,
+  RecurringForDerivation,
+  PeriodDerivationDeps,
+} from "../../domain/periods/period_derivation.types";
+import type {
+  BudgetForDerivation,
+  RecurringForDerivation,
+  PeriodDerivationDeps,
+} from "../../domain/periods/period_derivation.types";
+
+type Awaited2<T> = T extends Promise<infer U> ? U : T;
+
+/**
+ * Everything Firestore returns for one OR MORE windows of a cadence — the IO half of period
+ * derivation. Loaded once (`load_period_derivation_raw`) and re-filtered per window in memory
+ * (`shape_period_derivation_deps`), so a multi-window derive reads the user's definitions and
+ * transactions ONCE instead of per window.
+ */
+export interface PeriodDerivationRaw {
+  /** `get_overlapping` result for [min window start, max window end] (ordered by startDate). */
+  overlapping: SourcePeriodEntity[];
+  budget_entities: Awaited2<ReturnType<typeof budget_repo.get_by_user_id>>;
+  monthly_period_docs: Awaited2<ReturnType<typeof budget_period_repo.get_by_user_and_type>>;
+  outflows: Awaited2<ReturnType<typeof outflow_repo.get_by_user_id>>;
+  inflows: Awaited2<ReturnType<typeof inflow_repo.get_by_user_id>>;
+  all_goals: Awaited2<ReturnType<typeof goal_repo.get_by_user>>;
+  /** Active transactions across the UNION of every window's derivation span. */
+  txns: Array<{ id: string; data: Record<string, unknown> }>;
+  /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
+  inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
 }
 
-export interface RecurringForDerivation {
-  id: string;
-  name: string;
-  kind: "outflow" | "inflow";
-  schedule: RecurringScheduleForGeneration;
-  payments: ActualPayment[];
-  /** INCOME only: the stream's historical linked deposits, for per-slot amount estimation
-   *  (a semi-monthly stream's mid vs end occurrence draw from their own slot's average). */
-  payment_history?: DepositForSlot[];
-  /** INCOME only: true when the user set an explicit expected-amount override on the stream
-   *  ("this + future"). An explicit override MUST win over the per-slot auto-estimate — else
-   *  the user's edit is silently ignored for multi-occurrence income (semi-monthly/weekly). */
-  has_amount_override?: boolean;
-  /** INCOME only: per-occurrence expected overrides keyed by UTC due-date `YYYY-MM-DD`.
-   *  Wins over the per-slot auto-estimate AND the definition override, for that ONE occurrence. */
-  occurrence_amount_overrides?: Record<string, number>;
-  /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
-  removal_intervals: RemovalInterval[];
+export interface DerivationWindow {
+  start_ms: number;
+  end_ms: number;
 }
 
-export interface PeriodDerivationDeps {
-  view_buckets: ViewBucket[];
-  placement_buckets: PlacementBucket[];
-  budgets: BudgetForDerivation[];
-  real_budgets: BudgetForMatch[];
-  monthly_ee_id: string | null;
-  any_ee_id: string | null;
-  splits_for_match: SplitForOnReadMatch[];
-  recurring: RecurringForDerivation[];
-  /** Active income-drawing goals' planned set-aside (for the EE leftover). */
-  goals: GoalForLeftover[];
-  /** Real INCOME_* credits in the window not tied to any recurring inflow (→ "Other income"). */
-  other_income_credits: DepositForSlot[];
-  span_start_ms: number;
-  span_end_ms: number;
+/** Exact Firestore Timestamp comparison vs a millis bound (keeps sub-millisecond precision). */
+function ts_cmp(ts: Timestamp, ms: number): number {
+  const b = Timestamp.fromMillis(ms);
+  return ts.seconds !== b.seconds ? ts.seconds - b.seconds : ts.nanoseconds - b.nanoseconds;
 }
 
-export async function resolve_period_derivation_deps(
-  ctx: TraceContext,
-  user_id: string,
+/**
+ * The source periods `source_period_repo.get_overlapping(window_start, window_end)` would return,
+ * re-filtered from a wider load with the IDENTICAL predicate (startDate in
+ * [start − buffer, end], then end_date ≥ start by millis). Preserves startDate order.
+ */
+function overlapping_for_window(
+  all: SourcePeriodEntity[],
+  window_start_ms: number,
+  window_end_ms: number
+): SourcePeriodEntity[] {
+  const lower_ms =
+    Timestamp.fromMillis(window_start_ms).toMillis() - SOURCE_PERIOD_OVERLAP_BUFFER_MS;
+  return all.filter(
+    (p) =>
+      ts_cmp(p.start_date, lower_ms) >= 0 &&
+      ts_cmp(p.start_date, window_end_ms) <= 0 &&
+      p.end_date.toMillis() >= Timestamp.fromMillis(window_start_ms).toMillis()
+  );
+}
+
+/** A window's derivation span: the extent of its view-cadence buckets (or the window itself). */
+function derivation_span(
+  overlapping: SourcePeriodEntity[],
   view_cadence: PeriodInstanceType,
   window_start_ms: number,
   window_end_ms: number
-): Promise<PeriodDerivationDeps> {
-  // 1. Fetch everything that only needs user_id + the requested window in ONE
-  // parallel round-trip. Only the transaction read depends on the derived period
-  // span (computed below), so it alone follows — 2 IO layers instead of 4.
+): { span_start_ms: number; span_end_ms: number } {
+  const buckets = overlapping.filter((p) => p.period_type === view_cadence);
+  return {
+    span_start_ms: buckets.length
+      ? Math.min(...buckets.map((b) => b.start_date.toMillis()))
+      : window_start_ms,
+    span_end_ms: buckets.length
+      ? Math.max(...buckets.map((b) => b.end_date.toMillis()))
+      : window_end_ms,
+  };
+}
+
+/**
+ * IO half: read everything the given windows need, ONCE. For a single window this issues the same
+ * queries the per-window path always did (the inflow-history lookup covers every active,
+ * non-hidden inflow's stream ids — a superset that's re-filtered per window).
+ */
+export async function load_period_derivation_raw(
+  ctx: TraceContext,
+  user_id: string,
+  view_cadence: PeriodInstanceType,
+  windows: DerivationWindow[]
+): Promise<PeriodDerivationRaw> {
+  const range_start_ms = Math.min(...windows.map((w) => w.start_ms));
+  const range_end_ms = Math.max(...windows.map((w) => w.end_ms));
+
+  // 1. Everything that only needs user_id + the requested range, in ONE parallel round-trip.
+  // Only the transaction read depends on the derived period spans (computed below).
   const [overlapping, budget_entities, monthly_period_docs, outflows, inflows, all_goals] =
     await Promise.all([
       source_period_repo.get_overlapping(
         ctx,
-        Timestamp.fromMillis(window_start_ms),
-        Timestamp.fromMillis(window_end_ms)
+        Timestamp.fromMillis(range_start_ms),
+        Timestamp.fromMillis(range_end_ms)
       ),
       budget_repo.get_by_user_id(ctx, user_id),
       budget_period_repo.get_by_user_and_type(ctx, user_id, "monthly"),
@@ -138,6 +177,62 @@ export async function resolve_period_derivation_deps(
       inflow_repo.get_by_user_id(ctx, user_id),
       goal_repo.get_by_user(ctx, user_id),
     ]);
+
+  // 2. Transactions for the UNION of every window's span (one query).
+  const spans = windows.map((w) =>
+    derivation_span(
+      overlapping_for_window(overlapping, w.start_ms, w.end_ms),
+      view_cadence,
+      w.start_ms,
+      w.end_ms
+    )
+  );
+  const txns = await transaction_repo.get_active_in_date_range(
+    ctx,
+    user_id,
+    Math.min(...spans.map((sp) => sp.span_start_ms)),
+    Math.max(...spans.map((sp) => sp.span_end_ms))
+  );
+
+  // 3. Income history for every candidate inflow stream (superset; re-filtered per window).
+  const history_ids = [
+    ...new Set(
+      inflows
+        .filter((i) => i.is_active && !i.is_hidden)
+        .flatMap((i) => i.transaction_ids ?? [])
+    ),
+  ];
+  const inflow_history_docs = await transaction_repo.get_by_plaid_transaction_ids(
+    ctx,
+    user_id,
+    history_ids
+  );
+
+  return {
+    overlapping,
+    budget_entities,
+    monthly_period_docs,
+    outflows,
+    inflows,
+    all_goals,
+    txns,
+    inflow_history_docs,
+  };
+}
+
+/**
+ * Lookup/shaping half (NO IO): build ONE window's derivation inputs from a raw load, applying the
+ * same predicates the per-window queries apply — so the result is identical to loading that
+ * window alone.
+ */
+export function shape_period_derivation_deps(
+  raw: PeriodDerivationRaw,
+  view_cadence: PeriodInstanceType,
+  window_start_ms: number,
+  window_end_ms: number
+): PeriodDerivationDeps {
+  const { budget_entities, monthly_period_docs, outflows, inflows, all_goals } = raw;
+  const overlapping = overlapping_for_window(raw.overlapping, window_start_ms, window_end_ms);
 
   // Active, income-drawing goals contribute their planned per-period set-aside to
   // the Everything-Else leftover (EE limit = income − bills − goals − budgets).
@@ -250,13 +345,12 @@ export async function resolve_period_derivation_deps(
     });
   }
 
-  // 3. Load the window's transactions (needs the period span derived above).
-  const txns = await transaction_repo.get_active_in_date_range(
-    ctx,
-    user_id,
-    span_start_ms,
-    span_end_ms
-  );
+  // 3. The window's transactions (the per-window query's inclusive date range, re-filtered
+  // from the raw load in its original order).
+  const txns = raw.txns.filter((t) => {
+    const d = t.data.transactionDate as Timestamp;
+    return ts_cmp(d, span_start_ms) >= 0 && ts_cmp(d, span_end_ms) <= 0;
+  });
 
   // 3a. Matched-pair INTERNAL-transfer detection. `TRANSFER_*` alone is ambiguous —
   // Plaid tags both own-account transfers AND external ACH bills (mortgage, subs)
@@ -446,18 +540,14 @@ export async function resolve_period_derivation_deps(
     r.payments = payments_by_id.get(r.id) ?? [];
   }
 
-  // INCOME per-slot amounts: load each inflow's HISTORICAL linked deposits (its whole Plaid
-  // stream, not just the in-window ones) so a semi-monthly stream's mid vs end occurrences
-  // can each show their own slot's recent average instead of the blended stream average.
-  const inflow_tx_ids = [...inflow_tx_to_id.keys()];
-  if (inflow_tx_ids.length > 0) {
+  // INCOME per-slot amounts: each inflow's HISTORICAL linked deposits (its whole Plaid stream,
+  // not just the in-window ones) so a semi-monthly stream's mid vs end occurrences can each show
+  // their own slot's recent average instead of the blended stream average. The docs were loaded
+  // (for a superset of stream ids) in `load_period_derivation_raw`; attribute them via this
+  // window's membership map exactly as the per-window query did.
+  if (inflow_tx_to_id.size > 0) {
     const history_by_inflow = new Map<string, DepositForSlot[]>();
-    const hist_docs = await transaction_repo.get_by_plaid_transaction_ids(
-      ctx,
-      user_id,
-      inflow_tx_ids
-    );
-    for (const d of hist_docs) {
+    for (const d of raw.inflow_history_docs) {
       const inflow_id = inflow_tx_to_id.get(d.transactionId as string);
       if (!inflow_id) continue;
       const splits = (d.splits as Array<{ amount?: number }>) ?? [];
@@ -495,4 +585,21 @@ export async function resolve_period_derivation_deps(
     span_start_ms,
     span_end_ms,
   };
+}
+
+/**
+ * Load + shape for a SINGLE window — the `derive_period` path. Identical output to deriving any
+ * window of a multi-window load (see `derive_period_range`).
+ */
+export async function resolve_period_derivation_deps(
+  ctx: TraceContext,
+  user_id: string,
+  view_cadence: PeriodInstanceType,
+  window_start_ms: number,
+  window_end_ms: number
+): Promise<PeriodDerivationDeps> {
+  const raw = await load_period_derivation_raw(ctx, user_id, view_cadence, [
+    { start_ms: window_start_ms, end_ms: window_end_ms },
+  ]);
+  return shape_period_derivation_deps(raw, view_cadence, window_start_ms, window_end_ms);
 }

@@ -10,8 +10,8 @@
  * @module orchestrators/periods/derive_period
  */
 import { TraceContext } from "../../types";
-import { DerivedBudgetViewPeriod } from "../../domain/budgets/budget_view.service";
-import { PlacedOccurrenceGroup } from "../../domain/recurring/occurrence_placement.service";
+import { DerivePeriodResult } from "../../domain/periods/period_view.service";
+export type { DerivedBudgetResult, DerivedRecurringResult, DerivePeriodResult, } from "../../domain/periods/period_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 export interface DerivePeriodInput {
     view_cadence: PeriodInstanceType;
@@ -20,23 +20,6 @@ export interface DerivePeriodInput {
     /** Bypass the cached result and recompute fresh (still overwrites the cache with the result,
      *  stamped at the current version). Used by the FE right after a config mutation. */
     force?: boolean;
-}
-export interface DerivedBudgetResult {
-    budget_id: string;
-    name: string;
-    is_everything_else: boolean;
-    periods: DerivedBudgetViewPeriod[];
-}
-export interface DerivedRecurringResult {
-    recurring_id: string;
-    name: string;
-    groups: PlacedOccurrenceGroup[];
-}
-export interface DerivePeriodResult {
-    view_cadence: PeriodInstanceType;
-    budgets: DerivedBudgetResult[];
-    bills: DerivedRecurringResult[];
-    income: DerivedRecurringResult[];
 }
 export declare function derive_period_orchestrator(ctx: TraceContext, user_id: string, input: DerivePeriodInput): Promise<DerivePeriodResult>;
 //# sourceMappingURL=derive_period.orchestrator.d.ts.map

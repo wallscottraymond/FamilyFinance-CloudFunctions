@@ -19,33 +19,11 @@ import { source_period_repo } from "../../repositories/source_period.repo";
 import { resolve_goal_measurements } from "../../resolvers/goals/goal_measurement.resolver";
 
 /** One goal + its measurement for the viewed period (camelCase FE DTO). */
-export interface GoalViewItem {
-  goalId: string;
-  goalType: string;
-  name: string;
-  status: string;
-  linkedAccountId: string;
-  targetAmount: number | null;
-  homeCadence: string;
-  perPeriodAmount: number;
-  priorityRank: number;
-  drawsIncome: boolean;
-  baselineBalance: number;
-  // measurement (viewed period)
-  targetForPeriod: number;
-  progressForPeriod: number;
-  cumulativeProgress: number;
-  met: boolean;
-  targetReached: boolean;
-  dataIncomplete: boolean;
-}
-
-export interface DeriveGoalsViewResult {
-  periodId: string;
-  goals: GoalViewItem[];
-  /** Total set-aside this period across goals that draw against income. */
-  totalDrawThisPeriod: number;
-}
+export type { GoalViewItem, DeriveGoalsViewResult } from "../../domain/goals/goals_view.service";
+import {
+  build_goals_view,
+  DeriveGoalsViewResult,
+} from "../../domain/goals/goals_view.service";
 
 export async function derive_goals_view_orchestrator(
   ctx: TraceContext,
@@ -68,30 +46,8 @@ export async function derive_goals_view_orchestrator(
     period.end_date
   );
 
-  const goals: GoalViewItem[] = views.map(({ goal, measurement }) => ({
-    goalId: goal.id,
-    goalType: goal.goal_type,
-    name: goal.name,
-    status: goal.status,
-    linkedAccountId: goal.linked_account_id,
-    targetAmount: goal.target_amount ?? null,
-    homeCadence: goal.home_cadence,
-    perPeriodAmount: goal.per_period_amount,
-    priorityRank: goal.priority_rank,
-    drawsIncome: goal.draws_income,
-    baselineBalance: goal.baseline_balance,
-    targetForPeriod: measurement.target_for_period,
-    progressForPeriod: measurement.progress_for_period,
-    cumulativeProgress: measurement.cumulative_progress,
-    met: measurement.met,
-    targetReached: measurement.target_reached,
-    dataIncomplete: measurement.data_incomplete,
-  }));
-
-  const totalDrawThisPeriod = goals
-    .filter((g) => g.drawsIncome && g.status === "active")
-    .reduce((sum, g) => sum + g.targetForPeriod, 0);
+  const result = build_goals_view(period_id, views);
 
   log_operation_success(span, user_id);
-  return { periodId: period_id, goals, totalDrawThisPeriod };
+  return result;
 }

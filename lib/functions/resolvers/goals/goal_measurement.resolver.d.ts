@@ -21,4 +21,14 @@ export interface GoalMeasurementView {
     measurement: GoalMeasurement;
 }
 export declare function resolve_goal_measurements(ctx: TraceContext, user_id: string, period_id: string, period_start: Timestamp, period_end: Timestamp): Promise<GoalMeasurementView[]>;
+export interface GoalMeasurementPeriod {
+    period_id: string;
+    start: Timestamp;
+    end: Timestamp;
+}
+/**
+ * Multi-period variant: reads the user's goals ONCE, then measures each period (each period still
+ * needs its own start/end balance snapshots). Per period, identical to `resolve_goal_measurements`.
+ */
+export declare function resolve_goal_measurements_for_periods(ctx: TraceContext, user_id: string, periods: GoalMeasurementPeriod[]): Promise<Map<string, GoalMeasurementView[]>>;
 //# sourceMappingURL=goal_measurement.resolver.d.ts.map

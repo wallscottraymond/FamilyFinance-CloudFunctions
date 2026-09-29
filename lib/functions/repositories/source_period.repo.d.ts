@@ -23,6 +23,12 @@ export interface SourcePeriodEntity {
     month?: number;
     bi_monthly_half?: 1 | 2;
 }
+/**
+ * `get_overlapping` looks back this far on `startDate` (a period that STARTED up to a month before
+ * the window can still overlap it). Exported so in-memory re-filtering of a wider load
+ * (`shape_period_derivation_deps`) applies the IDENTICAL bound.
+ */
+export declare const SOURCE_PERIOD_OVERLAP_BUFFER_MS: number;
 export declare const source_period_repo: {
     /**
      * Gets a single source period by ID.

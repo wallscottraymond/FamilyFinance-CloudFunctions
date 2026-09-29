@@ -14,61 +14,55 @@
  * @module resolvers/periods/period_derivation
  */
 import { TraceContext } from "../../types";
-import { GoalForLeftover } from "../../domain/budgets/everything_else_leftover.service";
-import { ViewBucket, MonthlyPeriodForDerivation } from "../../domain/budgets/budget_view.service";
-import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
-import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
-import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
-import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
-import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
-import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
-import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
+import { budget_repo, outflow_repo, inflow_repo, SourcePeriodEntity } from "../../repositories";
+import { budget_period_repo } from "../../repositories/budget_period.repo";
+import { transaction_repo } from "../../repositories/transaction.repo";
+import { goal_repo } from "../../repositories/goal.repo";
 import { PeriodInstanceType } from "../../domain/budgets";
-export interface BudgetForDerivation {
-    id: string;
-    name: string;
-    is_ee: boolean;
-    monthly_periods: MonthlyPeriodForDerivation[];
-    /** Start of the budget's first active period (snapped); a view period ending before this is
-     *  omitted so a budget never appears in periods predating it. EE uses 0 (always active). */
-    active_start_ms: number;
-    /** End of the budget's active range, or null if ongoing. Periods after it are omitted. */
-    active_end_ms: number | null;
+export type { BudgetForDerivation, RecurringForDerivation, PeriodDerivationDeps, } from "../../domain/periods/period_derivation.types";
+import type { PeriodDerivationDeps } from "../../domain/periods/period_derivation.types";
+type Awaited2<T> = T extends Promise<infer U> ? U : T;
+/**
+ * Everything Firestore returns for one OR MORE windows of a cadence — the IO half of period
+ * derivation. Loaded once (`load_period_derivation_raw`) and re-filtered per window in memory
+ * (`shape_period_derivation_deps`), so a multi-window derive reads the user's definitions and
+ * transactions ONCE instead of per window.
+ */
+export interface PeriodDerivationRaw {
+    /** `get_overlapping` result for [min window start, max window end] (ordered by startDate). */
+    overlapping: SourcePeriodEntity[];
+    budget_entities: Awaited2<ReturnType<typeof budget_repo.get_by_user_id>>;
+    monthly_period_docs: Awaited2<ReturnType<typeof budget_period_repo.get_by_user_and_type>>;
+    outflows: Awaited2<ReturnType<typeof outflow_repo.get_by_user_id>>;
+    inflows: Awaited2<ReturnType<typeof inflow_repo.get_by_user_id>>;
+    all_goals: Awaited2<ReturnType<typeof goal_repo.get_by_user>>;
+    /** Active transactions across the UNION of every window's derivation span. */
+    txns: Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>;
+    /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
+    inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
 }
-export interface RecurringForDerivation {
-    id: string;
-    name: string;
-    kind: "outflow" | "inflow";
-    schedule: RecurringScheduleForGeneration;
-    payments: ActualPayment[];
-    /** INCOME only: the stream's historical linked deposits, for per-slot amount estimation
-     *  (a semi-monthly stream's mid vs end occurrence draw from their own slot's average). */
-    payment_history?: DepositForSlot[];
-    /** INCOME only: true when the user set an explicit expected-amount override on the stream
-     *  ("this + future"). An explicit override MUST win over the per-slot auto-estimate — else
-     *  the user's edit is silently ignored for multi-occurrence income (semi-monthly/weekly). */
-    has_amount_override?: boolean;
-    /** INCOME only: per-occurrence expected overrides keyed by UTC due-date `YYYY-MM-DD`.
-     *  Wins over the per-slot auto-estimate AND the definition override, for that ONE occurrence. */
-    occurrence_amount_overrides?: Record<string, number>;
-    /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
-    removal_intervals: RemovalInterval[];
+export interface DerivationWindow {
+    start_ms: number;
+    end_ms: number;
 }
-export interface PeriodDerivationDeps {
-    view_buckets: ViewBucket[];
-    placement_buckets: PlacementBucket[];
-    budgets: BudgetForDerivation[];
-    real_budgets: BudgetForMatch[];
-    monthly_ee_id: string | null;
-    any_ee_id: string | null;
-    splits_for_match: SplitForOnReadMatch[];
-    recurring: RecurringForDerivation[];
-    /** Active income-drawing goals' planned set-aside (for the EE leftover). */
-    goals: GoalForLeftover[];
-    /** Real INCOME_* credits in the window not tied to any recurring inflow (→ "Other income"). */
-    other_income_credits: DepositForSlot[];
-    span_start_ms: number;
-    span_end_ms: number;
-}
+/**
+ * IO half: read everything the given windows need, ONCE. For a single window this issues the same
+ * queries the per-window path always did (the inflow-history lookup covers every active,
+ * non-hidden inflow's stream ids — a superset that's re-filtered per window).
+ */
+export declare function load_period_derivation_raw(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, windows: DerivationWindow[]): Promise<PeriodDerivationRaw>;
+/**
+ * Lookup/shaping half (NO IO): build ONE window's derivation inputs from a raw load, applying the
+ * same predicates the per-window queries apply — so the result is identical to loading that
+ * window alone.
+ */
+export declare function shape_period_derivation_deps(raw: PeriodDerivationRaw, view_cadence: PeriodInstanceType, window_start_ms: number, window_end_ms: number): PeriodDerivationDeps;
+/**
+ * Load + shape for a SINGLE window — the `derive_period` path. Identical output to deriving any
+ * window of a multi-window load (see `derive_period_range`).
+ */
 export declare function resolve_period_derivation_deps(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, window_start_ms: number, window_end_ms: number): Promise<PeriodDerivationDeps>;
 //# sourceMappingURL=period_derivation.resolver.d.ts.map

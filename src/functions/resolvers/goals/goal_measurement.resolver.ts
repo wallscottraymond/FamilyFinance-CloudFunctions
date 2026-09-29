@@ -60,6 +60,41 @@ export async function resolve_goal_measurements(
   period_end: Timestamp
 ): Promise<GoalMeasurementView[]> {
   const goals = await goal_repo.get_by_user(ctx, user_id);
+  return measure_goals_for_period(goals, period_id, period_start, period_end);
+}
+
+export interface GoalMeasurementPeriod {
+  period_id: string;
+  start: Timestamp;
+  end: Timestamp;
+}
+
+/**
+ * Multi-period variant: reads the user's goals ONCE, then measures each period (each period still
+ * needs its own start/end balance snapshots). Per period, identical to `resolve_goal_measurements`.
+ */
+export async function resolve_goal_measurements_for_periods(
+  ctx: TraceContext,
+  user_id: string,
+  periods: GoalMeasurementPeriod[]
+): Promise<Map<string, GoalMeasurementView[]>> {
+  const goals = await goal_repo.get_by_user(ctx, user_id);
+  const out = new Map<string, GoalMeasurementView[]>();
+  await Promise.all(
+    periods.map(async (p) => {
+      out.set(p.period_id, await measure_goals_for_period(goals, p.period_id, p.start, p.end));
+    })
+  );
+  return out;
+}
+
+/** Measure the given goals for one period (reads that period's balance snapshots). */
+async function measure_goals_for_period(
+  goals: GoalEntity[],
+  period_id: string,
+  period_start: Timestamp,
+  period_end: Timestamp
+): Promise<GoalMeasurementView[]> {
   if (goals.length === 0) return [];
 
   const span_days = Math.max(
