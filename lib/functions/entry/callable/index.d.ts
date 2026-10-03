@@ -25,6 +25,7 @@ export { manage_recurring_inflow } from "./manage_recurring_inflow.entry";
 export { list_suppressed_recurring } from "./list_suppressed_recurring.entry";
 export { derive_recurring_view } from "./derive_recurring_view.entry";
 export { derive_period } from "./derive_period.entry";
+export { get_widget_token } from "./get_widget_token.entry";
 export { derive_period_range } from "./derive_period_range.entry";
 export { create_link_token } from "./create_link_token.entry";
 export { create_update_link_token } from "./create_update_link_token.entry";

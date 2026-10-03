@@ -45,6 +45,7 @@ import {
   hard_delete_doc,
   make_bulk_writer,
 } from "../../repositories/purge.repo";
+import { widget_token_repo } from "../../repositories/widget_token.repo";
 import { set_purge_status } from "../../infrastructure/purge_guard";
 
 /** Job payload for the purge. */
@@ -304,6 +305,11 @@ export async function purge_user_data_orchestrator(
         }`
       );
     }
+
+    // 9b. Revoke the iOS widget token (widgets fall back to "Open Budg to sign in").
+    await widget_token_repo.delete_for_user(user_id).catch((err: Error) =>
+      console.warn(`[${ctx.trace_id}] purge: widget token delete failed: ${err.message}`)
+    );
 
     // 10. Remove the profile doc LAST (after logout + auth removal).
     await hard_delete_doc("users", user_id);

@@ -46,6 +46,7 @@ export { derive_recurring_view } from "./derive_recurring_view.entry";
 
 // Derive-On-Read Period Architecture: BATCHED whole-period derivation (one call)
 export { derive_period } from "./derive_period.entry";
+export { get_widget_token } from "./get_widget_token.entry";
 // Home preload: many windows (+ goals) of one cadence in ONE call, reading data once
 export { derive_period_range } from "./derive_period_range.entry";
 
