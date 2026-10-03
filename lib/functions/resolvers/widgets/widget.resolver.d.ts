@@ -12,8 +12,11 @@ export declare function resolve_widget_request(token_hash: string): Promise<{
     user_id: string;
     data_version: number;
 } | null>;
-/** The source period of `cadence` containing `now_ms` (null if none generated). */
-export declare function resolve_current_source_period(ctx: TraceContext, cadence: string, now_ms: number): Promise<SourcePeriodEntity | null>;
+/**
+ * The `cadence` source periods from the one containing `now_ms` onward, soonest first
+ * (`count` of them: 1 = current; 2 = current + next, for "bills due soon").
+ */
+export declare function resolve_source_periods_from_now(ctx: TraceContext, cadence: string, now_ms: number, count: number): Promise<SourcePeriodEntity[]>;
 /** The account's stored widget token (encrypted), or null. */
 export declare function resolve_stored_widget_token(user_id: string): Promise<StoredWidgetToken | null>;
 //# sourceMappingURL=widget.resolver.d.ts.map

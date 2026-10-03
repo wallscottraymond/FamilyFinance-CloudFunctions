@@ -24,22 +24,26 @@ export async function resolve_widget_request(
   return { user_id, data_version };
 }
 
-/** The source period of `cadence` containing `now_ms` (null if none generated). */
-export async function resolve_current_source_period(
+/**
+ * The `cadence` source periods from the one containing `now_ms` onward, soonest first
+ * (`count` of them: 1 = current; 2 = current + next, for "bills due soon").
+ */
+export async function resolve_source_periods_from_now(
   ctx: TraceContext,
   cadence: string,
-  now_ms: number
-): Promise<SourcePeriodEntity | null> {
-  const now = Timestamp.fromMillis(now_ms);
-  const periods = await source_period_repo.get_overlapping(ctx, now, now);
-  return (
-    periods.find(
-      (p) =>
-        p.period_type === cadence &&
-        p.start_date.toMillis() <= now_ms &&
-        p.end_date.toMillis() >= now_ms
-    ) ?? null
+  now_ms: number,
+  count: number
+): Promise<SourcePeriodEntity[]> {
+  const lookahead_ms = count > 1 ? 45 * 24 * 60 * 60 * 1000 : 0; // covers the next month
+  const periods = await source_period_repo.get_overlapping(
+    ctx,
+    Timestamp.fromMillis(now_ms),
+    Timestamp.fromMillis(now_ms + lookahead_ms)
   );
+  return periods
+    .filter((p) => p.period_type === cadence && p.end_date.toMillis() >= now_ms)
+    .sort((a, b) => a.start_date.toMillis() - b.start_date.toMillis())
+    .slice(0, count);
 }
 
 /** The account's stored widget token (encrypted), or null. */

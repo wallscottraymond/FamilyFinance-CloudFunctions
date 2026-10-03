@@ -1,15 +1,15 @@
 /**
- * Widget Snapshot Entry Point ([[iOS-Home-Screen-Widgets]] Phase 2)
+ * Widget Snapshot Entry Point ([[iOS-Home-Screen-Widgets]] Phases 2–3)
  *
  * HTTPS GET called by the iOS widget extension on its own (no app, no Firebase SDK):
- *   GET /widget_snapshot?cadence=monthly&have=<data version>
+ *   GET /widget_snapshot?kind=left|summary|bills&cadence=monthly&lookahead=7&have=<version>
  *   Authorization: Bearer <widget token>
- * → 200 { unchanged: true, version }               (widget already current; ~2 reads)
- * → 200 { version, snapshot }                      (fresh snapshot, schema v1)
- * → 200 { version, snapshot: null }                (no current source period)
- * → 401 { error }                                  (unknown / revoked token)
+ * → 200 { unchanged: true, version }      (widget already current; ~2 reads)
+ * → 200 { version, data }                 (fresh widget data, schema v2)
+ * → 200 { version, data: null }           (no current source period)
+ * → 401 { error }                         (unknown / revoked token)
  *
- * The token is read-only and scoped to this snapshot. Never logged.
+ * The token is read-only and scoped to widget data. Never logged.
  *
  * @module entry/http/widget_snapshot
  */
@@ -22,7 +22,9 @@ import {
 } from "../../orchestrators/widgets/widget_snapshot.orchestrator";
 
 const query_schema = z.object({
+  kind: z.enum(["left", "summary", "bills"]).default("left"),
   cadence: z.enum(["monthly", "weekly", "bi_monthly"]).default("monthly"),
+  lookahead: z.coerce.number().int().refine((n) => [7, 14, 30].includes(n)).default(14),
   have: z.coerce.number().int().nonnegative().optional(),
 });
 
@@ -50,7 +52,9 @@ export const widget_snapshot = onRequest(
     try {
       const outcome = await widget_snapshot_orchestrator(ctx, {
         token,
+        kind: parsed.data.kind,
         cadence: parsed.data.cadence,
+        lookahead_days: parsed.data.lookahead,
         have_version: parsed.data.have ?? null,
         now_ms: Date.now(),
       });
@@ -63,10 +67,10 @@ export const widget_snapshot = onRequest(
         res.status(200).json({ unchanged: true, version: outcome.version });
         return;
       case "no_period":
-        res.status(200).json({ version: outcome.version, snapshot: null });
+        res.status(200).json({ version: outcome.version, data: null });
         return;
-      case "snapshot":
-        res.status(200).json({ version: outcome.version, snapshot: outcome.snapshot });
+      case "data":
+        res.status(200).json({ version: outcome.version, data: outcome.data });
         return;
       }
     } catch (error) {
