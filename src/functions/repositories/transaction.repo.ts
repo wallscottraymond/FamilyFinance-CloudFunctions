@@ -727,10 +727,17 @@ export const transaction_repo = {
   ): Promise<Map<string, PendingTransactionInfo>> {
     const db = getFirestore();
 
+    // Recently removed-by-Plaid-sync pendings only, within a window covering the
+    // pending lifecycle (Plaid posts 1–5 business days out).
+    const REMOVED_WINDOW_MS = 12 * 24 * 60 * 60 * 1000;
+    const cutoff_ms = Date.now() - REMOVED_WINDOW_MS;
+
     // ACTIVE pendings — the common (same-sync) case. PLUS recently REMOVED-BY-SYNC
     // pendings — so a posted arriving in a LATER sync (after Plaid already removed the
-    // pending) can STILL inherit the user's splits. (`isActive==false` reuses the same
-    // composite index shape as `==true`, so no new index is required.)
+    // pending) can STILL inherit the user's splits. The removed query is bounded by
+    // `updatedAt >= cutoff` (Read-Cost-Review-Round-3 Q5): it used to read EVERY soft-deleted
+    // pending the item ever had, then drop all but the last 12 days in memory — same result,
+    // now without reading the old ones. Index: ownerId+plaidItemId+isPending+isActive+updatedAt.
     const [active_snap, removed_snap] = await Promise.all([
       db
         .collection(COLLECTION)
@@ -745,6 +752,7 @@ export const transaction_repo = {
         .where("plaidItemId", "==", plaid_item_id)
         .where("isPending", "==", true)
         .where("isActive", "==", false)
+        .where("updatedAt", ">=", Timestamp.fromMillis(cutoff_ms))
         .get(),
     ]);
 
@@ -755,10 +763,8 @@ export const transaction_repo = {
       result.set(data.transactionId, map_to_pending_info(data));
     }
 
-    // Recently removed-by-Plaid-sync pendings only, within a window covering the
-    // pending lifecycle (Plaid posts 1–5 business days out). Don't overwrite an active.
-    const REMOVED_WINDOW_MS = 12 * 24 * 60 * 60 * 1000;
-    const cutoff_ms = Date.now() - REMOVED_WINDOW_MS;
+    // Don't overwrite an active. (The cutoff re-check below is now redundant with the
+    // query bound but kept as a guard.)
     let removed_recent = 0;
     for (const doc of removed_snap.docs) {
       const data = doc.data() as LegacyTransactionDoc & {

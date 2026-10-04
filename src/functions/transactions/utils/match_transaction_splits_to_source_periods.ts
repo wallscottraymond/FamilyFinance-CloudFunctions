@@ -12,6 +12,8 @@
 
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../../../index';
+// No source period is longer than this (31d) — bounds the candidate startDate range.
+import { SOURCE_PERIOD_OVERLAP_BUFFER_MS } from '../../repositories/source_period.repo';
 import { Transaction as FamilyTransaction } from '../../../types';
 
 /**
@@ -52,13 +54,21 @@ export async function match_transaction_splits_to_source_periods(
 
     console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Found ${unique_dates.size} unique transaction dates`);
 
-    // Query ALL source periods (they are app-wide, not user-specific)
-    // We'll filter in memory based on transaction dates
-    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Querying ALL source_periods collection...`);
+    // Read ONLY the source periods that can contain these dates (Read-Cost-Review-Round-3 Q4):
+    // a period contains date d iff startDate <= d <= endDate, and no period is longer than
+    // 31 days, so startDate ∈ [min(d) − 31d, max(d)] covers every candidate. Was an
+    // unfiltered `.get()` of the whole app-wide collection (~980 docs) up to twice per sync.
+    // Same (startDate range + orderBy) shape as source_period_repo.get_overlapping (indexed).
+    const date_list = Array.from(unique_dates);
+    const min_date = Math.min(...date_list);
+    const max_date = Math.max(...date_list);
     const periods_snapshot = await db.collection('source_periods')
+      .where('startDate', '>=', Timestamp.fromMillis(min_date - SOURCE_PERIOD_OVERLAP_BUFFER_MS))
+      .where('startDate', '<=', Timestamp.fromMillis(max_date))
+      .orderBy('startDate', 'asc')
       .get();
 
-    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] ✅ FOUND ${periods_snapshot.size} SOURCE PERIODS (app-wide)`);
+    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] ✅ FOUND ${periods_snapshot.size} candidate SOURCE PERIODS for the transaction dates`);
 
     if (periods_snapshot.size === 0) {
       console.error(`❌❌❌ [match_transaction_splits_to_source_periods] NO SOURCE PERIODS FOUND! Cannot match transactions to periods. Please run generateSourcePeriods.`);
