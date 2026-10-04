@@ -15,7 +15,7 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 import { create_trigger_trace } from "../../observability";
-import { create_job } from "../../infrastructure/job_queue";
+import { enqueue_reconcile_recurring } from "../../infrastructure/coalesced_jobs";
 import { runUpdateOutflowPeriods } from "../../outflows/outflow_periods/utils/runUpdateOutflowPeriods";
 import { runUpdateInflowPeriods } from "../../inflows/inflow_periods/utils/runUpdateInflowPeriods";
 import { Outflow, Inflow } from "../../../types";
@@ -71,11 +71,13 @@ export async function handle_recurring_write(
 
   // 1. `transactionIds` changed (Plaid recurring detection) → reconcile paid/received.
   if (transaction_ids_changed(before, after)) {
-    await create_job(
-      "reconcile_recurring_period",
-      { recurring_id, recurring_type, user_id, trace_id: trace.trace_id },
-      { trace_id: trace.trace_id }
-    );
+    // Coalesced (Read-Cost-Review-Round-3): a burst of stream updates → one delayed reconcile.
+    await enqueue_reconcile_recurring({
+      user_id,
+      recurring_id,
+      recurring_type,
+      trace_id: trace.trace_id,
+    });
     did = true;
   }
 

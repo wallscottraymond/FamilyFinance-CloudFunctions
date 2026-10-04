@@ -26,6 +26,10 @@ import {
 } from "../../observability";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 import {
+  enqueue_recompute_budget_spent,
+  enqueue_reconcile_recurring,
+} from "../../infrastructure/coalesced_jobs";
+import {
   is_assignment_relevant_change,
   is_spend_relevant_change,
 } from "../../domain/transactions/assignment_field_guard.service";
@@ -87,37 +91,24 @@ async function enqueue_recurring_reconciles(
   ctx: TraceContext,
   user_id: string,
   before: Record<string, unknown> | null,
-  after: Record<string, unknown> | null,
-  event_id: string
+  after: Record<string, unknown> | null
 ): Promise<void> {
   const b = recurring_links_from_doc(before ?? {});
   const a = recurring_links_from_doc(after ?? {});
   const outflow_ids = Array.from(new Set([...b.outflow_ids, ...a.outflow_ids]));
   const inflow_ids = Array.from(new Set([...b.inflow_ids, ...a.inflow_ids]));
 
+  // Coalesced (Read-Cost-Review-Round-3): one delayed reconcile per stream per burst, not one
+  // per write — it reconciles from current state, so merged writes are covered.
   for (const recurring_id of outflow_ids) {
-    await create_job_if_not_exists(
-      "reconcile_recurring_period",
-      {
-        deduplication_key: `reconcile:outflow:${recurring_id}:${event_id}`,
-        recurring_id,
-        recurring_type: "outflow",
-        user_id,
-      },
-      { trace_id: ctx.trace_id }
-    );
+    await enqueue_reconcile_recurring({
+      user_id, recurring_id, recurring_type: "outflow", trace_id: ctx.trace_id,
+    });
   }
   for (const recurring_id of inflow_ids) {
-    await create_job_if_not_exists(
-      "reconcile_recurring_period",
-      {
-        deduplication_key: `reconcile:inflow:${recurring_id}:${event_id}`,
-        recurring_id,
-        recurring_type: "inflow",
-        user_id,
-      },
-      { trace_id: ctx.trace_id }
-    );
+    await enqueue_reconcile_recurring({
+      user_id, recurring_id, recurring_type: "inflow", trace_id: ctx.trace_id,
+    });
   }
 }
 
@@ -128,8 +119,7 @@ export async function process_transaction_written_orchestrator(
   const span = create_span(ctx, "orchestrator", "process_transaction_written");
   log_operation_start(span, input.user_id);
 
-  const { transaction_id, user_id, before, after, event_id } = input;
-  const recompute_key = `recompute:${transaction_id}:${event_id}`;
+  const { user_id, before, after } = input;
 
   // DELETE: the doc is gone, so `assign_transaction` (which reads it) can't
   // discover the touched budgets. Recompute directly from the `before` snapshot
@@ -138,19 +128,16 @@ export async function process_transaction_written_orchestrator(
     const budget_ids = budget_ids_from_doc(before);
     const txn_date = before.transactionDate as Timestamp | undefined;
     if (budget_ids.length > 0 && txn_date) {
-      await create_job_if_not_exists(
-        "recompute_budget_spent",
-        {
-          deduplication_key: recompute_key,
-          user_id,
-          budget_ids,
-          transaction_date_ms: txn_date.toMillis(),
-        },
-        { trace_id: ctx.trace_id }
-      );
+      // Coalesced per budgets + day (Read-Cost-Review-Round-3) — was one job per write.
+      await enqueue_recompute_budget_spent({
+        user_id,
+        budget_ids,
+        transaction_date_ms: txn_date.toMillis(),
+        trace_id: ctx.trace_id,
+      });
     }
     // Also refresh any recurring items the deleted transaction was paying.
-    await enqueue_recurring_reconciles(ctx, user_id, before, null, event_id);
+    await enqueue_recurring_reconciles(ctx, user_id, before, null);
     log_operation_success(span, user_id);
     return;
   }
@@ -193,16 +180,13 @@ export async function process_transaction_written_orchestrator(
     ];
     const txn_date = after.transactionDate as Timestamp | undefined;
     if (budget_ids.length > 0 && txn_date) {
-      await create_job_if_not_exists(
-        "recompute_budget_spent",
-        {
-          deduplication_key: recompute_key,
-          user_id,
-          budget_ids,
-          transaction_date_ms: txn_date.toMillis(),
-        },
-        { trace_id: ctx.trace_id }
-      );
+      // Coalesced per budgets + day (Read-Cost-Review-Round-3) — was one job per write.
+      await enqueue_recompute_budget_spent({
+        user_id,
+        budget_ids,
+        transaction_date_ms: txn_date.toMillis(),
+        trace_id: ctx.trace_id,
+      });
     }
   }
 
@@ -210,7 +194,7 @@ export async function process_transaction_written_orchestrator(
   // changes (notably pending→posted, which the stream `transactionIds[]` misses),
   // recompute that recurring's periods so paid/received + the pending flag update.
   // before ∪ after so an UN-link also reverts the previously-linked item.
-  await enqueue_recurring_reconciles(ctx, user_id, before, after, event_id);
+  await enqueue_recurring_reconciles(ctx, user_id, before, after);
 
   log_operation_success(span, user_id);
 }

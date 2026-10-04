@@ -24,7 +24,10 @@ import {
   log_operation_success,
   log_operation_error,
 } from "../../observability";
-import { create_job } from "../../infrastructure/job_queue";
+import {
+  enqueue_recompute_budget_spent,
+  enqueue_reconcile_recurring,
+} from "../../infrastructure/coalesced_jobs";
 import {
   resolve_assignment_context,
 } from "../../resolvers/transactions/assignment_context.resolver";
@@ -145,42 +148,25 @@ export async function assign_transaction_orchestrator(
     // 7. Scoped fan-out: recompute the touched budgets' spend — only when the
     //    assignment actually changed (a name-only heal doesn't move spend).
     if (result.changed) {
-      await create_job(
-        "recompute_budget_spent",
-        {
-          user_id: input.user_id,
-          transaction_id: input.transaction_id,
-          transaction_date_ms: resolved.context.txn_date_ms,
-          budget_ids: result.touched_budget_ids,
-        },
-        { trace_id: ctx.trace_id }
-      );
+      // Coalesced (Read-Cost-Review-Round-3): one delayed run per budgets + day per burst.
+      await enqueue_recompute_budget_spent({
+        user_id: input.user_id,
+        budget_ids: result.touched_budget_ids,
+        transaction_date_ms: resolved.context.txn_date_ms,
+        trace_id: ctx.trace_id,
+      });
 
       // Recurring reconciliation fan-out (before ∪ after) — a set / cleared /
       // moved link reconciles the OLD recurring doc too (RPR Phase 5c).
       for (const outflow_id of result.touched_outflow_ids) {
-        await create_job(
-          "reconcile_recurring_period",
-          {
-            recurring_id: outflow_id,
-            recurring_type: "outflow",
-            user_id: input.user_id,
-            trace_id: ctx.trace_id,
-          },
-          { trace_id: ctx.trace_id }
-        );
+        await enqueue_reconcile_recurring({
+          user_id: input.user_id, recurring_id: outflow_id, recurring_type: "outflow", trace_id: ctx.trace_id,
+        });
       }
       for (const inflow_id of result.touched_inflow_ids) {
-        await create_job(
-          "reconcile_recurring_period",
-          {
-            recurring_id: inflow_id,
-            recurring_type: "inflow",
-            user_id: input.user_id,
-            trace_id: ctx.trace_id,
-          },
-          { trace_id: ctx.trace_id }
-        );
+        await enqueue_reconcile_recurring({
+          user_id: input.user_id, recurring_id: inflow_id, recurring_type: "inflow", trace_id: ctx.trace_id,
+        });
       }
     }
 
