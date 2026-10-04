@@ -2,7 +2,8 @@
  * Widget Snapshot Entry Point ([[iOS-Home-Screen-Widgets]] Phases 2–3)
  *
  * HTTPS GET called by the iOS widget extension on its own (no app, no Firebase SDK):
- *   GET /widget_snapshot?kind=left|summary|bills&cadence=monthly&lookahead=7&have=<version>
+ *   GET /widget_snapshot?kind=left|summary|bills|budget_txns&cadence=monthly&lookahead=7
+ *       &budget=<id, budget_txns only>&have=<version>
  *   Authorization: Bearer <widget token>
  * → 200 { unchanged: true, version }      (widget already current; ~2 reads)
  * → 200 { version, data }                 (fresh widget data, schema v2)

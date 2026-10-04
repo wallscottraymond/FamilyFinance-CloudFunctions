@@ -10,6 +10,10 @@
  *  - Period summary = mobile `mapResult` (bills/income = due-group occurrences, `occurrencesOf`)
  *                     → `computePeriodSummary` (Home Summary card; real budgets only, allocated;
  *                     active goals only).
+ *  - Budget lines   = one row per budget like the period page's budget rows (effective limit,
+ *                     spent, remaining), Everything-Else last.
+ *  - Budget txns    = the budget's derive_budget_transactions rows (Budget Detail list), newest
+ *                     first, counted/refund only (ignored rows don't count toward the budget).
  *  - Bills due soon = unpaid bill occurrences (same `occurrencesOf` rule) due by now+lookahead.
  *  - Labels         = mobile `shortPeriodLabel`.
  *
@@ -29,6 +33,8 @@ const MAX_BILL_ITEMS = 6;
 // ---- Inputs (structural slices of derive_period / derive_goals_view results) ----------------
 
 export interface WidgetBudgetInput {
+  budget_id?: string;
+  name?: string;
   is_everything_else: boolean;
   periods: Array<{
     period_id: string;
@@ -90,6 +96,36 @@ export interface WidgetSummary {
   isEmpty: boolean;
 }
 
+export interface WidgetBudgetLine {
+  id: string;
+  name: string;
+  isEverythingElse: boolean;
+  /** Effective limit (allocation + rollover; Everything-Else = derived leftover). */
+  budgeted: number;
+  spent: number;
+  available: number;
+  over: boolean;
+}
+
+/** Slice of a derive_budget_transactions row. */
+export interface WidgetBudgetTxnInput {
+  transaction_id: string;
+  date_ms: number;
+  name: string;
+  amount: number;
+  is_pending: boolean;
+  spend_status: string;
+}
+
+export interface WidgetBudgetTxn {
+  id: string;
+  name: string;
+  dateMs: number;
+  amount: number;
+  pending: boolean;
+  refund: boolean;
+}
+
 export interface WidgetBillItem {
   id: string;
   /** Source period the occurrence was placed in (→ the app's `{id}_{periodId}` bill detail). */
@@ -107,8 +143,19 @@ export type WidgetData =
       asOfMs: number;
       cadence: string;
       periodLabel: string;
+      /** Period bounds → the widget draws the app's weekly segments + "today" marker. */
+      startMs: number;
+      endMs: number;
       leftToSpend: WidgetLeftToSpend;
       leftToSpendRealOnly: WidgetLeftToSpend;
+      budgets: WidgetBudgetLine[];
+    }
+  | {
+      v: number;
+      kind: "budget_txns";
+      asOfMs: number;
+      budgetId: string;
+      transactions: WidgetBudgetTxn[];
     }
   | {
       v: number;
@@ -193,6 +240,58 @@ export function compute_left_to_spend(
     over: available < 0,
     hasBudgets: budgets.some((b) => !b.is_everything_else),
   };
+}
+
+// ---- Budget lines + transactions -----------------------------------------------------------
+
+/** One row per budget (period page order, Everything-Else last). PURE. */
+export function compute_budget_lines(
+  budgets: WidgetBudgetInput[],
+  period_id: string
+): WidgetBudgetLine[] {
+  const lines = budgets.map((b, i) => {
+    const p = budget_period(b, period_id);
+    const allocated = p?.allocated_amount ?? 0;
+    const budgeted = p?.effective_amount ?? allocated;
+    const spent = p?.spent ?? 0;
+    const available = budgeted - spent;
+    return {
+      order: i,
+      line: {
+        id: b.budget_id ?? `budget-${i}`,
+        name: b.name ?? "Budget",
+        isEverythingElse: b.is_everything_else,
+        budgeted,
+        spent,
+        available,
+        over: available < 0,
+      },
+    };
+  });
+  lines.sort(
+    (a, b) =>
+      Number(a.line.isEverythingElse) - Number(b.line.isEverythingElse) || a.order - b.order
+  );
+  return lines.map((l) => l.line);
+}
+
+/** Most recent transactions that count toward a budget (newest first). PURE. */
+export function compute_recent_budget_transactions(
+  rows: WidgetBudgetTxnInput[],
+  limit = 5
+): WidgetBudgetTxn[] {
+  return rows
+    .filter((r) => r.spend_status !== "ignored")
+    .sort((a, b) => b.date_ms - a.date_ms)
+    .slice(0, limit)
+    .map((r) => ({
+      id: r.transaction_id,
+      name: r.name,
+      dateMs: r.date_ms,
+      amount: r.amount,
+      pending: r.is_pending,
+      refund: r.spend_status === "refund",
+    }));
 }
 
 // ---- Period summary --------------------------------------------------------------------------

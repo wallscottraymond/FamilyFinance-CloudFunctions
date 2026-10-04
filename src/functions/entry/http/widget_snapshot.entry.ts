@@ -2,7 +2,8 @@
  * Widget Snapshot Entry Point ([[iOS-Home-Screen-Widgets]] Phases 2–3)
  *
  * HTTPS GET called by the iOS widget extension on its own (no app, no Firebase SDK):
- *   GET /widget_snapshot?kind=left|summary|bills&cadence=monthly&lookahead=7&have=<version>
+ *   GET /widget_snapshot?kind=left|summary|bills|budget_txns&cadence=monthly&lookahead=7
+ *       &budget=<id, budget_txns only>&have=<version>
  *   Authorization: Bearer <widget token>
  * → 200 { unchanged: true, version }      (widget already current; ~2 reads)
  * → 200 { version, data }                 (fresh widget data, schema v2)
@@ -22,7 +23,8 @@ import {
 } from "../../orchestrators/widgets/widget_snapshot.orchestrator";
 
 const query_schema = z.object({
-  kind: z.enum(["left", "summary", "bills"]).default("left"),
+  kind: z.enum(["left", "summary", "bills", "budget_txns"]).default("left"),
+  budget: z.string().min(1).max(128).optional(),
   cadence: z.enum(["monthly", "weekly", "bi_monthly"]).default("monthly"),
   lookahead: z.coerce.number().int().refine((n) => [7, 14, 30].includes(n)).default(14),
   have: z.coerce.number().int().nonnegative().optional(),
@@ -43,7 +45,7 @@ export const widget_snapshot = onRequest(
       return;
     }
     const parsed = query_schema.safeParse(req.query);
-    if (!parsed.success) {
+    if (!parsed.success || (parsed.data.kind === "budget_txns" && !parsed.data.budget)) {
       res.status(400).json({ error: "invalid_query" });
       return;
     }
@@ -53,6 +55,7 @@ export const widget_snapshot = onRequest(
       const outcome = await widget_snapshot_orchestrator(ctx, {
         token,
         kind: parsed.data.kind,
+        budget_id: parsed.data.budget ?? null,
         cadence: parsed.data.cadence,
         lookahead_days: parsed.data.lookahead,
         have_version: parsed.data.have ?? null,

@@ -18,7 +18,9 @@ export type WidgetCadence = "monthly" | "weekly" | "bi_monthly";
 export interface WidgetSnapshotInput {
     /** Raw bearer token from the widget (hashed here; never stored or logged). */
     token: string;
-    kind: "left" | "summary" | "bills";
+    kind: "left" | "summary" | "bills" | "budget_txns";
+    /** kind=budget_txns: the budget whose recent transactions to return. */
+    budget_id: string | null;
     cadence: WidgetCadence;
     lookahead_days: number;
     /** The data version the widget already has (skip work when unchanged). */

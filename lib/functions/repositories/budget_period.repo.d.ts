@@ -40,6 +40,12 @@ export declare const budget_period_repo: {
      * the batched period derivation to load every budget's monthly home at once
      * (instead of N per-budget queries).
      */
+    /**
+     * The user's periods of one type whose `periodStart` is in [start_lo_ms, start_hi_ms]
+     * (Read-Cost-Review-Round-3 #5: period derivation used to load ALL of a user's monthly periods
+     * on every cache miss). Index: userId + periodType + periodStart.
+     */
+    get_by_user_and_type_starting_between(_ctx: TraceContext, user_id: string, period_type: string, start_lo_ms: number, start_hi_ms: number): Promise<BudgetPeriodEntity[]>;
     get_by_user_and_type(_ctx: TraceContext, user_id: string, period_type: string): Promise<BudgetPeriodEntity[]>;
     /**
      * Gets the raw doc data + id for a set of period IDs (missing docs skipped).

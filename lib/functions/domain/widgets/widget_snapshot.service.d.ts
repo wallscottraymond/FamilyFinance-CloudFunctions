@@ -10,6 +10,10 @@
  *  - Period summary = mobile `mapResult` (bills/income = due-group occurrences, `occurrencesOf`)
  *                     → `computePeriodSummary` (Home Summary card; real budgets only, allocated;
  *                     active goals only).
+ *  - Budget lines   = one row per budget like the period page's budget rows (effective limit,
+ *                     spent, remaining), Everything-Else last.
+ *  - Budget txns    = the budget's derive_budget_transactions rows (Budget Detail list), newest
+ *                     first, counted/refund only (ignored rows don't count toward the budget).
  *  - Bills due soon = unpaid bill occurrences (same `occurrencesOf` rule) due by now+lookahead.
  *  - Labels         = mobile `shortPeriodLabel`.
  *
@@ -17,6 +21,8 @@
  */
 export declare const WIDGET_DATA_VERSION = 2;
 export interface WidgetBudgetInput {
+    budget_id?: string;
+    name?: string;
     is_everything_else: boolean;
     periods: Array<{
         period_id: string;
@@ -72,6 +78,33 @@ export interface WidgetSummary {
     goals: PlannedActual;
     isEmpty: boolean;
 }
+export interface WidgetBudgetLine {
+    id: string;
+    name: string;
+    isEverythingElse: boolean;
+    /** Effective limit (allocation + rollover; Everything-Else = derived leftover). */
+    budgeted: number;
+    spent: number;
+    available: number;
+    over: boolean;
+}
+/** Slice of a derive_budget_transactions row. */
+export interface WidgetBudgetTxnInput {
+    transaction_id: string;
+    date_ms: number;
+    name: string;
+    amount: number;
+    is_pending: boolean;
+    spend_status: string;
+}
+export interface WidgetBudgetTxn {
+    id: string;
+    name: string;
+    dateMs: number;
+    amount: number;
+    pending: boolean;
+    refund: boolean;
+}
 export interface WidgetBillItem {
     id: string;
     /** Source period the occurrence was placed in (→ the app's `{id}_{periodId}` bill detail). */
@@ -87,8 +120,18 @@ export type WidgetData = {
     asOfMs: number;
     cadence: string;
     periodLabel: string;
+    /** Period bounds → the widget draws the app's weekly segments + "today" marker. */
+    startMs: number;
+    endMs: number;
     leftToSpend: WidgetLeftToSpend;
     leftToSpendRealOnly: WidgetLeftToSpend;
+    budgets: WidgetBudgetLine[];
+} | {
+    v: number;
+    kind: "budget_txns";
+    asOfMs: number;
+    budgetId: string;
+    transactions: WidgetBudgetTxn[];
 } | {
     v: number;
     kind: "summary";
@@ -114,6 +157,10 @@ export declare function occurrences_of(g: WidgetOccurrenceGroupInput): Array<{
 }>;
 /** Home Budgets card totals (`computeBudgetSectionTotals`). PURE. */
 export declare function compute_left_to_spend(budgets: WidgetBudgetInput[], period_id: string, include_everything_else?: boolean): WidgetLeftToSpend;
+/** One row per budget (period page order, Everything-Else last). PURE. */
+export declare function compute_budget_lines(budgets: WidgetBudgetInput[], period_id: string): WidgetBudgetLine[];
+/** Most recent transactions that count toward a budget (newest first). PURE. */
+export declare function compute_recent_budget_transactions(rows: WidgetBudgetTxnInput[], limit?: number): WidgetBudgetTxn[];
 /** Home Summary card (`mapResult` → `computePeriodSummary`; four planned/actual pairs). PURE. */
 export declare function compute_period_summary(derived: WidgetDeriveInput, period_id: string, goals: WidgetGoalInput[]): WidgetSummary;
 /**

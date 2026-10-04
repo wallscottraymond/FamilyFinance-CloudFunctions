@@ -30,11 +30,16 @@ import {
   compute_left_to_spend,
   compute_period_summary,
   compute_bills_due_soon,
+  compute_budget_lines,
+  compute_recent_budget_transactions,
   short_period_label,
 } from "../../domain/widgets/widget_snapshot.service";
 import { hash_widget_token } from "../../domain/widgets/widget_token.service";
 import { derive_period_orchestrator } from "../periods/derive_period.orchestrator";
 import { derive_goals_view_orchestrator } from "../goals/derive_goals_view.orchestrator";
+import {
+  derive_budget_transactions_orchestrator,
+} from "../budgets/derive_budget_transactions.orchestrator";
 import { SourcePeriodEntity } from "../../repositories/source_period.repo";
 
 export type WidgetCadence = "monthly" | "weekly" | "bi_monthly";
@@ -42,7 +47,9 @@ export type WidgetCadence = "monthly" | "weekly" | "bi_monthly";
 export interface WidgetSnapshotInput {
   /** Raw bearer token from the widget (hashed here; never stored or logged). */
   token: string;
-  kind: "left" | "summary" | "bills";
+  kind: "left" | "summary" | "bills" | "budget_txns";
+  /** kind=budget_txns: the budget whose recent transactions to return. */
+  budget_id: string | null;
   cadence: WidgetCadence;
   lookahead_days: number;
   /** The data version the widget already has (skip work when unchanged). */
@@ -117,8 +124,27 @@ export async function widget_snapshot_orchestrator(
         asOfMs: input.now_ms,
         cadence,
         periodLabel: label,
+        startMs: current.start_date.toMillis(),
+        endMs: current.end_date.toMillis(),
         leftToSpend: compute_left_to_spend(derived.budgets, current.period_id, true),
         leftToSpendRealOnly: compute_left_to_spend(derived.budgets, current.period_id, false),
+        budgets: compute_budget_lines(derived.budgets, current.period_id),
+      };
+    } else if (input.kind === "budget_txns") {
+      // Same rows as the app's Budget Detail list for this period (cached per budget+window).
+      const rows = await derive_budget_transactions_orchestrator(
+        ctx,
+        user_id,
+        input.budget_id ?? "",
+        current.start_date.toMillis(),
+        current.end_date.toMillis()
+      );
+      data = {
+        v: WIDGET_DATA_VERSION,
+        kind: "budget_txns",
+        asOfMs: input.now_ms,
+        budgetId: input.budget_id ?? "",
+        transactions: compute_recent_budget_transactions(rows),
       };
     } else if (input.kind === "summary") {
       const [derived, goals] = await Promise.all([

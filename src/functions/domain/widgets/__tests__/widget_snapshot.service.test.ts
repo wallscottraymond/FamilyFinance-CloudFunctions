@@ -1,4 +1,6 @@
 import {
+  compute_budget_lines,
+  compute_recent_budget_transactions,
   compute_left_to_spend,
   compute_period_summary,
   compute_bills_due_soon,
@@ -141,5 +143,37 @@ describe("hash_widget_token", () => {
     expect(hash_widget_token("abc")).toMatch(/^[0-9a-f]{64}$/);
     expect(hash_widget_token("abc")).toBe(hash_widget_token("abc"));
     expect(hash_widget_token("abc")).not.toBe(hash_widget_token("abd"));
+  });
+});
+
+describe("compute_budget_lines", () => {
+  it("one row per budget (effective limit), Everything-Else last, order otherwise kept", () => {
+    const lines = compute_budget_lines(
+      [
+        { ...budget(true, 900, 900, 300), budget_id: "ee", name: "Everything Else" },
+        { ...budget(false, 600, 650, 700), budget_id: "food", name: "Food" },
+        { ...budget(false, 200, null, 50), budget_id: "fun", name: "Fun" },
+      ],
+      P
+    );
+    expect(lines.map((l) => l.id)).toEqual(["food", "fun", "ee"]);
+    expect(lines[0]).toEqual({
+      id: "food", name: "Food", isEverythingElse: false, budgeted: 650, spent: 700, available: -50, over: true,
+    });
+    expect(lines[1].budgeted).toBe(200);
+  });
+});
+
+describe("compute_recent_budget_transactions", () => {
+  it("newest first, ignored excluded, refund flagged, capped at 5", () => {
+    const row = (id: string, d: number, status = "counted") => ({
+      transaction_id: id, date_ms: d, name: id, amount: 10, is_pending: d === 7, spend_status: status,
+    });
+    const out = compute_recent_budget_transactions([
+      row("a", 1), row("b", 7), row("ign", 9, "ignored"), row("ref", 5, "refund"), row("c", 3), row("d", 2), row("e", 4),
+    ]);
+    expect(out.map((t) => t.id)).toEqual(["b", "ref", "e", "c", "d"]);
+    expect(out[0].pending).toBe(true);
+    expect(out[1].refund).toBe(true);
   });
 });

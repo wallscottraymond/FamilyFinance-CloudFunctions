@@ -49,10 +49,15 @@ export interface DerivationWindow {
     end_ms: number;
 }
 /**
- * IO half: read everything the given windows need, ONCE. For a single window this issues the same
- * queries the per-window path always did (the inflow-history lookup covers every active,
- * non-hidden inflow's stream ids — a superset that's re-filtered per window).
+ * `periodStart` bounds for the monthly budget periods derivation can use for [range_start,
+ * range_end] (Read-Cost-Review-Round-3 #5). `shape_period_derivation_deps` keeps only periods
+ * overlapping a window's span; a span is built from source periods overlapping the range, so it
+ * lies within [range_start − 31d, range_end + 31d], and a kept period (≤ 31d long) must START in
+ * [range_start − 62d, range_end + 31d]. Loading exactly that superset leaves the shaped result
+ * IDENTICAL to loading all of the user's monthly periods (incl. the "no stored period → synthesize"
+ * fallback, which already looks only at span-overlapping periods).
  */
+export declare function monthly_period_load_bounds(range_start_ms: number, range_end_ms: number): [number, number];
 export declare function load_period_derivation_raw(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, windows: DerivationWindow[]): Promise<PeriodDerivationRaw>;
 /**
  * Lookup/shaping half (NO IO): build ONE window's derivation inputs from a raw load, applying the

@@ -223,6 +223,24 @@ export declare function create_job_if_not_exists<TPayload extends {
     trace_id?: string;
 }): Promise<Job<TPayload> | null>;
 /**
+ * COALESCING enqueue (Read-Cost-Review-Round-3): create the job unless one with the same key is
+ * still PENDING — so a burst of N writes (e.g. a Plaid sync landing 78 transactions) collapses into
+ * ONE delayed run instead of N. Unlike `create_job_if_not_exists`, a job that is already
+ * PROCESSING does NOT absorb the new request: a write that lands mid-run gets its own (delayed)
+ * job, so no change is ever dropped. Only for jobs that recompute from CURRENT state when they run
+ * (not from the payload's snapshot) — then the pending job's payload covers every merged write.
+ *
+ * Delayed jobs are skipped by `on_job_created` and run on the queue sweep (`process_job_queue`,
+ * every 5 minutes), so a coalesced job runs within ~delay + ≤5 min.
+ */
+export declare function coalesce_job<TPayload extends {
+    deduplication_key: string;
+}>(job_type: string, payload: TPayload, options: {
+    delay_seconds: number;
+    trace_id?: string;
+    max_retries?: number;
+}): Promise<Job<TPayload> | null>;
+/**
  * Claims a job for processing using a transaction.
  * Prevents multiple workers from processing the same job.
  *
