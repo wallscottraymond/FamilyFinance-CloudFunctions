@@ -159,6 +159,30 @@ export const budget_period_repo = {
    * the batched period derivation to load every budget's monthly home at once
    * (instead of N per-budget queries).
    */
+  /**
+   * The user's periods of one type whose `periodStart` is in [start_lo_ms, start_hi_ms]
+   * (Read-Cost-Review-Round-3 #5: period derivation used to load ALL of a user's monthly periods
+   * on every cache miss). Index: userId + periodType + periodStart.
+   */
+  async get_by_user_and_type_starting_between(
+    _ctx: TraceContext,
+    user_id: string,
+    period_type: string,
+    start_lo_ms: number,
+    start_hi_ms: number
+  ): Promise<BudgetPeriodEntity[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("periodType", "==", period_type)
+      .where("periodStart", ">=", Timestamp.fromMillis(start_lo_ms))
+      .where("periodStart", "<=", Timestamp.fromMillis(start_hi_ms))
+      .get();
+    return snapshot.docs.map((doc) =>
+      map_to_entity(doc.data() as LegacyBudgetPeriodDoc)
+    );
+  },
+
   async get_by_user_and_type(
     _ctx: TraceContext,
     user_id: string,

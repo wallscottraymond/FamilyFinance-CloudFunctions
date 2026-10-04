@@ -43,6 +43,8 @@ const mockStore: {
   snapshots: Array<{ accountId: string; ts: Timestamp; currentBalance: number }>;
   cache: Map<string, any>;
   calls: Record<string, number>;
+  /** Emulate the periodStart-bounded budget-period query (true) or return all (old load). */
+  scope_budget_periods: boolean;
 } = {
   periods: [],
   budgets: [],
@@ -54,6 +56,7 @@ const mockStore: {
   snapshots: [],
   cache: new Map(),
   calls: {},
+  scope_budget_periods: true,
 };
 const mockCount = (k: string): void => {
   mockStore.calls[k] = (mockStore.calls[k] ?? 0) + 1;
@@ -101,6 +104,20 @@ jest.mock("../../../repositories/budget_period.repo", () => ({
     get_by_user_and_type: async () => {
       mockCount("budget_periods");
       return mockStore.budget_periods;
+    },
+    // Read-Cost-Review-Round-3 #5: emulates the periodStart-bounded query (Firestore semantics).
+    get_by_user_and_type_starting_between: async (
+      _c: unknown, _u: string, _t: string, lo: number, hi: number
+    ) => {
+      mockCount("budget_periods");
+      const kept = mockStore.budget_periods.filter(
+        (p: { start_date: Timestamp }) =>
+          !mockStore.scope_budget_periods ||
+          (p.start_date.toMillis() >= lo && p.start_date.toMillis() <= hi)
+      );
+      mockStore.calls.budget_periods_excluded =
+        (mockStore.calls.budget_periods_excluded ?? 0) + mockStore.budget_periods.length - kept.length;
+      return kept;
     },
   },
 }));
@@ -456,6 +473,32 @@ describe("derive_period_range parity", () => {
       const f = `${process.env.DUMP_DERIVE_PARITY}.${cadence}.json`;
       fs.writeFileSync(f, JSON.stringify({ singles, single_goals }, null, 1));
     }
+  });
+
+  // Read-Cost-Review-Round-3 #5: loading only periodStart-bounded budget periods must not change
+  // a single derived number vs loading all of the user's monthly periods (the old query).
+  it.each([
+    ["monthly", "monthly" as const, monthly_windows],
+    ["weekly", "weekly" as const, weekly_windows],
+  ])("%s: scoped budget-period load == loading all (every window)", async (_l, cadence, make) => {
+    const run = async (scoped: boolean) => {
+      mockStore.scope_budget_periods = scoped;
+      mockStore.cache.clear();
+      const out: unknown[] = [];
+      for (const w of make()) {
+        out.push(wire(await derive_period_orchestrator(ctx, UID, {
+          view_cadence: cadence, window_start_ms: w.start_ms, window_end_ms: w.end_ms,
+        })));
+      }
+      return out;
+    };
+    const all = await run(false);
+    mockStore.calls = {};
+    const scoped = await run(true);
+    mockStore.scope_budget_periods = true;
+    expect(scoped).toEqual(all);
+    // Meaningful: the scoped load really skipped periods outside the bounds.
+    expect(mockStore.calls.budget_periods_excluded).toBeGreaterThan(0);
   });
 
   it("the fixture exercises the edge cases (non-trivial output)", async () => {

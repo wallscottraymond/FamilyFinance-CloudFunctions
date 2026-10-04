@@ -153,6 +153,26 @@ function derivation_span(
  * queries the per-window path always did (the inflow-history lookup covers every active,
  * non-hidden inflow's stream ids — a superset that's re-filtered per window).
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** No source / budget period is longer than this. */
+const MAX_PERIOD_MS = 31 * DAY_MS;
+
+/**
+ * `periodStart` bounds for the monthly budget periods derivation can use for [range_start,
+ * range_end] (Read-Cost-Review-Round-3 #5). `shape_period_derivation_deps` keeps only periods
+ * overlapping a window's span; a span is built from source periods overlapping the range, so it
+ * lies within [range_start − 31d, range_end + 31d], and a kept period (≤ 31d long) must START in
+ * [range_start − 62d, range_end + 31d]. Loading exactly that superset leaves the shaped result
+ * IDENTICAL to loading all of the user's monthly periods (incl. the "no stored period → synthesize"
+ * fallback, which already looks only at span-overlapping periods).
+ */
+export function monthly_period_load_bounds(
+  range_start_ms: number,
+  range_end_ms: number
+): [number, number] {
+  return [range_start_ms - 2 * MAX_PERIOD_MS, range_end_ms + MAX_PERIOD_MS];
+}
+
 export async function load_period_derivation_raw(
   ctx: TraceContext,
   user_id: string,
@@ -172,7 +192,12 @@ export async function load_period_derivation_raw(
         Timestamp.fromMillis(range_end_ms)
       ),
       budget_repo.get_by_user_id(ctx, user_id),
-      budget_period_repo.get_by_user_and_type(ctx, user_id, "monthly"),
+      budget_period_repo.get_by_user_and_type_starting_between(
+        ctx,
+        user_id,
+        "monthly",
+        ...monthly_period_load_bounds(range_start_ms, range_end_ms)
+      ),
       outflow_repo.get_by_user_id(ctx, user_id),
       inflow_repo.get_by_user_id(ctx, user_id),
       goal_repo.get_by_user(ctx, user_id),
