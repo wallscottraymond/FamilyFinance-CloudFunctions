@@ -12,7 +12,9 @@
  * SAFETY:
  * - dev == prod. DRY-RUN by default (reads only). Pass --commit to write.
  * - Touches ONLY the `_audit` collection. No triggers listen to it.
- * - Throttled (400 ops per batch, then a pause); resumable (re-running skips finished work).
+ * - Uses BulkWriter (small independent writes, built-in throttling + retries). NOT batches:
+ *   old entries hold big nested before/after maps, and deleting 400 at once exceeded Firestore's
+ *   per-transaction size limit ("Transaction too big"). Resumable (re-running skips finished work).
  * - Emulator: set FIRESTORE_EMULATOR_HOST (and GCLOUD_PROJECT).
  *
  *   node scripts/cleanup-audit-trail.js            # dry-run
@@ -23,8 +25,7 @@ const path = require("path");
 
 const COMMIT = process.argv.includes("--commit");
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // keep in step with AUDIT_RETENTION_MS
-const BATCH = 400;
-const PAUSE_MS = 300;
+const PAGE = 500;
 
 if (!admin.apps.length) {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
@@ -38,7 +39,6 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 const { Timestamp, FieldValue } = admin.firestore;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function countWhere(q) {
   return (await q.count().get()).data().count;
@@ -64,14 +64,13 @@ async function run() {
   let deleted = 0;
   if (COMMIT) {
     for (;;) {
-      const snap = await col.where("timestamp", "<", cutoff).orderBy("timestamp").limit(BATCH).select().get();
+      const snap = await col.where("timestamp", "<", cutoff).orderBy("timestamp").limit(PAGE).select().get();
       if (snap.empty) break;
-      const batch = db.batch();
-      snap.docs.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
+      const writer = db.bulkWriter();
+      snap.docs.forEach((d) => writer.delete(d.ref));
+      await writer.close();
       deleted += snap.size;
-      if (deleted % 20000 < BATCH) process.stdout.write(`  ✓ deleted ${deleted}\r`);
-      await sleep(PAUSE_MS);
+      if (deleted % 20000 < PAGE) process.stdout.write(`  ✓ deleted ${deleted}\r`);
     }
     console.log(`\n  deleted ${deleted}`);
   }
@@ -81,11 +80,11 @@ async function run() {
   let fixed = 0;
   let last = null;
   for (;;) {
-    let q = col.where("timestamp", ">=", cutoff).orderBy("timestamp").limit(BATCH);
+    let q = col.where("timestamp", ">=", cutoff).orderBy("timestamp").limit(PAGE);
     if (last) q = q.startAfter(last);
     const snap = await q.get();
     if (snap.empty) break;
-    const batch = db.batch();
+    const writer = COMMIT ? db.bulkWriter() : null;
     let n = 0;
     snap.docs.forEach((d) => {
       scanned++;
@@ -96,14 +95,11 @@ async function run() {
       const ts = data.timestamp;
       const update = { before: FieldValue.delete(), after: FieldValue.delete() };
       if (needsExpiry) update.expire_at = Timestamp.fromMillis(ts.toMillis() + RETENTION_MS);
-      batch.update(d.ref, update);
+      if (writer) writer.update(d.ref, update);
       n++;
     });
     fixed += n;
-    if (COMMIT && n > 0) {
-      await batch.commit();
-      await sleep(PAUSE_MS);
-    }
+    if (writer) await writer.close();
     last = snap.docs[snap.docs.length - 1];
   }
   console.log(`  recent entries scanned: ${scanned}; ${COMMIT ? "slimmed/expiry set" : "to slim/set expiry"}: ${fixed}`);
