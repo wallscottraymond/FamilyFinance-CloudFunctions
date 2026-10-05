@@ -51,6 +51,9 @@ import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { format_transactions } from "../../transactions/utils/format_transactions";
 import { match_categories_to_transactions } from "../../transactions/utils/match_categories_to_transactions";
 import { match_transaction_splits_to_source_periods } from "../../transactions/utils/match_transaction_splits_to_source_periods";
+import {
+  merge_modified_into_existing,
+} from "../../domain/plaid/merge_modified_into_existing.service";
 
 /**
  * Orchestrates the transaction synchronization flow.
@@ -392,7 +395,9 @@ async function process_added_transactions(
         transactions_for_persistence,
         ctx.user_id,
         deps.plaid_item.plaid_item_id,
-        on_create
+        on_create,
+        // Existing doc → keep the user's edits, refresh only Plaid's fields.
+        merge_modified_into_existing
       );
       console.log(`[${ctx.trace_id}] Step 6b: Upserted transactions (created=${upsert_result.created}, updated=${upsert_result.updated})`);
 
@@ -451,12 +456,15 @@ async function process_modified_transactions(
         deps.user_context.group_ids
       );
 
-      // Upsert via new repository
+      // Upsert via new repository. Modified txns already exist → merge, never overwrite the
+      // user's splits/tags/review/categories (Plaid-Modified-Sync-Preserves-Edits).
       const upsert_result = await transaction_repo.upsert_from_plaid_sync(
         create_child_span(ctx),
         transactions_for_persistence,
         ctx.user_id,
-        deps.plaid_item.plaid_item_id
+        deps.plaid_item.plaid_item_id,
+        undefined,
+        merge_modified_into_existing
       );
 
       updated = upsert_result.updated;

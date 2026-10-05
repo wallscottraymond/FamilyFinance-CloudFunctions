@@ -284,7 +284,14 @@ export const transaction_repo = {
     transactions: TransactionForPersistence[],
     user_id: string,
     plaid_item_id: string,
-    on_create?: (txn: TransactionForPersistence) => TransactionForPersistence
+    on_create?: (txn: TransactionForPersistence) => TransactionForPersistence,
+    // UPDATE-branch hook (Plaid-Modified-Sync-Preserves-Edits): the caller's PURE merge of
+    // the fresh Plaid doc into the doc we already hold (keeps the user's splits / tags /
+    // review / categories). The repo holds no merge logic; it just applies it on update.
+    on_update?: (
+      existing: Record<string, unknown>,
+      fresh: Record<string, unknown>
+    ) => Record<string, unknown>
   ): Promise<{
     created: number;
     updated: number;
@@ -324,12 +331,13 @@ export const transaction_repo = {
       );
       const existing_by_txn_id = new Map<
         string,
-        { doc_id: string; created_at: Timestamp }
+        { doc_id: string; created_at: Timestamp; doc: LegacyTransactionDoc }
       >();
       for (const d of existing_docs) {
         existing_by_txn_id.set(d.transactionId, {
           doc_id: d.id,
           created_at: d.createdAt,
+          doc: d, // full doc, already read by the lookup (the merge needs no extra reads)
         });
       }
 
@@ -338,11 +346,16 @@ export const transaction_repo = {
 
         if (existing) {
           // UPDATE: Update the existing document
-          const doc_data = map_to_doc({ ...txn, id: existing.doc_id }, now);
-          doc_data.createdAt = existing.created_at; // Preserve original creation time
-          doc_data.updatedAt = now;
+          const fresh_doc = map_to_doc({ ...txn, id: existing.doc_id }, now);
+          fresh_doc.createdAt = existing.created_at; // Preserve original creation time
+          fresh_doc.updatedAt = now;
+          const { id: _existing_id, ...existing_doc } =
+            existing.doc as unknown as Record<string, unknown>;
+          const doc_data = on_update
+            ? on_update(existing_doc, fresh_doc as unknown as Record<string, unknown>)
+            : (fresh_doc as unknown as Record<string, unknown>);
 
-          batch.update(doc_ref(existing.doc_id), doc_data as unknown as Record<string, unknown>);
+          batch.update(doc_ref(existing.doc_id), doc_data);
 
           results.push({
             plaid_transaction_id: txn.transaction_id,

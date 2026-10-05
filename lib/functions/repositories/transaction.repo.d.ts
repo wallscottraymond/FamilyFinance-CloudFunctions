@@ -113,7 +113,7 @@ export declare const transaction_repo: {
      * @param plaid_item_id - Plaid item ID (for scoping)
      * @returns Upsert results with created/updated counts
      */
-    upsert_from_plaid_sync(ctx: TraceContext, transactions: TransactionForPersistence[], user_id: string, plaid_item_id: string, on_create?: (txn: TransactionForPersistence) => TransactionForPersistence): Promise<{
+    upsert_from_plaid_sync(ctx: TraceContext, transactions: TransactionForPersistence[], user_id: string, plaid_item_id: string, on_create?: (txn: TransactionForPersistence) => TransactionForPersistence, on_update?: (existing: Record<string, unknown>, fresh: Record<string, unknown>) => Record<string, unknown>): Promise<{
         created: number;
         updated: number;
         results: Array<{
