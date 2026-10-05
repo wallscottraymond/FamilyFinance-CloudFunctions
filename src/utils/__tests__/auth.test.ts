@@ -581,9 +581,12 @@ describe('Auth Utilities', () => {
       expect(validateCorsOrigin('https://family-finance-app.firebaseapp.com')).toBe(true);
     });
 
-    it('should allow any localhost port', () => {
-      expect(validateCorsOrigin('http://localhost:5173')).toBe(true);
-      expect(validateCorsOrigin('http://localhost:4200')).toBe(true);
+    it('should allow only the listed localhost ports', () => {
+      // Wildcard localhost was removed on purpose (any local app could call in).
+      expect(validateCorsOrigin('http://localhost:3000')).toBe(true);
+      expect(validateCorsOrigin('http://localhost:8081')).toBe(true);
+      expect(validateCorsOrigin('http://localhost:5173')).toBe(false);
+      expect(validateCorsOrigin('http://localhost:4200')).toBe(false);
     });
 
     it('should reject non-allowed origins', () => {

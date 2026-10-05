@@ -96,7 +96,7 @@ describe('calculateAllOccurrencesInPeriod (Inflows)', () => {
       expect(dueDate <= period.endDate!.toDate()).toBe(true);
     });
 
-    it('should calculate 2 occurrences for weekly income in bi-monthly period', () => {
+    it('should calculate 3 occurrences for weekly income in a Jan 1–15 period (1st, 8th, 15th inclusive)', () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.WEEKLY,
         'Weekly Tutoring',
@@ -113,9 +113,9 @@ describe('calculateAllOccurrencesInPeriod (Inflows)', () => {
 
       const result = calculateAllOccurrencesInPeriod(inflow, period);
 
-      expect(result.numberOfOccurrences).toBe(2);
-      expect(result.occurrenceDueDates).toHaveLength(2);
-      expect(result.totalExpectedAmount).toBe(400.00); // 2 x 200
+      expect(result.numberOfOccurrences).toBe(3);
+      expect(result.occurrenceDueDates).toHaveLength(3);
+      expect(result.totalExpectedAmount).toBe(600.00); // 3 x 200
 
       // Verify all dates are within period
       result.occurrenceDueDates.forEach((date: Timestamp) => {
