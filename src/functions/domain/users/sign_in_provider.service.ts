@@ -4,9 +4,16 @@
  * @module domain/users/sign_in_provider
  */
 
-/** True when the caller signed in anonymously ("Try it without an account"). */
+/**
+ * True when the caller is STILL anonymous ("Try it without an account"). An anonymous account
+ * secured later (Apple / email linked to the same uid) can keep `sign_in_provider: "anonymous"`
+ * on its session token, so a linked identity in `firebase.identities` means it's secured.
+ */
 export function is_anonymous_sign_in(
-  token: { firebase?: { sign_in_provider?: string } } | undefined
+  token:
+    | { firebase?: { sign_in_provider?: string; identities?: Record<string, unknown> } }
+    | undefined
 ): boolean {
-  return token?.firebase?.sign_in_provider === "anonymous";
+  if (token?.firebase?.sign_in_provider !== "anonymous") return false;
+  return Object.keys(token.firebase.identities ?? {}).length === 0;
 }
