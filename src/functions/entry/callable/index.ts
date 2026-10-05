@@ -54,6 +54,7 @@ export { derive_period_range } from "./derive_period_range.entry";
 export { create_link_token } from "./create_link_token.entry";
 export { create_update_link_token } from "./create_update_link_token.entry";
 export { complete_relink } from "./complete_relink.entry";
+export { create_manual_outflow } from "./create_manual_outflow.entry";
 export { link_plaid_account } from "./link_plaid_account.entry";
 export { refresh_plaid_data } from "./refresh_plaid_data.entry";
 export { sync_transactions } from "./sync_transactions.entry";

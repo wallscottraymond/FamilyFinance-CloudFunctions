@@ -375,6 +375,12 @@ export interface RecurringScheduleForGeneration {
   first_date: Timestamp;
   last_date: Timestamp;
   predicted_next_date: Timestamp | null;
+  /**
+   * Where the stream came from. A user-created ("manual") bill or income didn't
+   * exist before its first date, so it gets no occurrences before it. Plaid
+   * streams keep backward placement (their history is real).
+   */
+  source?: string;
 }
 
 /** One generated (expected) occurrence: when it's due + how much. */
@@ -426,10 +432,19 @@ export function generate_expected_occurrences_in_window(
   const cycle_info = calculate_payment_cycle(outflow);
   const result = calculate_occurrences_in_period(outflow, window, cycle_info);
 
-  return result.occurrence_due_dates.map((ts) => ({
-    due_date_ms: ts.toMillis(),
-    amount_due: cycle_info.bill_amount,
-  }));
+  // A manual stream starts on its first date — nothing is expected before it.
+  const first = schedule.first_date.toDate();
+  const not_before_ms =
+    schedule.source === "manual"
+      ? Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate())
+      : Number.NEGATIVE_INFINITY;
+
+  return result.occurrence_due_dates
+    .filter((ts) => ts.toMillis() >= not_before_ms)
+    .map((ts) => ({
+      due_date_ms: ts.toMillis(),
+      amount_due: cycle_info.bill_amount,
+    }));
 }
 
 /**

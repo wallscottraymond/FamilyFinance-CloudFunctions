@@ -410,6 +410,7 @@ export function shape_period_derivation_deps(
         first_date: o.first_date,
         last_date: o.last_date,
         predicted_next_date: o.predicted_next_date,
+        source: o.source,
       },
       payments: [],
       // User remove/pause spans — filtered per period on read (not a blanket skip,
@@ -441,6 +442,7 @@ export function shape_period_derivation_deps(
         first_date: i.first_date,
         last_date: i.last_date,
         predicted_next_date: i.predicted_next_date,
+        source: i.source,
       },
       payments: [],
       // When set, the override wins over per-slot auto-estimates in derive_period.
