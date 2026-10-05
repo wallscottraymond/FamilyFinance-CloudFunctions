@@ -21,6 +21,7 @@ import {
   setUserClaims
 } from "../../utils/auth";
 import { createEverythingElseBudget } from "../budgets/utils/createEverythingElseBudget";
+import { generated_display_name } from "../domain/users/generated_name.service";
 
 /**
  * Create user profile (triggered on user registration)
@@ -125,7 +126,10 @@ export const onUserCreate = functions.region("us-central1").runWith({
 
     const userData: Omit<User, "id" | "createdAt" | "updatedAt"> = {
       email: userRecord.email || "",
-      displayName: userRecord.displayName || userRecord.email?.split("@")[0] || "User",
+      // No name and no email (Sign in with Apple requests neither; anonymous accounts have
+      // none) → a generated "Adjective Animal" name. Email users are unchanged.
+      displayName:
+        userRecord.displayName || userRecord.email?.split("@")[0] || generated_display_name(userRecord.uid),
       photoURL: userRecord.photoURL,
       role: userRole, // ADMIN in dev, EDITOR in production
       preferences: defaultPreferences,
@@ -373,7 +377,8 @@ export const onUserCreate = functions.region("us-central1").runWith({
     try {
       const minimalUserData = {
         email: userRecord.email || "",
-        displayName: userRecord.displayName || "User",
+        displayName:
+          userRecord.displayName || userRecord.email?.split("@")[0] || generated_display_name(userRecord.uid),
         role: UserRole.VIEWER,
         isActive: true,
         preferences: {

@@ -141,7 +141,9 @@ service cloud.firestore {
     function isValidUserData() {
       let data = request.resource.data;
       return data.keys().hasAll(['email', 'displayName', 'role', 'isActive', 'preferences']) &&
-             data.email is string && data.email.size() > 0 &&
+             // email may be EMPTY: Sign in with Apple (no scopes) and anonymous accounts share none
+             // ([[Sign-In-With-Apple]]); requiring size() > 0 rejected every profile update for them.
+             data.email is string &&
              data.displayName is string && data.displayName.size() > 0 &&
              data.role is string && data.role in ['admin', 'parent', 'child', 'viewer'] &&
              data.isActive is bool &&

@@ -24,6 +24,7 @@ import {
   FunctionResponse,
   CreateLinkTokenResponse,
 } from "../../types";
+import { is_anonymous_sign_in } from "../../domain/users/sign_in_provider.service";
 
 // Plaid secrets - must be declared at entry point for runtime access
 const PLAID_CLIENT_ID = defineSecret("PLAID_CLIENT_ID");
@@ -86,6 +87,16 @@ export const create_link_token = onCall(
       throw new HttpsError(
         "unauthenticated",
         "You must be logged in to create a link token"
+      );
+    }
+
+    // Anonymous ("Try it without an account") users must secure their account (Apple or email)
+    // BEFORE linking a bank — an unrecoverable account must never own a live Plaid item
+    // ([[Sign-In-With-Apple]]). The app gates this first; this is the server-side backstop.
+    if (is_anonymous_sign_in(request.auth.token)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Secure your account (Sign in with Apple or email) before linking a bank."
       );
     }
 
