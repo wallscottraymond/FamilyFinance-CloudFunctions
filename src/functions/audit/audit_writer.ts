@@ -25,7 +25,9 @@ import { fire_and_forget } from "../observability";
  */
 const AUDIT_COLLECTION = "_audit";
 /** Audit-trail retention (TTL). Bounds the collection; was previously never deleted. */
-const AUDIT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+// 30 days (Storage-Cost-Audit, 2026-10-05). The ONE definition of audit retention: the
+// `_audit.expire_at` TTL policy deletes at expire_at with no extra offset.
+export const AUDIT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Computes the list of changed fields between before and after states.
@@ -53,16 +55,17 @@ function compute_changed_fields(
 }
 
 /**
- * Creates a complete audit entry from input.
+ * Builds the audit entry to store. SLIM by design (Storage-Cost-Audit): the full before/after
+ * documents are used only to compute the changed field names + hashes, never stored. Nothing
+ * reads stored snapshots, and they made the audit trail ~94% of all stored documents.
  */
-function create_audit_entry(input: AuditEntryInput): AuditEntry {
+export function create_audit_entry(input: AuditEntryInput, now_ms: number = Date.now()): AuditEntry {
   const before_hash = input.before ? compute_hash(input.before) : "null";
   const after_hash = input.after ? compute_hash(input.after) : "null";
   const changed_fields = input.action === "update"
     ? compute_changed_fields(input.before, input.after)
     : undefined;
 
-  const now_ms = Date.now();
   return {
     audit_id: uuid(),
     timestamp: Timestamp.fromMillis(now_ms),
@@ -71,8 +74,6 @@ function create_audit_entry(input: AuditEntryInput): AuditEntry {
     action: input.action,
     entity_type: input.entity_type,
     entity_id: input.entity_id,
-    before: input.before,
-    after: input.after,
     trace_id: input.trace_id,
     before_hash,
     after_hash,

@@ -42,8 +42,8 @@ export interface AuditEntry {
   /** Timestamp of the audited action */
   timestamp: Timestamp;
 
-  /** TTL field: Firestore auto-deletes the entry once past (= timestamp + retention). Bounds
-   *  the otherwise unbounded audit trail without a cleanup cron. */
+  /** TTL field: Firestore auto-deletes the entry once past (= timestamp + AUDIT_RETENTION_MS,
+   *  30 days). The `_audit.expire_at` TTL policy must have NO extra offset. */
   expire_at: Timestamp;
 
   /** User who performed the action */
@@ -58,11 +58,11 @@ export interface AuditEntry {
   /** ID of the entity affected */
   entity_id: string;
 
-  /** State of entity before the action (null for create) */
-  before: Record<string, unknown> | null;
-
-  /** State of entity after the action (null for delete) */
-  after: Record<string, unknown> | null;
+  /** Legacy: entries written before 2026-10-05 stored the whole document before/after the
+   *  change. New entries don't (Storage-Cost-Audit: never read, ~94% of stored docs); the
+   *  changed field names + hashes below are kept instead. */
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
 
   /** Trace ID for correlation with request logs */
   trace_id: string;

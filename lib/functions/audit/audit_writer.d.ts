@@ -8,6 +8,14 @@
  * @module audit/writer
  */
 import { AuditEntry, AuditEntryInput, AuditQueryOptions, AuditQueryResult } from "./audit.types";
+/** Audit-trail retention (TTL). Bounds the collection; was previously never deleted. */
+export declare const AUDIT_RETENTION_MS: number;
+/**
+ * Builds the audit entry to store. SLIM by design (Storage-Cost-Audit): the full before/after
+ * documents are used only to compute the changed field names + hashes, never stored. Nothing
+ * reads stored snapshots, and they made the audit trail ~94% of all stored documents.
+ */
+export declare function create_audit_entry(input: AuditEntryInput, now_ms?: number): AuditEntry;
 /**
  * Records an audit entry synchronously.
  * Use this when you need to ensure the audit is written before proceeding.
