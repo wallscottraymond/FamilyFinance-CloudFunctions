@@ -191,31 +191,6 @@ function subtract_frequency_interval(date: Date, frequency: string): Date {
   return result;
 }
 
-/**
- * Adjust date for month-end edge cases.
- */
-function adjust_for_month_end(
-  current_date: Date,
-  reference_date: Date,
-  frequency: string
-): Date {
-  const freq = normalize_frequency(frequency);
-  if (freq !== "MONTHLY" && freq !== "QUARTERLY" && freq !== "ANNUALLY") {
-    return current_date;
-  }
-
-  const original_day = reference_date.getUTCDate();
-  const current_month = current_date.getUTCMonth();
-  const current_year = current_date.getUTCFullYear();
-  const last_day_of_month = new Date(Date.UTC(current_year, current_month + 1, 0)).getUTCDate();
-
-  if (original_day > last_day_of_month) {
-    return new Date(Date.UTC(current_year, current_month, last_day_of_month));
-  }
-
-  return current_date;
-}
-
 /** Last day-of-month for a UTC year/month0. PURE. */
 function utc_last_day_of_month(year: number, month0: number): number {
   return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
@@ -255,6 +230,123 @@ function semimonthly_due_dates(reference: Date, start: Date, end: Date): Date[] 
     }
   }
   return out;
+}
+
+/**
+ * Months between occurrences for calendar-month frequencies, or null for
+ * day-based ones (weekly/bi-weekly/semi-monthly). PURE.
+ */
+function month_step(frequency: string): number | null {
+  switch (normalize_frequency(frequency)) {
+    case "MONTHLY":
+      return 1;
+    case "QUARTERLY":
+      return 3;
+    case "ANNUALLY":
+      return 12;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Due dates within [start, end] for a calendar-month frequency: every
+ * `step_months` from the anchor's month, always on the anchor's day-of-month,
+ * clamped to month-end (a "31st" bill is due Feb 28, Apr 30, then Mar 31 again).
+ *
+ * Replaces iterative `setUTCMonth(+1)` stepping, which overflowed short months
+ * (Jan 31 → Mar 3) and then kept the wrong day: a 31st bill showed due on the 1st,
+ * a 30th bill on the 2nd. Computing each occurrence from the anchor can't drift. PURE.
+ */
+function month_step_due_dates(
+  reference: Date,
+  step_months: number,
+  start: Date,
+  end: Date
+): Date[] {
+  const anchor_idx = reference.getUTCFullYear() * 12 + reference.getUTCMonth();
+  const anchor_day = reference.getUTCDate();
+  const out: Date[] = [];
+  // Pad by one step either side so boundary occurrences aren't missed; filter to the window.
+  const start_idx = start.getUTCFullYear() * 12 + start.getUTCMonth() - step_months;
+  const end_idx = end.getUTCFullYear() * 12 + end.getUTCMonth() + step_months;
+  for (let idx = start_idx; idx <= end_idx; idx++) {
+    if ((((idx - anchor_idx) % step_months) + step_months) % step_months !== 0) continue;
+    const dt = utc_day(Math.floor(idx / 12), ((idx % 12) + 12) % 12, anchor_day);
+    if (dt >= start && dt <= end) out.push(dt);
+  }
+  return out;
+}
+
+/**
+ * Occurrence due dates of a recurring stream within [start, end], plus the first
+ * one after the window. Shared by bills and income (live derive AND the stored
+ * period generators) so a date fix lands everywhere at once.
+ *
+ * - semi-monthly: two fixed days-of-month from the anchor
+ * - monthly / quarterly / yearly: the anchor's day-of-month, clamped to month-end
+ * - weekly / bi-weekly (and unknown, stepped yearly): fixed-day stepping
+ *
+ * PURE FUNCTION - no IO.
+ *
+ * @param reference_date - The anchor (predicted next / last / first date)
+ * @param frequency - Stream frequency (any spelling normalize_frequency accepts)
+ * @param period_start - Window start
+ * @param period_end - Window end
+ * @returns Due dates in the window and the next one after it
+ */
+export function occurrence_dates_in_window(
+  reference_date: Date,
+  frequency: string,
+  period_start: Date,
+  period_end: Date
+): { dates: Date[]; next: Date } {
+  const dates: Date[] = [];
+
+  if (normalize_frequency(frequency) === "SEMIMONTHLY") {
+    // Semi-monthly is day-of-month based (two fixed days/month), NOT +15-day stepping.
+    dates.push(...semimonthly_due_dates(reference_date, period_start, period_end));
+    // Next expected = the first semi-monthly day after the period (scan ~45 days out).
+    const after = semimonthly_due_dates(
+      reference_date,
+      new Date(period_end.getTime() + 1),
+      new Date(period_end.getTime() + 45 * 24 * 60 * 60 * 1000)
+    );
+    return { dates, next: after[0] ?? new Date(period_end.getTime() + 1) };
+  }
+
+  const step = month_step(frequency);
+  if (step !== null) {
+    // Calendar-month cadences: computed from the anchor's day-of-month (no drift).
+    dates.push(...month_step_due_dates(reference_date, step, period_start, period_end));
+    // Next expected = the first occurrence after the period (scan one step + a month out).
+    const after = month_step_due_dates(
+      reference_date,
+      step,
+      new Date(period_end.getTime() + 1),
+      new Date(Date.UTC(period_end.getUTCFullYear(), period_end.getUTCMonth() + step + 1, 1))
+    );
+    return { dates, next: after[0] ?? new Date(period_end.getTime() + 1) };
+  }
+
+  // Day-based cadences (weekly, bi-weekly; unknown steps a year).
+  let current_date = new Date(reference_date);
+
+  // Rewind to at/before the period start, THEN advance to the first occurrence >=
+  // start. The reference (predicted_next_date) often lands inside or after the
+  // period; starting collection forward from it would skip occurrences that fall
+  // EARLIER in the same period.
+  while (current_date > period_start) {
+    current_date = subtract_frequency_interval(current_date, frequency);
+  }
+  while (current_date < period_start) {
+    current_date = add_frequency_interval(current_date, frequency);
+  }
+  while (current_date <= period_end) {
+    dates.push(new Date(current_date));
+    current_date = add_frequency_interval(current_date, frequency);
+  }
+  return { dates, next: current_date };
 }
 
 /**
@@ -304,49 +396,9 @@ function calculate_occurrences_in_period(
   }
 
   // Find all occurrences that fall within the period.
-  const occurrence_due_dates: Timestamp[] = [];
-  let next_expected_date: Timestamp;
-
-  if (normalize_frequency(frequency) === "SEMIMONTHLY") {
-    // Semi-monthly is day-of-month based (two fixed days/month), NOT +15-day stepping.
-    for (const dt of semimonthly_due_dates(reference_date, period_start, period_end)) {
-      occurrence_due_dates.push(Timestamp.fromDate(dt));
-    }
-    // Next expected = the first semi-monthly day after the period (scan ~45 days out).
-    const after = semimonthly_due_dates(
-      reference_date,
-      new Date(period_end.getTime() + 1),
-      new Date(period_end.getTime() + 45 * 24 * 60 * 60 * 1000)
-    );
-    next_expected_date = Timestamp.fromDate(after[0] ?? new Date(period_end.getTime() + 1));
-  } else {
-    let current_date = new Date(reference_date);
-
-    // Rewind to at/before the period start, THEN advance to the first occurrence >=
-    // start. The reference (predicted_next_date) often lands inside or after the
-    // period; starting collection forward from it would skip occurrences that fall
-    // EARLIER in the same period.
-    while (current_date > period_start) {
-      current_date = subtract_frequency_interval(current_date, frequency);
-    }
-    while (current_date < period_start) {
-      current_date = add_frequency_interval(current_date, frequency);
-    }
-
-    // Collect all occurrences within the period.
-    while (current_date <= period_end) {
-      if (current_date >= period_start) {
-        const adjusted = adjust_for_month_end(current_date, reference_date, frequency);
-        occurrence_due_dates.push(Timestamp.fromDate(adjusted));
-      }
-      current_date = add_frequency_interval(current_date, frequency);
-    }
-
-    // Next expected date is after the period.
-    next_expected_date = Timestamp.fromDate(
-      adjust_for_month_end(current_date, reference_date, frequency)
-    );
-  }
+  const window = occurrence_dates_in_window(reference_date, frequency, period_start, period_end);
+  const occurrence_due_dates = window.dates.map((d) => Timestamp.fromDate(d));
+  const next_expected_date = Timestamp.fromDate(window.next);
 
   const number_of_occurrences = occurrence_due_dates.length;
   const total_expected_amount = number_of_occurrences * amount_per_occurrence;

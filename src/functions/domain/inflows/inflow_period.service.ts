@@ -11,6 +11,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { DomainResult, success_many, validation_failed } from "../../types";
 import { InflowPeriodForPersistence } from "../../repositories/inflow_period.repo";
 import { normalize_frequency } from "../recurring/frequency";
+import { occurrence_dates_in_window } from "../outflows/outflow_period.service";
 
 /**
  * Inflow data needed for period generation (snake_case).
@@ -110,99 +111,6 @@ function get_period_days(start: Date, end: Date): number {
 }
 
 /**
- * Add frequency interval to a date.
- */
-function add_frequency_interval(date: Date, frequency: string): Date {
-  // UTC date-math: anchors are UTC-midnight, so stepping in UTC keeps the day stable
-  // regardless of runtime timezone (mirrors outflow_period.service).
-  const result = new Date(date);
-
-  switch (normalize_frequency(frequency)) {
-    case "WEEKLY":
-      result.setUTCDate(result.getUTCDate() + 7);
-      break;
-    case "BIWEEKLY":
-      result.setUTCDate(result.getUTCDate() + 14);
-      break;
-    case "SEMIMONTHLY":
-      result.setUTCDate(result.getUTCDate() + 15);
-      break;
-    case "MONTHLY":
-      result.setUTCMonth(result.getUTCMonth() + 1);
-      break;
-    case "QUARTERLY":
-      result.setUTCMonth(result.getUTCMonth() + 3);
-      break;
-    case "ANNUALLY":
-      result.setUTCFullYear(result.getUTCFullYear() + 1);
-      break;
-    default:
-      // UNKNOWN — step by a year so an unrecognized cadence never fans out monthly.
-      result.setUTCFullYear(result.getUTCFullYear() + 1);
-  }
-
-  return result;
-}
-
-/**
- * Subtract frequency interval from a date.
- */
-function subtract_frequency_interval(date: Date, frequency: string): Date {
-  const result = new Date(date); // UTC date-math (see add_frequency_interval).
-
-  switch (normalize_frequency(frequency)) {
-    case "WEEKLY":
-      result.setUTCDate(result.getUTCDate() - 7);
-      break;
-    case "BIWEEKLY":
-      result.setUTCDate(result.getUTCDate() - 14);
-      break;
-    case "SEMIMONTHLY":
-      result.setUTCDate(result.getUTCDate() - 15);
-      break;
-    case "MONTHLY":
-      result.setUTCMonth(result.getUTCMonth() - 1);
-      break;
-    case "QUARTERLY":
-      result.setUTCMonth(result.getUTCMonth() - 3);
-      break;
-    case "ANNUALLY":
-      result.setUTCFullYear(result.getUTCFullYear() - 1);
-      break;
-    default:
-      // UNKNOWN — mirror the forward step (a year), never monthly.
-      result.setUTCFullYear(result.getUTCFullYear() - 1);
-  }
-
-  return result;
-}
-
-/**
- * Adjust date for month-end edge cases.
- */
-function adjust_for_month_end(
-  current_date: Date,
-  reference_date: Date,
-  frequency: string
-): Date {
-  const freq = normalize_frequency(frequency);
-  if (freq !== "MONTHLY" && freq !== "QUARTERLY" && freq !== "ANNUALLY") {
-    return current_date;
-  }
-
-  const original_day = reference_date.getUTCDate();
-  const current_month = current_date.getUTCMonth();
-  const current_year = current_date.getUTCFullYear();
-  const last_day_of_month = new Date(Date.UTC(current_year, current_month + 1, 0)).getUTCDate();
-
-  if (original_day > last_day_of_month) {
-    return new Date(Date.UTC(current_year, current_month, last_day_of_month));
-  }
-
-  return current_date;
-}
-
-/**
  * Calculate payment cycle information from inflow data.
  * PURE function - no IO.
  */
@@ -248,33 +156,10 @@ function calculate_occurrences_in_period(
     reference_date = inflow.first_date.toDate();
   }
 
-  // Find all occurrences that fall within the period
-  const occurrence_due_dates: Timestamp[] = [];
-  let current_date = new Date(reference_date);
-
-  // If reference date is after period end, work backwards
-  while (current_date > period_end) {
-    current_date = subtract_frequency_interval(current_date, frequency);
-  }
-
-  // If reference date is before period start, work forwards
-  while (current_date < period_start) {
-    current_date = add_frequency_interval(current_date, frequency);
-  }
-
-  // Collect all occurrences within the period
-  while (current_date <= period_end) {
-    if (current_date >= period_start) {
-      const adjusted = adjust_for_month_end(current_date, reference_date, frequency);
-      occurrence_due_dates.push(Timestamp.fromDate(adjusted));
-    }
-    current_date = add_frequency_interval(current_date, frequency);
-  }
-
-  // Next expected date is after the period
-  const next_expected_date = Timestamp.fromDate(
-    adjust_for_month_end(current_date, reference_date, frequency)
-  );
+  // Find all occurrences that fall within the period (shared with bills + live derive).
+  const window = occurrence_dates_in_window(reference_date, frequency, period_start, period_end);
+  const occurrence_due_dates = window.dates.map((d) => Timestamp.fromDate(d));
+  const next_expected_date = Timestamp.fromDate(window.next);
 
   const number_of_occurrences = occurrence_due_dates.length;
   const total_expected_amount = number_of_occurrences * amount_per_occurrence;

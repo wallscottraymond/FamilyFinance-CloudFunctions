@@ -17,7 +17,8 @@
  */
 
 import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency, OutflowOccurrence } from '../../../../types';
+import { RecurringOutflow, SourcePeriod, OutflowOccurrence } from '../../../../types';
+import { occurrence_dates_in_window } from '../../../domain/outflows/outflow_period.service';
 
 /**
  * Result of calculating all occurrences in a period
@@ -36,84 +37,6 @@ export interface PeriodOccurrences {
   occurrenceDueDates: Timestamp[];
   /** @deprecated Use occurrences array instead */
   occurrenceDrawDates: Timestamp[];
-}
-
-/**
- * Add frequency interval to a date (reused from predictFutureBillDueDate)
- *
- * @param date - Starting date
- * @param frequency - Recurring frequency
- * @returns New date with interval added
- */
-function addFrequencyInterval(date: Date, frequency: PlaidRecurringFrequency): Date {
-  const newDate = new Date(date);
-
-  switch (frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      newDate.setDate(newDate.getDate() + 7);
-      break;
-
-    case PlaidRecurringFrequency.BIWEEKLY:
-      newDate.setDate(newDate.getDate() + 14);
-      break;
-
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      newDate.setDate(newDate.getDate() + 15);
-      break;
-
-    case PlaidRecurringFrequency.MONTHLY:
-      newDate.setMonth(newDate.getMonth() + 1);
-      break;
-
-    case PlaidRecurringFrequency.ANNUALLY:
-      newDate.setFullYear(newDate.getFullYear() + 1);
-      break;
-
-    default:
-      console.warn(`[addFrequencyInterval] Unknown frequency: ${frequency}, defaulting to monthly`);
-      newDate.setMonth(newDate.getMonth() + 1);
-  }
-
-  return newDate;
-}
-
-/**
- * Subtract frequency interval from a date (for rewinding)
- *
- * @param date - Starting date
- * @param frequency - Recurring frequency
- * @returns New date with interval subtracted
- */
-function subtractFrequencyInterval(date: Date, frequency: PlaidRecurringFrequency): Date {
-  const newDate = new Date(date);
-
-  switch (frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      newDate.setDate(newDate.getDate() - 7);
-      break;
-
-    case PlaidRecurringFrequency.BIWEEKLY:
-      newDate.setDate(newDate.getDate() - 14);
-      break;
-
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      newDate.setDate(newDate.getDate() - 15);
-      break;
-
-    case PlaidRecurringFrequency.MONTHLY:
-      newDate.setMonth(newDate.getMonth() - 1);
-      break;
-
-    case PlaidRecurringFrequency.ANNUALLY:
-      newDate.setFullYear(newDate.getFullYear() - 1);
-      break;
-
-    default:
-      console.warn(`[subtractFrequencyInterval] Unknown frequency: ${frequency}, defaulting to monthly`);
-      newDate.setMonth(newDate.getMonth() - 1);
-  }
-
-  return newDate;
 }
 
 /**
@@ -194,36 +117,24 @@ export function calculateAllOccurrencesInPeriod(
 
   // Step 2: Rewind to find the first occurrence at or before period start
   // This ensures we don't miss any occurrences that start before the period begins
-  let firstOccurrence = new Date(referenceDate);
-  while (firstOccurrence > periodStart) {
-    firstOccurrence = subtractFrequencyInterval(firstOccurrence, outflow.frequency);
-  }
+  // Due dates come from the shared domain calculation (same as live derive), so a
+  // 29th–31st bill lands on its real day here too (setMonth stepping overflowed).
+  const { dates } = occurrence_dates_in_window(
+    referenceDate,
+    outflow.frequency,
+    periodStart,
+    periodEnd
+  );
 
-  // If we rewound too far (before period start), advance one interval to get first occurrence IN period
-  if (firstOccurrence < periodStart) {
-    firstOccurrence = addFrequencyInterval(firstOccurrence, outflow.frequency);
-  }
-
-  console.log(`[calculateAllOccurrencesInPeriod] First occurrence in period: ${firstOccurrence.toISOString().split('T')[0]}`);
-
-  // Step 3: Iterate forward from first occurrence, collecting all dates within period
   const dueDates: Timestamp[] = [];
   const drawDates: Timestamp[] = [];
   const occurrences: OutflowOccurrence[] = [];
-  let currentOccurrence = new Date(firstOccurrence);
-  let occurrenceIndex = 0;
 
-  while (currentOccurrence <= periodEnd) {
-    // Create timestamps for this occurrence
-    const dueDate = Timestamp.fromDate(currentOccurrence);
-    const drawDate = Timestamp.fromDate(adjustForWeekend(currentOccurrence));
-
-    // Add to parallel arrays (legacy)
+  dates.forEach((date, occurrenceIndex) => {
+    const dueDate = Timestamp.fromDate(date);
     dueDates.push(dueDate);
-    drawDates.push(drawDate);
-
-    // Create occurrence object (new pattern)
-    const occurrence: OutflowOccurrence = {
+    drawDates.push(Timestamp.fromDate(adjustForWeekend(date)));
+    occurrences.push({
       id: `${sourcePeriod.id}_occ_${occurrenceIndex}`,
       dueDate: dueDate,
       isPaid: false,
@@ -236,20 +147,8 @@ export function calculateAllOccurrencesInPeriod(
       isAutoMatched: false,
       matchedAt: null,
       matchedBy: null,
-    };
-    occurrences.push(occurrence);
-
-    console.log(
-      `[calculateAllOccurrencesInPeriod] Occurrence #${occurrenceIndex + 1}: ` +
-      `ID=${occurrence.id}, ` +
-      `Due ${currentOccurrence.toISOString().split('T')[0]}, ` +
-      `Draw ${adjustForWeekend(currentOccurrence).toISOString().split('T')[0]}`
-    );
-
-    // Move to next occurrence
-    currentOccurrence = addFrequencyInterval(currentOccurrence, outflow.frequency);
-    occurrenceIndex++;
-  }
+    });
+  });
 
   const result = {
     numberOfOccurrences: dueDates.length,
