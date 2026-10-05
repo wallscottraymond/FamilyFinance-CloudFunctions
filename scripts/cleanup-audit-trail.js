@@ -12,9 +12,10 @@
  * SAFETY:
  * - dev == prod. DRY-RUN by default (reads only). Pass --commit to write.
  * - Touches ONLY the `_audit` collection. No triggers listen to it.
- * - Uses BulkWriter (small independent writes, built-in throttling + retries). NOT batches:
- *   old entries hold big nested before/after maps, and deleting 400 at once exceeded Firestore's
- *   per-transaction size limit ("Transaction too big"). Resumable (re-running skips finished work).
+ * - Small batches (25 writes): old entries hold big nested before/after maps, and deleting 400
+ *   per batch exceeded Firestore's per-transaction size limit ("Transaction too big").
+ *   (BulkWriter was tried and let the process exit silently mid-flush.) Resumable: re-running
+ *   skips finished work.
  * - Emulator: set FIRESTORE_EMULATOR_HOST (and GCLOUD_PROJECT).
  *
  *   node scripts/cleanup-audit-trail.js            # dry-run
@@ -26,6 +27,7 @@ const path = require("path");
 const COMMIT = process.argv.includes("--commit");
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // keep in step with AUDIT_RETENTION_MS
 const PAGE = 500;
+const CHUNK = 25; // writes per batch commit
 
 if (!admin.apps.length) {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
@@ -66,9 +68,11 @@ async function run() {
     for (;;) {
       const snap = await col.where("timestamp", "<", cutoff).orderBy("timestamp").limit(PAGE).select().get();
       if (snap.empty) break;
-      const writer = db.bulkWriter();
-      snap.docs.forEach((d) => writer.delete(d.ref));
-      await writer.close();
+      for (let i = 0; i < snap.docs.length; i += CHUNK) {
+        const batch = db.batch();
+        snap.docs.slice(i, i + CHUNK).forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
       deleted += snap.size;
       if (deleted % 20000 < PAGE) process.stdout.write(`  ✓ deleted ${deleted}\r`);
     }
@@ -84,8 +88,7 @@ async function run() {
     if (last) q = q.startAfter(last);
     const snap = await q.get();
     if (snap.empty) break;
-    const writer = COMMIT ? db.bulkWriter() : null;
-    let n = 0;
+    const updates = [];
     snap.docs.forEach((d) => {
       scanned++;
       const data = d.data();
@@ -95,11 +98,16 @@ async function run() {
       const ts = data.timestamp;
       const update = { before: FieldValue.delete(), after: FieldValue.delete() };
       if (needsExpiry) update.expire_at = Timestamp.fromMillis(ts.toMillis() + RETENTION_MS);
-      if (writer) writer.update(d.ref, update);
-      n++;
+      updates.push([d.ref, update]);
     });
-    fixed += n;
-    if (writer) await writer.close();
+    fixed += updates.length;
+    if (COMMIT) {
+      for (let i = 0; i < updates.length; i += CHUNK) {
+        const batch = db.batch();
+        updates.slice(i, i + CHUNK).forEach(([ref, u]) => batch.update(ref, u));
+        await batch.commit();
+      }
+    }
     last = snap.docs[snap.docs.length - 1];
   }
   console.log(`  recent entries scanned: ${scanned}; ${COMMIT ? "slimmed/expiry set" : "to slim/set expiry"}: ${fixed}`);
