@@ -10,6 +10,9 @@
  * and marked healthy if they work again (a repair done in-app sends no webhook,
  * and older app builds don't report it).
  *
+ * And retries Plaid itemRemove for items whose removal failed during an account
+ * removal (flagged `removalPending`), so Plaid stops billing for them.
+ *
  * Schedule: every 4 hours.
  *
  * @module entry/scheduled/retry_transient_plaid_errors
@@ -24,6 +27,9 @@ import {
 import {
   self_heal_reauth_items_orchestrator,
 } from "../../orchestrators/plaid/reauth_recovery.orchestrator";
+import {
+  retry_pending_item_removals_orchestrator,
+} from "../../orchestrators/plaid/retry_pending_item_removals.orchestrator";
 import { RETRY_SCHEDULE } from "../../types/plaid/transient_error_retry.types";
 
 // Both passes decrypt access tokens and call Plaid. Without these the probes
@@ -50,6 +56,7 @@ export const retry_transient_plaid_errors_scheduled = onSchedule(
 
     const result = await retry_transient_item_errors_orchestrator(ctx);
     const self_heal = await self_heal_reauth_items_orchestrator(ctx);
+    const removals = await retry_pending_item_removals_orchestrator(ctx);
 
     console.log(
       JSON.stringify({
@@ -60,6 +67,8 @@ export const retry_transient_plaid_errors_scheduled = onSchedule(
         reauth_probed: self_heal.probed,
         reauth_repaired: self_heal.repaired,
         reauth_still_needed: self_heal.still_needs_reauth,
+        removals_retried: removals.attempted,
+        removals_done: removals.removed,
       })
     );
   }

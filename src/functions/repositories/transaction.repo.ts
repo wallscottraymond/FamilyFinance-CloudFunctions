@@ -1013,16 +1013,14 @@ export const transaction_repo = {
   },
 
   /**
-   * Hides up to 500 active transactions for a removed account (one page). The
-   * caller decides `exclude_from_budgets` (a removal-mode choice); the repo only
-   * persists the computed hide fields. Idempotent. Returns the count hidden and
-   * whether a full page came back (more may remain).
+   * Hides up to 500 active transactions for a removed account (one page).
+   * Inactive transactions drop out of every derived total. Idempotent. Returns
+   * the count hidden and whether a full page came back (more may remain).
    */
   async hide_for_account(
     ctx: TraceContext,
     account_id: string,
-    user_id: string,
-    exclude_from_budgets: boolean
+    user_id: string
   ): Promise<{ hidden: number; has_more: boolean }> {
     const db = getFirestore();
     const now = Timestamp.now();
@@ -1051,9 +1049,6 @@ export const transaction_repo = {
           hiddenReason: "account_removed",
           updatedAt: now,
         };
-        if (exclude_from_budgets) {
-          update_data.excludeFromBudgets = true;
-        }
         /* eslint-enable @typescript-eslint/naming-convention */
         batch.update(doc_ref(id), update_data);
         hidden++;
@@ -1065,6 +1060,57 @@ export const transaction_repo = {
       `[${ctx.trace_id}] hide_for_account: account=${account_id}, hidden=${hidden}`
     );
     return { hidden, has_more: snapshot.size === 500 };
+  },
+
+  /**
+   * Restores up to 500 transactions that an account removal hid (one page) —
+   * only `hiddenReason == "account_removed"`, so transactions soft-deleted for
+   * other reasons (e.g. superseded pendings) stay deleted. Idempotent. Returns
+   * the count restored and whether a full page came back (more may remain).
+   */
+  async restore_for_account(
+    ctx: TraceContext,
+    account_id: string,
+    user_id: string
+  ): Promise<{ restored: number; has_more: boolean }> {
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const snapshot = await db
+      .collection(COLLECTION)
+      .where("accountId", "==", account_id)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", false)
+      .where("hiddenReason", "==", "account_removed")
+      .select()
+      .limit(500)
+      .get();
+
+    if (snapshot.empty) {
+      return { restored: 0, has_more: false };
+    }
+
+    let restored = 0;
+    for (const chunk of chunk_for_batch(snapshot.docs.map((d) => d.id))) {
+      const batch = db.batch();
+      for (const id of chunk) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), {
+          isActive: true,
+          isHidden: false,
+          hiddenReason: null,
+          hiddenAt: null,
+          updatedAt: now,
+        });
+        /* eslint-enable @typescript-eslint/naming-convention */
+        restored++;
+      }
+      await batch.commit();
+    }
+
+    console.log(
+      `[${ctx.trace_id}] restore_for_account: account=${account_id}, restored=${restored}`
+    );
+    return { restored, has_more: snapshot.size === 500 };
   },
 
   /**

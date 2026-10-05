@@ -2,7 +2,7 @@
  * Restore Account Transactions Orchestrator
  *
  * Job handler that unhides transactions for a restored account.
- * Sets `isHidden: false` on all transactions for the account.
+ * Reactivates the transactions an account removal hid (paged, 500 per job).
  *
  * @module orchestrators/accounts/restore_account_transactions
  */
@@ -22,6 +22,7 @@ import {
 } from "../../observability";
 import { transaction_repo } from "../../repositories";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
+import { create_job } from "../../infrastructure/job_queue";
 
 /**
  * Performance budget for restore_account_transactions job.
@@ -32,11 +33,6 @@ const _BUDGET: PerformanceBudget = {
   max_time_ms: 30000,
 };
 void _BUDGET; // Reserved for future budget checking
-
-/**
- * Batch size for transaction updates.
- */
-const BATCH_SIZE = 500;
 
 /**
  * Input for restore account transactions job.
@@ -69,8 +65,8 @@ export interface RestoreAccountTransactionsResult {
  * This is a job handler - called by the job queue processor.
  *
  * Flow:
- * 1. Get hidden transaction IDs for the account
- * 2. Batch update to set isHidden: false
+ * 1. Reactivate one page (≤500) of the account's removal-hidden transactions
+ * 2. Re-enqueue itself while a full page came back
  *
  * @param ctx - Trace context (from job payload)
  * @param input - Job input
@@ -85,46 +81,29 @@ export async function restore_account_transactions_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
-    // 1. Get hidden transaction IDs for this account. Account removal set them
-    //    to isActive: false, so we MUST include soft-deleted rows here or the
-    //    query comes back empty and nothing gets restored.
-    const transaction_ids = await transaction_repo.get_ids_by_account_id(
-      ctx,
-      input.plaid_account_id,
-      input.user_id,
-      BATCH_SIZE * 10, // Allow larger batches for restore
-      { include_deleted: true }
-    );
+    // 1. Restore one page of the transactions the account removal hid. Only
+    //    hiddenReason "account_removed" — rows soft-deleted for other reasons
+    //    (superseded pendings, etc.) must stay deleted.
+    const { restored: restored_count, has_more } =
+      await transaction_repo.restore_for_account(
+        ctx,
+        input.plaid_account_id,
+        input.user_id
+      );
     perf.reads++;
+    perf.writes += restored_count;
 
-    if (transaction_ids.length === 0) {
+    if (restored_count === 0) {
       console.log(
         `[${ctx.trace_id}] No transactions to restore for account ${input.plaid_account_id}`
       );
       return { success: true, transactions_restored: 0 };
     }
 
-    console.log(
-      `[${ctx.trace_id}] Restoring ${transaction_ids.length} transactions for account ${input.plaid_account_id}`
-    );
-
-    // 2. Reactivate + unhide via the repo. Account removal set isActive: false
-    //    and the hide markers, so restore must reverse both. We don't touch
-    //    excludeFromBudgets — that's a user choice that persists across
-    //    hide/restore.
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const restored_count = await transaction_repo.set_fields_by_ids(
-      ctx,
-      transaction_ids,
-      {
-        isActive: true,
-        isHidden: false,
-        hiddenReason: null,
-        hiddenAt: null,
-      }
-    );
-    /* eslint-enable @typescript-eslint/naming-convention */
-    perf.writes += Math.ceil(restored_count / BATCH_SIZE);
+    // A full page means more may remain — continue in a follow-up job.
+    if (has_more) {
+      await create_job("restore_account_transactions", input, { trace_id: input.trace_id });
+    }
 
     // Restored txns re-enter derive — invalidate the cache (TR-2, trigger no longer bumps).
     await bump_derive_version(input.user_id).catch(() => {});

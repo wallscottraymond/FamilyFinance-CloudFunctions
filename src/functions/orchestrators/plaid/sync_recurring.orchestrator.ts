@@ -208,8 +208,14 @@ export async function sync_recurring_orchestrator(
     errors.push(...(outflow_result.validation_errors ?? []));
   }
 
-  const inflows = get_entities(inflow_result);
-  const outflows = get_entities(outflow_result);
+  // Drop streams on removed (inactive) accounts — otherwise the sync would
+  // re-activate the bills/income the account removal soft-deleted.
+  const inflows = get_entities(inflow_result).filter(
+    (i) => deps.active_account_ids.has(i.account_id)
+  );
+  const outflows = get_entities(outflow_result).filter(
+    (o) => deps.active_account_ids.has(o.account_id)
+  );
 
   console.log(
     `[${ctx.trace_id}] Transformed: inflows=${inflows.length}, outflows=${outflows.length}`

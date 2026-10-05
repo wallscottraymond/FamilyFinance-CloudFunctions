@@ -100,6 +100,13 @@ export interface RecurringSyncDependencies {
 
   /** Dependency analysis result */
   dependency_result: DependencyResult;
+
+  /**
+   * Plaid account IDs on this item that are still active. Streams on a removed
+   * account are dropped, or the sync would re-create/re-activate bills and income
+   * the account removal soft-deleted (same rule as the transaction sync).
+   */
+  active_account_ids: Set<string>;
 }
 
 // ============================================================================
@@ -237,6 +244,15 @@ export async function resolve_recurring_sync_dependencies(
     }
   }
 
+  // Step 5b: Active accounts on this item (removed accounts' streams are dropped)
+  const accounts_snapshot = await db.collection("accounts")
+    .where("itemId", "==", item_data.plaidItemId)
+    .where("isActive", "==", true)
+    .get();
+  const active_account_ids = new Set<string>(
+    accounts_snapshot.docs.map((doc) => doc.data().accountId || doc.id)
+  );
+
   // Step 6: Identify affected cashflow projections
   const dependency_result = await resolve_affected_cashflow_projections(
     db,
@@ -270,6 +286,7 @@ export async function resolve_recurring_sync_dependencies(
     existing_plaid_inflow_ids,
     existing_plaid_outflow_ids,
     dependency_result,
+    active_account_ids,
   };
 }
 

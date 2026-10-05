@@ -256,6 +256,21 @@ export const plaid_item_repo = {
   },
 
   /**
+   * Active items whose Plaid removal failed during an account removal
+   * (`removalPending == true`), raw doc + id, for the scheduled retry.
+   */
+  async get_pending_removal(
+    _ctx: TraceContext
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const snapshot = await get_db()
+      .collection(COLLECTION)
+      .where("removalPending", "==", true)
+      .where("isActive", "==", true)
+      .get();
+    return snapshot.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
+  },
+
+  /**
    * Lightweight rows for every ACTIVE item across all users — used by the
    * scheduled fallback transaction sync so data still flows if a webhook is missed.
    */

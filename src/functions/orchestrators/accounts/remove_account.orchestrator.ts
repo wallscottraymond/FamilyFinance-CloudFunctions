@@ -58,6 +58,8 @@ import { remove_item } from "../../integrations/plaid";
 import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
 import { decryptAccessToken } from "../../../utils/encryption";
 import { create_job } from "../../infrastructure/job_queue";
+import { goal_repo } from "../../repositories/goal.repo";
+import { goals_to_pause_on_account_removal } from "../../domain/goals/goal.service";
 import { CascadeHideTransactionsInput } from "./cascade_hide_transactions.orchestrator";
 import { CascadeSoftDeleteRecurringInput } from "./cascade_soft_delete_recurring.orchestrator";
 
@@ -318,12 +320,19 @@ export async function remove_account_orchestrator(
         }
       } catch (plaid_error) {
         // Log but continue - still soft-delete locally
-        // TODO: Enqueue background job to retry Plaid cleanup
         console.error(
           `[${ctx.trace_id}] Plaid itemRemove failed, continuing with local soft-delete:`,
           plaid_error
         );
         plaid_removal_success = false;
+      }
+
+      // Plaid still has the connection (and bills for it): flag the item so the
+      // scheduled job retries itemRemove (retry_pending_item_removals).
+      if (!plaid_removal_success) {
+        /* eslint-disable-next-line @typescript-eslint/naming-convention */
+        await plaid_item_repo.apply_field_update(ctx, dependencies.item_id, { removalPending: true });
+        perf.writes++;
       }
     }
 
@@ -338,6 +347,15 @@ export async function remove_account_orchestrator(
     // 10. Repository write: Soft delete the account (audit is automatic)
     await account_repo.soft_delete(ctx, input.account_id, user_id);
     perf.writes++;
+
+    // 10b. Pause goals that watch this account — its balance stops updating.
+    const linked_goals = await goal_repo.get_by_account(ctx, user_id, input.account_id);
+    perf.reads += linked_goals.length;
+    for (const goal_id of goals_to_pause_on_account_removal(linked_goals)) {
+      /* eslint-disable-next-line @typescript-eslint/naming-convention */
+      await goal_repo.update(ctx, goal_id, { status: "paused" });
+      perf.writes++;
+    }
 
     // 11. Complete idempotency key
     const result = { success: true, account_id: input.account_id };
@@ -400,8 +418,8 @@ export async function remove_account_orchestrator(
         cascade_jobs_enqueued = true;
       }
 
-      // TODO: Enqueue budget recalculation job if removal_mode === "delete_history"
-      // TODO: Enqueue Plaid cleanup retry job if plaid_removal_success === false
+      // No budget recalculation job: derive-on-read drops inactive transactions
+      // and bills on the next read (the cascades bump the derive cache).
     }
 
     // 14. Async debug logging

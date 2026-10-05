@@ -304,3 +304,17 @@ export function compute_goal_measurement(params: {
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
+
+/**
+ * Goals to pause when their linked account is removed: the active ones. A goal
+ * measures that account's balance, which no longer updates, so it would otherwise
+ * keep drawing on income against a frozen number. Paused goals are resumable.
+ *
+ * PURE FUNCTION - no IO.
+ *
+ * @param goals - The user's goals linked to the removed account
+ * @returns IDs of the goals to pause
+ */
+export function goals_to_pause_on_account_removal(goals: GoalEntity[]): string[] {
+  return goals.filter((g) => g.status === "active").map((g) => g.id);
+}

@@ -14,6 +14,7 @@ import {
 } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
+import { create_job } from "../../infrastructure/job_queue";
 import {
   create_span,
   log_operation_start,
@@ -85,16 +86,15 @@ export async function cascade_hide_transactions_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
-    // Control-flow decision: delete-history removal also drops the txns from
-    // budgets. The repo persists the computed hide fields (one page of ≤500).
-    const exclude_from_budgets = input.removal_mode === "delete_history";
-
+    // Removing an account removes its transactions from budgets too (decided
+    // 2026-10-05; the "Keep in Budgets" choice was dropped — it never worked,
+    // since derive ignores inactive transactions). `removal_mode` stays on the
+    // payload only for older app builds. One page of ≤500 per run.
     const { hidden: total_hidden, has_more } =
       await transaction_repo.hide_for_account(
         ctx,
         input.plaid_account_id,
-        input.user_id,
-        exclude_from_budgets
+        input.user_id
       );
     perf.reads++;
     perf.writes += total_hidden;
@@ -111,6 +111,12 @@ export async function cascade_hide_transactions_orchestrator(
     // Hidden txns drop out of derive — invalidate the cache (TR-2, trigger no longer bumps).
     // One bump per page; a paginated cascade re-invokes this handler and bumps each page.
     await bump_derive_version(input.user_id).catch(() => {});
+
+    // A full page means more may remain — continue in a follow-up job (the
+    // account had 5k+ transactions; only the first 500 used to be hidden).
+    if (has_more) {
+      await create_job("cascade_hide_transactions", input, { trace_id: input.trace_id });
+    }
 
     log_operation_success(span, input.user_id);
 
@@ -135,7 +141,7 @@ export async function cascade_hide_transactions_orchestrator(
 
     console.log(
       `[${ctx.trace_id}] cascade_hide_transactions: hidden=${total_hidden}, ` +
-      `has_more=${has_more}, exclude_from_budgets=${exclude_from_budgets}`
+      `has_more=${has_more}`
     );
 
     return {
