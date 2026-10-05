@@ -80,6 +80,7 @@ interface LegacySplitDoc {
     amount: number;
     description?: string | null;
     isDefault: boolean;
+    spendStatus?: "counted" | "ignored" | "refund";
     isIgnored?: boolean;
     isRefund?: boolean;
     isTaxDeductible?: boolean;

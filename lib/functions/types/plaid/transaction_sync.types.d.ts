@@ -125,6 +125,10 @@ export interface TransactionSplitForMigration {
     internal_detailed_category: string | null;
     is_default: boolean;
     tags: string[];
+    /** User's spend status + tax flag, carried pending → posted (absent = false). */
+    is_ignored?: boolean;
+    is_refund?: boolean;
+    is_tax_deductible?: boolean;
 }
 /**
  * Input for resolving transaction sync dependencies.

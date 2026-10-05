@@ -271,9 +271,10 @@ export function merge_pending_to_posted(
         internal_primary_category: pending_split.internal_primary_category, // Preserve user's category
         internal_detailed_category: pending_split.internal_detailed_category, // Preserve user's category
         is_default: pending_split.is_default,
-        is_ignored: false,
-        is_refund: false,
-        is_tax_deductible: false,
+        // Preserve the user's Ignore / Refund / Tax choices (were reset to false on post).
+        is_ignored: pending_split.is_ignored ?? false,
+        is_refund: pending_split.is_refund ?? false,
+        is_tax_deductible: pending_split.is_tax_deductible ?? false,
         payment_date: posted_transaction.transaction_date,
         tags: pending_split.tags, // Preserve user's tags
         rules: [],

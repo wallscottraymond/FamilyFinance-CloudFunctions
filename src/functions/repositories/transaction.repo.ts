@@ -107,6 +107,7 @@ interface LegacySplitDoc {
   amount: number;
   description?: string | null;
   isDefault: boolean;
+  spendStatus?: "counted" | "ignored" | "refund";
   isIgnored?: boolean;
   isRefund?: boolean;
   isTaxDeductible?: boolean;
@@ -142,6 +143,10 @@ function map_to_pending_info(doc: LegacyTransactionDoc): PendingTransactionInfo 
       internal_detailed_category: s.internalDetailedCategory,
       is_default: s.isDefault,
       tags: s.tags || [],
+      // spendStatus is the source of truth; the booleans are its legacy mirrors.
+      is_ignored: s.spendStatus ? s.spendStatus === "ignored" : !!s.isIgnored,
+      is_refund: s.spendStatus ? s.spendStatus === "refund" : !!s.isRefund,
+      is_tax_deductible: !!s.isTaxDeductible,
     })),
     internal_primary_category: doc.internalPrimaryCategory,
     internal_detailed_category: doc.internalDetailedCategory,
