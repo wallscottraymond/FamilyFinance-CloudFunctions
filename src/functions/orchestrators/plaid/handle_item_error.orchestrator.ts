@@ -82,7 +82,10 @@ export async function handle_item_error_orchestrator(
     const now = Timestamp.now();
 
     switch (ctx.input.webhook_code) {
+      // PENDING_DISCONNECT: the institution will drop the connection soon (e.g. a
+      // non-OAuth → OAuth migration); same user action as an expiring consent.
       case "PENDING_EXPIRATION":
+      case "PENDING_DISCONNECT":
         status_update = compute_pending_expiration_update(
           now,
           ctx.input.consent_expiration_time

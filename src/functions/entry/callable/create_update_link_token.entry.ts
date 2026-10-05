@@ -39,8 +39,12 @@ const TOKEN_ENCRYPTION_KEY = defineSecret("TOKEN_ENCRYPTION_KEY");
 const create_update_link_token_input_schema = z.object({
   /** The Plaid item document ID to create update token for */
   item_id: z.string().min(1, "Item ID is required"),
-  /** Idempotency key to prevent duplicate requests */
-  idempotency_key: z.string().uuid("Idempotency key must be a valid UUID"),
+  /**
+   * Idempotency key to prevent duplicate requests. Any non-empty string — the app
+   * sends `update_link_<itemId>_<ms>` (Hermes has no crypto.randomUUID), and a
+   * UUID-only check rejected every Reconnect tap.
+   */
+  idempotency_key: z.string().min(1, "idempotency_key is required"),
   /** Debug mode enables verbose logging */
   debug_mode: z.boolean().optional(),
 });

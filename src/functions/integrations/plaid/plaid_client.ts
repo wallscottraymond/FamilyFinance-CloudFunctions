@@ -181,6 +181,32 @@ export async function fetch_plaid_accounts(
 }
 
 /**
+ * Fetches the item's consent state from Plaid (`/item/get`). Used to tell whether
+ * a re-authentication renewed an expiring OAuth consent.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @returns The consent expiration time (ISO string) or null when the institution has none
+ */
+export async function fetch_plaid_item(
+  access_token: string
+): Promise<{ consent_expiration_time: string | null; request_id: string }> {
+  const client = create_plaid_client();
+
+  const response = await with_retry(async () => {
+    return client.itemGet({
+      /* eslint-disable @typescript-eslint/naming-convention */
+      access_token,
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
+  });
+
+  return {
+    consent_expiration_time: response.data.item.consent_expiration_time ?? null,
+    request_id: response.data.request_id,
+  };
+}
+
+/**
  * Fetches an institution's optional metadata (logo, primary color, url) by id.
  * Used at link time to capture the institution logo (a base64 PNG). Best-effort —
  * callers should tolerate a null logo and never fail the link on this.
@@ -399,9 +425,15 @@ export async function create_link_token(
   };
 
   // Update mode: use access_token instead of products
-  // This is used for re-authentication when user credentials expire
+  // This is used for re-authentication when user credentials expire.
+  // The item's products/accounts are already fixed, so drop the new-link-only
+  // settings too: the cash `account_filters` would not match a credit-card item
+  // (Amex/Capital One were linked on the liability flow), and `days_requested`
+  // only applies to a first link.
   if (input.access_token) {
     delete request.products;
+    delete request.account_filters;
+    delete request.transactions;
     request.access_token = input.access_token;
   }
   /* eslint-enable @typescript-eslint/naming-convention */

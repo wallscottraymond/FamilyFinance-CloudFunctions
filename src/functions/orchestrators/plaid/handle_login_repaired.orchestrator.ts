@@ -12,7 +12,6 @@ import {
   create_performance_metrics,
   is_budget_exceeded,
 } from "../../types";
-import { plaid_item_repo } from "../../repositories/plaid";
 import {
   ItemStatusWebhookInput,
   ItemStatusWebhookResponse,
@@ -31,8 +30,7 @@ import {
   compute_login_repaired_update,
   should_trigger_refresh,
 } from "../../domain/plaid/item_status_webhook.service";
-import { relink_attempt_repo } from "../../repositories/plaid/relink_attempt.repo";
-import { sync_balances_orchestrator } from "./sync_balances.orchestrator";
+import { mark_item_repaired, refresh_repaired_item } from "./reauth_recovery.orchestrator";
 
 /**
  * Orchestrates handling of ITEM.LOGIN_REPAIRED webhooks.
@@ -40,9 +38,8 @@ import { sync_balances_orchestrator } from "./sync_balances.orchestrator";
  * Flow:
  * 1. Resolver: Find item by Plaid item ID
  * 2. Domain Service: Compute status update (clear error)
- * 3. Repository: Update item status
- * 4. Repository: Mark relink attempts as successful
- * 5. (Optional) Trigger data refresh
+ * 3. Repository: Clear error state + mark relink attempts successful
+ * 4. (Optional) Trigger a full data refresh
  *
  * @param ctx - Orchestrator context with webhook input
  * @returns Response indicating success/failure
@@ -85,67 +82,31 @@ export async function handle_login_repaired_orchestrator(
     );
 
     // =========================================================================
-    // 3. REPOSITORY: Update item status (clear error state)
+    // 3. REPOSITORY: Clear error state + close open relink attempts
     // =========================================================================
-    /* eslint-disable @typescript-eslint/naming-convention */
-    await plaid_item_repo.apply_field_update(ctx, deps.item_doc_id, {
-      status: status_update.status,
-      error: null,
-      errorMessage: null,
-      errorAt: null,
-      requiresReauth: false,
-      consentExpiresAt: null,
-      transientSince: null,
-    });
-    /* eslint-enable @typescript-eslint/naming-convention */
+    const target = {
+      item_doc_id: deps.item_doc_id,
+      plaid_item_id: ctx.input.plaid_item_id,
+      user_id: deps.user_id,
+    };
+    await mark_item_repaired(ctx, target);
     perf.writes++;
 
     // =========================================================================
-    // 4. REPOSITORY: Mark relink attempts as successful
+    // 4. TRIGGER DATA REFRESH (if coming from error state)
     // =========================================================================
-    const marked_count = await relink_attempt_repo.mark_all_successful_for_item(
-      ctx,
-      deps.item_doc_id
-    );
-    if (marked_count > 0) {
-      console.log(
-        `[${ctx.trace_id}] Marked ${marked_count} relink attempts as successful`
-      );
-    }
-
-    // =========================================================================
-    // 5. TRIGGER DATA REFRESH (if coming from error state)
-    // =========================================================================
+    // Full refresh — balances, transactions and recurring — since syncs skipped
+    // this item while it was broken. Fire and forget so the webhook answers fast;
+    // the scheduled syncs are the backstop if this is cut short.
     let refresh_triggered = false;
 
     if (trigger_refresh) {
       console.log(
         `[${ctx.trace_id}] Triggering data refresh after login repair for item ${deps.item_doc_id}`
       );
-
-      // Fire and forget - don't block webhook response
       fire_and_forget(async () => {
-        try {
-          await sync_balances_orchestrator({
-            trace_id: ctx.trace_id,
-            span_id: span.span_id,
-            input: {
-              item_id: ctx.input.plaid_item_id,
-            },
-            user_id: deps.user_id!,
-            idempotency_key: `login_repaired_refresh:${deps.item_doc_id}:${Date.now()}`,
-          });
-          console.log(
-            `[${ctx.trace_id}] Data refresh completed for item ${deps.item_doc_id}`
-          );
-        } catch (error) {
-          console.error(
-            `[${ctx.trace_id}] Data refresh failed for item ${deps.item_doc_id}:`,
-            error
-          );
-        }
+        await refresh_repaired_item(ctx, target);
       });
-
       refresh_triggered = true;
     }
 
@@ -171,7 +132,6 @@ export async function handle_login_repaired_orchestrator(
           previous_status: deps.current_status,
           new_status: status_update.status,
           refresh_triggered,
-          relink_attempts_marked: marked_count,
         },
         context: {
           institution_name: deps.institution_name,

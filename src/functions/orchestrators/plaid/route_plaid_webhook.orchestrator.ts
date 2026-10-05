@@ -93,6 +93,7 @@ export async function route_plaid_webhook_orchestrator(
 
     case PlaidWebhookCode.ERROR:
     case PlaidWebhookCode.PENDING_EXPIRATION:
+    case PlaidWebhookCode.PENDING_DISCONNECT:
     case PlaidWebhookCode.USER_PERMISSION_REVOKED: {
       // Process item error/expiration webhooks
       const error_result = await handle_item_error_orchestrator({

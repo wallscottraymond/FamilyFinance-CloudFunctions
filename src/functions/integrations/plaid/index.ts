@@ -15,6 +15,7 @@ export {
   RemoveItemResult,
   PlaidLiabilitiesResult,
   fetch_plaid_accounts,
+  fetch_plaid_item,
   fetch_plaid_balances,
   fetch_plaid_liabilities,
   safe_fetch_liabilities,
