@@ -66,6 +66,7 @@ interface LegacyTransactionDoc {
   type: string | null;
   name: string;
   merchantName: string | null;
+  vendorKey?: string | null;
   amount?: number;
   isPending?: boolean;
   pendingTransactionId?: string | null;
@@ -188,6 +189,8 @@ function map_to_doc(
     type: entity.type,
     name: entity.name,
     merchantName: entity.merchant_name,
+    // Only when the caller computed it, so an update never nulls an existing key.
+    ...(entity.vendor_key !== undefined ? { vendorKey: entity.vendor_key } : {}),
     amount: entity.amount,
     isPending: entity.is_pending,
     pendingTransactionId: entity.pending_transaction_id,

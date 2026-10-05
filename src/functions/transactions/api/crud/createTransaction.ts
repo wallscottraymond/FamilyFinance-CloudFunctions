@@ -31,6 +31,7 @@ import {
 import * as admin from "firebase-admin";
 import { firebaseCors } from "../../../../middleware/cors";
 import { bump_derive_version } from "../../../repositories/derive_version.repo";
+import { vendor_key } from "../../../domain/transactions/vendor_key.service";
 
 /**
  * Create a new transaction
@@ -152,6 +153,7 @@ export const createTransaction = onRequest({
       const transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
         // === ROOT-LEVEL QUERY FIELDS ===
         transactionId: admin.firestore().collection('_dummy').doc().id, // Generate ID for manual transactions
+        userId: user.id!, // canonical owner field (rule 8); vendor-history queries filter on it
         ownerId: user.id!,
         groupId: groupIds.length > 0 ? groupIds[0] : null,
         transactionDate,
@@ -176,6 +178,7 @@ export const createTransaction = onRequest({
         type: transactionData.type,
         name: transactionData.description,
         merchantName: null,
+        vendorKey: vendor_key({ name: transactionData.description }),
 
         // === SPLITS ARRAY ===
         splits: [defaultSplit],

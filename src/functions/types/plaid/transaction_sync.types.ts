@@ -234,6 +234,9 @@ export interface TransactionForPersistence {
   /** Merchant name from Plaid */
   merchant_name: string | null;
 
+  /** Cleaned, lowercase vendor (domain/transactions/vendor_key); null when there's no name. */
+  vendor_key?: string | null;
+
   /** Whether transaction is pending */
   is_pending: boolean;
 

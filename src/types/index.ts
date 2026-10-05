@@ -416,6 +416,7 @@ export interface Transaction extends BaseDocument {
   type: TransactionType | null;   // Transaction type (income, expense, transfer)
   name: string;                   // Transaction name from Plaid
   merchantName: string | null;    // Merchant name from Plaid
+  vendorKey?: string | null;      // Cleaned lowercase vendor (domain/transactions/vendor_key) for same-vendor queries
 
   // === SPLITS ARRAY ===
   splits: TransactionSplit[];     // Array of transaction splits

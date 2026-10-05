@@ -21,6 +21,7 @@ import {
   TransactionForPersistence,
   TransactionSplitForPersistence,
 } from "../../types/plaid";
+import { vendor_key } from "../../domain/transactions/vendor_key.service";
 
 /**
  * Transforms legacy FamilyTransaction array to TransactionForPersistence array.
@@ -77,6 +78,7 @@ function transform_single_legacy_transaction(
     // Description
     name: txn.name,
     merchant_name: txn.merchantName,
+    vendor_key: vendor_key({ merchant_name: txn.merchantName, name: txn.name, description: txn.description }),
 
     // Status
     is_pending: is_pending,

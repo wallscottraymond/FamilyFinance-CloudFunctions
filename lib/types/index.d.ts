@@ -308,6 +308,7 @@ export interface Transaction extends BaseDocument {
     type: TransactionType | null;
     name: string;
     merchantName: string | null;
+    vendorKey?: string | null;
     splits: TransactionSplit[];
     returnAmount?: number;
     hasRefundSplits?: boolean;

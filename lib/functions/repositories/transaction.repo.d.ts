@@ -42,6 +42,7 @@ interface LegacyTransactionDoc {
     type: string | null;
     name: string;
     merchantName: string | null;
+    vendorKey?: string | null;
     amount?: number;
     isPending?: boolean;
     pendingTransactionId?: string | null;
