@@ -69,6 +69,12 @@ export interface RecurringSyncDependencies {
     existing_plaid_outflow_ids: Set<string>;
     /** Dependency analysis result */
     dependency_result: DependencyResult;
+    /**
+     * Plaid account IDs on this item that are still active. Streams on a removed
+     * account are dropped, or the sync would re-create/re-activate bills and income
+     * the account removal soft-deleted (same rule as the transaction sync).
+     */
+    active_account_ids: Set<string>;
 }
 /**
  * Resolves dependencies needed for the recurring sync orchestrator.

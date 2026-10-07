@@ -54,6 +54,27 @@ export interface SourcePeriodForOutflowGeneration {
     end_date: Timestamp;
 }
 /**
+ * Occurrence due dates of a recurring stream within [start, end], plus the first
+ * one after the window. Shared by bills and income (live derive AND the stored
+ * period generators) so a date fix lands everywhere at once.
+ *
+ * - semi-monthly: two fixed days-of-month from the anchor
+ * - monthly / quarterly / yearly: the anchor's day-of-month, clamped to month-end
+ * - weekly / bi-weekly (and unknown, stepped yearly): fixed-day stepping
+ *
+ * PURE FUNCTION - no IO.
+ *
+ * @param reference_date - The anchor (predicted next / last / first date)
+ * @param frequency - Stream frequency (any spelling normalize_frequency accepts)
+ * @param period_start - Window start
+ * @param period_end - Window end
+ * @returns Due dates in the window and the next one after it
+ */
+export declare function occurrence_dates_in_window(reference_date: Date, frequency: string, period_start: Date, period_end: Date): {
+    dates: Date[];
+    next: Date;
+};
+/**
  * The minimal recurring-item schedule needed to generate occurrences.
  * Works for outflows AND inflows (both carry frequency + anchor dates + amount).
  */
@@ -63,6 +84,12 @@ export interface RecurringScheduleForGeneration {
     first_date: Timestamp;
     last_date: Timestamp;
     predicted_next_date: Timestamp | null;
+    /**
+     * Where the stream came from. A user-created ("manual") bill or income didn't
+     * exist before its first date, so it gets no occurrences before it. Plaid
+     * streams keep backward placement (their history is real).
+     */
+    source?: string;
 }
 /** One generated (expected) occurrence: when it's due + how much. */
 export interface GeneratedOccurrence {

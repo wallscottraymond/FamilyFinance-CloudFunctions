@@ -265,13 +265,22 @@ export declare const transaction_repo: {
      */
     get_ids_by_account_id(ctx: TraceContext, account_id: string, user_id: string, limit?: number, options?: ReadOptions): Promise<string[]>;
     /**
-     * Hides up to 500 active transactions for a removed account (one page). The
-     * caller decides `exclude_from_budgets` (a removal-mode choice); the repo only
-     * persists the computed hide fields. Idempotent. Returns the count hidden and
-     * whether a full page came back (more may remain).
+     * Hides up to 500 active transactions for a removed account (one page).
+     * Inactive transactions drop out of every derived total. Idempotent. Returns
+     * the count hidden and whether a full page came back (more may remain).
      */
-    hide_for_account(ctx: TraceContext, account_id: string, user_id: string, exclude_from_budgets: boolean): Promise<{
+    hide_for_account(ctx: TraceContext, account_id: string, user_id: string): Promise<{
         hidden: number;
+        has_more: boolean;
+    }>;
+    /**
+     * Restores up to 500 transactions that an account removal hid (one page) —
+     * only `hiddenReason == "account_removed"`, so transactions soft-deleted for
+     * other reasons (e.g. superseded pendings) stay deleted. Idempotent. Returns
+     * the count restored and whether a full page came back (more may remain).
+     */
+    restore_for_account(ctx: TraceContext, account_id: string, user_id: string): Promise<{
+        restored: number;
         has_more: boolean;
     }>;
     /**

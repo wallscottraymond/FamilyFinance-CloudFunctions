@@ -65,6 +65,14 @@ export declare const plaid_item_repo: {
      */
     get_in_transient_state(ctx: TraceContext, statuses: string[]): Promise<TransientItemToRetry[]>;
     /**
+     * Active items whose Plaid removal failed during an account removal
+     * (`removalPending == true`), raw doc + id, for the scheduled retry.
+     */
+    get_pending_removal(_ctx: TraceContext): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
      * Lightweight rows for every ACTIVE item across all users — used by the
      * scheduled fallback transaction sync so data still flows if a webhook is missed.
      */

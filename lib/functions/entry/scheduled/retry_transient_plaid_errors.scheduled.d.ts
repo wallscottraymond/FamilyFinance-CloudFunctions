@@ -6,6 +6,13 @@
  * institution comes back, and only surfaces a "Reconnect" prompt to the user if
  * the failure persists past 24 hours.
  *
+ * Also runs the re-auth self-heal pass: items flagged for reconnection are probed
+ * and marked healthy if they work again (a repair done in-app sends no webhook,
+ * and older app builds don't report it).
+ *
+ * And retries Plaid itemRemove for items whose removal failed during an account
+ * removal (flagged `removalPending`), so Plaid stops billing for them.
+ *
  * Schedule: every 4 hours.
  *
  * @module entry/scheduled/retry_transient_plaid_errors

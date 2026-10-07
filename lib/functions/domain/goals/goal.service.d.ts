@@ -89,4 +89,15 @@ export declare function compute_goal_measurement(params: {
     target_amount?: number | null;
     data_incomplete: boolean;
 }): GoalMeasurement;
+/**
+ * Goals to pause when their linked account is removed: the active ones. A goal
+ * measures that account's balance, which no longer updates, so it would otherwise
+ * keep drawing on income against a frozen number. Paused goals are resumable.
+ *
+ * PURE FUNCTION - no IO.
+ *
+ * @param goals - The user's goals linked to the removed account
+ * @returns IDs of the goals to pause
+ */
+export declare function goals_to_pause_on_account_removal(goals: GoalEntity[]): string[];
 //# sourceMappingURL=goal.service.d.ts.map

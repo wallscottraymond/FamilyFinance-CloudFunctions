@@ -14,9 +14,8 @@ import { ItemStatusWebhookInput, ItemStatusWebhookResponse } from "../../types/p
  * Flow:
  * 1. Resolver: Find item by Plaid item ID
  * 2. Domain Service: Compute status update (clear error)
- * 3. Repository: Update item status
- * 4. Repository: Mark relink attempts as successful
- * 5. (Optional) Trigger data refresh
+ * 3. Repository: Clear error state + mark relink attempts successful
+ * 4. (Optional) Trigger a full data refresh
  *
  * @param ctx - Orchestrator context with webhook input
  * @returns Response indicating success/failure

@@ -2,7 +2,7 @@
  * Restore Account Transactions Orchestrator
  *
  * Job handler that unhides transactions for a restored account.
- * Sets `isHidden: false` on all transactions for the account.
+ * Reactivates the transactions an account removal hid (paged, 500 per job).
  *
  * @module orchestrators/accounts/restore_account_transactions
  */
@@ -33,8 +33,8 @@ export interface RestoreAccountTransactionsResult {
  * This is a job handler - called by the job queue processor.
  *
  * Flow:
- * 1. Get hidden transaction IDs for the account
- * 2. Batch update to set isHidden: false
+ * 1. Reactivate one page (≤500) of the account's removal-hidden transactions
+ * 2. Re-enqueue itself while a full page came back
  *
  * @param ctx - Trace context (from job payload)
  * @param input - Job input

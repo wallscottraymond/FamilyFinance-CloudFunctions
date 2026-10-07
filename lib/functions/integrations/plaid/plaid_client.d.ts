@@ -39,6 +39,17 @@ export declare function get_webhook_verification_key(key_id: string): Promise<JW
  */
 export declare function fetch_plaid_accounts(access_token: string): Promise<PlaidAccountsResult>;
 /**
+ * Fetches the item's consent state from Plaid (`/item/get`). Used to tell whether
+ * a re-authentication renewed an expiring OAuth consent.
+ *
+ * @param access_token - Decrypted Plaid access token
+ * @returns The consent expiration time (ISO string) or null when the institution has none
+ */
+export declare function fetch_plaid_item(access_token: string): Promise<{
+    consent_expiration_time: string | null;
+    request_id: string;
+}>;
+/**
  * Fetches an institution's optional metadata (logo, primary color, url) by id.
  * Used at link time to capture the institution logo (a base64 PNG). Best-effort —
  * callers should tolerate a null logo and never fail the link on this.
