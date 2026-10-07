@@ -139,13 +139,15 @@ describe("purge_user_data_orchestrator — full erase", () => {
   it("BLOCKS when the user owns a group with other members (no data deleted)", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
     const now = Timestamp.now();
+    // Account-Rooted-Sharing group shape: members MAP + memberIds array.
     await db.collection("groups").doc(`grp_${seed.userId}`).set({
-      id: `grp_${seed.userId}`, name: "Shared Group", ownerId: seed.userId, isActive: true,
-      members: [
-        { userId: seed.userId, role: "owner" },
-        { userId: "other_member", role: "viewer" },
-      ],
-      createdAt: now,
+      name: "Shared Group", ownerId: seed.userId,
+      members: {
+        [seed.userId]: { role: "owner", joinedAt: now },
+        other_member: { role: "full", joinedAt: now },
+      },
+      memberIds: [seed.userId, "other_member"],
+      createdAt: now, deletedAt: null,
     });
 
     const result = await purge_user_data_orchestrator(ctx(), {
@@ -157,6 +159,45 @@ describe("purge_user_data_orchestrator — full erase", () => {
     const status = (await db.collection("purge_status").doc(seed.userId).get()).data();
     expect(status?.state).toBe("blocked");
     expect(status?.blocked_reason).toBe("owns_group_with_members");
+  });
+
+  it("D13: leaves others' groups, closes solo groups, drops connections + requests", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const me = seed.userId;
+    const now = Timestamp.now();
+    await db.collection("users").doc("owner_x").set({ groupIds: [`theirs_${me}`] });
+    await db.collection("users").doc(me).set({ groupIds: [`theirs_${me}`, `solo_${me}`] }, { merge: true });
+    await db.collection("groups").doc(`theirs_${me}`).set({
+      name: "Theirs", ownerId: "owner_x",
+      members: { owner_x: { role: "owner", joinedAt: now }, [me]: { role: "full", joinedAt: now } },
+      memberIds: ["owner_x", me], createdAt: now, deletedAt: null,
+    });
+    await db.collection("groups").doc(`solo_${me}`).set({
+      name: "Mom", ownerId: me, members: { [me]: { role: "owner", joinedAt: now } },
+      memberIds: [me], createdAt: now, deletedAt: null,
+    });
+    await db.collection("connections").doc(`${me}__owner_x`).set({
+      userIds: [me, "owner_x"], status: "connected", connectedAt: now, blockedBy: null, nicknames: {},
+    });
+    await db.collection("requests").doc(`req_${me}`).set({
+      type: "join_group", fromUserId: "owner_x", toUserId: me, groupId: `theirs_${me}`,
+      status: "pending", createdAt: now, expiresAt: now,
+    });
+
+    const result = await purge_user_data_orchestrator(ctx(), {
+      user_id: me, initiated_by: me, trace_id: "t_sharing",
+    });
+    expect(result.blocked).toBe(false);
+
+    const theirs = (await db.collection("groups").doc(`theirs_${me}`).get()).data()!;
+    expect(theirs.memberIds).toEqual(["owner_x"]);
+    expect(theirs.deletedAt).toBeNull();
+    const solo = (await db.collection("groups").doc(`solo_${me}`).get()).data()!;
+    expect(solo.deletedAt).not.toBeNull(); // closed like a leave, not hard-deleted
+    expect((await db.collection("connections").doc(`${me}__owner_x`).get()).exists).toBe(false);
+    expect((await db.collection("requests").doc(`req_${me}`).get()).exists).toBe(false);
+    expect((await db.collection("users").doc("owner_x").get()).data()?.groupIds)
+      .toEqual([`theirs_${me}`]);
   });
 
   it("cancel_pending_jobs targets ONLY this user's pending/processing non-purge jobs", async () => {

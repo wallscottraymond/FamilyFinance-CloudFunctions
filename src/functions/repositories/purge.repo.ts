@@ -197,7 +197,7 @@ export async function cancel_pending_jobs(
     // is the correct (slower) superset behavior — use it so a purge never breaks.
     console.warn(
       `[purge] targeted job-cancel failed (${(err as Error).message}); ` +
-        `falling back to full scan`
+        "falling back to full scan"
     );
     return await cancel_pending_jobs_scan(user_id, exclude_job_id);
   }
@@ -311,8 +311,17 @@ export async function find_owned_shared_groups(
       .where("ownerId", "==", user_id)
       .get();
     for (const d of groups.docs) {
-      const data = d.data() as { name?: string; members?: unknown[]; isActive?: boolean };
-      if (data.isActive !== false && (data.members?.length ?? 0) > 1) {
+      // Account-Rooted-Sharing groups: `memberIds` array + `members` MAP +
+      // `deletedAt`. (The old check read `members.length`, which is undefined on
+      // a map, so it never blocked.)
+      const data = d.data() as {
+        name?: string;
+        memberIds?: unknown[];
+        deletedAt?: unknown;
+        isActive?: boolean;
+      };
+      const active = (data.deletedAt ?? null) === null && data.isActive !== false;
+      if (active && (data.memberIds?.length ?? 0) > 1) {
         out.push({ id: d.id, name: data.name ?? "Untitled group" });
       }
     }
@@ -339,7 +348,7 @@ export async function find_owned_shared_groups(
 }
 
 /**
- * Hard-delete the SOLE-member groups/families the user owns (nothing to
+ * Hard-delete the SOLE-member legacy families the user owns (nothing to
  * transfer). Owned groups with other members are handled by the pre-check
  * block, so by purge time only solo groups remain. Best-effort / never throws.
  *
@@ -350,8 +359,11 @@ export async function delete_owned_solo_groups(user_id: string): Promise<number>
   const db = getFirestore();
   let deleted = 0;
 
+  // Groups are released by release_user_from_sharing (it closes solo groups the
+  // same way leaving does). Only the legacy `families` collection is swept here:
+  // the old groups branch counted `members.length` on what is now a MAP and would
+  // have hard-deleted groups that still had members.
   for (const [collection, ownerField, membersField] of [
-    ["groups", "ownerId", "members"],
     ["families", "adminUserId", "memberIds"],
   ] as const) {
     try {

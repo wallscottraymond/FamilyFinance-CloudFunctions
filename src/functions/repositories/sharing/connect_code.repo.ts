@@ -119,6 +119,11 @@ export const connect_code_repo = {
     /* eslint-enable @typescript-eslint/naming-convention */
   },
 
+  /** Removes the user's code doc (account purge). */
+  async delete(_ctx: TraceContext, user_id: string): Promise<void> {
+    await ref(user_id).delete();
+  },
+
   /** Expires both people's codes once they've connected (codes are single-use). */
   async expire_codes(_ctx: TraceContext, user_ids: string[], now_ms: number): Promise<void> {
     const batch = getFirestore().batch();

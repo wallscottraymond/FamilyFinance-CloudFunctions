@@ -12,7 +12,7 @@
  *   → revoke Plaid access tokens (/item/remove) BEFORE deleting plaid_items
  *   → hard-delete child collections (by parent id)
  *   → hard-delete top-level user-keyed collections
- *   → delete sole-owned groups
+ *   → leave every group (D13), close solo groups, drop connections + code
  *   → delete users/{uid} doc
  *   → delete the Firebase Auth user
  *   → status → done
@@ -46,6 +46,7 @@ import {
   make_bulk_writer,
 } from "../../repositories/purge.repo";
 import { widget_token_repo } from "../../repositories/widget_token.repo";
+import { release_user_from_sharing } from "../sharing/departure.orchestrator";
 import { set_purge_status } from "../../infrastructure/purge_guard";
 
 /** Job payload for the purge. */
@@ -256,10 +257,24 @@ export async function purge_user_data_orchestrator(
     await step("Finalizing…");
     await writer.close();
 
-    // 7. Sole-owned groups (shared-owned ones were blocked above).
-    const groups_deleted = await delete_owned_solo_groups(user_id);
-    total_deleted += groups_deleted;
-    await record("groups", groups_deleted);
+    // 7. Sharing (Account-Rooted-Sharing D13): leave every group like a normal
+    //    leave (solo groups close), drop connections + connect code, delete
+    //    requests from/to the user. Owned groups with members were blocked above.
+    await step("Leaving your groups…");
+    const departure = await release_user_from_sharing(ctx, user_id);
+    await record("groups_left", departure.groups_left + departure.groups_closed);
+    await record("connections", departure.connections_removed);
+    // The main writer is closed above; requests get their own short-lived one.
+    const sharing_writer = make_bulk_writer();
+    const requests_deleted = await hard_delete_by_fields_union(
+      "requests", ["fromUserId", "toUserId"], user_id, sharing_writer, on_batch
+    );
+    await sharing_writer.close();
+    await record("requests", requests_deleted);
+    // Legacy sole-owned families.
+    const families_deleted = await delete_owned_solo_groups(user_id);
+    total_deleted += families_deleted;
+    await record("families", families_deleted);
 
     // 7b. If any Plaid revoke genuinely failed, STOP before deleting the profile
     //     + auth user: throw so the job retries (idempotent) rather than orphaning
