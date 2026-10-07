@@ -25,6 +25,9 @@ import {
   PeriodType,
 } from '../../../../types';
 import { authenticateRequest } from '../../../../utils/auth';
+import { create_trace_context } from '../../../observability';
+import { group_repo } from '../../../repositories/sharing';
+import { can_manage_budget, group_id_of_key } from '../../../domain/sharing/budget_view.service';
 import {
   findOverlappingPrimePeriods,
   calculatePrimeContributions,
@@ -160,19 +163,6 @@ export const updateBudgetPeriodAmount = onCall<
 
     const period = { id: periodDoc.id, ...periodDoc.data() } as BudgetPeriodDocument;
 
-    // Check ownership
-    if (period.userId !== user.uid && period.createdBy !== user.uid) {
-      // Check if user is editor/admin
-      if (userData.role !== UserRole.EDITOR && userData.role !== UserRole.ADMIN) {
-        throw new HttpsError('permission-denied', 'You do not have permission to edit this budget period');
-      }
-    }
-
-    // Block past period updates
-    if (isPastPeriod(period.periodEnd)) {
-      throw new HttpsError('failed-precondition', 'Cannot edit past/historical periods. Only current and future periods can be modified.');
-    }
-
     // Get the parent budget
     const budgetDoc = await db.collection('budgets').doc(period.budgetId).get();
     if (!budgetDoc.exists) {
@@ -180,6 +170,22 @@ export const updateBudgetPeriodAmount = onCall<
     }
 
     const budget = { id: budgetDoc.id, ...budgetDoc.data() } as Budget;
+
+    // Ownership: the parent budget's CURRENT view (userId) — the caller's Me, or a group
+    // they're in (Account-Rooted-Sharing PD6). Not createdBy, and no role bypass: every
+    // user is an EDITOR, so a role check let anyone edit anyone's period. The admin SDK
+    // skips rules, so this is the only guard.
+    const owner_key = (budget as unknown as { userId?: string }).userId ?? '';
+    const owner_gid = group_id_of_key(owner_key);
+    const owner_group = owner_gid ? await group_repo.get(create_trace_context(false), owner_gid) : null;
+    if (period.budgetId !== budget.id || !can_manage_budget(owner_key, user.uid, owner_group)) {
+      throw new HttpsError('not-found', 'Budget period not found');
+    }
+
+    // Block past period updates
+    if (isPastPeriod(period.periodEnd)) {
+      throw new HttpsError('failed-precondition', 'Cannot edit past/historical periods. Only current and future periods can be modified.');
+    }
 
     // Check for system budget
     if (budget.isSystemEverythingElse) {
