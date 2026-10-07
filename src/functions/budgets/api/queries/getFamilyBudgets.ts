@@ -31,10 +31,11 @@ export const getFamilyBudgets = onCall({
     throw new HttpsError("unauthenticated", error?.message || "Authentication required");
   }
 
-  if (!userData.familyId) {
-    // Message preserved for the client's no-family fallback detection
-    throw new HttpsError("failed-precondition", "User must belong to a family");
-  }
+  // Legacy family sharing is retired (security audit 2026-10-07): a shared familyId must not
+  // grant reads of other users' budgets. Every caller gets the no-family answer, which the app
+  // already handles by falling back to getPersonalBudgets. Message preserved for that detection.
+  void userData;
+  throw new HttpsError("failed-precondition", "User must belong to a family");
 
   try {
     const data = (request.data || {}) as { includeInactive?: boolean | string; limit?: number; offset?: number };

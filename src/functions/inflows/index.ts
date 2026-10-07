@@ -42,7 +42,7 @@ export { extendRecurringInflowPeriods } from "./orchestration/scheduled/extendRe
 
 // API Functions
 export { regenerateInflowPeriods } from "./inflow_periods/api/regenerateInflowPeriods";
-export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";
+// Retired 2026-10-07 (security audit: no owner check / unused by the app): export { adminRegenerateInflowPeriods } from "./inflow_periods/api/adminRegenerateInflowPeriods";
 export { updateInflowConfiguration } from "./inflow_periods/api/updateInflowConfiguration";
 export { createManualInflow } from "./inflow_periods/api/createManualInflow";
 
