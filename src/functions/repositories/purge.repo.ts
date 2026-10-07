@@ -314,12 +314,14 @@ export async function find_owned_shared_groups(
       // Account-Rooted-Sharing groups: `memberIds` array + `members` MAP +
       // `deletedAt`. (The old check read `members.length`, which is undefined on
       // a map, so it never blocked.)
+      /* eslint-disable @typescript-eslint/naming-convention */
       const data = d.data() as {
         name?: string;
         memberIds?: unknown[];
         deletedAt?: unknown;
         isActive?: boolean;
       };
+      /* eslint-enable @typescript-eslint/naming-convention */
       const active = (data.deletedAt ?? null) === null && data.isActive !== false;
       if (active && (data.memberIds?.length ?? 0) > 1) {
         out.push({ id: d.id, name: data.name ?? "Untitled group" });
