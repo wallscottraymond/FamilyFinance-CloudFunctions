@@ -10,8 +10,8 @@ if (!admin.apps.length) {
 // Export all function modules
 export * from "./functions/auth";
 export * from "./functions/users"; // Includes auth triggers (onUserCreate, onUserDelete)
-export * from "./functions/sharing"; // Legacy group management (onRequest, familyId) - DEPRECATED
-export * from "./functions/groups";  // RBAC v2 group management (onCall, groupIds[])
+// functions/sharing + functions/groups: retired 2026-10-06 (Account-Rooted-Sharing Phase 0.3) — no longer
+// deployed; replaced by the new group callables. Code kept until the user OKs deleting the folders.
 export * from "./functions/transactions";
 export * from "./functions/budgets";
 export * from "./functions/categories"; // Categories management functions
