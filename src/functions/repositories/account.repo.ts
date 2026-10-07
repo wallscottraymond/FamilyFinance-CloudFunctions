@@ -19,6 +19,7 @@ import {
   AccessMetadata,
   create_write_result,
   chunk_for_batch,
+  FIRESTORE_BATCH_LIMIT,
   TraceContext,
 } from "../types";
 import { ClientAccountData, LiabilityDetail, LiabilityByAccountId } from "../types/plaid";
@@ -684,6 +685,26 @@ export const account_repo = {
       trace_id: ctx.trace_id,
       metadata: { source: "api", context: { placement: true } },
     });
+  },
+
+  /** Makes several accounts private in one batch (leaving / deleting a group). */
+  async clear_placements(
+    ctx: TraceContext,
+    account_ids: string[],
+    user_id: string
+  ): Promise<void> {
+    if (account_ids.length === 0) return;
+    for (let i = 0; i < account_ids.length; i += FIRESTORE_BATCH_LIMIT) {
+      const batch = getFirestore().batch();
+      for (const id of account_ids.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+        /* eslint-disable-next-line @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), { placement: null, updatedAt: Timestamp.now() });
+      }
+      await batch.commit();
+    }
+    console.log(
+      `[${ctx.trace_id}] account_repo.clear_placements: ${account_ids.length} by ${user_id}`
+    );
   },
 
   /** Active accounts shared with a group (any owner). */

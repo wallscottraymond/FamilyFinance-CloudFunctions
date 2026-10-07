@@ -27,6 +27,7 @@ import { get_sharing_overview_orchestrator } from "../src/functions/orchestrator
 import {
   create_group_orchestrator,
   respond_to_request_orchestrator,
+  manage_group_orchestrator,
 } from "../src/functions/orchestrators/sharing/groups.orchestrator";
 import {
   share_account_orchestrator,
@@ -132,6 +133,33 @@ describe("account placement (emulator)", () => {
   it("unshare → private again", async () => {
     expect((await unshare_account_orchestrator(ctx(SAM, { account_id: JC_A }))).success).toBe(false);
     expect((await unshare_account_orchestrator(ctx(ALEX, { account_id: JC_A }))).success).toBe(true);
+    expect(await placement_of(JC_A)).toBeNull();
+  });
+});
+
+describe("departures (D13, emulator)", () => {
+  async function share_and_accept(owner: string, other: string, account_id: string) {
+    const res = await share_account_orchestrator(
+      ctx(owner, { account_id, group_id, include_history: true })
+    );
+    expect(res.success).toBe(true);
+    const req = (await overview(other)).requests.find((r) => r.type === "share_account")!;
+    await respond_to_request_orchestrator(ctx(other, { request_id: req.id, accept: true }));
+    expect((await placement_of(account_id)).groupId).toBe(group_id);
+  }
+
+  it("T-LV-01 Sam leaves → his shared Amex goes private; Alex's account stays shared", async () => {
+    await share_and_accept(SAM, ALEX, AMEX);
+    await share_and_accept(ALEX, SAM, JC_A);
+    expect((await manage_group_orchestrator(ctx(SAM, { group_id, action: "leave" }))).success)
+      .toBe(true);
+    expect(await placement_of(AMEX)).toBeNull();
+    expect((await placement_of(JC_A)).groupId).toBe(group_id);
+  });
+
+  it("delete → every account in the group goes private", async () => {
+    expect((await manage_group_orchestrator(ctx(ALEX, { group_id, action: "delete" }))).success)
+      .toBe(true);
     expect(await placement_of(JC_A)).toBeNull();
   });
 });

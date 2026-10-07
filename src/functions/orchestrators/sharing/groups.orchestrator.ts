@@ -23,8 +23,13 @@ import {
   resolve_request,
   resolve_group_pending_requests,
   resolve_share_accept,
+  resolve_group_accounts,
 } from "../../resolvers/sharing/sharing.resolver";
-import { placement_on_accept } from "../../domain/sharing/placement.service";
+import {
+  placement_on_accept,
+  placements_released,
+  requests_released,
+} from "../../domain/sharing/placement.service";
 import { account_repo } from "../../repositories/account.repo";
 import {
   build_group,
@@ -221,7 +226,11 @@ export type ManageGroupInput =
   | { group_id: string; action: "leave" }
   | { group_id: string; action: "delete" };
 
-/** Owner / member group management. Effects on shared accounts land in Phase 2. */
+/**
+ * Owner / member group management. Leaving / removal / deletion also make the
+ * departing people's shared accounts private again and cancel their pending
+ * requests (D13). Budgets they moved in follow in 2.3 (needs budgets.view).
+ */
 export async function manage_group_orchestrator(
   ctx: OrchestratorContext<ManageGroupInput>
 ): Promise<SharingWriteResult> {
@@ -232,10 +241,14 @@ export async function manage_group_orchestrator(
   const caller = ctx.user_id;
 
   // 1. RESOLVER (the group itself is read inside the transaction below)
-  const pending =
-    input.action === "delete" || input.action === "leave"
-      ? await resolve_group_pending_requests(ctx, input.group_id)
-      : [];
+  const departs =
+    input.action === "delete" || input.action === "leave" || input.action === "remove_member";
+  const [pending, group_accounts] = departs
+    ? await Promise.all([
+      resolve_group_pending_requests(ctx, input.group_id),
+      resolve_group_accounts(ctx, input.group_id),
+    ])
+    : [[], []];
 
   // 2. DOMAIN rule (run on fresh data inside the transaction)
   const rule = (group: Group | null): DomainResult<GroupMutation> => {
@@ -251,8 +264,18 @@ export async function manage_group_orchestrator(
   // 3. REPOSITORY
   const result = await group_repo.apply_mutation(ctx, input.group_id, [], rule, now_ms);
   if (result.validation_errors?.length || !result.entity) return fail(result.validation_errors);
-  if (result.entity.group.deleted_at_ms !== null) {
-    await request_repo.save_many(ctx, cancel_requests(pending, now_ms));
+  // 4. DEPARTURES (D13): who left decides which accounts / requests are released.
+  if (departs) {
+    const deleted = result.entity.group.deleted_at_ms !== null;
+    const leaving: string[] | "all" = deleted
+      ? "all"
+      : result.entity.user_changes.filter((c) => c.remove).map((c) => c.user_id);
+    await account_repo.clear_placements(
+      ctx, placements_released(group_accounts, input.group_id, leaving), caller
+    );
+    await request_repo.save_many(
+      ctx, cancel_requests(requests_released(pending, leaving), now_ms)
+    );
   }
 
   log_operation_success(span, ctx.user_id);

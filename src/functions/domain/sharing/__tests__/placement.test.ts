@@ -8,6 +8,8 @@ import {
   placement_on_accept,
   plan_unshare_account,
   account_fingerprint,
+  placements_released,
+  requests_released,
   PlaceableAccount,
   SharePlanInput,
 } from "../placement.service";
@@ -121,5 +123,24 @@ describe("accepting a share (PD5) and unsharing", () => {
     expect(plan_unshare_account(placed, "alex").entity).toEqual({ was_group_id: "g1" });
     expect(plan_unshare_account(placed, "sam").validation_errors).toBeDefined();
     expect(plan_unshare_account(acct(), "alex").validation_errors).toBeDefined();
+  });
+});
+
+describe("departures release accounts + requests (D13)", () => {
+  const p = (gid: string) => ({ group_id: gid, shared_from_ms: null, shared_by: "x", shared_at_ms: NOW });
+  const accounts = [
+    acct({ id: "a1", user_id: "alex", placement: p("g1") }),
+    acct({ id: "s1", user_id: "sam", placement: p("g1") }),
+    acct({ id: "s2", user_id: "sam", placement: p("g2") }),
+  ];
+  it("T-LV-01 a leaver's accounts in THIS group go private; others stay", () => {
+    expect(placements_released(accounts, "g1", ["sam"])).toEqual(["s1"]);
+    expect(placements_released(accounts, "g1", "all")).toEqual(["a1", "s1"]);
+  });
+  it("requests from or to the leaver are released", () => {
+    const base = plan_share_account(input()).entity!.requests; // alex → sam, alex → riley
+    expect(requests_released(base, ["riley"]).map((r) => r.to_user_id)).toEqual(["riley"]);
+    expect(requests_released(base, ["alex"])).toHaveLength(2);
+    expect(requests_released(base, "all")).toHaveLength(2);
   });
 });

@@ -267,3 +267,12 @@ export async function resolve_share_accept(
   ]);
   return { ...placement, group };
 }
+
+/** For manage_group leave / remove / delete: accounts shared with the group. */
+export async function resolve_group_accounts(
+  ctx: TraceContext,
+  group_id: string
+): Promise<PlaceableAccount[]> {
+  const shared = await account_repo.get_shared_with_group(ctx, group_id);
+  return shared.map((a) => to_placeable(a)!);
+}

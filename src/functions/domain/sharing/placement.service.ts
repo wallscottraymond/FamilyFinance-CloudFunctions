@@ -181,3 +181,31 @@ export function plan_unshare_account(
   if (!account.placement) return validation_failed(["This account is already private"]);
   return success({ was_group_id: account.placement.group_id });
 }
+
+/**
+ * Accounts that leave a group when people leave it (D13). `leaving` = the uids
+ * leaving, or "all" when the group is deleted. Returns account ids to make private.
+ *
+ * Derive must ALSO ignore any account whose owner isn't a current member, so a
+ * failed write here can never keep someone's account visible after they leave.
+ */
+export function placements_released(
+  group_accounts: PlaceableAccount[],
+  group_id: string,
+  leaving: string[] | "all"
+): string[] {
+  return group_accounts
+    .filter((a) => a.placement?.group_id === group_id)
+    .filter((a) => leaving === "all" || leaving.includes(a.user_id))
+    .map((a) => a.id);
+}
+
+/** Pending requests that die with a departure: anything from or to the leavers. */
+export function requests_released(
+  pending: SharingRequest[],
+  leaving: string[] | "all"
+): SharingRequest[] {
+  return pending.filter(
+    (r) => leaving === "all" || leaving.includes(r.from_user_id) || leaving.includes(r.to_user_id)
+  );
+}
