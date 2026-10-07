@@ -151,3 +151,16 @@ export function apply_failure(
   }
   return { failed_attempts: next, cooldown_until_ms: 0 };
 }
+
+/** Codes with less than this left are replaced instead of shown again. */
+export const MIN_CODE_REMAINING_MS = 60 * 1000;
+
+/** Show the existing code unless asked for a new one or it's (nearly) expired. */
+export function should_issue_new_code(
+  existing: ConnectCode | null,
+  now_ms: number,
+  refresh: boolean
+): boolean {
+  if (refresh || !existing || !existing.code) return true;
+  return existing.expires_at_ms - now_ms < MIN_CODE_REMAINING_MS;
+}

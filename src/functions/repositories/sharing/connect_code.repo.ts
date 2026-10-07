@@ -18,8 +18,8 @@ const TTL_GRACE_MS = 24 * 60 * 60 * 1000;
 /* eslint-disable @typescript-eslint/naming-convention */
 interface ConnectCodeDoc {
   userId: string;
-  code: string;
-  expiresAt: Timestamp;
+  code?: string;
+  expiresAt?: Timestamp;
   entries: Record<string, number>;
   failedAttempts: number;
   cooldownUntil: Timestamp | null;
@@ -31,8 +31,9 @@ interface ConnectCodeDoc {
 function to_domain(doc: ConnectCodeDoc): ConnectCode {
   return {
     user_id: doc.userId,
-    code: doc.code,
-    expires_at_ms: doc.expiresAt.toMillis(),
+    // A doc can exist with only failure counters (no code issued yet).
+    code: doc.code ?? "",
+    expires_at_ms: doc.expiresAt ? doc.expiresAt.toMillis() : 0,
     entries: doc.entries ?? {},
     failed_attempts: doc.failedAttempts ?? 0,
     cooldown_until_ms: doc.cooldownUntil ? doc.cooldownUntil.toMillis() : 0,

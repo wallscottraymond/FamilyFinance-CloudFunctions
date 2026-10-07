@@ -94,13 +94,13 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
     }
 
-    // Check if user belongs to any of the document's groups (NEW - groupIds array)
+    // Account-Rooted-Sharing (2026-10-06): clients never read another member's
+    // raw data; group numbers and shared lists come from callables that check
+    // membership on the server (Rules §3). Group-stamp access is therefore OFF.
+    // Kept as a function so the existing `owner || canAccessGroup(...)` rules
+    // reduce to owner-only without touching each one.
     function canAccessGroup(documentGroupIds) {
-      return isAuthenticated() &&
-             documentGroupIds != null &&
-             documentGroupIds.size() > 0 &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             hasAnyGroupAccess(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupIds, documentGroupIds);
+      return false;
     }
 
     // Check if user's groups intersect with document's groups
@@ -109,19 +109,19 @@ service cloud.firestore {
              userGroupIds.hasAny(documentGroupIds);
     }
 
-    // Check if user belongs to a specific group
+    // Check if user belongs to a specific group: the GROUP doc's member list is the
+    // source of truth (users/{uid}.groupIds is a server-written mirror).
     function userBelongsToGroup(groupId) {
       return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupIds.hasAny([groupId]);
+             exists(/databases/$(database)/documents/groups/$(groupId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
     }
 
     // Check if user belongs to group extracted from summary ID
     // Summary ID format: {groupId}_outflowsummary_{periodType} (e.g., "group_xyz789_outflowsummary_monthly")
+    // Legacy group summaries are not used by account-rooted sharing: off.
     function userBelongsToGroupFromSummaryId(summaryId) {
-      let groupId = summaryId.split('_')[0];
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupIds.hasAny([groupId]);
+      return false;
     }
 
     // Check if user can access another user (same family or admin)
@@ -266,6 +266,8 @@ service cloud.firestore {
       // This is primarily for the createUserProfile cloud function
       allow create: if isOwner(userId) && 
                        isValidUserData() &&
+                       // groupIds is server-written (Account-Rooted-Sharing)
+                       (!('groupIds' in request.resource.data) || request.resource.data.groupIds.size() == 0) &&
                        request.resource.data.role == 'viewer'; // New users start as viewers
       
       // Allow users to update their own profile
@@ -284,6 +286,10 @@ service cloud.firestore {
                        ||
                        (
                          isValidUserData() &&
+                         // groupIds is a server-written mirror of group membership
+                         // (Account-Rooted-Sharing): only functions change it.
+                         (isAdmin() ||
+                           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupIds'])) &&
                          // Users cannot change their own role unless they're admin
                          (isOwner(userId) ?
                            (request.resource.data.role == resource.data.role || isAdmin()) :
@@ -332,40 +338,30 @@ service cloud.firestore {
     // =======================
 
     match /groups/{groupId} {
-      // Members can read group info
-      allow read: if userBelongsToGroup(groupId) || isAdmin();
+      // Members read their group (Account-Rooted-Sharing). Every write goes through
+      // callables (create_group, respond_to_request, manage_group) so limits and
+      // the users/{uid}.groupIds mirror stay consistent.
+      allow read: if (isAuthenticated() && request.auth.uid in resource.data.memberIds) || isAdmin();
+      allow write: if false;
 
-      // Only authenticated users can create groups (they become owner)
-      // Demo users cannot create groups
-      allow create: if isAuthenticated() &&
-                       !isDemoUser() &&
-                       request.resource.data.ownerId == request.auth.uid &&
-                       isValidGroupData();
-
-      // Only group owner or admin can update group settings
-      allow update: if (isOwner(resource.data.ownerId) || isAdmin()) &&
-                       isValidGroupData() &&
-                       // Prevent changing ownerId (use transferOwnership function)
-                       request.resource.data.ownerId == resource.data.ownerId;
-
-      // Only group owner or admin can delete group
-      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
-
-      // Group members subcollection
-      match /members/{memberId} {
-        // Members can read member list
-        allow read: if userBelongsToGroup(groupId) || isAdmin();
-
-        // Only group owner/admin can add/remove members
-        allow create, delete: if (isOwner(get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId) ||
-                                  isAdmin());
-
-        // Members can update their own membership settings (e.g., notifications)
-        // Owner/admin can update any member's role
-        allow update: if isOwner(memberId) ||
-                        isOwner(get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId) ||
-                        isAdmin();
+      match /{sub=**} {
+        allow read, write: if false;
       }
+    }
+
+    // Sharing collections: functions-only (requests and codes reach the app
+    // through callables).
+    match /connect_codes/{id} {
+      allow read, write: if false;
+    }
+    match /connections/{id} {
+      allow read, write: if false;
+    }
+    match /requests/{id} {
+      allow read, write: if false;
+    }
+    match /reports/{id} {
+      allow read, write: if false;
     }
 
     // =======================
