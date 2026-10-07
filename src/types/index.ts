@@ -145,6 +145,9 @@ export interface User extends BaseDocument {
   // Initialization status (set after user_summaries and budgets are created)
   isInitialized?: boolean;          // True after backend initialization completes
   initializedAt?: Timestamp;        // When initialization completed
+
+  // Per-user feature switches (the app reads features.groups to show Groups)
+  features?: { groups?: boolean };
 }
 
 // Legacy enum - kept for backward compatibility

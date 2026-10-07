@@ -137,6 +137,8 @@ export const onUserCreate = functions.region("us-central1").runWith({
       // Start as not initialized - will be set to true after summaries and budgets are created
       // Frontend waits for this flag before loading user data
       isInitialized: false,
+      // Groups are on for every new account so people can connect right away
+      features: { groups: true },
     };
 
     // Create user document with custom ID (user's UID)
