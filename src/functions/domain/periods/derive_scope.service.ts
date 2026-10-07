@@ -18,6 +18,8 @@
  * @module domain/periods/derive_scope
  */
 
+import { createHash } from "crypto";
+
 /** What the caller asked for. */
 export type DeriveScopeRequest = { kind: "me" } | { kind: "group"; group_id: string };
 
@@ -41,21 +43,46 @@ export interface DeriveScope {
   include_account_ids: Set<string> | null;
   /** Me: the user's shared accounts (they count in their group instead). */
   exclude_account_ids: Set<string>;
-  /** Group: account id (doc or Plaid) → share-from (ms) or null for all history. */
+  /** Account id (doc or Plaid) → share-from (ms) or null for all history. Group: when its
+   *  transactions start counting there. Me: for the user's shared accounts, transactions
+   *  BEFORE this date stay in Me (N9: earlier history stays private). */
   shared_from: Map<string, number | null>;
   /** Group id when kind = group. */
   group_id: string | null;
+  /**
+   * Extra transactions to load ONLY for pairing transfers (D12): accounts the viewer knows that
+   * aren't the view's own members' — for Me, the shared accounts of the user's groups (owned by
+   * other members). Never counted; just lets a transfer into a group account be seen as one.
+   */
+  pairing_extra: { member_ids: string[]; account_ids: Set<string> } | null;
 }
 
 /** Me scope: exclude the user's own shared accounts. */
 export function build_me_scope(
   user_id: string,
-  my_shared_accounts: Array<Pick<ScopeAccount, "doc_id" | "plaid_account_id">>
+  my_shared_accounts: Array<Pick<ScopeAccount, "doc_id" | "plaid_account_id"> & {
+    shared_from_ms?: number | null;
+  }>,
+  my_groups_accounts: ScopeAccount[] = []
 ): DeriveScope {
   const exclude = new Set<string>();
+  const shared_from = new Map<string, number | null>();
   for (const a of my_shared_accounts) {
-    exclude.add(a.doc_id);
-    if (a.plaid_account_id) exclude.add(a.plaid_account_id);
+    for (const id of [a.doc_id, a.plaid_account_id]) {
+      if (!id) continue;
+      exclude.add(id);
+      shared_from.set(id, a.shared_from_ms ?? null);
+    }
+  }
+  // Accounts of the user's groups owned by OTHER members: known to the user, so a transfer
+  // between one of them and the user's own account is a transfer, not outside money (D12).
+  const extra_members = new Set<string>();
+  const extra_accounts = new Set<string>();
+  for (const a of my_groups_accounts) {
+    if (a.owner_id === user_id) continue;
+    extra_members.add(a.owner_id);
+    if (a.plaid_account_id) extra_accounts.add(a.plaid_account_id);
+    extra_accounts.add(a.doc_id);
   }
   return {
     kind: "me",
@@ -63,8 +90,11 @@ export function build_me_scope(
     member_ids: [user_id],
     include_account_ids: null,
     exclude_account_ids: exclude,
-    shared_from: new Map(),
+    shared_from,
     group_id: null,
+    pairing_extra: extra_members.size
+      ? { member_ids: [...extra_members], account_ids: extra_accounts }
+      : null,
   };
 }
 
@@ -93,6 +123,7 @@ export function build_group_scope(
     exclude_account_ids: new Set(),
     shared_from,
     group_id,
+    pairing_extra: null,
   };
 }
 
@@ -113,8 +144,34 @@ export function transaction_in_scope(
   account_id: string | null | undefined,
   date_ms: number
 ): boolean {
+  const from = account_id ? scope.shared_from.get(account_id) : undefined;
+  if (!scope.include_account_ids) {
+    // Me: a shared account's transactions from BEFORE its share-from date stay private (N9).
+    if (account_id && scope.exclude_account_ids.has(account_id)) {
+      return from !== null && from !== undefined && date_ms < from;
+    }
+    return true;
+  }
   if (!account_in_scope(scope, account_id)) return false;
-  if (!scope.include_account_ids) return true;
-  const from = scope.shared_from.get(account_id as string);
   return from === null || from === undefined || date_ms >= from;
+}
+
+/**
+ * A group view's cache version: a fingerprint of everything that can change its numbers —
+ * who's in it, the group's own version (its budgets), and every member's version (their
+ * transactions / bills / placements). Any member edit or membership change → new version.
+ * Deterministic; a safe integer (52 bits of a SHA-1). PURE.
+ */
+export function group_view_version(
+  member_ids: string[],
+  group_version: number,
+  member_versions: Record<string, number>
+): number {
+  const members = [...member_ids].sort();
+  const parts = [
+    `g=${group_version}`,
+    ...members.map((m) => `${m}=${member_versions[m] ?? 0}`),
+  ];
+  const hex = createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 13);
+  return parseInt(hex, 16);
 }

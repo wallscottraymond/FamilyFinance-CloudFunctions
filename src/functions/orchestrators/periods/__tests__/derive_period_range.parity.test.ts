@@ -194,6 +194,11 @@ jest.mock("../../../repositories/transaction.repo", () => ({
     },
   },
 }));
+// Account-Rooted-Sharing: the Me scope reads the user's group list; a user in no groups takes
+// the fast path (no shared accounts), which is exactly this single-user parity fixture.
+jest.mock("../../../repositories/user.repo", () => ({
+  user_repo: { get_by_id: jest.fn(async () => ({ id: "u1", data: {} })) },
+}));
 jest.mock("../../../repositories/derive_version.repo", () => ({
   get_derive_version: async () => 7,
 }));

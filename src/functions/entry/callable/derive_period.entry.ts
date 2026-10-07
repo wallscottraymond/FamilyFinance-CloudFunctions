@@ -22,6 +22,8 @@ import {
 } from "../../orchestrators/periods/derive_period.orchestrator";
 import { map_derive_period_result } from "./mappers/derive_period.mapper";
 import { success_response, FunctionResponse } from "../../types";
+import { derive_scope_schema } from "../../types/schemas/derive_scope.schema";
+import { PermissionDeniedError } from "../../types";
 
 const MAX_WINDOW_MS = 200 * 24 * 60 * 60 * 1000;
 
@@ -34,6 +36,8 @@ const schema = z
     // right after a user config change (budget/bill/goal) so the edit reflects immediately
     // instead of waiting out the version-bump race / TTL backstop.
     force: z.boolean().optional(),
+    // Account-Rooted-Sharing: Me (default) or a group the caller belongs to.
+    scope: derive_scope_schema.optional(),
     debug_mode: z.boolean().optional(),
   })
   .refine((d) => d.window_end_ms >= d.window_start_ms, { message: "window_end_ms must be >= window_start_ms" })
@@ -70,6 +74,7 @@ export const derive_period = onCall(
         window_start_ms: input.window_start_ms,
         window_end_ms: input.window_end_ms,
         force: input.force,
+        scope: input.scope,
       });
 
       log_operation_success(span, user_id);
@@ -81,6 +86,11 @@ export const derive_period = onCall(
         { user_id }
       );
       if (error instanceof HttpsError) throw error;
+      if (error instanceof PermissionDeniedError) {
+        throw new HttpsError("permission-denied", "You're not in this group", {
+          trace_id: ctx.trace_id,
+        });
+      }
       throw new HttpsError("internal", "Failed to derive period", { trace_id: ctx.trace_id });
     }
   }

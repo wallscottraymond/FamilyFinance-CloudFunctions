@@ -30,6 +30,7 @@ import {
 } from "../../repositories/sharing";
 import { account_repo } from "../../repositories/account.repo";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
+import { bump_owner_versions } from "./versions";
 
 export interface DepartureResult {
   groups_left: number;
@@ -68,7 +69,11 @@ export async function release_user_from_sharing(
     }
     const closed = applied.entity.group.deleted_at_ms !== null;
     const leaving: string[] | "all" = closed ? "all" : [user_id];
-    await account_repo.clear_placements(ctx, placements_released(accounts, g.id, leaving), user_id);
+    const released = placements_released(accounts, g.id, leaving);
+    await account_repo.clear_placements(ctx, released, user_id);
+    await bump_owner_versions(
+      accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
+    );
     await request_repo.save_many(ctx, cancel_requests(requests_released(pending, leaving), now_ms));
     await return_moved_in_budgets(ctx, g.id, leaving, user_id);
     if (closed) result.groups_closed++;

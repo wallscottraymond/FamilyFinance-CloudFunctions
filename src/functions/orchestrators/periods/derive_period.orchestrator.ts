@@ -35,7 +35,11 @@ export type {
   DerivePeriodResult,
 } from "../../domain/periods/period_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
-import { get_derive_version } from "../../repositories/derive_version.repo";
+import {
+  resolve_view_version,
+  view_key_for,
+} from "../../resolvers/periods/view_version.resolver";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 import {
   get_cached_derived_period,
   put_cached_derived_period,
@@ -57,6 +61,8 @@ export interface DerivePeriodInput {
   /** Bypass the cached result and recompute fresh (still overwrites the cache with the result,
    *  stamped at the current version). Used by the FE right after a config mutation. */
   force?: boolean;
+  /** Account-Rooted-Sharing: which view (default Me). A group view needs membership. */
+  scope?: DeriveScopeRequest;
 }
 
 export async function derive_period_orchestrator(
@@ -77,22 +83,25 @@ export async function derive_period_orchestrator(
     // `force` (set by the FE right after a config mutation) skips the cache SERVE entirely so the
     // edit reflects immediately without waiting out the async version-bump race / TTL backstop.
     // We still read the current version (to stamp the overwrite) but skip the cached-doc read.
+    // Cache key + version per VIEW: Me = the user (exactly as before); a group = "group:<id>"
+    // with a members-aware version (membership is checked even on a cache hit).
     let data_version: number;
+    const view_key = view_key_for(user_id, input.scope);
     if (input.force) {
-      data_version = await get_derive_version(user_id);
+      data_version = (await resolve_view_version(ctx, user_id, input.scope)).version;
       perf.reads += 1;
     } else {
-      const [version, cached] = await Promise.all([
-        get_derive_version(user_id),
+      const [vv, cached] = await Promise.all([
+        resolve_view_version(ctx, user_id, input.scope),
         get_cached_derived_period<DerivePeriodResult>(
-          user_id,
+          view_key,
           input.view_cadence,
           input.window_start_ms,
           input.window_end_ms
         ),
       ]);
       perf.reads += 2;
-      data_version = version;
+      data_version = vv.version;
       if (
         cached &&
         cached.data_version === data_version &&
@@ -108,7 +117,8 @@ export async function derive_period_orchestrator(
       user_id,
       input.view_cadence,
       input.window_start_ms,
-      input.window_end_ms
+      input.window_end_ms,
+      input.scope
     );
     perf.reads += 7;
 
@@ -148,7 +158,7 @@ export async function derive_period_orchestrator(
     // now stale, so the next read misses and recomputes — never serving stale data.
     fire_and_forget(() =>
       put_cached_derived_period(
-        user_id,
+        view_key,
         input.view_cadence,
         input.window_start_ms,
         input.window_end_ms,

@@ -29,6 +29,7 @@ import { person_view } from "../../domain/sharing/names.service";
 import { PersonView } from "../../types/sharing.types";
 import { account_repo } from "../../repositories/account.repo";
 import { request_repo } from "../../repositories/sharing";
+import { bump_owner_versions } from "./versions";
 
 export interface ShareAccountResult {
   success: boolean;
@@ -78,6 +79,7 @@ export async function share_account_orchestrator(
     await account_repo.set_placement(
       ctx, ctx.input.account_id, plan.entity.placement, ctx.user_id
     );
+    await bump_owner_versions([ctx.user_id]);
   }
   await request_repo.save_many(ctx, plan.entity.requests);
 
@@ -107,6 +109,7 @@ export async function unshare_account_orchestrator(
   // 3. REPOSITORY (cancelling a pending share counts as unsharing too)
   if (plan.entity) {
     await account_repo.set_placement(ctx, ctx.input.account_id, null, ctx.user_id);
+    await bump_owner_versions([ctx.user_id]);
   }
   await request_repo.save_many(ctx, cancelled);
 

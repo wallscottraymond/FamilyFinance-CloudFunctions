@@ -20,6 +20,8 @@ import {
 } from "../../observability";
 import { derive_budget_transactions_orchestrator } from "../../orchestrators/budgets/derive_budget_transactions.orchestrator";
 import { success_response, FunctionResponse } from "../../types";
+import { derive_scope_schema } from "../../types/schemas/derive_scope.schema";
+import { PermissionDeniedError } from "../../types";
 
 const MAX_WINDOW_MS = 200 * 24 * 60 * 60 * 1000;
 
@@ -30,6 +32,8 @@ const schema = z
     window_end_ms: z.number().int().nonnegative(),
     /** Skip the cache serve + recompute (post-mutation freshness). */
     force: z.boolean().optional(),
+    // Account-Rooted-Sharing: the budget's view — Me (default) or its group (membership checked).
+    scope: derive_scope_schema.optional(),
     debug_mode: z.boolean().optional(),
   })
   .refine((d) => d.window_end_ms >= d.window_start_ms, {
@@ -67,7 +71,8 @@ export const derive_budget_transactions = onCall(
         input.budget_id,
         input.window_start_ms,
         input.window_end_ms,
-        input.force ?? false
+        input.force ?? false,
+        input.scope
       );
 
       log_operation_success(span, user_id);
@@ -92,6 +97,11 @@ export const derive_budget_transactions = onCall(
         user_id,
       });
       if (error instanceof HttpsError) throw error;
+      if (error instanceof PermissionDeniedError) {
+        throw new HttpsError("permission-denied", "You're not in this group", {
+          trace_id: ctx.trace_id,
+        });
+      }
       throw new HttpsError("internal", "Failed to derive budget transactions", {
         trace_id: ctx.trace_id,
       });

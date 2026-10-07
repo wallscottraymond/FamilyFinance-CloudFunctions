@@ -36,6 +36,8 @@ import {
 } from "../../domain/budgets/budget_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 import { derive_period_orchestrator } from "../periods/derive_period.orchestrator";
+import { PermissionDeniedError } from "../../types";
+import { group_id_of_key } from "../../domain/sharing/budget_view.service";
 
 /** Read-only budget: derivation reads a bounded window; keep it generous. */
 const BUDGET: PerformanceBudget = {
@@ -80,10 +82,36 @@ export async function derive_budget_view_orchestrator(
     //    RBAC-owned concern; owner covers the parity gate + single-user case).
     const budget = await budget_repo.get_by_id(ctx, input.budget_id);
     perf.reads++;
-    if (
-      !budget ||
-      (budget.user_id !== user_id && budget.owner_id !== user_id)
-    ) {
+    if (!budget) return null;
+
+    // 1a. GROUP budget (Account-Rooted-Sharing PD6): derived inside the group's view via the
+    //     scoped period derivation (same numbers as the group's period page — one source of
+    //     truth). Membership is checked there; a non-member gets "not found".
+    const group_id = group_id_of_key(budget.user_id);
+    if (group_id) {
+      let period_result;
+      try {
+        period_result = await derive_period_orchestrator(ctx, user_id, {
+          view_cadence: input.view_cadence,
+          window_start_ms: input.window_start_ms,
+          window_end_ms: input.window_end_ms,
+          scope: { kind: "group", group_id },
+        });
+      } catch (error) {
+        if (error instanceof PermissionDeniedError) return null;
+        throw error;
+      }
+      const derived = period_result.budgets.find((b) => b.budget_id === input.budget_id);
+      log_operation_success(span, user_id);
+      return {
+        budget_id: input.budget_id,
+        budget_name: budget.name,
+        view_cadence: input.view_cadence,
+        periods: derived?.periods ?? [],
+      };
+    }
+
+    if (budget.user_id !== user_id && budget.owner_id !== user_id) {
       return null;
     }
 

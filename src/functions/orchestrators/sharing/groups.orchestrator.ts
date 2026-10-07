@@ -53,6 +53,7 @@ import { group_repo, request_repo } from "../../repositories/sharing";
 import { DomainResult } from "../../types";
 import { ensure_group_everything_else } from "./group_everything_else";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
+import { bump_owner_versions } from "./versions";
 
 export interface SharingWriteResult {
   success: boolean;
@@ -203,6 +204,7 @@ export async function respond_to_request_orchestrator(
       await account_repo.set_placement(
         ctx, deps.account!.id, placement.entity, answer.from_user_id
       );
+      await bump_owner_versions([answer.from_user_id]);
     }
     await request_repo.save_many(ctx, [answer, ...siblings]);
     log_operation_success(span, ctx.user_id);
@@ -273,8 +275,10 @@ export async function manage_group_orchestrator(
     const leaving: string[] | "all" = deleted
       ? "all"
       : result.entity.user_changes.filter((c) => c.remove).map((c) => c.user_id);
-    await account_repo.clear_placements(
-      ctx, placements_released(group_accounts, input.group_id, leaving), caller
+    const released = placements_released(group_accounts, input.group_id, leaving);
+    await account_repo.clear_placements(ctx, released, caller);
+    await bump_owner_versions(
+      group_accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
     );
     await request_repo.save_many(
       ctx, cancel_requests(requests_released(pending, leaving), now_ms)

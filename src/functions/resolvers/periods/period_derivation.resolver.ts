@@ -43,6 +43,7 @@ import {
   PeriodLens,
 } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
+import { find_crossing_transfers } from "../../domain/periods/edge_transfers.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import {
   build_stream_membership_map,
@@ -56,7 +57,7 @@ import {
   account_in_scope,
   transaction_in_scope,
 } from "../../domain/periods/derive_scope.service";
-import { resolve_derive_scope } from "./derive_scope.resolver";
+import { resolve_derive_scope, load_pairing_extra_txns } from "./derive_scope.resolver";
 
 function to_cadence(period: string): PeriodLens {
   return period === "weekly" ? "weekly" : period === "bi_monthly" ? "bi_monthly" : "monthly";
@@ -100,12 +101,26 @@ export interface PeriodDerivationRaw {
   outflows: Awaited2<ReturnType<typeof outflow_repo.get_by_user_id>>;
   inflows: Awaited2<ReturnType<typeof inflow_repo.get_by_user_id>>;
   all_goals: Awaited2<ReturnType<typeof goal_repo.get_by_user>>;
-  /** Active transactions across the UNION of every window's derivation span. */
+  /** Active transactions across the UNION of every window's derivation span (in the view). */
   txns: Array<{ id: string; data: Record<string, unknown> }>;
+  /**
+   * The same span's transactions for ALL the view's members, BEFORE the view filter — used only
+   * to pair transfers across every known account, so a transfer that crosses the view boundary
+   * counts at the edge (D12). Server-side only; never returned. For Me with nothing shared this
+   * equals `txns`.
+   */
+  all_member_txns: Array<{ id: string; data: Record<string, unknown> }>;
   /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
   inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
   /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
   scope: DeriveScope;
+  /**
+   * Ids (+ Plaid stream transaction ids) of the members' bills / income that exist but were
+   * left OUT of this view because their account is in another view. A payment linked to one
+   * of these counts as ordinary money in this view instead of vanishing (it's not this view's
+   * bill). Empty for Me with nothing shared.
+   */
+  out_of_view_recurring: { ids: Set<string>; stream_txn_ids: Set<string> };
 }
 
 export interface DerivationWindow {
@@ -228,6 +243,15 @@ export async function load_period_derivation_raw(
   // Bills / income / goals follow their account's view (an item with no account stays in Me).
   const outflows = all_outflows.filter((o) => account_in_scope(scope, o.account_id));
   const inflows = all_inflows.filter((i) => account_in_scope(scope, i.account_id));
+  const out_of_view_recurring = { ids: new Set<string>(), stream_txn_ids: new Set<string>() };
+  for (const r of [...all_outflows, ...all_inflows]) {
+    if (account_in_scope(scope, r.account_id)) continue;
+    // Only live items that would show in their own view. A link to an inactive / hidden item is
+    // a stale link and keeps today's behavior (counted nowhere), so nothing changes for it.
+    if (!r.is_active || r.is_hidden) continue;
+    out_of_view_recurring.ids.add(r.id);
+    for (const t of r.transaction_ids ?? []) out_of_view_recurring.stream_txn_ids.add(t);
+  }
   const all_goals = goals_raw.filter((g) => account_in_scope(scope, g.linked_account_id));
 
   // 2. Transactions for the UNION of every window's span (one query).
@@ -241,11 +265,15 @@ export async function load_period_derivation_raw(
   );
   const txn_start_ms = Math.min(...spans.map((sp) => sp.span_start_ms));
   const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms));
-  const txns = (
-    await per_member(scope, (m) =>
+  const [member_txns, pairing_extra] = await Promise.all([
+    per_member(scope, (m) =>
       transaction_repo.get_active_in_date_range(ctx, m, txn_start_ms, txn_end_ms)
-    )
-  ).filter((t) =>
+    ),
+    load_pairing_extra_txns(ctx, scope, txn_start_ms, txn_end_ms),
+  ]);
+  // Pairing pool: the members' transactions plus known group accounts (never counted).
+  const all_member_txns = [...member_txns, ...pairing_extra];
+  const txns = member_txns.filter((t) =>
     transaction_in_scope(
       scope,
       t.data.accountId as string | undefined,
@@ -281,8 +309,10 @@ export async function load_period_derivation_raw(
     inflows,
     all_goals,
     txns,
+    all_member_txns,
     inflow_history_docs,
     scope,
+    out_of_view_recurring,
   };
 }
 
@@ -291,6 +321,36 @@ export async function load_period_derivation_raw(
  * same predicates the per-window queries apply — so the result is identical to loading that
  * window alone.
  */
+/** Splits with every bill / income link removed (edge money isn't a bill or a paycheck). */
+function without_recurring_links(
+  splits: Array<Record<string, unknown>>
+): Array<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  return splits.map((s) => ({ ...s, outflowId: null, inflowId: null }));
+}
+
+/** Splits with links to out-of-view bills / income removed (same objects when nothing to do). */
+function without_out_of_view_links(
+  splits: Array<Record<string, unknown>>,
+  out_of_view_ids: Set<string>
+): Array<Record<string, unknown>> {
+  if (out_of_view_ids.size === 0) return splits;
+  return splits.map((s) => {
+    const o = s.outflowId as string | null | undefined;
+    const i = s.inflowId as string | null | undefined;
+    if ((o && out_of_view_ids.has(o)) || (i && out_of_view_ids.has(i))) {
+      /* eslint-disable @typescript-eslint/naming-convention */
+      return {
+        ...s,
+        outflowId: o && out_of_view_ids.has(o) ? null : o ?? null,
+        inflowId: i && out_of_view_ids.has(i) ? null : i ?? null,
+      };
+      /* eslint-enable @typescript-eslint/naming-convention */
+    }
+    return s;
+  });
+}
+
 export function shape_period_derivation_deps(
   raw: PeriodDerivationRaw,
   view_cadence: PeriodInstanceType,
@@ -298,6 +358,7 @@ export function shape_period_derivation_deps(
   window_end_ms: number
 ): PeriodDerivationDeps {
   const { budget_entities, monthly_period_docs, outflows, inflows, all_goals } = raw;
+  const out_of_view_recurring_ids = raw.out_of_view_recurring.ids;
   const overlapping = overlapping_for_window(raw.overlapping, window_start_ms, window_end_ms);
 
   // Active, income-drawing goals contribute their planned per-period set-aside to
@@ -428,6 +489,25 @@ export function shape_period_derivation_deps(
   const is_internal_stream = (transaction_ids: string[] | undefined): boolean =>
     (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
 
+  // 3b. Counting at the edge (Account-Rooted-Sharing D12). Pair transfers across ALL the view's
+  // members' accounts too: a transfer that's internal there but NOT inside this view crosses the
+  // view boundary → it's EDGE money, counted on its own date: into the view = "Other income",
+  // out of it = spending (Everything Else / a budget by category). Bill / income links and
+  // recurring-stream membership are ignored for edge money (it isn't a bill or a paycheck), and
+  // hidden transfer streams stay hidden. With nothing shared, `crossing` is empty.
+  const all_in_span = raw.all_member_txns.filter((t) => {
+    const d = t.data.transactionDate as Timestamp;
+    return ts_cmp(d, span_start_ms) >= 0 && ts_cmp(d, span_end_ms) <= 0;
+  });
+  // Two-stage pairing: pairs INSIDE the view win (stage 1, above); only the view's leftover
+  // transfers are then paired against the members' other accounts (stage 2), so a cross-view
+  // match can never steal one of the view's own pairs.
+  const crossing = find_crossing_transfers(
+    detect_internal_transfers_from_txns(all_in_span.filter((t) => !internal_ids.has(t.id))),
+    internal_ids,
+    txns
+  );
+
   const recurring: RecurringForDerivation[] = [];
   const payments_by_id = new Map<string, ActualPayment[]>();
   // Included bills' Plaid `transactionIds` → map built AFTER the loop (conflict-safe).
@@ -514,14 +594,26 @@ export function shape_period_derivation_deps(
     // payments keep counting.
     const txn_is_internal_transfer = internal_ids.has(id);
     const txn_is_income = data.type === "income";
+    // Edge money (D12, see 3b): crosses the view boundary.
+    const is_edge = crossing.ids.has(id);
     // Is this transaction part of a Plaid income stream? (Plaid id → inflow.)
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
-    const linked_inflow_id = plaid_txn_id ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
-    const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
+    const linked_inflow_id =
+      plaid_txn_id && !is_edge ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
+    // A split linked to a bill / income that lives in ANOTHER view (its account isn't in this
+    // one) isn't this view's bill payment: drop the link so the money counts here as ordinary
+    // spending / money in, instead of vanishing (Account-Rooted-Sharing). No-op for Me with
+    // nothing shared. Edge money drops every link.
+    const raw = is_edge
+      ? without_recurring_links((data.splits as Array<Record<string, unknown>>) ?? [])
+      : without_out_of_view_links(
+        (data.splits as Array<Record<string, unknown>>) ?? [],
+        out_of_view_recurring_ids
+      );
     // A manual "remove from bill" beats Plaid stream membership: the txn is neither a bill
     // payment nor excluded from budget spend as a recurring member.
     const linked_outflow_id =
-      plaid_txn_id && !is_txn_detached_from_outflow(raw)
+      plaid_txn_id && !is_edge && !is_txn_detached_from_outflow(raw)
         ? outflow_tx_to_id.get(plaid_txn_id)
         : undefined;
     let income_amount = 0;
@@ -543,6 +635,9 @@ export function shape_period_derivation_deps(
           is_recurring_member: !!(linked_outflow_id || linked_inflow_id),
         })
       );
+      if (is_edge && crossing.out_ids.has(id)) {
+        splits_for_match[splits_for_match.length - 1].is_edge_out = true;
+      }
       income_amount += Math.abs(amount);
       // Outflow (bills) attribute via the split's stored link; MANUAL inflows via
       // split.inflowId — but a Plaid income txn is attributed ONCE below via
@@ -601,6 +696,10 @@ export function shape_period_derivation_deps(
       !any_split_inflow_linked &&
       !txn_is_internal_transfer
     ) {
+      other_income_credits.push({ date_ms: txn_date_ms, amount: income_amount });
+    } else if (crossing.in_ids.has(id)) {
+      // D12: money moved INTO this view from a member's account outside it (e.g. a share sent
+      // to the joint account) is income for this view, on the day it arrived.
       other_income_credits.push({ date_ms: txn_date_ms, amount: income_amount });
     }
   }

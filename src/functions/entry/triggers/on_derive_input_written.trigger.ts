@@ -39,11 +39,14 @@ const TRIGGER_OPTS = {
 export const on_budget_written = onDocumentWritten(
   { ...TRIGGER_OPTS, document: "budgets/{budgetId}" },
   async (event) => {
-    const owner = owner_of(
-      (event.data?.before?.data() as Record<string, unknown> | undefined) ?? null,
-      (event.data?.after?.data() as Record<string, unknown> | undefined) ?? null
-    );
+    const before = (event.data?.before?.data() as Record<string, unknown> | undefined) ?? null;
+    const after = (event.data?.after?.data() as Record<string, unknown> | undefined) ?? null;
+    const owner = owner_of(before, after);
     if (owner) void bump_derive_version(owner).catch(() => {});
+    // Account-Rooted-Sharing: a budget MOVED between views (Me <-> "group:<id>") changes its
+    // owner key; the view it left must refresh too. Ordinary writes have one owner → one bump.
+    const previous = before ? owner_of(before, null) : undefined;
+    if (previous && previous !== owner) void bump_derive_version(previous).catch(() => {});
   }
 );
 

@@ -23,6 +23,8 @@ import {
 } from "../../orchestrators/periods/derive_period_range.orchestrator";
 import { map_derive_period_result } from "./mappers/derive_period.mapper";
 import { success_response, FunctionResponse } from "../../types";
+import { derive_scope_schema } from "../../types/schemas/derive_scope.schema";
+import { PermissionDeniedError } from "../../types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Same per-window bound as `derive_period`. */
@@ -50,6 +52,8 @@ const schema = z
     view_cadence: z.enum(["weekly", "monthly", "bi_monthly"]),
     windows: z.array(window_schema).min(1).max(MAX_WINDOWS),
     force: z.boolean().optional(),
+    // Account-Rooted-Sharing: Me (default) or a group the caller belongs to.
+    scope: derive_scope_schema.optional(),
     debug_mode: z.boolean().optional(),
   })
   .refine((d) => new Set(d.windows.map((w) => w.period_id)).size === d.windows.length, {
@@ -95,6 +99,7 @@ export const derive_period_range = onCall(
           end_ms: w.window_end_ms,
         })),
         force: input.force,
+        scope: input.scope,
       });
 
       log_operation_success(span, user_id);
@@ -121,6 +126,11 @@ export const derive_period_range = onCall(
         { user_id }
       );
       if (error instanceof HttpsError) throw error;
+      if (error instanceof PermissionDeniedError) {
+        throw new HttpsError("permission-denied", "You're not in this group", {
+          trace_id: ctx.trace_id,
+        });
+      }
       throw new HttpsError("internal", "Failed to derive period range", {
         trace_id: ctx.trace_id,
       });

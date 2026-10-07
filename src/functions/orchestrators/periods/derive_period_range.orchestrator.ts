@@ -47,7 +47,11 @@ import {
 } from "../../domain/goals/goals_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 import { source_period_repo } from "../../repositories/source_period.repo";
-import { get_derive_version } from "../../repositories/derive_version.repo";
+import {
+  resolve_view_version,
+  view_key_for,
+} from "../../resolvers/periods/view_version.resolver";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 import {
   get_cached_derived_period,
   put_cached_derived_period,
@@ -73,6 +77,8 @@ export interface DerivePeriodRangeInput {
   windows: DeriveRangeWindow[];
   /** Bypass cached results (recompute every window, still writing the cache). */
   force?: boolean;
+  /** Account-Rooted-Sharing: which view (default Me). A group view needs membership. */
+  scope?: DeriveScopeRequest;
 }
 
 export interface DerivePeriodRangeWindowResult {
@@ -105,14 +111,17 @@ export async function derive_period_range_orchestrator(
 
     // 1. Version + every window's cached result + the range's source periods (for goal period
     //    dates, exactly as `derive_goals_view` reads them) — one parallel round-trip.
-    const [data_version, cached, range_periods] = await Promise.all([
-      get_derive_version(user_id),
+    // Cache key + version per VIEW (Me exactly as before; a group = "group:<id>", membership
+    // checked even on a cache hit).
+    const view_key = view_key_for(user_id, input.scope);
+    const [{ version: data_version }, cached, range_periods] = await Promise.all([
+      resolve_view_version(ctx, user_id, input.scope),
       input.force
         ? Promise.resolve(input.windows.map(() => null))
         : Promise.all(
           input.windows.map((w) =>
             get_cached_derived_period<DerivePeriodResult>(
-              user_id,
+              view_key,
               input.view_cadence,
               w.start_ms,
               w.end_ms
@@ -149,7 +158,8 @@ export async function derive_period_range_orchestrator(
         ctx,
         user_id,
         input.view_cadence,
-        miss_windows
+        miss_windows,
+        input.scope
       );
       perf.reads += 8 + raw.txns.length;
 
@@ -161,7 +171,7 @@ export async function derive_period_range_orchestrator(
         // Same version-stamped write as `derive_period` (fire-and-forget; never fails the call).
         fire_and_forget(() =>
           put_cached_derived_period(
-            user_id,
+            view_key,
             input.view_cadence,
             w.start_ms,
             w.end_ms,
@@ -178,7 +188,12 @@ export async function derive_period_range_orchestrator(
       .map((w) => period_by_id.get(w.period_id))
       .filter((p): p is NonNullable<typeof p> => p !== undefined)
       .map((p) => ({ period_id: p.period_id, start: p.start_date, end: p.end_date }));
-    const goal_views = await resolve_goal_measurements_for_periods(ctx, user_id, goal_periods);
+    const goal_views = await resolve_goal_measurements_for_periods(
+      ctx,
+      user_id,
+      goal_periods,
+      input.scope
+    );
 
     const windows: DerivePeriodRangeWindowResult[] = input.windows.map((w, i) => {
       const r = results.get(i)!;

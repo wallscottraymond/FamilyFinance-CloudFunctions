@@ -56,6 +56,10 @@ export interface SplitForOnReadMatch {
   first_category_id?: string | null;
   /** Manual budget pin (user assigned this split to a budget); null otherwise. */
   manual_pin_budget_id: string | null;
+  /** Account-Rooted-Sharing D12: this split is money leaving the VIEW through a transfer to a
+   *  member's account in another view → it counts as spending here even though it's a
+   *  transfer. Optional; defaults false (always false with nothing shared). */
+  is_edge_out?: boolean;
 }
 
 /**
@@ -112,7 +116,9 @@ export function owned_splits_for_budget(
       is_transfer: s.is_transfer,
       is_income: s.is_income,
       is_income_category: is_income_category(s.internal_match_category ?? s.plaid_match_category),
-      is_transfer_category: is_transfer_category(s.internal_match_category ?? s.plaid_match_category),
+      is_transfer_category:
+        !s.is_edge_out &&
+        is_transfer_category(s.internal_match_category ?? s.plaid_match_category),
       spend_status: s.spend_status,
       outflow_id: s.outflow_id,
       inflow_id: s.inflow_id,
