@@ -120,18 +120,34 @@ export async function enter_connect_code_orchestrator(
     );
   }
   const other = decision.other_user_id;
+  let outcome = decision.outcome;
   if (decision.record_entry && other) {
     await connect_code_repo.record_entry(ctx, other, ctx.user_id, now_ms);
+    // Both typed at about the same time: each read before the other's entry landed. Look again
+    // after writing ours. Of two crossing writes, the later one always sees the earlier one, so
+    // at least one side connects here (the other sees it on its next overview poll).
+    const fresh = await connect_code_repo.get_by_user(ctx, ctx.user_id);
+    outcome = evaluate_code_entry({
+      caller_id: ctx.user_id,
+      now_ms,
+      target: deps.target,
+      caller_code: fresh,
+      existing_connection_status: deps.existing_connection?.status ?? null,
+      caller_connection_count: deps.caller_connection_count,
+      target_connection_count: deps.target_connection_count,
+    }).outcome;
   }
-  if (decision.outcome === "connected" && other) {
-    await connection_repo.save(ctx, build_connection(ctx.user_id, other, now_ms), now_ms);
+  if (outcome === "connected" && other) {
+    // Both sides can get here in the same instant: create once, never overwrite.
+    const connection = build_connection(ctx.user_id, other, now_ms);
+    await connection_repo.create_if_absent(ctx, connection, now_ms);
     await connect_code_repo.expire_codes(ctx, [ctx.user_id, other], now_ms);
   }
 
   log_operation_success(span, ctx.user_id);
-  const show_person = other !== null && decision.outcome !== "unavailable";
+  const show_person = other !== null && outcome !== "unavailable";
   return {
-    outcome: decision.outcome,
+    outcome,
     person: show_person ? person_view(other!, {}) : null,
   };
 }

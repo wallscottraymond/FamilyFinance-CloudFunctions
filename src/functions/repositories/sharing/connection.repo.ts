@@ -12,6 +12,8 @@ import { TraceContext } from "../../types";
 import { Connection, ConnectionStatus } from "../../types/sharing.types";
 
 const COLLECTION = "connections";
+/** gRPC status for create() on an existing doc. */
+const ALREADY_EXISTS = 6;
 
 /* eslint-disable @typescript-eslint/naming-convention */
 interface ConnectionDoc {
@@ -78,6 +80,15 @@ export const connection_repo = {
 
   async save(_ctx: TraceContext, entity: Connection, now_ms: number): Promise<void> {
     await ref(entity.id).set(to_doc(entity, now_ms));
+  },
+
+  /** Creates the connection unless the pair's doc already exists (two sides connecting at once). */
+  async create_if_absent(_ctx: TraceContext, entity: Connection, now_ms: number): Promise<void> {
+    try {
+      await ref(entity.id).create(to_doc(entity, now_ms));
+    } catch (e) {
+      if ((e as { code?: number }).code !== ALREADY_EXISTS) throw e;
+    }
   },
 
   async delete(_ctx: TraceContext, pair_id: string): Promise<void> {
