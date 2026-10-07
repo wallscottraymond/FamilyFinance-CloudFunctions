@@ -117,3 +117,50 @@ it("T-SR-05 an account owner can't set placement themselves (server-written)", a
   await assertFails(setDoc(doc(alex, "accounts/a2"), { userId: "alex", placement: { groupId: "g1" } }));
   await assertSucceeds(setDoc(doc(alex, "accounts/a3"), { userId: "alex", name: "New" }));
 });
+
+it("T-SR-06 group members read the group's budgets + budget periods; others can't; no client writes", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "budgets/gb1"), { userId: "group:g1", createdBy: "alex", name: "Groceries", amount: 600 });
+    await setDoc(doc(db, "budget_periods/gb1_2026M10"), { userId: "group:g1", budgetId: "gb1", allocatedAmount: 600 });
+    await setDoc(doc(db, "budgets/mb1"), { userId: "alex", createdBy: "alex", name: "Mine", amount: 50 });
+    // A look-alike key for a group that doesn't exist / a group Sam isn't in.
+    await setDoc(doc(db, "budgets/gx"), { userId: "group:nope", createdBy: "mallory", name: "X", amount: 1 });
+    await setDoc(doc(db, "groups/g2"), { name: "Other", ownerId: "mallory", memberIds: ["mallory"] });
+    await setDoc(doc(db, "budgets/gb2"), { userId: "group:g2", createdBy: "mallory", name: "Theirs", amount: 1 });
+  });
+  const alex = env.authenticatedContext("alex").firestore();
+  const sam = env.authenticatedContext("sam").firestore();
+  const mallory = env.authenticatedContext("mallory").firestore();
+
+  await assertSucceeds(getDoc(doc(sam, "budgets/gb1")));
+  await assertSucceeds(getDoc(doc(sam, "budget_periods/gb1_2026M10")));
+  await assertSucceeds(getDoc(doc(alex, "budgets/gb1")));
+  await assertFails(getDoc(doc(mallory, "budgets/gb1")));
+  await assertFails(getDoc(doc(mallory, "budget_periods/gb1_2026M10")));
+  // Membership doesn't leak a member's private (Me) budgets.
+  await assertFails(getDoc(doc(sam, "budgets/mb1")));
+  await assertFails(getDoc(doc(sam, "budgets/gx")));
+  await assertFails(getDoc(doc(sam, "budgets/gb2")));
+  await assertSucceeds(getDoc(doc(mallory, "budgets/gb2")));
+  // Reading doesn't open client writes to group docs (callables only).
+  await assertFails(updateDoc(doc(sam, "budget_periods/gb1_2026M10"), { allocatedAmount: 1 }));
+  await assertFails(updateDoc(doc(sam, "budgets/gb1"), { amount: 1 }));
+});
+
+it("T-SR-07 budget client-updates follow the current owner (userId), not the creator", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    // Sam made it in the group; Alex later moved it to Alex's Me.
+    await setDoc(doc(db, "budgets/moved"), { userId: "alex", createdBy: "sam", name: "Gas", amount: 100, isSystemEverythingElse: false });
+    await setDoc(doc(db, "budgets/grp"), { userId: "group:g1", createdBy: "sam", name: "Food", amount: 100, isSystemEverythingElse: false });
+    await setDoc(doc(db, "budgets/own"), { userId: "sam", createdBy: "sam", name: "Mine", amount: 100, isSystemEverythingElse: false });
+  });
+  const alex = env.authenticatedContext("alex").firestore();
+  const sam = env.authenticatedContext("sam").firestore();
+  await assertFails(updateDoc(doc(sam, "budgets/moved"), { amount: 1 }));
+  await assertSucceeds(updateDoc(doc(alex, "budgets/moved"), { amount: 120 }));
+  await assertFails(updateDoc(doc(sam, "budgets/grp"), { isActive: false }));
+  await assertSucceeds(updateDoc(doc(sam, "budgets/own"), { amount: 90 }));
+  await assertFails(updateDoc(doc(sam, "budgets/own"), { userId: "group:g1" }));
+});
