@@ -3,12 +3,13 @@
  *
  * HTTPS GET called by the iOS widget extension on its own (no app, no Firebase SDK):
  *   GET /widget_snapshot?kind=left|summary|bills|budget_txns&cadence=monthly&lookahead=7
- *       &budget=<id, budget_txns only>&have=<version>
+ *       &budget=<id, budget_txns only>&group=<group id, optional>&have=<version>
  *   Authorization: Bearer <widget token>
  * → 200 { unchanged: true, version }      (widget already current; ~2 reads)
  * → 200 { version, data }                 (fresh widget data, schema v2)
  * → 200 { version, data: null }           (no current source period)
  * → 401 { error }                         (unknown / revoked token)
+ * → 403 { error: "not_member" }            (group widget, caller no longer in that group)
  *
  * The token is read-only and scoped to widget data. Never logged.
  *
@@ -25,6 +26,7 @@ import {
 const query_schema = z.object({
   kind: z.enum(["left", "summary", "bills", "budget_txns"]).default("left"),
   budget: z.string().min(1).max(128).optional(),
+  group: z.string().trim().min(1).max(128).optional(),
   cadence: z.enum(["monthly", "weekly", "bi_monthly"]).default("monthly"),
   lookahead: z.coerce.number().int().refine((n) => [7, 14, 30].includes(n)).default(14),
   have: z.coerce.number().int().nonnegative().optional(),
@@ -56,6 +58,7 @@ export const widget_snapshot = onRequest(
         token,
         kind: parsed.data.kind,
         budget_id: parsed.data.budget ?? null,
+        group_id: parsed.data.group ?? null,
         cadence: parsed.data.cadence,
         lookahead_days: parsed.data.lookahead,
         have_version: parsed.data.have ?? null,
@@ -65,6 +68,9 @@ export const widget_snapshot = onRequest(
       switch (outcome.status) {
       case "unauthorized":
         res.status(401).json({ error: "unauthorized" });
+        return;
+      case "not_member":
+        res.status(403).json({ error: "not_member" });
         return;
       case "unchanged":
         res.status(200).json({ unchanged: true, version: outcome.version });

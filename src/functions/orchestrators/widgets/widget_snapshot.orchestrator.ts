@@ -3,7 +3,8 @@
  *
  * Serves the iOS widgets' self-fetch (every ~30 min with the app closed, or immediately when
  * the running app asks WidgetKit to reload). The backend is the single source of widget data:
- *   1. token → sha256 → user + current data version (2 reads)
+ *   1. token → sha256 → user + current data version (2 reads); a group widget uses that group's
+ *      view version instead (membership checked: not a member → "not_member")
  *   2. widget already has this version → "unchanged" (done)
  *   3. else only the derives this widget KIND needs (same windows the app derives, so they
  *      share the derived-period cache) → pure builders that mirror the app's formulas.
@@ -41,6 +42,10 @@ import {
   derive_budget_transactions_orchestrator,
 } from "../budgets/derive_budget_transactions.orchestrator";
 import { SourcePeriodEntity } from "../../repositories/source_period.repo";
+import { group_repo } from "../../repositories/sharing";
+import { is_member } from "../../domain/sharing/group.service";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
+import { resolve_view_version } from "../../resolvers/periods/view_version.resolver";
 
 export type WidgetCadence = "monthly" | "weekly" | "bi_monthly";
 
@@ -52,6 +57,8 @@ export interface WidgetSnapshotInput {
   budget_id: string | null;
   cadence: WidgetCadence;
   lookahead_days: number;
+  /** Account-Rooted-Sharing: the group this widget shows (Edit Widget → Show); null = Me. */
+  group_id: string | null;
   /** The data version the widget already has (skip work when unchanged). */
   have_version: number | null;
   now_ms: number;
@@ -59,6 +66,7 @@ export interface WidgetSnapshotInput {
 
 export type WidgetSnapshotOutcome =
   | { status: "unauthorized" }
+  | { status: "not_member" }
   | { status: "unchanged"; version: number }
   | { status: "no_period"; version: number }
   | { status: "data"; version: number; data: WidgetData };
@@ -67,12 +75,14 @@ async function derive_for(
   ctx: TraceContext,
   user_id: string,
   period: SourcePeriodEntity,
-  cadence: WidgetCadence
+  cadence: WidgetCadence,
+  scope: DeriveScopeRequest | undefined
 ) {
   return derive_period_orchestrator(ctx, user_id, {
     view_cadence: cadence,
     window_start_ms: period.start_date.toMillis(),
     window_end_ms: period.end_date.toMillis(),
+    scope,
   });
 }
 
@@ -88,7 +98,23 @@ export async function widget_snapshot_orchestrator(
       log_operation_success(span, "widget");
       return { status: "unauthorized" };
     }
-    const { user_id, data_version: version } = request;
+    const { user_id } = request;
+    let version = request.data_version;
+
+    // A group widget: the caller must still be a member; its "unchanged" check uses the group
+    // view's version (moves when any member's data or the group's budgets change).
+    let scope: DeriveScopeRequest | undefined;
+    let group_name: string | undefined;
+    if (input.group_id) {
+      const group = await group_repo.get(ctx, input.group_id);
+      if (!is_member(group, user_id)) {
+        log_operation_success(span, user_id);
+        return { status: "not_member" };
+      }
+      scope = { kind: "group", group_id: input.group_id };
+      group_name = group!.name;
+      version = (await resolve_view_version(ctx, user_id, scope)).version;
+    }
     if (input.have_version !== null && input.have_version === version) {
       log_operation_success(span, user_id);
       return { status: "unchanged", version };
@@ -117,7 +143,7 @@ export async function widget_snapshot_orchestrator(
     /* eslint-disable @typescript-eslint/naming-convention */
     let data: WidgetData;
     if (input.kind === "left") {
-      const derived = await derive_for(ctx, user_id, current, cadence);
+      const derived = await derive_for(ctx, user_id, current, cadence, scope);
       data = {
         v: WIDGET_DATA_VERSION,
         kind: "left",
@@ -137,7 +163,9 @@ export async function widget_snapshot_orchestrator(
         user_id,
         input.budget_id ?? "",
         current.start_date.toMillis(),
-        current.end_date.toMillis()
+        current.end_date.toMillis(),
+        false,
+        scope
       );
       data = {
         v: WIDGET_DATA_VERSION,
@@ -148,8 +176,8 @@ export async function widget_snapshot_orchestrator(
       };
     } else if (input.kind === "summary") {
       const [derived, goals] = await Promise.all([
-        derive_for(ctx, user_id, current, cadence),
-        derive_goals_view_orchestrator(ctx, user_id, current.period_id),
+        derive_for(ctx, user_id, current, cadence, scope),
+        derive_goals_view_orchestrator(ctx, user_id, current.period_id, scope),
       ]);
       data = {
         v: WIDGET_DATA_VERSION,
@@ -160,7 +188,9 @@ export async function widget_snapshot_orchestrator(
         summary: compute_period_summary(derived, current.period_id, goals.goals),
       };
     } else {
-      const derives = await Promise.all(periods.map((p) => derive_for(ctx, user_id, p, cadence)));
+      const derives = await Promise.all(
+        periods.map((p) => derive_for(ctx, user_id, p, cadence, scope))
+      );
       const due = compute_bills_due_soon(
         periods.map((p, i) => ({ period_id: p.period_id, bills: derives[i].bills })),
         input.now_ms,
@@ -175,6 +205,7 @@ export async function widget_snapshot_orchestrator(
         moreCount: due.moreCount,
       };
     }
+    if (group_name !== undefined) data = { ...data, groupName: group_name };
     /* eslint-enable @typescript-eslint/naming-convention */
     log_operation_success(span, user_id);
     return { status: "data", version, data };

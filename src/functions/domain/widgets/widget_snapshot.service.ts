@@ -136,7 +136,10 @@ export interface WidgetBillItem {
   overdue: boolean;
 }
 
-export type WidgetData =
+/** Every payload; `groupName` is set only for a widget showing a group view (its small label). */
+export type WidgetData = WidgetPayload & { groupName?: string };
+
+type WidgetPayload =
   | {
       v: number;
       kind: "left";
