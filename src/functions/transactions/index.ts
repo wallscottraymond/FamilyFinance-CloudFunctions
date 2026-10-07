@@ -32,11 +32,11 @@
 
 // CRUD Operations
 export { createTransaction } from "./api/crud/createTransaction";
-export { getTransaction } from "./api/crud/getTransaction";
+// Retired 2026-10-07 (security audit: no owner check / unused by the app): export { getTransaction } from "./api/crud/getTransaction";
 export { updateTransaction } from "./api/crud/updateTransaction";
 export { updateTransactionSplits } from "./api/crud/updateTransactionSplits"; // Callable version for mobile
 export { deleteTransaction } from "./api/crud/deleteTransaction";
-export { approveTransaction } from "./api/crud/approveTransaction";
+// Retired 2026-10-07 (security audit: no owner check / unused by the app): export { approveTransaction } from "./api/crud/approveTransaction";
 
 // Query Operations
 // Note: getUserTransactions and getFamilyTransactions have been removed

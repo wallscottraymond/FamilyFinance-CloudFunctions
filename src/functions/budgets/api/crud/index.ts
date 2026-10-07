@@ -8,4 +8,5 @@
  * Only the read (getBudget) remains here.
  */
 
-export { getBudget } from './getBudget';
+// Retired 2026-10-07 (security audit: no owner check / unused by the app): export { getBudget } from './getBudget';
+export {};

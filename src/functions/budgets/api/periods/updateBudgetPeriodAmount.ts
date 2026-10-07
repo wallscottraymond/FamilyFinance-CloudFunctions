@@ -160,19 +160,6 @@ export const updateBudgetPeriodAmount = onCall<
 
     const period = { id: periodDoc.id, ...periodDoc.data() } as BudgetPeriodDocument;
 
-    // Check ownership
-    if (period.userId !== user.uid && period.createdBy !== user.uid) {
-      // Check if user is editor/admin
-      if (userData.role !== UserRole.EDITOR && userData.role !== UserRole.ADMIN) {
-        throw new HttpsError('permission-denied', 'You do not have permission to edit this budget period');
-      }
-    }
-
-    // Block past period updates
-    if (isPastPeriod(period.periodEnd)) {
-      throw new HttpsError('failed-precondition', 'Cannot edit past/historical periods. Only current and future periods can be modified.');
-    }
-
     // Get the parent budget
     const budgetDoc = await db.collection('budgets').doc(period.budgetId).get();
     if (!budgetDoc.exists) {
@@ -180,6 +167,20 @@ export const updateBudgetPeriodAmount = onCall<
     }
 
     const budget = { id: budgetDoc.id, ...budgetDoc.data() } as Budget;
+
+    // Ownership: the parent budget's owner (userId) must be the caller. Not createdBy, and no
+    // role bypass: every user is an EDITOR, so the old role check let anyone edit anyone's
+    // period (security audit 2026-10-07). The admin SDK skips rules, so this is the only guard.
+    const owner_id = (budget as unknown as { userId?: string }).userId;
+    if (period.budgetId !== budget.id || !owner_id || owner_id !== user.uid) {
+      throw new HttpsError('not-found', 'Budget period not found');
+    }
+
+    // Block past period updates
+    if (isPastPeriod(period.periodEnd)) {
+      throw new HttpsError('failed-precondition', 'Cannot edit past/historical periods. Only current and future periods can be modified.');
+    }
+
 
     // Check for system budget
     if (budget.isSystemEverythingElse) {

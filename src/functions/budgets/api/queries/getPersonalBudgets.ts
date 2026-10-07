@@ -17,6 +17,12 @@ import { authenticateRequest } from "../../../../utils/auth";
  * Callable (onCall): use the Firebase Functions SDK (httpsCallable) — the client
  * no longer hand-builds URLs or attaches tokens. Returns the Budget[] directly.
  */
+const toMs = (v: unknown): number => {
+  const t = v as { toMillis?: () => number } | string | null | undefined;
+  if (t && typeof t === "object" && typeof t.toMillis === "function") return t.toMillis();
+  return t ? new Date(t as string).getTime() || 0 : 0;
+};
+
 export const getPersonalBudgets = onCall({
   region: "us-central1",
   memory: "256MiB",
@@ -39,7 +45,8 @@ export const getPersonalBudgets = onCall({
 
     // Build query conditions
     const whereConditions: WhereClause[] = [
-      { field: "createdBy", operator: "==", value: userData.id },
+      // Owner = the budget's current owner (userId), not its creator (security audit 2026-10-07).
+      { field: "userId", operator: "==", value: userData.id },
     ];
 
     if (startDate) {
@@ -63,11 +70,10 @@ export const getPersonalBudgets = onCall({
     }
 
     // Query personal budgets created by this user
-    const budgets = await queryDocuments<Budget>("budgets", {
-      where: whereConditions,
-      orderBy: "createdAt",
-      orderDirection: "desc",
-    });
+    // Newest first, sorted in memory (no composite index needed for the userId filter).
+    const budgets = (await queryDocuments<Budget>("budgets", { where: whereConditions })).sort(
+      (a, b) => toMs((b as { createdAt?: unknown }).createdAt) - toMs((a as { createdAt?: unknown }).createdAt)
+    );
 
     console.log(`[getPersonalBudgets] Found ${budgets.length} personal budgets for user ${userData.id}`);
 

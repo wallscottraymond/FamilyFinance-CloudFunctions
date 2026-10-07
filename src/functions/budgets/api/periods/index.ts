@@ -4,6 +4,6 @@
  * Exports all budget period extension functions.
  */
 
-export { extendBudgetPeriods } from './extendBudgetPeriods';
-export { extendBudgetPeriodsRange } from './extendBudgetPeriodsRange';
+// Retired 2026-10-07 (security audit: no owner check / unused by the app): export { extendBudgetPeriods } from './extendBudgetPeriods';
+// Retired 2026-10-07 (security audit: no owner check / unused by the app): export { extendBudgetPeriodsRange } from './extendBudgetPeriodsRange';
 export { updateBudgetPeriodAmount } from './updateBudgetPeriodAmount';
