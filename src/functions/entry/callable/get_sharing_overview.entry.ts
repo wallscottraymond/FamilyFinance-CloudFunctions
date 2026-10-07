@@ -15,7 +15,9 @@ import {
   log_operation_success,
   log_operation_error,
 } from "../../observability";
-import { get_sharing_overview_orchestrator } from "../../orchestrators/sharing/connections.orchestrator";
+import {
+  get_sharing_overview_orchestrator,
+} from "../../orchestrators/sharing/connections.orchestrator";
 import { SharingOverview } from "../../domain/sharing/sharing_overview.service";
 import { success_response, error_response, FunctionResponse } from "../../types";
 

@@ -522,7 +522,9 @@ service cloud.firestore {
 
       // Only authenticated users can create their own accounts
       allow create: if isAuthenticated() &&
-                       isOwner(request.resource.data.userId);
+                       isOwner(request.resource.data.userId) &&
+                       // placement (sharing) is server-written (Account-Rooted-Sharing)
+                       request.resource.data.get('placement', null) == null;
 
       // Users can update their own accounts
       // Group members can update shared accounts
@@ -531,7 +533,9 @@ service cloud.firestore {
                         canAccessGroup(resource.data.groupIds) ||
                         isAdmin()) &&
                        // Prevent changing userId after creation
-                       request.resource.data.userId == resource.data.userId;
+                       request.resource.data.userId == resource.data.userId &&
+                       // placement (sharing) is server-written (Account-Rooted-Sharing)
+                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['placement']);
 
       // Users can delete their own accounts
       // Admins can delete any account

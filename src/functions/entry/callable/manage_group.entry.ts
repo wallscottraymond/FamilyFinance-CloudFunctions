@@ -15,13 +15,28 @@ import {
   log_operation_success,
   log_operation_error,
 } from "../../observability";
-import { manage_group_orchestrator, SharingWriteResult } from "../../orchestrators/sharing/groups.orchestrator";
+import {
+  manage_group_orchestrator,
+  SharingWriteResult,
+} from "../../orchestrators/sharing/groups.orchestrator";
 import { success_response, error_response, FunctionResponse } from "../../types";
 
 const schema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("rename"), group_id: z.string().trim().min(1).max(128), name: z.string().max(200) }),
-  z.object({ action: z.literal("remove_member"), group_id: z.string().trim().min(1).max(128), user_id: z.string().trim().min(1).max(128) }),
-  z.object({ action: z.literal("transfer_ownership"), group_id: z.string().trim().min(1).max(128), user_id: z.string().trim().min(1).max(128) }),
+  z.object({
+    action: z.literal("rename"),
+    group_id: z.string().trim().min(1).max(128),
+    name: z.string().max(200),
+  }),
+  z.object({
+    action: z.literal("remove_member"),
+    group_id: z.string().trim().min(1).max(128),
+    user_id: z.string().trim().min(1).max(128),
+  }),
+  z.object({
+    action: z.literal("transfer_ownership"),
+    group_id: z.string().trim().min(1).max(128),
+    user_id: z.string().trim().min(1).max(128),
+  }),
   z.object({ action: z.literal("leave"), group_id: z.string().trim().min(1).max(128) }),
   z.object({ action: z.literal("delete"), group_id: z.string().trim().min(1).max(128) }),
 ]);

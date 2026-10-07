@@ -15,7 +15,10 @@ import {
   log_operation_success,
   log_operation_error,
 } from "../../observability";
-import { add_to_group_orchestrator, SharingWriteResult } from "../../orchestrators/sharing/groups.orchestrator";
+import {
+  add_to_group_orchestrator,
+  SharingWriteResult,
+} from "../../orchestrators/sharing/groups.orchestrator";
 import { success_response, error_response, FunctionResponse } from "../../types";
 
 const schema = z.object({

@@ -106,3 +106,14 @@ it("T-SR-04 a group stamp no longer lets another member read the owner's data", 
   await assertSucceeds(getDoc(doc(env.authenticatedContext("alex").firestore(), "transactions/t1")));
   await assertFails(getDoc(doc(env.authenticatedContext("sam").firestore(), "transactions/t1")));
 });
+
+it("T-SR-05 an account owner can't set placement themselves (server-written)", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "accounts/a1"), { userId: "alex", name: "Checking", placement: null });
+  });
+  const alex = env.authenticatedContext("alex").firestore();
+  await assertSucceeds(updateDoc(doc(alex, "accounts/a1"), { name: "Main" }));
+  await assertFails(updateDoc(doc(alex, "accounts/a1"), { placement: { groupId: "g1" } }));
+  await assertFails(setDoc(doc(alex, "accounts/a2"), { userId: "alex", placement: { groupId: "g1" } }));
+  await assertSucceeds(setDoc(doc(alex, "accounts/a3"), { userId: "alex", name: "New" }));
+});

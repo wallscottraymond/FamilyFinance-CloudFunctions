@@ -22,7 +22,10 @@ import {
   resolve_invites,
   resolve_request,
   resolve_group_pending_requests,
+  resolve_share_accept,
 } from "../../resolvers/sharing/sharing.resolver";
+import { placement_on_accept } from "../../domain/sharing/placement.service";
+import { account_repo } from "../../repositories/account.repo";
 import {
   build_group,
   validate_invite,
@@ -173,6 +176,27 @@ export async function respond_to_request_orchestrator(
   // 3. REPOSITORY
   if (!ctx.input.accept) {
     await request_repo.save_many(ctx, [answer]);
+    log_operation_success(span, ctx.user_id);
+    return { success: true, group_id: answer.group_id };
+  }
+  if (answer.type === "share_account") {
+    // First Accept from any member applies the share (PD5); the other members'
+    // copies of the request are cancelled.
+    const deps = await resolve_share_accept(ctx, answer);
+    const placement = placement_on_accept(answer, deps.account, deps.group, now_ms);
+    if (placement.validation_errors?.length || !placement.entity) {
+      return fail(placement.validation_errors);
+    }
+    const siblings = cancel_requests(
+      deps.pending.filter((r) => r.id !== answer.id),
+      now_ms
+    );
+    if (!deps.account!.placement) {
+      await account_repo.set_placement(
+        ctx, deps.account!.id, placement.entity, answer.from_user_id
+      );
+    }
+    await request_repo.save_many(ctx, [answer, ...siblings]);
     log_operation_success(span, ctx.user_id);
     return { success: true, group_id: answer.group_id };
   }

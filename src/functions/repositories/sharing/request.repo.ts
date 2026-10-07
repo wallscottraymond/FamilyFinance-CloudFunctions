@@ -4,7 +4,8 @@
  * `requests/{id}`: offers waiting for the recipient's Accept. Functions-only.
  * `expireAt` is a TTL field (30 days after the request expires).
  *
- * Indexes: (toUserId, status), (fromUserId, createdAt), (groupId, status).
+ * Indexes: (toUserId, status), (fromUserId, createdAt), (groupId, status),
+ * (targetId, status).
  *
  * @module repositories/sharing/request
  */
@@ -22,6 +23,9 @@ interface RequestDoc {
   fromUserId: string;
   toUserId: string;
   groupId: string;
+  targetId?: string | null;
+  targetLabel?: string | null;
+  sharedFrom?: Timestamp | null;
   status: RequestStatus;
   createdAt: Timestamp;
   expiresAt: Timestamp;
@@ -37,6 +41,9 @@ function to_domain(id: string, doc: RequestDoc): SharingRequest {
     from_user_id: doc.fromUserId,
     to_user_id: doc.toUserId,
     group_id: doc.groupId,
+    target_id: doc.targetId ?? null,
+    target_label: doc.targetLabel ?? null,
+    shared_from_ms: doc.sharedFrom ? doc.sharedFrom.toMillis() : null,
     status: doc.status,
     created_at_ms: doc.createdAt.toMillis(),
     expires_at_ms: doc.expiresAt.toMillis(),
@@ -51,6 +58,9 @@ function to_doc(entity: SharingRequest): RequestDoc {
     fromUserId: entity.from_user_id,
     toUserId: entity.to_user_id,
     groupId: entity.group_id,
+    targetId: entity.target_id,
+    targetLabel: entity.target_label,
+    sharedFrom: entity.shared_from_ms !== null ? Timestamp.fromMillis(entity.shared_from_ms) : null,
     status: entity.status,
     createdAt: Timestamp.fromMillis(entity.created_at_ms),
     expiresAt: Timestamp.fromMillis(entity.expires_at_ms),
@@ -109,6 +119,19 @@ export const request_repo = {
       .where("groupId", "==", group_id)
       .where("status", "==", "pending")
       .limit(500)
+      .get();
+    return snap.docs.map((d) => to_domain(d.id, d.data() as RequestDoc));
+  },
+
+  /** Pending requests about one account (share_account). */
+  async get_pending_for_target(
+    _ctx: TraceContext,
+    target_id: string
+  ): Promise<SharingRequest[]> {
+    const snap = await collection()
+      .where("targetId", "==", target_id)
+      .where("status", "==", "pending")
+      .limit(100)
       .get();
     return snap.docs.map((d) => to_domain(d.id, d.data() as RequestDoc));
   },

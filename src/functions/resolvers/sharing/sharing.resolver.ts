@@ -22,6 +22,8 @@ import {
 } from "../../repositories/sharing";
 import { pair_id } from "../../domain/sharing/connection.service";
 import { DAY_MS } from "../../domain/sharing/request.service";
+import { PlaceableAccount } from "../../domain/sharing/placement.service";
+import { account_repo, Account } from "../../repositories/account.repo";
 
 /** For get_my_connect_code. */
 export async function resolve_my_code(
@@ -189,4 +191,79 @@ export async function resolve_group_pending_requests(
   group_id: string
 ): Promise<SharingRequest[]> {
   return request_repo.get_pending_for_group(ctx, group_id);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2.1: account placement
+// ---------------------------------------------------------------------------
+
+/** Repo account → the fields placement rules need. */
+export function to_placeable(a: Account | null): PlaceableAccount | null {
+  if (!a) return null;
+  return {
+    id: a.id,
+    user_id: a.user_id,
+    is_active: a.is_active,
+    name: a.name,
+    mask: a.mask ?? null,
+    institution_id: a.institution.id,
+    account_subtype: a.account_subtype,
+    placement: a.placement ?? null,
+  };
+}
+
+export interface ShareAccountDeps {
+  account: PlaceableAccount | null;
+  group: Group | null;
+  group_accounts: PlaceableAccount[];
+  pending_for_account: SharingRequest[];
+  sent_today: SharingRequest[];
+}
+
+/** For share_account. */
+export async function resolve_share_account(
+  ctx: TraceContext,
+  user_id: string,
+  account_id: string,
+  group_id: string,
+  now_ms: number
+): Promise<ShareAccountDeps> {
+  const [account, group, shared, pending_for_account, sent_today] = await Promise.all([
+    account_repo.get_by_id(ctx, account_id),
+    group_repo.get(ctx, group_id),
+    account_repo.get_shared_with_group(ctx, group_id),
+    request_repo.get_pending_for_target(ctx, account_id),
+    request_repo.get_sent_since(ctx, user_id, now_ms - DAY_MS),
+  ]);
+  return {
+    account: to_placeable(account),
+    group,
+    group_accounts: shared.map((a) => to_placeable(a)!),
+    pending_for_account,
+    sent_today,
+  };
+}
+
+/** For unshare_account and accepting a share request. */
+export async function resolve_account_placement(
+  ctx: TraceContext,
+  account_id: string
+): Promise<{ account: PlaceableAccount | null; pending: SharingRequest[] }> {
+  const [account, pending] = await Promise.all([
+    account_repo.get_by_id(ctx, account_id),
+    request_repo.get_pending_for_target(ctx, account_id),
+  ]);
+  return { account: to_placeable(account), pending };
+}
+
+/** For accepting a share_account request: the account, its pending requests, the group. */
+export async function resolve_share_accept(
+  ctx: TraceContext,
+  request: SharingRequest
+): Promise<{ account: PlaceableAccount | null; pending: SharingRequest[]; group: Group | null }> {
+  const [placement, group] = await Promise.all([
+    resolve_account_placement(ctx, request.target_id ?? ""),
+    group_repo.get(ctx, request.group_id),
+  ]);
+  return { ...placement, group };
 }

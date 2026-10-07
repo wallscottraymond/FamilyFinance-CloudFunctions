@@ -15,14 +15,25 @@ import {
   log_operation_success,
   log_operation_error,
 } from "../../observability";
-import { manage_connection_orchestrator, ManageConnectionResult } from "../../orchestrators/sharing/connections.orchestrator";
+import {
+  manage_connection_orchestrator,
+  ManageConnectionResult,
+} from "../../orchestrators/sharing/connections.orchestrator";
 import { success_response, error_response, FunctionResponse } from "../../types";
 
 const schema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("set_nickname"), other_user_id: z.string().trim().min(1).max(128), nickname: z.string().max(200) }),
+  z.object({
+    action: z.literal("set_nickname"),
+    other_user_id: z.string().trim().min(1).max(128),
+    nickname: z.string().max(200),
+  }),
   z.object({ action: z.literal("disconnect"), other_user_id: z.string().trim().min(1).max(128) }),
   z.object({ action: z.literal("block"), other_user_id: z.string().trim().min(1).max(128) }),
-  z.object({ action: z.literal("report"), other_user_id: z.string().trim().min(1).max(128), reason: z.string().max(2000).default("") }),
+  z.object({
+    action: z.literal("report"),
+    other_user_id: z.string().trim().min(1).max(128),
+    reason: z.string().max(2000).default(""),
+  }),
 ]);
 
 /**

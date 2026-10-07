@@ -1,9 +1,10 @@
 /**
- * Create Group Entry Point (Account-Rooted-Sharing)
+ * Unshare Account Entry Point (Account-Rooted-Sharing)
  *
- * Creates a group (the caller owns it) and sends join requests to connected people.
+ * The account owner makes a shared account private again (cancels a pending
+ * share too).
  *
- * @module entry/callable/create_group
+ * @module entry/callable/unshare_account
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
@@ -16,31 +17,31 @@ import {
   log_operation_error,
 } from "../../observability";
 import {
-  create_group_orchestrator,
-  SharingWriteResult,
-} from "../../orchestrators/sharing/groups.orchestrator";
+  unshare_account_orchestrator,
+  ShareAccountResult,
+} from "../../orchestrators/sharing/placement.orchestrator";
 import { success_response, error_response, FunctionResponse } from "../../types";
 
 const schema = z.object({
-  name: z.string().max(200),
-  invitee_ids: z.array(z.string().trim().min(1).max(128)).max(10).default([]),
+  account_id: z.string().trim().min(1).max(128),
   debug_mode: z.boolean().optional(),
 });
 
 /**
- * Creates a group (the caller owns it) and sends join requests to connected people.
+ * The account owner makes a shared account private again (cancels a pending
+ * share too).
  */
-export const create_group = onCall(
+export const unshare_account = onCall(
   /* eslint-disable-next-line @typescript-eslint/naming-convention */
   { maxInstances: 20 },
-  async (request): Promise<FunctionResponse<SharingWriteResult>> => {
+  async (request): Promise<FunctionResponse<ShareAccountResult>> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     const user_id = request.auth.uid;
 
     const trace = create_trace_context(request.data?.debug_mode === true);
-    const span = create_span(trace, "entry", "create_group");
+    const span = create_span(trace, "entry", "unshare_account");
     log_operation_start(span, user_id);
 
     const validation = schema.safeParse(request.data || {});
@@ -49,7 +50,7 @@ export const create_group = onCall(
         user_id,
         error_code: "VALIDATION_ERROR",
       });
-      return error_response<SharingWriteResult>(
+      return error_response<ShareAccountResult>(
         "VALIDATION_ERROR",
         validation.error.issues.map((i: z.ZodIssue) => i.message).join("; "),
         trace.trace_id
@@ -57,14 +58,14 @@ export const create_group = onCall(
     }
 
     try {
-      const result = await create_group_orchestrator({
+      const result = await unshare_account_orchestrator({
         ...trace,
-        input: { name: validation.data.name, invitee_ids: validation.data.invitee_ids },
+        input: { account_id: validation.data.account_id },
         user_id,
-        idempotency_key: `create_group:${trace.trace_id}`,
+        idempotency_key: `unshare_account:${trace.trace_id}`,
       });
       if (!result.success) {
-        return error_response<SharingWriteResult>(
+        return error_response<ShareAccountResult>(
           "VALIDATION_ERROR",
           (result.errors ?? ["Not allowed"]).join("; "),
           trace.trace_id
@@ -78,9 +79,9 @@ export const create_group = onCall(
         error instanceof Error ? error : new Error(String(error)),
         { user_id, error_code: "INTERNAL_ERROR" }
       );
-      return error_response<SharingWriteResult>(
+      return error_response<ShareAccountResult>(
         "INTERNAL_ERROR",
-        "Unable to create the group. Please try again.",
+        "Unable to change sharing. Please try again.",
         trace.trace_id
       );
     }

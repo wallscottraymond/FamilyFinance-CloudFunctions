@@ -84,6 +84,22 @@ export interface Account extends BaseEntity {
 
   /** Access control metadata */
   access: AccessMetadata;
+
+  /**
+   * Where the account lives (Account-Rooted-Sharing P1): null/absent = private
+   * (the owner's Me view); otherwise shared with exactly one group (D7) from
+   * `shared_from_ms` (N9). Written only by the sharing orchestrators.
+   */
+  placement?: AccountPlacement | null;
+}
+
+/** An account's sharing placement. */
+export interface AccountPlacement {
+  group_id: string;
+  /** Transactions on/after this instant count in the group; null = all history. */
+  shared_from_ms: number | null;
+  shared_by: string;
+  shared_at_ms: number;
 }
 
 /**
@@ -127,6 +143,12 @@ interface LegacyAccountDoc {
     groupIds: string[];
     isPrivate: boolean;
   };
+  placement?: {
+    groupId: string;
+    sharedFrom: Timestamp | null;
+    sharedBy: string;
+    sharedAt: Timestamp;
+  } | null;
 }
 
 /**
@@ -175,6 +197,14 @@ function map_to_entity(doc: LegacyAccountDoc): Account {
         group_ids: doc.groupIds ?? [],
         is_private: (doc.groupIds ?? []).length === 0,
       },
+    placement: doc.placement
+      ? {
+        group_id: doc.placement.groupId,
+        shared_from_ms: doc.placement.sharedFrom ? doc.placement.sharedFrom.toMillis() : null,
+        shared_by: doc.placement.sharedBy,
+        shared_at_ms: doc.placement.sharedAt.toMillis(),
+      }
+      : null,
   };
 }
 
@@ -214,6 +244,17 @@ function map_to_doc(entity: Account): LegacyAccountDoc {
       groupIds: entity.access.group_ids,
       isPrivate: entity.access.is_private,
     },
+    // Round-trips so full-doc writes (save/soft_delete/restore) never drop a share.
+    placement: entity.placement
+      ? {
+        groupId: entity.placement.group_id,
+        sharedFrom: entity.placement.shared_from_ms !== null
+          ? Timestamp.fromMillis(entity.placement.shared_from_ms)
+          : null,
+        sharedBy: entity.placement.shared_by,
+        sharedAt: Timestamp.fromMillis(entity.placement.shared_at_ms),
+      }
+      : null,
   };
 }
 /* eslint-enable @typescript-eslint/naming-convention */
@@ -610,6 +651,52 @@ export const account_repo = {
    * @param include_deleted - Include soft-deleted accounts
    * @returns Count of accounts
    */
+  /**
+   * Sets or clears an account's sharing placement (Account-Rooted-Sharing).
+   * Only the sharing orchestrators call this.
+   */
+  async set_placement(
+    ctx: TraceContext,
+    account_id: string,
+    placement: AccountPlacement | null,
+    user_id: string
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const value = placement
+      ? {
+        groupId: placement.group_id,
+        sharedFrom: placement.shared_from_ms !== null
+          ? Timestamp.fromMillis(placement.shared_from_ms)
+          : null,
+        sharedBy: placement.shared_by,
+        sharedAt: Timestamp.fromMillis(placement.shared_at_ms),
+      }
+      : null;
+    await doc_ref(account_id).update({ placement: value, updatedAt: Timestamp.now() });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "account",
+      entity_id: account_id,
+      before: {},
+      after: { placement: value },
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { placement: true } },
+    });
+  },
+
+  /** Active accounts shared with a group (any owner). */
+  async get_shared_with_group(_ctx: TraceContext, group_id: string): Promise<Account[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("placement.groupId", "==", group_id)
+      .get();
+    return snapshot.docs
+      .map((d) => map_to_entity({ ...(d.data() as LegacyAccountDoc), id: d.id }))
+      .filter((a) => a.is_active);
+  },
+
   async count_by_user_id(
     _ctx: TraceContext,
     user_id: string,

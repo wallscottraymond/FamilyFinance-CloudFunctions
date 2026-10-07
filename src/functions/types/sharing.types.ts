@@ -32,7 +32,7 @@ export interface Connection {
   nicknames: Record<string, string>;
 }
 
-export type RequestType = "join_group";
+export type RequestType = "join_group" | "share_account";
 export type RequestStatus = "pending" | "accepted" | "declined" | "expired" | "cancelled";
 
 /** An offer that needs the recipient's one-tap Accept (D25). */
@@ -42,6 +42,12 @@ export interface SharingRequest {
   from_user_id: string;
   to_user_id: string;
   group_id: string;
+  /** share_account: the account being shared. */
+  target_id: string | null;
+  /** share_account: what the recipient sees, e.g. "Joint Checking ••1234". */
+  target_label: string | null;
+  /** share_account: transactions from this instant count; null = all history (N9). */
+  shared_from_ms: number | null;
   status: RequestStatus;
   created_at_ms: number;
   expires_at_ms: number;

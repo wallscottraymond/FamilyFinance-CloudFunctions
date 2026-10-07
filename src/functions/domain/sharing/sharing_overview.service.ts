@@ -50,6 +50,10 @@ export interface OverviewRequest {
   group_id: string;
   group_name: string;
   group_member_count: number;
+  /** share_account: e.g. "Joint Checking ••1234". */
+  account_label: string | null;
+  /** share_account: shared from this instant; null = all history. */
+  shared_from_ms: number | null;
   created_at_ms: number;
   expires_at_ms: number;
 }
@@ -127,6 +131,8 @@ export function build_sharing_overview(
         group_id: r.group_id,
         group_name: g.name,
         group_member_count: g.member_ids.length,
+        account_label: r.target_label,
+        shared_from_ms: r.shared_from_ms,
         created_at_ms: r.created_at_ms,
         expires_at_ms: r.expires_at_ms,
       };

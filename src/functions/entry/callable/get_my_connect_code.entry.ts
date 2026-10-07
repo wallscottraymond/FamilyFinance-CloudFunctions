@@ -15,7 +15,10 @@ import {
   log_operation_success,
   log_operation_error,
 } from "../../observability";
-import { get_my_connect_code_orchestrator, MyConnectCodeResult } from "../../orchestrators/sharing/connect.orchestrator";
+import {
+  get_my_connect_code_orchestrator,
+  MyConnectCodeResult,
+} from "../../orchestrators/sharing/connect.orchestrator";
 import { success_response, error_response, FunctionResponse } from "../../types";
 
 const schema = z.object({

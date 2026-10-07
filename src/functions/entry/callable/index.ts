@@ -92,3 +92,5 @@ export { create_group } from "./create_group.entry";
 export { add_to_group } from "./add_to_group.entry";
 export { respond_to_request } from "./respond_to_request.entry";
 export { manage_group } from "./manage_group.entry";
+export { share_account } from "./share_account.entry";
+export { unshare_account } from "./unshare_account.entry";
