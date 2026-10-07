@@ -23,6 +23,11 @@ import {
   amount_for_span,
   compute_goal_measurement,
 } from "../../domain/goals/goal.service";
+import { resolve_derive_scope } from "../periods/derive_scope.resolver";
+import {
+  DeriveScopeRequest,
+  account_in_scope,
+} from "../../domain/periods/derive_scope.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -57,10 +62,26 @@ export async function resolve_goal_measurements(
   user_id: string,
   period_id: string,
   period_start: Timestamp,
-  period_end: Timestamp
+  period_end: Timestamp,
+  scope_request?: DeriveScopeRequest
 ): Promise<GoalMeasurementView[]> {
-  const goals = await goal_repo.get_by_user(ctx, user_id);
+  const goals = await load_scoped_goals(ctx, user_id, scope_request);
   return measure_goals_for_period(goals, period_id, period_start, period_end);
+}
+
+/**
+ * Goals in a view (Account-Rooted-Sharing): a goal follows its linked account — Me
+ * keeps goals on private (or unknown) accounts; a group gets members' goals on its
+ * shared accounts. Membership is checked by the scope resolver.
+ */
+async function load_scoped_goals(
+  ctx: TraceContext,
+  user_id: string,
+  scope_request?: DeriveScopeRequest
+): Promise<GoalEntity[]> {
+  const scope = await resolve_derive_scope(ctx, user_id, scope_request);
+  const lists = await Promise.all(scope.member_ids.map((m) => goal_repo.get_by_user(ctx, m)));
+  return lists.flat().filter((g) => account_in_scope(scope, g.linked_account_id));
 }
 
 export interface GoalMeasurementPeriod {
@@ -76,9 +97,10 @@ export interface GoalMeasurementPeriod {
 export async function resolve_goal_measurements_for_periods(
   ctx: TraceContext,
   user_id: string,
-  periods: GoalMeasurementPeriod[]
+  periods: GoalMeasurementPeriod[],
+  scope_request?: DeriveScopeRequest
 ): Promise<Map<string, GoalMeasurementView[]>> {
-  const goals = await goal_repo.get_by_user(ctx, user_id);
+  const goals = await load_scoped_goals(ctx, user_id, scope_request);
   const out = new Map<string, GoalMeasurementView[]>();
   await Promise.all(
     periods.map(async (p) => {

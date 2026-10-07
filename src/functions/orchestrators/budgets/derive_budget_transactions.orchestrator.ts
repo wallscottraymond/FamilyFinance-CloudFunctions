@@ -29,6 +29,11 @@ import {
   DERIVED_CACHE_TTL_MS,
 } from "../../repositories/derived_result_cache.repo";
 import { is_income_category } from "../../domain/budgets/budget_spend.service";
+import { resolve_derive_scope } from "../../resolvers/periods/derive_scope.resolver";
+import {
+  DeriveScopeRequest,
+  transaction_in_scope,
+} from "../../domain/periods/derive_scope.service";
 import { resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
 import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
 import {
@@ -66,18 +71,24 @@ export async function derive_budget_transactions_orchestrator(
   budget_id: string,
   start_ms: number,
   end_ms: number,
-  force = false
+  force = false,
+  scope_request?: DeriveScopeRequest
 ): Promise<DerivedBudgetTransaction[]> {
+  // 0. The view (Account-Rooted-Sharing): Me, or a group the caller belongs to (throws if not).
+  const scope = await resolve_derive_scope(ctx, user_id, scope_request);
+  // Cache + version are per VIEW: the user for Me (unchanged), "group:<id>" for a group.
+  const view_key = scope.kind === "me" ? user_id : scope.budget_owner_key;
+
   // L2 CACHE: serve the version-matched result (2 reads) instead of the ~348-doc window read
   // + derivation. Correctness = version match (bumped on every budget/txn write); the cache
   // stamp uses the version read BEFORE compute so a mid-compute bump forces the next miss.
-  const cache_id = `${user_id}__${budget_id}__${start_ms}__${end_ms}`;
+  const cache_id = `${view_key}__${budget_id}__${start_ms}__${end_ms}`;
   let data_version: number;
   if (force) {
-    data_version = await get_derive_version(user_id);
+    data_version = await get_derive_version(view_key);
   } else {
     const [version, cached] = await Promise.all([
-      get_derive_version(user_id),
+      get_derive_version(view_key),
       get_cached_result<DerivedBudgetTransaction[]>(BUDGET_TXN_CACHE, cache_id),
     ]);
     data_version = version;
@@ -91,7 +102,7 @@ export async function derive_budget_transactions_orchestrator(
   }
 
   // 1. Budgets → real budgets (category ownership) + the EE id + is-target-EE.
-  const budgets = await budget_repo.get_by_user_id(ctx, user_id);
+  const budgets = await budget_repo.get_by_user_id(ctx, scope.budget_owner_key);
   const real_budgets: BudgetForMatch[] = [];
   let monthly_ee_id: string | null = null;
   let any_ee_id: string | null = null;
@@ -115,12 +126,26 @@ export async function derive_budget_transactions_orchestrator(
   const ee_id = target_is_ee ? budget_id : monthly_ee_id ?? any_ee_id;
 
   // 2. Load the window's transactions (+ a small buffer for transfer pairing).
-  const txns = await transaction_repo.get_active_in_date_range(
-    ctx,
-    user_id,
-    start_ms - PAIRING_BUFFER_MS,
-    end_ms + PAIRING_BUFFER_MS
-  );
+  const txns = (
+    await Promise.all(
+      scope.member_ids.map((m) =>
+        transaction_repo.get_active_in_date_range(
+          ctx,
+          m,
+          start_ms - PAIRING_BUFFER_MS,
+          end_ms + PAIRING_BUFFER_MS
+        )
+      )
+    )
+  )
+    .flat()
+    .filter((t) =>
+      transaction_in_scope(
+        scope,
+        t.data.accountId as string | undefined,
+        (t.data.transactionDate as Timestamp).toMillis()
+      )
+    );
 
   // 3. Matched-pair internal-transfer detection over the buffered window.
   const { internal_ids } = detect_internal_transfers_from_txns(txns);

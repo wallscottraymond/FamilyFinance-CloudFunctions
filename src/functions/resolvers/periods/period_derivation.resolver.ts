@@ -50,6 +50,13 @@ import {
 } from "../../domain/recurring/stream_membership";
 import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
 import { PeriodInstanceType } from "../../domain/budgets";
+import {
+  DeriveScope,
+  DeriveScopeRequest,
+  account_in_scope,
+  transaction_in_scope,
+} from "../../domain/periods/derive_scope.service";
+import { resolve_derive_scope } from "./derive_scope.resolver";
 
 function to_cadence(period: string): PeriodLens {
   return period === "weekly" ? "weekly" : period === "bi_monthly" ? "bi_monthly" : "monthly";
@@ -97,6 +104,8 @@ export interface PeriodDerivationRaw {
   txns: Array<{ id: string; data: Record<string, unknown> }>;
   /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
   inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
+  /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
+  scope: DeriveScope;
 }
 
 export interface DerivationWindow {
@@ -173,35 +182,53 @@ export function monthly_period_load_bounds(
   return [range_start_ms - 2 * MAX_PERIOD_MS, range_end_ms + MAX_PERIOD_MS];
 }
 
+/** Runs a per-person read for every member of the scope and concatenates (member order). */
+async function per_member<T>(
+  scope: DeriveScope,
+  read: (member_id: string) => Promise<T[]>
+): Promise<T[]> {
+  const lists = await Promise.all(scope.member_ids.map(read));
+  return lists.flat();
+}
+
 export async function load_period_derivation_raw(
   ctx: TraceContext,
   user_id: string,
   view_cadence: PeriodInstanceType,
-  windows: DerivationWindow[]
+  windows: DerivationWindow[],
+  scope_request?: DeriveScopeRequest
 ): Promise<PeriodDerivationRaw> {
   const range_start_ms = Math.min(...windows.map((w) => w.start_ms));
   const range_end_ms = Math.max(...windows.map((w) => w.end_ms));
 
-  // 1. Everything that only needs user_id + the requested range, in ONE parallel round-trip.
+  // 0. The view (Account-Rooted-Sharing): Me = the caller minus their shared accounts;
+  //    a group = its shared accounts (caller must be a member — throws otherwise).
+  const scope = await resolve_derive_scope(ctx, user_id, scope_request);
+
+  // 1. Everything that only needs the view + the requested range, in ONE parallel round-trip.
   // Only the transaction read depends on the derived period spans (computed below).
-  const [overlapping, budget_entities, monthly_period_docs, outflows, inflows, all_goals] =
+  const [overlapping, budget_entities, monthly_period_docs, all_outflows, all_inflows, goals_raw] =
     await Promise.all([
       source_period_repo.get_overlapping(
         ctx,
         Timestamp.fromMillis(range_start_ms),
         Timestamp.fromMillis(range_end_ms)
       ),
-      budget_repo.get_by_user_id(ctx, user_id),
+      budget_repo.get_by_user_id(ctx, scope.budget_owner_key),
       budget_period_repo.get_by_user_and_type_starting_between(
         ctx,
-        user_id,
+        scope.budget_owner_key,
         "monthly",
         ...monthly_period_load_bounds(range_start_ms, range_end_ms)
       ),
-      outflow_repo.get_by_user_id(ctx, user_id),
-      inflow_repo.get_by_user_id(ctx, user_id),
-      goal_repo.get_by_user(ctx, user_id),
+      per_member(scope, (m) => outflow_repo.get_by_user_id(ctx, m)),
+      per_member(scope, (m) => inflow_repo.get_by_user_id(ctx, m)),
+      per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
     ]);
+  // Bills / income / goals follow their account's view (an item with no account stays in Me).
+  const outflows = all_outflows.filter((o) => account_in_scope(scope, o.account_id));
+  const inflows = all_inflows.filter((i) => account_in_scope(scope, i.account_id));
+  const all_goals = goals_raw.filter((g) => account_in_scope(scope, g.linked_account_id));
 
   // 2. Transactions for the UNION of every window's span (one query).
   const spans = windows.map((w) =>
@@ -212,11 +239,18 @@ export async function load_period_derivation_raw(
       w.end_ms
     )
   );
-  const txns = await transaction_repo.get_active_in_date_range(
-    ctx,
-    user_id,
-    Math.min(...spans.map((sp) => sp.span_start_ms)),
-    Math.max(...spans.map((sp) => sp.span_end_ms))
+  const txn_start_ms = Math.min(...spans.map((sp) => sp.span_start_ms));
+  const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms));
+  const txns = (
+    await per_member(scope, (m) =>
+      transaction_repo.get_active_in_date_range(ctx, m, txn_start_ms, txn_end_ms)
+    )
+  ).filter((t) =>
+    transaction_in_scope(
+      scope,
+      t.data.accountId as string | undefined,
+      (t.data.transactionDate as Timestamp).toMillis()
+    )
   );
 
   // 3. Income history for every candidate inflow stream (superset; re-filtered per window).
@@ -227,10 +261,16 @@ export async function load_period_derivation_raw(
         .flatMap((i) => i.transaction_ids ?? [])
     ),
   ];
-  const inflow_history_docs = await transaction_repo.get_by_plaid_transaction_ids(
-    ctx,
-    user_id,
-    history_ids
+  const inflow_history_docs = (
+    await per_member(scope, (m) =>
+      transaction_repo.get_by_plaid_transaction_ids(ctx, m, history_ids)
+    )
+  ).filter((d) =>
+    transaction_in_scope(
+      scope,
+      d.accountId as string | undefined,
+      (d.transactionDate as Timestamp).toMillis()
+    )
   );
 
   return {
@@ -242,6 +282,7 @@ export async function load_period_derivation_raw(
     all_goals,
     txns,
     inflow_history_docs,
+    scope,
   };
 }
 
@@ -623,10 +664,15 @@ export async function resolve_period_derivation_deps(
   user_id: string,
   view_cadence: PeriodInstanceType,
   window_start_ms: number,
-  window_end_ms: number
+  window_end_ms: number,
+  scope_request?: DeriveScopeRequest
 ): Promise<PeriodDerivationDeps> {
-  const raw = await load_period_derivation_raw(ctx, user_id, view_cadence, [
-    { start_ms: window_start_ms, end_ms: window_end_ms },
-  ]);
+  const raw = await load_period_derivation_raw(
+    ctx,
+    user_id,
+    view_cadence,
+    [{ start_ms: window_start_ms, end_ms: window_end_ms }],
+    scope_request
+  );
   return shape_period_derivation_deps(raw, view_cadence, window_start_ms, window_end_ms);
 }
