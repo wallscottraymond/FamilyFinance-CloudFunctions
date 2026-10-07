@@ -39,7 +39,9 @@ export async function resolve_update_budget_dependencies(
   log_operation_start(span, user_id);
 
   const existing = await budget_repo.get_by_id(ctx, input.budget_id);
-  if (!existing) {
+  // Ownership: a budget that isn't the caller's is "not found" (don't reveal it
+  // exists). The callables run with the admin SDK, so rules don't protect it.
+  if (!existing || existing.user_id !== user_id) {
     throw new NotFoundError("budget", input.budget_id);
   }
 
