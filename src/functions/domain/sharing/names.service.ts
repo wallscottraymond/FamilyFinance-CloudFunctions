@@ -12,30 +12,61 @@
 
 import { PersonView } from "../../types/sharing.types";
 
-const ADJECTIVES = [
-  "Brave", "Calm", "Quiet", "Swift", "Bright", "Gentle", "Clever", "Happy",
-  "Lucky", "Merry", "Noble", "Proud", "Sunny", "Witty", "Bold", "Cosy",
-  "Daring", "Eager", "Fancy", "Fuzzy", "Golden", "Grand", "Jolly", "Kind",
-  "Lively", "Mellow", "Misty", "Nimble", "Patient", "Plucky", "Polite", "Rapid",
-  "Rosy", "Silver", "Sleepy", "Snappy", "Spry", "Steady", "Sturdy", "Tidy",
-  "Velvet", "Warm", "Wise", "Zesty", "Breezy", "Cheery", "Crisp", "Dapper",
-  "Frosty", "Hardy", "Humble", "Keen", "Lofty", "Mighty", "Peppy", "Quick",
-  "Royal", "Scrappy", "Shy", "Smart", "Snowy", "Spicy", "Stormy", "Tender",
+/** No colors (skin-tone readings) or put-downs. */
+export const ADJECTIVES = [
+  "Able", "Agile", "Airy", "Artful", "Balmy", "Bold", "Bouncy", "Brave", "Breezy", "Bright",
+  "Brisk", "Bubbly", "Busy", "Calm", "Candid", "Capable", "Careful", "Caring", "Charming",
+  "Cheery", "Chipper", "Classy", "Clever", "Cosmic", "Cozy", "Crafty", "Crisp", "Cuddly",
+  "Curious", "Dainty", "Dandy", "Dapper", "Daring", "Dashing", "Dazzling", "Deft", "Devoted",
+  "Dreamy", "Dynamic", "Eager", "Easy", "Elegant", "Epic", "Fabled", "Fair", "Faithful", "Fancy",
+  "Fearless", "Festive", "Fiery", "Fine", "Fleet", "Fluffy", "Focused", "Frank", "Free", "Fresh",
+  "Friendly", "Frosty", "Fuzzy", "Gallant", "Generous", "Gentle", "Giddy", "Gifted", "Glad",
+  "Gleaming", "Glowing", "Golden", "Graceful", "Gracious", "Grand", "Grateful", "Great", "Handy",
+  "Happy", "Hardy", "Hearty", "Helpful", "Heroic", "Honest", "Hopeful", "Humble", "Ideal",
+  "Inventive", "Jaunty", "Jazzy", "Jolly", "Jovial", "Joyful", "Jumpy", "Keen", "Kind", "Likable",
+  "Lively", "Lofty", "Loyal", "Lucky", "Lunar", "Magic", "Majestic", "Mellow", "Merry", "Mighty",
+  "Mindful", "Misty", "Modest", "Musical", "Mystic", "Natty", "Nautical", "Neat", "Nifty",
+  "Nimble", "Noble", "Patient", "Peaceful", "Peppy", "Perky", "Placid", "Playful", "Plucky",
+  "Plush", "Poised", "Polished", "Polite", "Prime", "Proud", "Pure", "Quick", "Quiet", "Quirky",
+  "Radiant", "Rapid", "Ready", "Regal", "Rising", "Roaming", "Robust", "Royal", "Rugged",
+  "Rustic", "Savvy", "Scenic", "Serene", "Sharp", "Shiny", "Silky", "Silver", "Sincere", "Sleek",
+  "Smart", "Smooth", "Snappy", "Snowy", "Snug", "Social", "Solar", "Solid", "Sparkly", "Speedy",
+  "Spicy", "Spirited", "Spry", "Stable", "Starry", "Steady", "Stellar", "Sterling", "Stormy",
+  "Sturdy", "Sublime", "Sunny", "Super", "Sweet", "Tender", "Thoughtful", "Thrifty", "Tidy",
+  "Tireless", "Tranquil", "True", "Trusty", "Twinkly", "Unique", "Upbeat", "Valiant", "Velvet",
+  "Vibrant", "Vivid", "Warm", "Whimsical", "Wise", "Witty", "Wondrous", "Worthy", "Zany", "Zen",
+  "Zesty", "Zippy",
 ];
 
 /**
- * No primates (apes, monkeys, chimps, gorillas, lemurs, ...): they're used as racist slurs.
- * Swap a word IN PLACE (same index) so nobody else's name changes; names_blocklist.test guards it.
+ * 200 × 200 = 40,000 names. No primates (apes, monkeys, chimps, gorillas, lemurs, ...) or
+ * other animals used as slurs/put-downs. Swap a word IN PLACE (same index) so nobody else's name
+ * changes; names_blocklist.test guards both lists.
  */
 export const ANIMALS = [
-  "Otter", "Panda", "Heron", "Robin", "Fox", "Badger", "Koala", "Lynx",
-  "Owl", "Seal", "Wren", "Bison", "Crane", "Dolphin", "Falcon", "Gecko",
-  "Hare", "Ibis", "Jaguar", "Kiwi", "Lark", "Moose", "Newt", "Ocelot",
-  "Puffin", "Quail", "Raven", "Sparrow", "Tiger", "Walrus", "Yak", "Zebra",
-  "Alpaca", "Beaver", "Camel", "Deer", "Eagle", "Ferret", "Goose", "Hedgehog",
-  "Iguana", "Jackal", "Kestrel", "Llama", "Marten", "Narwhal", "Orca", "Pelican",
-  "Rabbit", "Salmon", "Toucan", "Urchin", "Vole", "Weasel", "Finch", "Gazelle",
-  "Hippo", "Impala", "Mole", "Penguin", "Squirrel", "Turtle", "Viper", "Wombat",
+  "Aardvark", "Albatross", "Alligator", "Alpaca", "Angelfish", "Anteater", "Antelope",
+  "Armadillo", "Axolotl", "Badger", "Barracuda", "Bear", "Beaver", "Bee", "Beetle", "Beluga",
+  "Bison", "Bobcat", "Buffalo", "Bumblebee", "Bunny", "Butterfly", "Camel", "Canary", "Capybara",
+  "Caracal", "Cardinal", "Caribou", "Cassowary", "Chameleon", "Cheetah", "Chickadee",
+  "Chinchilla", "Chipmunk", "Cicada", "Clownfish", "Coati", "Cockatoo", "Condor", "Cougar",
+  "Coyote", "Crab", "Crane", "Cricket", "Crocodile", "Curlew", "Dingo", "Dolphin", "Dove",
+  "Dragonfly", "Duck", "Dugong", "Eagle", "Egret", "Eland", "Elephant", "Elk", "Emu", "Ermine",
+  "Falcon", "Fawn", "Fennec", "Ferret", "Finch", "Firefly", "Flamingo", "Fox", "Frog", "Gazelle",
+  "Gecko", "Giraffe", "Goldfinch", "Goldfish", "Goose", "Gopher", "Grizzly", "Hamster", "Hare",
+  "Harrier", "Hawk", "Hedgehog", "Heron", "Hippo", "Hornbill", "Hummingbird", "Ibex", "Ibis",
+  "Iguana", "Impala", "Jackrabbit", "Jaguar", "Jay", "Jellyfish", "Kangaroo", "Kestrel",
+  "Kingfisher", "Kinkajou", "Kiwi", "Koala", "Koi", "Kookaburra", "Kudu", "Ladybug", "Lark",
+  "Leopard", "Lion", "Llama", "Lobster", "Lynx", "Macaw", "Magpie", "Mallard", "Manatee",
+  "Mantis", "Marlin", "Marmot", "Marten", "Meerkat", "Merlin", "Mongoose", "Moose", "Mustang",
+  "Narwhal", "Newt", "Nightingale", "Ocelot", "Octopus", "Okapi", "Oriole", "Orca", "Oryx",
+  "Osprey", "Ostrich", "Otter", "Owl", "Panda", "Panther", "Parrot", "Partridge", "Peacock",
+  "Pelican", "Penguin", "Petrel", "Pheasant", "Pika", "Platypus", "Plover", "Pony", "Porcupine",
+  "Porpoise", "Puffin", "Puma", "Quail", "Quetzal", "Quokka", "Rabbit", "Raven", "Reindeer",
+  "Rhino", "Roadrunner", "Robin", "Salamander", "Salmon", "Sandpiper", "Seahorse", "Seal",
+  "Serval", "Shark", "Skylark", "Sparrow", "Squid", "Squirrel", "Starfish", "Starling",
+  "Stingray", "Stork", "Swallow", "Swan", "Tapir", "Tern", "Thrush", "Tiger", "Tortoise",
+  "Toucan", "Trout", "Turtle", "Urchin", "Vole", "Wallaby", "Walrus", "Warbler", "Whale",
+  "Wildcat", "Wolf", "Wolverine", "Wombat", "Woodpecker", "Wren", "Yak", "Zebra",
 ];
 
 /** Longest nickname a user can set. */
