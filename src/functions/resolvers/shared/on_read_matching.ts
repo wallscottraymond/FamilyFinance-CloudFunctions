@@ -20,7 +20,10 @@ import {
   InternalTransferResult,
   TransferForPairing,
 } from "../../domain/transactions/internal_transfer.service";
-import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
+import {
+  is_transfer_category,
+  is_card_payment_category,
+} from "../../domain/transactions/category_semantics.service";
 
 /** Transaction-level context a split inherits (computed once per transaction). */
 export interface TxnMatchContext {
@@ -95,7 +98,13 @@ export function detect_internal_transfers_from_txns(
   const transfers: TransferForPairing[] = [];
   for (const { id, data } of txns) {
     const eff = txn_effective_category(data);
-    if (!is_transfer_category(eff)) continue;
+    // Card payments (G7 / D11) pair like transfers: money out of checking ↔ the payment received
+    // on the card. Paired = both accounts are linked → the money just moved between the user's
+    // own accounts (the card's purchases are already counted). Unpaired (card not linked) stays
+    // a real bill payment. Direction comes from the transaction type (both legs share the
+    // category).
+    const is_card_payment = is_card_payment_category(eff);
+    if (!is_transfer_category(eff) && !is_card_payment) continue;
     const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
     transfers.push({
       id,
@@ -103,7 +112,9 @@ export function detect_internal_transfers_from_txns(
       account_id: (data.accountId as string) ?? "",
       amount: raw.reduce((s, sp) => s + Math.abs((sp.amount as number) ?? 0), 0),
       date_ms: (data.transactionDate as Timestamp).toMillis(),
-      direction: eff.startsWith("TRANSFER_IN") ? "in" : "out",
+      direction: is_card_payment
+        ? data.type === "income" ? "in" : "out"
+        : eff.startsWith("TRANSFER_IN") ? "in" : "out",
     });
   }
   return detect_internal_transfers(transfers);

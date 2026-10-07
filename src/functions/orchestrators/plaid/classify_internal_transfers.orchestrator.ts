@@ -34,14 +34,15 @@ import {
 } from "../../repositories/transfer_classification_state.repo";
 import { createHash } from "crypto";
 
-/** Credit-card payments are always KEPT (a real recurring bill), never hidden. */
+/** Credit-card payments: kept as a bill unless they pair with a linked card (see should_hide). */
 const CC_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
 /** Window of transactions loaded for matched-pair detection. */
 const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
 /** Max age of a skipped (unchanged-fingerprint) result before a full re-run is forced. */
 const FULL_RECLASSIFY_MS = 24 * 60 * 60 * 1000;
-/** Bump when the classification logic changes, to invalidate every stored fingerprint. */
-const CLASSIFIER_VERSION = 1;
+/** Bump when the classification logic changes, to invalidate every stored fingerprint.
+ *  v2 (Account-Rooted-Sharing G7): card payments to linked cards are internal. */
+const CLASSIFIER_VERSION = 2;
 
 interface ClassifiableRecord {
   id: string;
@@ -86,16 +87,22 @@ function fingerprint(
 }
 
 /**
- * A recurring record should be HIDDEN when it is a transfer category, is an
- * internal (matched-pair) transfer, and is NOT a credit-card payment.
+ * A recurring record should be HIDDEN when it's an internal (matched-pair) money move: a
+ * transfer category, or a credit-card payment whose payments pair with the payment received
+ * on a LINKED card (G7 / D11: the card's purchases already count, so a bill for the payment
+ * would double the plan). A payment to a card that isn't linked never pairs → stays a bill.
  */
-function should_hide(
+export function should_hide(
   plaid_detailed_category: string,
   transaction_ids: string[] | undefined,
   internal_plaid_ids: Set<string>
 ): boolean {
-  if (plaid_detailed_category === CC_PAYMENT_CATEGORY) return false;
-  if (!is_transfer_category(plaid_detailed_category)) return false;
+  if (
+    plaid_detailed_category !== CC_PAYMENT_CATEGORY &&
+    !is_transfer_category(plaid_detailed_category)
+  ) {
+    return false;
+  }
   return (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
 }
 

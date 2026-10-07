@@ -13,6 +13,8 @@
  * @module domain/periods/edge_transfers
  */
 
+import { CARD_PAYMENT_CATEGORY } from "../transactions/category_semantics.service";
+
 /** What a pairing pass returns (see internal_transfer.service). */
 export interface PairingResult {
   internal_ids: Set<string>;
@@ -62,7 +64,11 @@ export function find_crossing_transfers(
   for (const { id, data } of view_txns) {
     if (!all_members.internal_ids.has(id) || view_internal_ids.has(id)) continue;
     out.ids.add(id);
-    if (effective_category(data).startsWith("TRANSFER_IN")) out.in_ids.add(id);
+    const cat = effective_category(data);
+    // Card payments share one category on both legs; the transaction type says which way.
+    const is_in =
+      cat === CARD_PAYMENT_CATEGORY ? data.type === "income" : cat.startsWith("TRANSFER_IN");
+    if (is_in) out.in_ids.add(id);
     else out.out_ids.add(id);
     const plaid_id = (data.transactionId as string | null) ?? null;
     if (plaid_id) out.plaid_ids.add(plaid_id);

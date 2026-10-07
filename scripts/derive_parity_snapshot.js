@@ -148,6 +148,44 @@ if (SIM_GROUP) {
     origPeriods(ctx, key === "group:simg" ? USER : key, ...rest);
 }
 
+// --simulate-classifier: IN MEMORY ONLY, recompute every recurring record's hidden flag the way
+// the CURRENT lib's classify_internal_transfers would (180 days before NOW), so a classifier
+// change can be previewed on live data without writing anything.
+const SIM_CLASSIFIER = process.argv.includes("--simulate-classifier");
+let simHidden = null; // Map<recurringId, boolean>, filled lazily
+async function classifierHidden(ctx) {
+  if (simHidden) return simHidden;
+  // Builds before the G7 change don't export should_hide: replay the v1 rule (card payments
+  // always kept; transfer streams hidden when internal) to check the simulation is faithful.
+  const exported = L("orchestrators/plaid/classify_internal_transfers.orchestrator").should_hide;
+  const should_hide = exported || ((cat, ids, internal) =>
+    cat !== "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT" &&
+    (cat || "").match(/^TRANSFER_(IN|OUT)/) !== null &&
+    (ids || []).some((t) => internal.has(t)));
+  const { detect_internal_transfers_from_txns } = L("resolvers/shared/on_read_matching");
+  const txRepo = L("repositories/transaction.repo").transaction_repo;
+  const txns = await txRepo.get_active_in_date_range(ctx, USER, NOW - 180 * 86400000, NOW);
+  const { internal_plaid_ids } = detect_internal_transfers_from_txns(txns);
+  simHidden = { should_hide, internal_plaid_ids };
+  return simHidden;
+}
+if (SIM_CLASSIFIER) {
+  for (const repoPath of ["repositories/outflow.repo", "repositories/inflow.repo"]) {
+    const mod = L(repoPath);
+    const repo = mod.outflow_repo || mod.inflow_repo;
+    const orig = repo.get_by_user_id.bind(repo);
+    repo.get_by_user_id = async (ctx, uid) => {
+      const list = await orig(ctx, uid);
+      if (uid !== USER) return list;
+      const { should_hide, internal_plaid_ids } = await classifierHidden(ctx);
+      return list.map((r) => ({
+        ...r,
+        is_hidden: should_hide(r.plaid_detailed_category, r.transaction_ids, internal_plaid_ids),
+      }));
+    };
+  }
+}
+
 const resolver = L("resolvers/periods/period_derivation.resolver");
 const { compute_period_view } = L("domain/periods/period_view.service");
 const { resolve_goal_measurements_for_periods } = L("resolvers/goals/goal_measurement.resolver");

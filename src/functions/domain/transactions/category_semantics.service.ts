@@ -31,3 +31,11 @@ export function is_income_category(category: string | null | undefined): boolean
   if (!category) return false;
   return category.startsWith("INCOME");
 }
+
+/** Plaid's credit-card payment category (both legs: money out of checking, payment received on
+ *  the card). G7 / D11: it pairs like a transfer when both accounts are linked. */
+export const CARD_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
+
+export function is_card_payment_category(category: string | null | undefined): boolean {
+  return category === CARD_PAYMENT_CATEGORY;
+}

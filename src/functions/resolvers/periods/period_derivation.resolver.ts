@@ -516,7 +516,9 @@ export function shape_period_derivation_deps(
   const outflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
   for (const o of outflows) {
     if (!o.is_active || o.is_hidden) continue; // hidden = classified internal transfer
-    // Skip only INTERNAL account transfers; external ACH bills (mortgage, etc.) stay.
+    // Skip only INTERNAL account transfers; external ACH bills (mortgage, etc.) stay. (A card
+    // payment to a linked card is hidden by the persisted classifier — see should_hide — so it's
+    // consistent across every window, not decided per window here.)
     if (is_transfer_category(o.plaid_detailed_category) && is_internal_stream(o.transaction_ids)) {
       continue;
     }

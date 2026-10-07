@@ -101,3 +101,25 @@ describe("edge transfers (D12)", () => {
     expect(c.out_ids.has("out")).toBe(true);
   });
 });
+
+describe("card payments pair like transfers (G7 / D11)", () => {
+  const card = (id: string, account: string, amount: number, day: number, type: "income" | "expense") => {
+    const t = txn(id, account, amount, day, "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT");
+    t.data.type = type;
+    return t;
+  };
+  it("checking payment ↔ card's payment received → internal (both accounts linked)", () => {
+    const pair = [card("pay", "CHK-A", 789, 0, "expense"), card("recv", "VISA-A", 789, 1, "income")];
+    const { internal_ids } = detect_internal_transfers_from_txns(pair);
+    expect([...internal_ids].sort()).toEqual(["pay", "recv"]);
+  });
+  it("payment to an UNLINKED card stays unpaired (a real bill payment)", () => {
+    expect(detect_internal_transfers_from_txns([card("pay", "CHK-A", 400, 0, "expense")]).internal_ids.size)
+      .toBe(0);
+  });
+  it("joint pays Alex's private card → edge: out of the group, into Alex's Me", () => {
+    const pair = [card("pay", "JC", 300, 0, "expense"), card("recv", "VISA-A", 300, 0, "income")];
+    expect([...crossing(pair, ["JC"]).out_ids]).toEqual(["pay"]);
+    expect([...crossing(pair, ["VISA-A"]).in_ids]).toEqual(["recv"]);
+  });
+});
