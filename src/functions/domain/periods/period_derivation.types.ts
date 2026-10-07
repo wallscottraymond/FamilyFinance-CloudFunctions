@@ -48,6 +48,9 @@ export interface RecurringForDerivation {
   occurrence_amount_overrides?: Record<string, number>;
   /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
   removal_intervals: RemovalInterval[];
+  /** GROUP views only: the member whose account this bill/income is on (owner badge,
+   *  "paid by Sam"). Absent in Me so its output stays byte-identical. */
+  owner_user_id?: string;
 }
 
 export interface PeriodDerivationDeps {

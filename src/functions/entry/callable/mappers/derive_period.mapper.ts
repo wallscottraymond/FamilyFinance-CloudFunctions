@@ -56,6 +56,8 @@ function map_recurring(r: DerivedRecurringResult) {
       firstDueMs: g.first_due_ms,
       nextUnpaidDueMs: g.next_unpaid_due_ms,
     })),
+    // Group views only: whose bill/income it is (owner badge). Omitted in Me.
+    ...(r.owner_user_id ? { ownerUserId: r.owner_user_id } : {}),
   };
 }
 

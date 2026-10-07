@@ -358,6 +358,8 @@ export function shape_period_derivation_deps(
   window_end_ms: number
 ): PeriodDerivationDeps {
   const { budget_entities, monthly_period_docs, outflows, inflows, all_goals } = raw;
+  // Group views tag each bill/income with its member (owner badge); Me stays unchanged.
+  const owner_of = (user_id: string) => (raw.scope.kind === "group" ? { owner_user_id: user_id } : {});
   const out_of_view_recurring_ids = raw.out_of_view_recurring.ids;
   const overlapping = overlapping_for_window(raw.overlapping, window_start_ms, window_end_ms);
 
@@ -537,6 +539,7 @@ export function shape_period_derivation_deps(
       // User remove/pause spans — filtered per period on read (not a blanket skip,
       // so past periods still show a going-forward/paused bill).
       removal_intervals: o.removal_intervals,
+      ...owner_of(o.user_id),
     });
     payments_by_id.set(o.id, []);
     outflow_stream_items.push({ id: o.id, transaction_ids: o.transaction_ids ?? [] });
@@ -572,6 +575,7 @@ export function shape_period_derivation_deps(
       occurrence_amount_overrides: i.occurrence_amount_overrides,
       // Income remove/pause spans — filtered per period on read, same as bills.
       removal_intervals: i.removal_intervals,
+      ...owner_of(i.user_id),
     });
     payments_by_id.set(i.id, []);
     inflow_stream_items.push({ id: i.id, transaction_ids: i.transaction_ids ?? [] });

@@ -47,6 +47,8 @@ export interface DerivedRecurringResult {
   recurring_id: string;
   name: string;
   groups: PlacedOccurrenceGroup[];
+  /** Group views only (see RecurringForDerivation.owner_user_id). */
+  owner_user_id?: string;
 }
 export interface DerivePeriodResult {
   view_cadence: PeriodInstanceType;
@@ -160,6 +162,7 @@ export function compute_period_view(
       recurring_id: r.id,
       name: r.name,
       groups: visible_groups,
+      ...(r.owner_user_id ? { owner_user_id: r.owner_user_id } : {}),
     });
   }
 
