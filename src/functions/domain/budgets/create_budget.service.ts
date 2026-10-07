@@ -31,6 +31,7 @@ export function compute_create_budget(
   compute: CreateBudgetComputeInput
 ): DomainResult<BudgetEntity> {
   const { budget_id, user_id, input, dependencies, now } = compute;
+  const created_by = compute.created_by ?? user_id;
   const validation_errors: string[] = [];
 
   if (!budget_id) {
@@ -92,12 +93,12 @@ export function compute_create_budget(
 
     access: {
       owner_id: user_id,
-      created_by: user_id,
+      created_by,
       group_ids,
       is_private,
     },
 
-    created_by: user_id,
+    created_by,
     owner_id: user_id,
     is_private,
 

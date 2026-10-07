@@ -106,7 +106,7 @@ export async function update_budget_orchestrator(
       );
       const payload: ProcessBudgetUpdatedPayload = {
         budget_id: entity.id,
-        user_id,
+        user_id: entity.user_id, // owner key (PD6): the cascade works in the budget's view
         group_ids: entity.group_ids,
         budget_name: entity.name,
         category_ids: entity.category_ids,

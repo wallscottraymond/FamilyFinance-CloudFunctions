@@ -51,6 +51,8 @@ import {
 import { is_connected } from "../../domain/sharing/connection.service";
 import { group_repo, request_repo } from "../../repositories/sharing";
 import { DomainResult } from "../../types";
+import { ensure_group_everything_else } from "./group_everything_else";
+import { return_moved_in_budgets } from "./budget_view.orchestrator";
 
 export interface SharingWriteResult {
   success: boolean;
@@ -120,6 +122,7 @@ export async function create_group_orchestrator(
   );
   if (created.validation_errors?.length) return fail(created.validation_errors);
   await request_repo.save_many(ctx, invites.entities ?? []);
+  await ensure_group_everything_else(ctx, group_id);
 
   log_operation_success(span, ctx.user_id);
   return { success: true, group_id };
@@ -229,7 +232,7 @@ export type ManageGroupInput =
 /**
  * Owner / member group management. Leaving / removal / deletion also make the
  * departing people's shared accounts private again and cancel their pending
- * requests (D13). Budgets they moved in follow in 2.3 (needs budgets.view).
+ * requests, and budgets they moved in go back to their Me view (D13).
  */
 export async function manage_group_orchestrator(
   ctx: OrchestratorContext<ManageGroupInput>
@@ -276,6 +279,7 @@ export async function manage_group_orchestrator(
     await request_repo.save_many(
       ctx, cancel_requests(requests_released(pending, leaving), now_ms)
     );
+    await return_moved_in_budgets(ctx, input.group_id, leaving, caller);
   }
 
   log_operation_success(span, ctx.user_id);

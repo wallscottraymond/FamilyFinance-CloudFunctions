@@ -54,6 +54,8 @@ export const create_budget_input_schema = z
     is_shared: z.boolean().optional(),
     /** Explicit group to share into; falls back to family for shared budgets */
     group_id: z.string().optional(),
+    /** Account-Rooted-Sharing: create the budget in this group's view (caller must be a member). */
+    view_group_id: z.string().trim().min(1).max(128).optional(),
     selected_start_period: z.string().optional(),
     is_ongoing: z.boolean().optional(),
     /** ISO 8601 fixed end date; required when is_ongoing is false */
@@ -94,6 +96,8 @@ export interface CreateBudgetInput {
   alert_threshold: number;
   is_shared: boolean;
   group_id?: string;
+  /** Account-Rooted-Sharing (PD6): create in this group's view instead of Me. */
+  view_group_id?: string;
   selected_start_period?: string;
   is_ongoing: boolean;
   budget_end_date?: string;
@@ -129,7 +133,10 @@ export interface CreateBudgetDependencies {
  */
 export interface CreateBudgetComputeInput {
   budget_id: string;
+  /** Owner key: the creator's uid, or "group:<id>" for a group budget (PD6). */
   user_id: string;
+  /** The person creating it (defaults to user_id). */
+  created_by?: string;
   input: CreateBudgetInput;
   dependencies: CreateBudgetDependencies;
   now: Timestamp;

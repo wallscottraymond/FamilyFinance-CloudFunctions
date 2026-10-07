@@ -29,6 +29,7 @@ import {
   request_repo,
 } from "../../repositories/sharing";
 import { account_repo } from "../../repositories/account.repo";
+import { return_moved_in_budgets } from "./budget_view.orchestrator";
 
 export interface DepartureResult {
   groups_left: number;
@@ -69,6 +70,7 @@ export async function release_user_from_sharing(
     const leaving: string[] | "all" = closed ? "all" : [user_id];
     await account_repo.clear_placements(ctx, placements_released(accounts, g.id, leaving), user_id);
     await request_repo.save_many(ctx, cancel_requests(requests_released(pending, leaving), now_ms));
+    await return_moved_in_budgets(ctx, g.id, leaving, user_id);
     if (closed) result.groups_closed++;
     else result.groups_left++;
   }

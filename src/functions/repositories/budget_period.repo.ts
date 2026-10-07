@@ -17,6 +17,7 @@ import {
   WriteResult,
   create_write_result,
   chunk_for_batch,
+  FIRESTORE_BATCH_LIMIT,
 } from "../types";
 import { BudgetPeriodEntity, PendingRolloverByType } from "../types/budgets/budget_entity.types";
 
@@ -114,6 +115,31 @@ export const budget_period_repo = {
   /**
    * Returns all periods for a budget as entities.
    */
+  /**
+   * Re-keys every period of a budget to a new owner key (Account-Rooted-Sharing
+   * PD6: "uid" or "group:<id>"). Used when a budget moves between Me and a group.
+   */
+  async set_owner_for_budget(
+    ctx: TraceContext,
+    budget_id: string,
+    owner_key: string
+  ): Promise<number> {
+    const db = getFirestore();
+    const snap = await db.collection(COLLECTION).where("budgetId", "==", budget_id).get();
+    for (let i = 0; i < snap.docs.length; i += FIRESTORE_BATCH_LIMIT) {
+      const batch = db.batch();
+      for (const d of snap.docs.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+        /* eslint-disable-next-line @typescript-eslint/naming-convention */
+        batch.update(d.ref, { userId: owner_key, ownerId: owner_key, updatedAt: Timestamp.now() });
+      }
+      await batch.commit();
+    }
+    console.log(
+      `[${ctx.trace_id}] budget_period_repo.set_owner_for_budget: ${snap.size} → ${owner_key}`
+    );
+    return snap.size;
+  },
+
   async get_by_budget_id(
     _ctx: TraceContext,
     budget_id: string

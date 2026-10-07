@@ -26,6 +26,9 @@ import { budget_cadence_to_instance } from "../domain/budgets";
  */
 const COLLECTION = "budgets";
 
+/** Doc fields owned by other writers that `save` must keep (see save()). */
+const PRESERVED_ON_SAVE = ["tags", "everythingElsePeriodType"] as const;
+
 /**
  * Safety cap on the per-field budget queries in `get_by_user_id`. A real user
  * has at most a few hundred budgets; this bounds the scan so a runaway/abusive
@@ -88,6 +91,9 @@ interface LegacyBudgetDoc {
   accessibleBy?: string[];
   memberIds?: string[];
   isShared?: boolean;
+  broughtBy?: string | null;
+  tags?: string[];
+  everythingElsePeriodType?: string;
 }
 
 /**
@@ -144,6 +150,7 @@ function map_to_entity(doc: LegacyBudgetDoc): BudgetEntity {
     rollover_enabled: doc.rolloverEnabled,
     rollover_strategy: doc.rolloverStrategy,
     rollover_spread_periods: doc.rolloverSpreadPeriods,
+    brought_by: doc.broughtBy ?? null,
     created_at: doc.createdAt,
     updated_at: doc.updatedAt,
   };
@@ -199,6 +206,7 @@ function map_to_doc(entity: BudgetEntity): LegacyBudgetDoc {
     rolloverEnabled: entity.rollover_enabled,
     rolloverStrategy: entity.rollover_strategy,
     rolloverSpreadPeriods: entity.rollover_spread_periods,
+    broughtBy: entity.brought_by ?? null,
     // Legacy compatibility fields
     familyId: entity.is_private ? undefined : single_group_id ?? undefined,
     groupId: single_group_id,
@@ -304,6 +312,41 @@ export const budget_repo = {
   /**
    * Counts active budgets for a user (used for the budget limit).
    */
+  /**
+   * Moves a budget to another view (Account-Rooted-Sharing PD6): rewrites the
+   * owner key ("uid" or "group:<id>") and who brought it in. `createdBy` is kept.
+   */
+  async set_owner(
+    ctx: TraceContext,
+    budget_id: string,
+    owner_key: string,
+    brought_by: string | null,
+    actor_id: string
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const update = {
+      userId: owner_key,
+      ownerId: owner_key,
+      "access.ownerId": owner_key,
+      accessibleBy: [owner_key],
+      memberIds: [owner_key],
+      broughtBy: brought_by,
+      updatedAt: Timestamp.now(),
+    };
+    /* eslint-enable @typescript-eslint/naming-convention */
+    await doc_ref(budget_id).update(update);
+    record_audit_entry_async({
+      user_id: actor_id,
+      action: "update",
+      entity_type: "budget",
+      entity_id: budget_id,
+      before: {},
+      after: update as unknown as Record<string, unknown>,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { moved_to: owner_key } },
+    });
+  },
+
   async count_by_user_id(
     _ctx: TraceContext,
     user_id: string
@@ -565,6 +608,12 @@ export const budget_repo = {
     const doc_data = strip_undefined(
       map_to_doc(entity_to_save) as unknown as Record<string, unknown>
     );
+    // Fields written by other paths (set_tags, EE provisioning) aren't part of
+    // the entity; carry them over so a full-doc save can't wipe them.
+    for (const field of PRESERVED_ON_SAVE) {
+      const prior = (before as Record<string, unknown> | null)?.[field];
+      if (!(field in doc_data) && prior !== undefined) doc_data[field] = prior;
+    }
     await doc_ref(entity.id).set(doc_data);
 
     record_audit_entry_async({

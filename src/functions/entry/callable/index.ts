@@ -94,3 +94,5 @@ export { respond_to_request } from "./respond_to_request.entry";
 export { manage_group } from "./manage_group.entry";
 export { share_account } from "./share_account.entry";
 export { unshare_account } from "./unshare_account.entry";
+export { move_budget } from "./move_budget.entry";
+export { copy_budgets_to_group } from "./copy_budgets_to_group.entry";

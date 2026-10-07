@@ -70,6 +70,7 @@ export const create_budget = onCall(
         alert_threshold: data.alert_threshold ?? 80,
         is_shared: data.is_shared ?? false,
         group_id: data.group_id,
+        view_group_id: data.view_group_id,
         selected_start_period: data.selected_start_period,
         is_ongoing: data.is_ongoing ?? true,
         budget_end_date: data.budget_end_date,

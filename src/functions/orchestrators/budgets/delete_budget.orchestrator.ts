@@ -91,7 +91,7 @@ export async function delete_budget_orchestrator(
         !!rollover_transfer_mode && dependencies.pending_rollover_by_type.length > 0;
       const payload: ProcessBudgetDeletedPayload = {
         budget_id,
-        user_id,
+        user_id: dependencies.existing.user_id, // owner key (PD6)
         group_ids: dependencies.existing.group_ids,
         budget_period_ids: dependencies.budget_period_ids,
         affected_transaction_ids: dependencies.affected_transaction_ids,

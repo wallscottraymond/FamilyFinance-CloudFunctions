@@ -107,6 +107,13 @@ export interface BudgetEntity {
   rollover_strategy?: RolloverStrategy;
   rollover_spread_periods?: number;
 
+  /**
+   * Account-Rooted-Sharing (PD6): the uid that moved this budget into a group
+   * (it returns to them if they leave, D13). Null/absent for budgets made or
+   * copied in the group and for every Me budget.
+   */
+  brought_by?: string | null;
+
   created_at: Timestamp;
   updated_at: Timestamp;
 }

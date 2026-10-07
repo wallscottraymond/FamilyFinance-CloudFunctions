@@ -37,6 +37,10 @@ import {
   CreateBudgetResponse,
   ProcessBudgetCreatedPayload,
 } from "../../types/budgets/create_budget.types";
+import { group_repo } from "../../repositories/sharing";
+import { is_member } from "../../domain/sharing/group.service";
+import { group_view_key } from "../../domain/sharing/budget_view.service";
+import { ensure_group_everything_else } from "../sharing/group_everything_else";
 
 /**
  * Creates a budget.
@@ -73,14 +77,27 @@ export async function create_budget_orchestrator(
   }
 
   try {
-    // 2. Resolve dependencies (read-only)
-    const dependencies = await resolve_create_budget_dependencies(ctx, user_id, input);
+    // 2. Resolve the view (Account-Rooted-Sharing PD6): Me → the caller's uid;
+    //    a group → "group:<id>" after checking the caller is a member.
+    let owner_key = user_id;
+    if (input.view_group_id) {
+      const group = await group_repo.get(ctx, input.view_group_id);
+      if (!is_member(group, user_id)) {
+        throw new ValidationError(["You're not in this group"]);
+      }
+      owner_key = group_view_key(input.view_group_id);
+      await ensure_group_everything_else(ctx, input.view_group_id);
+    }
+
+    // 2b. Resolve dependencies (read-only) within that view
+    const dependencies = await resolve_create_budget_dependencies(ctx, owner_key, input);
 
     // 3. Domain computation (pure)
     const budget_id = budget_repo.new_id();
     const computed = compute_create_budget({
       budget_id,
-      user_id,
+      user_id: owner_key,
+      created_by: user_id,
       input,
       dependencies,
       now: Timestamp.now(),
@@ -110,7 +127,7 @@ export async function create_budget_orchestrator(
     );
     const payload: ProcessBudgetCreatedPayload = {
       budget_id,
-      user_id,
+      user_id: owner_key,
       group_ids: entity.group_ids,
       budget_name: entity.name,
       category_ids: entity.category_ids,
