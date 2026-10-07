@@ -65,7 +65,7 @@ export async function resolve_balance_sync_dependencies(
         access_token,
         institution_id: data.institutionId || "",
         institution_name: data.institutionName || "Unknown Institution",
-        group_id: data.groupIds?.[0], // First group ID for sharing
+        group_id: undefined, // Accounts start private (Account-Rooted-Sharing P1)
       });
     } catch (error) {
       console.error(

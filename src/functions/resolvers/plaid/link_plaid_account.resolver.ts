@@ -14,13 +14,12 @@ import {
 } from "../../types";
 import { create_span, log_operation_start, log_operation_success } from "../../observability";
 import { plaid_item_repo } from "../../repositories/plaid";
-import { user_repo } from "../../repositories/user.repo";
 
 /**
  * Resolves dependencies for linking a Plaid account.
  *
  * Gathers:
- * - User's group IDs for RBAC
+ * - (no group IDs: accounts start private)
  * - Whether the institution is already linked (duplicate detection)
  *
  * @param ctx - Trace context
@@ -34,16 +33,9 @@ export async function resolve_link_account_dependencies(
   const span = create_span(ctx, "resolver", "resolve_link_account_dependencies");
   log_operation_start(span, input.user_id);
 
-  // 1. Fetch user profile for group IDs
-  const user = await user_repo.get_by_id(ctx, input.user_id);
-  const user_data = user?.data ?? null;
-
-  // Extract group IDs from user profile
-  const group_id =
-    (user_data?.familyId as string | undefined) ||
-    (user_data?.groupId as string | undefined) ||
-    null;
-  const group_ids: string[] = group_id ? [group_id] : [];
+  // 1. Accounts start private (Account-Rooted-Sharing P1): sharing comes from an
+  // account's placement, never from stamping the user's groups onto synced data.
+  const group_ids: string[] = [];
 
   // 2. Check if institution is already linked (via repository)
   const existing_item = await plaid_item_repo.get_by_user_and_institution(

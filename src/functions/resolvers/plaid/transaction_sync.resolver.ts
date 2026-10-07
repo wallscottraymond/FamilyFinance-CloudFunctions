@@ -90,7 +90,9 @@ export async function resolve_transaction_sync_dependencies(
   const user_doc = await db.collection("users").doc(input.user_id).get();
   let family_id: string | null = null;
   let currency = "USD";
-  let group_ids: string[] = item_data.groupIds || [];
+  // Accounts start private (Account-Rooted-Sharing P1): sharing comes from an
+  // account's placement, never from stamping the user's groups onto synced data.
+  const group_ids: string[] = [];
 
   if (user_doc.exists) {
     const user_data = user_doc.data()!;
@@ -102,11 +104,6 @@ export async function resolve_transaction_sync_dependencies(
       if (family_doc.exists) {
         const family_data = family_doc.data()!;
         currency = family_data.settings?.currency || "USD";
-
-        // Add family group to group_ids if not already present
-        if (!group_ids.includes(family_id)) {
-          group_ids = [...group_ids, family_id];
-        }
       }
     }
   }

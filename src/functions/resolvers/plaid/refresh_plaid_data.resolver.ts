@@ -64,7 +64,8 @@ export async function resolve_refresh_dependencies(
   const user_data = user_doc.data();
 
   const user_context = {
-    group_ids: user_data?.groupIds || [],
+    // Accounts start private (Account-Rooted-Sharing P1); sharing is per-account placement.
+    group_ids: [],
     family_id: user_data?.familyId || null,
     currency: user_data?.currency || "USD",
   };

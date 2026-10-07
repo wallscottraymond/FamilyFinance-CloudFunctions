@@ -113,7 +113,7 @@ export async function resolve_webhook_balance_sync_dependencies(
       access_token,
       institution_id: item_data.institutionId || "",
       institution_name: item_data.institutionName || "Unknown Institution",
-      group_id: item_data.groupIds?.[0],
+      group_id: undefined, // Accounts start private (Account-Rooted-Sharing P1)
     },
     already_processed: false,
   };

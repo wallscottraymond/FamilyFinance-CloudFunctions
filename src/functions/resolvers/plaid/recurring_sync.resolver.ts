@@ -184,7 +184,7 @@ export async function resolve_recurring_sync_dependencies(
   }
 
   // Step 3: Get user context
-  const user_context = await resolve_user_context(db, input.user_id, item_data.groupIds || []);
+  const user_context = await resolve_user_context(db, input.user_id);
 
   // Step 4: Fetch existing inflows for this user
   const all_inflows = await inflow_repo.get_by_user_id(ctx, input.user_id, {
@@ -339,12 +339,13 @@ export async function resolve_webhook_recurring_sync_dependencies(
  */
 async function resolve_user_context(
   db: FirebaseFirestore.Firestore,
-  user_id: string,
-  item_group_ids: string[]
+  user_id: string
 ): Promise<RecurringSyncUserContext> {
   let family_id: string | null = null;
   let currency = "USD";
-  let group_ids: string[] = [...item_group_ids];
+  // Accounts start private (Account-Rooted-Sharing P1): sharing comes from an
+  // account's placement, never from stamping the user's groups onto synced data.
+  const group_ids: string[] = [];
 
   const user_doc = await db.collection("users").doc(user_id).get();
 
@@ -358,11 +359,6 @@ async function resolve_user_context(
       if (family_doc.exists) {
         const family_data = family_doc.data()!;
         currency = family_data.settings?.currency || "USD";
-
-        // Add family group to group_ids if not already present
-        if (!group_ids.includes(family_id)) {
-          group_ids = [...group_ids, family_id];
-        }
       }
     }
   }

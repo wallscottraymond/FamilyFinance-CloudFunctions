@@ -3,7 +3,7 @@
  *
  * Gathers dependencies for the initial sync orchestrator.
  * - Fetches plaid_item and decrypts access token
- * - Gets user's group_ids for RBAC
+ * - Accounts start private (no group ids)
  * - Builds institution info for account creation
  *
  * @module resolvers/plaid/initial_sync
@@ -13,7 +13,6 @@ import { TraceContext } from "../../types";
 import { InitialSyncInput, InitialSyncDependencies } from "../../types/plaid";
 import { decryptAccessToken } from "../../../utils/encryption";
 import { plaid_item_repo } from "../../repositories/plaid";
-import { user_repo } from "../../repositories/user.repo";
 
 /**
  * Resolves dependencies needed for the initial sync orchestrator.
@@ -21,7 +20,7 @@ import { user_repo } from "../../repositories/user.repo";
  * This resolver:
  * 1. Fetches the plaid_item document
  * 2. Decrypts the access token
- * 3. Fetches user profile for group_ids
+ * 3. Leaves group_ids empty (accounts start private)
  * 4. Builds institution info
  *
  * @param ctx - Trace context
@@ -52,20 +51,9 @@ export async function resolve_initial_sync_dependencies(
     throw new Error(`Failed to decrypt access token for item: ${input.item_doc_id}`);
   }
 
-  // Fetch user profile for group_ids
-  const user = await user_repo.get_by_id(ctx, input.user_id);
-  let group_ids: string[] = [];
-
-  if (user) {
-    const user_data = user.data;
-    // groupIds can be on the user doc or we use familyId
-    group_ids = (user_data?.groupIds as string[] | undefined) ?? [];
-
-    // If user has familyId but no groupIds, use familyId as a group
-    if (group_ids.length === 0 && user_data?.familyId) {
-      group_ids = [user_data.familyId as string];
-    }
-  }
+  // Accounts start private (Account-Rooted-Sharing P1): sharing comes from an
+  // account's placement, never from stamping the user's groups onto synced data.
+  const group_ids: string[] = [];
 
   // Build institution info
   const institution = {
