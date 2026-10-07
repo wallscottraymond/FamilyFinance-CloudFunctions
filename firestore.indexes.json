@@ -1090,96 +1090,6 @@
       ]
     },
     {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "ownerId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isActive",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isHidden",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "ownerId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "incomeType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "ownerId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "frequency",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "itemId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isActive",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastSyncedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "streamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "itemId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "outflows",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2160,42 +2070,6 @@
       ]
     },
     {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "groupIds",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "isActive",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "groupIds",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "isHidden",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "inflow_periods",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2666,40 +2540,6 @@
       ]
     },
     {
-      "collectionGroup": "inflow",
-      "fieldPath": "category",
-      "indexes": [
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "fieldPath": "tags",
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
-      "fieldPath": "transactionIds",
-      "indexes": [
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
       "collectionGroup": "outflows",
       "fieldPath": "category",
       "indexes": [
@@ -2805,16 +2645,6 @@
     },
     {
       "collectionGroup": "outflow_periods",
-      "fieldPath": "groupIds",
-      "indexes": [
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "inflow",
       "fieldPath": "groupIds",
       "indexes": [
         {
