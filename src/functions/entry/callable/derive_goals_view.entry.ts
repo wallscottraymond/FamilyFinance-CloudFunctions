@@ -1,7 +1,7 @@
 /**
  * Derive Goals View Entry Point — Goals (Phase 1)
  *
- * onCall read endpoint for the period-page Goals section: given a period_id,
+ * onCall read endpoint for the period-page Goals section: given a period_id (+ optional view scope),
  * returns each active goal + its measured progress for that period. Read-only.
  *
  * @module entry/callable/derive_goals_view
@@ -21,9 +21,14 @@ import {
 } from "../../orchestrators/goals";
 import { success_response, FunctionResponse } from "../../types";
 import { handle_goal_entry_error } from "./create_goal.entry";
+import { derive_scope_schema } from "../../types/schemas/derive_scope.schema";
 
 const derive_goals_view_input_schema = z.object({
   period_id: z.string().min(1, "period_id is required"),
+  // Account-Rooted-Sharing: absent = Me; a group = goals on accounts shared with it.
+  scope: derive_scope_schema.optional(),
+  // Goals tab / goal detail: all of the caller's own goals, shared or not (ignores scope).
+  own_goals: z.boolean().optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -54,7 +59,9 @@ export const derive_goals_view = onCall(
       const result = await derive_goals_view_orchestrator(
         ctx,
         user_id,
-        validation.data.period_id
+        validation.data.period_id,
+        validation.data.scope,
+        validation.data.own_goals === true
       );
 
       log_operation_success(span, user_id);

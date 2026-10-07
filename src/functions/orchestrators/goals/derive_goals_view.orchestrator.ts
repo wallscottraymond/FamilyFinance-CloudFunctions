@@ -16,7 +16,11 @@ import {
   log_operation_success,
 } from "../../observability";
 import { source_period_repo } from "../../repositories/source_period.repo";
-import { resolve_goal_measurements } from "../../resolvers/goals/goal_measurement.resolver";
+import {
+  resolve_goal_measurements,
+  resolve_own_goal_measurements,
+} from "../../resolvers/goals/goal_measurement.resolver";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 
 /** One goal + its measurement for the viewed period (camelCase FE DTO). */
 export type { GoalViewItem, DeriveGoalsViewResult } from "../../domain/goals/goals_view.service";
@@ -28,7 +32,9 @@ import {
 export async function derive_goals_view_orchestrator(
   ctx: TraceContext,
   user_id: string,
-  period_id: string
+  period_id: string,
+  scope?: DeriveScopeRequest,
+  own_goals = false
 ): Promise<DeriveGoalsViewResult> {
   const span = create_span(ctx, "orchestrator", "derive_goals_view");
   log_operation_start(span, user_id);
@@ -38,15 +44,18 @@ export async function derive_goals_view_orchestrator(
     throw new NotFoundError("source_period", period_id);
   }
 
-  const views = await resolve_goal_measurements(
-    ctx,
-    user_id,
-    period_id,
-    period.start_date,
-    period.end_date
-  );
+  const views = own_goals
+    ? await resolve_own_goal_measurements(ctx, user_id, period_id, period.start_date, period.end_date)
+    : await resolve_goal_measurements(
+        ctx,
+        user_id,
+        period_id,
+        period.start_date,
+        period.end_date,
+        scope
+      );
 
-  const result = build_goals_view(period_id, views);
+  const result = build_goals_view(period_id, views, scope?.kind === "group");
 
   log_operation_success(span, user_id);
   return result;

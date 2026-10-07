@@ -31,6 +31,8 @@ export interface GoalViewItem {
   met: boolean;
   targetReached: boolean;
   dataIncomplete: boolean;
+  /** Group views only: whose goal this is (the linked account's owner), for the owner badge. */
+  ownerUserId?: string;
 }
 
 export interface DeriveGoalsViewResult {
@@ -42,7 +44,8 @@ export interface DeriveGoalsViewResult {
 
 export function build_goals_view(
   period_id: string,
-  views: Array<{ goal: GoalEntity; measurement: GoalMeasurement }>
+  views: Array<{ goal: GoalEntity; measurement: GoalMeasurement }>,
+  with_owner = false
 ): DeriveGoalsViewResult {
   const goals: GoalViewItem[] = views.map(({ goal, measurement }) => ({
     goalId: goal.id,
@@ -62,6 +65,7 @@ export function build_goals_view(
     met: measurement.met,
     targetReached: measurement.target_reached,
     dataIncomplete: measurement.data_incomplete,
+    ...(with_owner ? { ownerUserId: goal.owner_id } : {}),
   }));
 
   const totalDrawThisPeriod = goals

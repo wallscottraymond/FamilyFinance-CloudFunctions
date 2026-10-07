@@ -203,7 +203,7 @@ export async function derive_period_range_orchestrator(
         start_ms: w.start_ms,
         end_ms: w.end_ms,
         derive: r.derive,
-        goals: views ? build_goals_view(w.period_id, views) : null,
+        goals: views ? build_goals_view(w.period_id, views, input.scope?.kind === "group") : null,
         from_cache: r.from_cache,
       };
     });

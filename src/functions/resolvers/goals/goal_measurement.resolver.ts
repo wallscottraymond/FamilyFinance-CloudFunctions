@@ -70,6 +70,21 @@ export async function resolve_goal_measurements(
 }
 
 /**
+ * Every goal the user owns, wherever its account is shared (the Goals tab + goal detail).
+ * Measurement is per goal + its account, so it matches the goal's numbers in any view.
+ */
+export async function resolve_own_goal_measurements(
+  ctx: TraceContext,
+  user_id: string,
+  period_id: string,
+  period_start: Timestamp,
+  period_end: Timestamp
+): Promise<GoalMeasurementView[]> {
+  const goals = await goal_repo.get_by_user(ctx, user_id);
+  return measure_goals_for_period(goals, period_id, period_start, period_end);
+}
+
+/**
  * Goals in a view (Account-Rooted-Sharing): a goal follows its linked account — Me
  * keeps goals on private (or unknown) accounts; a group gets members' goals on its
  * shared accounts. Membership is checked by the scope resolver.
