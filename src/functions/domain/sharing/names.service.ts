@@ -23,10 +23,14 @@ const ADJECTIVES = [
   "Royal", "Scrappy", "Shy", "Smart", "Snowy", "Spicy", "Stormy", "Tender",
 ];
 
-const ANIMALS = [
+/**
+ * No primates (apes, monkeys, chimps, gorillas, lemurs, ...): they're used as racist slurs.
+ * Swap a word IN PLACE (same index) so nobody else's name changes; names_blocklist.test guards it.
+ */
+export const ANIMALS = [
   "Otter", "Panda", "Heron", "Robin", "Fox", "Badger", "Koala", "Lynx",
   "Owl", "Seal", "Wren", "Bison", "Crane", "Dolphin", "Falcon", "Gecko",
-  "Hare", "Ibis", "Jaguar", "Kiwi", "Lemur", "Moose", "Newt", "Ocelot",
+  "Hare", "Ibis", "Jaguar", "Kiwi", "Lark", "Moose", "Newt", "Ocelot",
   "Puffin", "Quail", "Raven", "Sparrow", "Tiger", "Walrus", "Yak", "Zebra",
   "Alpaca", "Beaver", "Camel", "Deer", "Eagle", "Ferret", "Goose", "Hedgehog",
   "Iguana", "Jackal", "Kestrel", "Llama", "Marten", "Narwhal", "Orca", "Pelican",
