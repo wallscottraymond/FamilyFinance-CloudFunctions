@@ -21,6 +21,7 @@ import {
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import {
   compute_budget_periods,
   compute_reallocated_periods,
@@ -166,6 +167,7 @@ async function reallocate_periods(
 
   if (existing.length === 0) {
     await generate_fresh_periods(ctx, payload);
+    await bump_derive_version(payload.user_id).catch(() => {});
     return;
   }
 
@@ -191,6 +193,11 @@ async function reallocate_periods(
   }
 
   await budget_period_repo.update_allocations(ctx, updates);
+  // `allocatedAmount` feeds derive but the period-edit trigger ignores it, and the budget
+  // write's own bump landed BEFORE this job — a derive in between cached the old allocations.
+  // Invalidate again now that they're written. `payload.user_id` is the owner key
+  // (uid or "group:<id>").
+  await bump_derive_version(payload.user_id).catch(() => {});
   // (user_summaries build retired)
 }
 

@@ -44,15 +44,12 @@ import {
   get_cached_derived_period,
   put_cached_derived_period,
 } from "../../repositories/derive_period_cache.repo";
+import { DERIVED_CACHE_TTL_MS } from "../../repositories/derived_result_cache.repo";
 
 const BUDGET: PerformanceBudget = { max_reads: 200, max_writes: 0, max_time_ms: 1500 };
 
-/**
- * TTL SAFETY BACKSTOP for the L2 derive cache ([[Firestore-Read-Cost-Reduction]]).
- * Correctness comes from the per-user `data_version` match — this only bounds staleness
- * to minutes (rather than forever) in the event some write path forgot to bump the version.
- */
-const CACHE_TTL_MS = 10 * 60 * 1000;
+/** TTL safety backstop for the L2 derive cache — shared with every derive cache. */
+const CACHE_TTL_MS = DERIVED_CACHE_TTL_MS;
 
 export interface DerivePeriodInput {
   view_cadence: PeriodInstanceType;

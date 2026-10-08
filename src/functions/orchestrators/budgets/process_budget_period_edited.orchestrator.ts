@@ -117,12 +117,16 @@ export async function process_budget_period_edited_orchestrator(
       // resuming restores it. The util writes allocatedAmount (not isActive),
       // so it does not re-trigger this handler.
       const is_pausing = before.isActive === true && after.isActive === false;
-      await handleBudgetPeriodPauseResume(db, period_id, after, is_pausing);
-      // The trigger's own bump fires BEFORE these split moves land, so a derive in between
-      // could re-cache pre-move data under the new version. Bump again now that the
-      // transaction writes are committed (also the mobile app's transaction-change signal).
-      const owner = (af.userId ?? af.ownerId) as string | undefined;
-      if (owner) await bump_derive_version(owner).catch(() => {});
+      try {
+        await handleBudgetPeriodPauseResume(db, period_id, after, is_pausing);
+      } finally {
+        // The trigger's own bump fires BEFORE these split moves land, so a derive in between
+        // could re-cache pre-move data under the new version. Bump again once the transaction
+        // writes are committed (also the mobile app's transaction-change signal) — in `finally`
+        // so a partial failure still invalidates the writes that did land.
+        const owner = (af.userId ?? af.ownerId) as string | undefined;
+        if (owner) await bump_derive_version(owner).catch(() => {});
+      }
     }
   } catch (error) {
     // Non-fatal — a sync failure must not break the period edit.

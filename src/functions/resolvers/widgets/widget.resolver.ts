@@ -8,20 +8,19 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { widget_token_repo, StoredWidgetToken } from "../../repositories/widget_token.repo";
-import { get_derive_version } from "../../repositories/derive_version.repo";
 import {
   source_period_repo,
   SourcePeriodEntity,
 } from "../../repositories/source_period.repo";
 
-/** Owner of a widget token hash (null = unknown/revoked) + their current data version. */
+/** Owner of a widget token hash (null = unknown/revoked). The view version is resolved by the
+ *  caller (`resolve_view_version`), which knows whether this is a Me or a group widget. */
 export async function resolve_widget_request(
   token_hash: string
-): Promise<{ user_id: string; data_version: number } | null> {
+): Promise<{ user_id: string } | null> {
   const user_id = await widget_token_repo.get_user_by_hash(token_hash);
   if (!user_id) return null;
-  const data_version = await get_derive_version(user_id);
-  return { user_id, data_version };
+  return { user_id };
 }
 
 /**

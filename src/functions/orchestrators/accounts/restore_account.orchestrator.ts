@@ -26,6 +26,7 @@ import {
   log_async_debug,
 } from "../../observability";
 import { account_repo } from "../../repositories";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
 import {
   check_idempotency,
@@ -224,6 +225,9 @@ export async function restore_account_orchestrator(
     // 8. Repository write: Restore the account
     await account_repo.restore(ctx, input.account_id, user_id);
     perf.writes++;
+    // The account's isActive is a derive-scope input (Me + any group it's shared into); the
+    // transaction cascade job bumps too, but it may not run (no txns / not requested).
+    await bump_derive_version(user_id).catch(() => {});
 
     // 9. Complete idempotency key
     const result = { success: true, account_id: input.account_id };

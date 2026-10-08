@@ -7,12 +7,14 @@
  * so their cached periods recompute on the next read ([[Firestore-Read-Cost-Reduction]]).
  *
  * These are thin invalidation-only triggers (no orchestrator, no cascade): extract the
- * owner, fire-and-forget a version bump, done. `bump_derive_version` writes only to
+ * owner, await a version bump, done (awaited: gen2 may drop work still running after the
+ * handler returns). `bump_derive_version` writes only to
  * `user_data_versions` (no trigger there), so there is no loop.
  *
  * NOT covered here: `source_periods` is a GLOBAL, non-owner-scoped calendar that changes
  * rarely (period generation extends the horizon) — a per-user version can't target it, so
- * it relies on the cache's TTL backstop (minutes) to pick up new period definitions.
+ * it relies on the cache's TTL backstop (24h) to pick up new period definitions. After a
+ * manual source-period regenerate, clear the `derived_*_cache` collections.
  *
  * @module entry/triggers/on_derive_input_written
  */
@@ -42,11 +44,11 @@ export const on_budget_written = onDocumentWritten(
     const before = (event.data?.before?.data() as Record<string, unknown> | undefined) ?? null;
     const after = (event.data?.after?.data() as Record<string, unknown> | undefined) ?? null;
     const owner = owner_of(before, after);
-    if (owner) void bump_derive_version(owner).catch(() => {});
+    if (owner) await bump_derive_version(owner).catch(() => {});
     // Account-Rooted-Sharing: a budget MOVED between views (Me <-> "group:<id>") changes its
     // owner key; the view it left must refresh too. Ordinary writes have one owner → one bump.
     const previous = before ? owner_of(before, null) : undefined;
-    if (previous && previous !== owner) void bump_derive_version(previous).catch(() => {});
+    if (previous && previous !== owner) await bump_derive_version(previous).catch(() => {});
   }
 );
 
@@ -57,6 +59,6 @@ export const on_goal_written = onDocumentWritten(
       (event.data?.before?.data() as Record<string, unknown> | undefined) ?? null,
       (event.data?.after?.data() as Record<string, unknown> | undefined) ?? null
     );
-    if (owner) void bump_derive_version(owner).catch(() => {});
+    if (owner) await bump_derive_version(owner).catch(() => {});
   }
 );

@@ -24,6 +24,7 @@ import {
   calculateRolloverForPeriod,
   RolloverCalculationResult,
 } from './rolloverCalculation';
+import { bump_derive_version } from '../../repositories/derive_version.repo';
 
 export interface RolloverChainResult {
   success: boolean;
@@ -114,6 +115,7 @@ export async function recalculateRolloverChain(
       result.updatedPeriodIds = clearedIds;
       result.periodsUpdated = clearedIds.length;
       console.log(`[recalculateRolloverChain] Cleared rollover from ${clearedIds.length} periods`);
+      if (clearedIds.length > 0 && userId) await bump_derive_version(userId).catch(() => {});
       return result;
     }
 
@@ -232,6 +234,13 @@ export async function recalculateRolloverChain(
     if (batchCount > 0) {
       await batch.commit();
       console.log(`[recalculateRolloverChain] Committed final batch of ${batchCount} updates`);
+    }
+
+    // `rolledOverAmount` feeds derive (effective/remaining) but the budget-period edit trigger
+    // ignores it, so invalidate the derive cache here, once per chain, after the writes land.
+    // Owner key is the budget's userId (the uid, or "group:<id>" for a group budget).
+    if (result.periodsUpdated > 0 && userId) {
+      await bump_derive_version(userId).catch(() => {});
     }
 
     console.log('[recalculateRolloverChain] ════════════════════════════════════════════');

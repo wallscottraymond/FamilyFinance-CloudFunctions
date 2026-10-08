@@ -87,7 +87,7 @@ export const on_outflow_created = onDocumentCreated(
     }
 
     // Invalidate derived-period cache — a new bill changes derive ([[Firestore-Read-Cost-Reduction]]).
-    void bump_derive_version(user_id).catch(() => {});
+    await bump_derive_version(user_id).catch(() => {});
 
     console.log(
       `[on_outflow_created] Trigger fired for outflow ${outflow_id}, user ${user_id}`

@@ -30,6 +30,7 @@ import {
   log_async_debug,
 } from "../../observability";
 import { account_repo } from "../../repositories";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import {
   check_idempotency,
   claim_key,
@@ -347,6 +348,9 @@ export async function remove_account_orchestrator(
     // 10. Repository write: Soft delete the account (audit is automatic)
     await account_repo.soft_delete(ctx, input.account_id, user_id);
     perf.writes++;
+    // The account's isActive is a derive-scope input (Me + any group it's shared into); the
+    // transaction cascade job bumps too, but it may not run (no txns / not requested).
+    await bump_derive_version(user_id).catch(() => {});
 
     // 10b. Pause goals that watch this account — its balance stops updating.
     const linked_goals = await goal_repo.get_by_account(ctx, user_id, input.account_id);

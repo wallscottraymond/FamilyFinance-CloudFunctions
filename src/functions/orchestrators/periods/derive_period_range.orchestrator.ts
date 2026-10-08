@@ -56,6 +56,7 @@ import {
   get_cached_derived_period,
   put_cached_derived_period,
 } from "../../repositories/derive_period_cache.repo";
+import { DERIVED_CACHE_TTL_MS } from "../../repositories/derived_result_cache.repo";
 
 /**
  * Transactions dominate (a cold 12-month range reads every active txn in it, ~4k for a heavy
@@ -64,7 +65,7 @@ import {
 const BUDGET: PerformanceBudget = { max_reads: 6000, max_writes: 0, max_time_ms: 8000 };
 
 /** Same TTL backstop as `derive_period` (correctness comes from the data_version match). */
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_TTL_MS = DERIVED_CACHE_TTL_MS;
 
 export interface DeriveRangeWindow {
   period_id: string;

@@ -17,6 +17,7 @@ import {
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { create_job } from "../../infrastructure/job_queue";
 import { ProcessBudgetDeletedPayload } from "../../types/budgets/delete_budget.types";
 
@@ -104,6 +105,10 @@ export async function process_budget_deleted_orchestrator(
         `[${ctx.trace_id}] process_budget_deleted: transferred rollover (${payload.rollover_transfer_mode}) ` +
           `to EE across ${ee_period_ids.length} period(s)`
       );
+      // EE `rolledOverAmount` feeds derive; this lands after the category-release bump.
+      if (ee_period_ids.length > 0) {
+        await bump_derive_version(payload.user_id).catch(() => {});
+      }
       // (user_summaries build retired)
     } catch (rollover_error) {
       console.error(

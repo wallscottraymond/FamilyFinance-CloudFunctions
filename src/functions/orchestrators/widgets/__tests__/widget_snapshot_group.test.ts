@@ -2,7 +2,8 @@
  * widget_snapshot group views (Account-Rooted-Sharing): Edit Widget → Show picks a group.
  * Not a member → not_member (no data). A member → every derive gets the group scope, the
  * "unchanged" check uses the group view version, and the payload carries the group's name.
- * No group → Me exactly as before.
+ * No group → the Me view version. Either way the widget's version also carries the UTC day
+ * (Performance-Review-4 G11), so a widget refetches day-relative fields once a day.
  */
 import { Timestamp } from "firebase-admin/firestore";
 
@@ -12,7 +13,7 @@ const get_group = jest.fn();
 const view_version = jest.fn();
 
 jest.mock("../../../resolvers/widgets/widget.resolver", () => ({
-  resolve_widget_request: jest.fn(async () => ({ user_id: "me", data_version: 5 })),
+  resolve_widget_request: jest.fn(async () => ({ user_id: "me" })),
   resolve_source_periods_from_now: jest.fn(async () => [
     {
       period_id: "2026M10",
@@ -38,6 +39,7 @@ jest.mock("../../../resolvers/periods/view_version.resolver", () => ({
 }));
 
 import { widget_snapshot_orchestrator } from "../widget_snapshot.orchestrator";
+import { widget_view_version } from "../../../domain/periods/derive_scope.service";
 import { create_trace_context } from "../../../observability";
 
 const base = {
@@ -66,13 +68,15 @@ beforeEach(() => {
 });
 
 describe("widget_snapshot group views", () => {
-  it("Me (no group): unchanged behavior, no scope, no groupName", async () => {
+  it("Me (no group): Me view version, no scope, no groupName", async () => {
+    view_version.mockResolvedValue({ view_key: "me", version: 5 });
     const out = await widget_snapshot_orchestrator(create_trace_context(false), { ...base, group_id: null });
     expect(out.status).toBe("data");
     expect(derive_period.mock.calls[0][2].scope).toBeUndefined();
     expect(get_group).not.toHaveBeenCalled();
+    expect(view_version.mock.calls[0][2]).toBeUndefined();
     if (out.status === "data") {
-      expect(out.version).toBe(5);
+      expect(out.version).toBe(widget_view_version(5, base.now_ms));
       expect("groupName" in out.data).toBe(false);
     }
   });
@@ -101,7 +105,7 @@ describe("widget_snapshot group views", () => {
     expect(derive_period.mock.calls[0][2].scope).toEqual({ kind: "group", group_id: "g1" });
     expect(derive_goals.mock.calls[0][3]).toEqual({ kind: "group", group_id: "g1" });
     if (out.status === "data") {
-      expect(out.version).toBe(42);
+      expect(out.version).toBe(widget_view_version(42, base.now_ms));
       expect(out.data.groupName).toBe("The Walls");
     }
   });
@@ -111,9 +115,19 @@ describe("widget_snapshot group views", () => {
     const out = await widget_snapshot_orchestrator(create_trace_context(false), {
       ...base,
       group_id: "g1",
-      have_version: 42,
+      have_version: widget_view_version(42, base.now_ms),
     });
-    expect(out).toEqual({ status: "unchanged", version: 42 });
+    expect(out).toEqual({ status: "unchanged", version: widget_view_version(42, base.now_ms) });
     expect(derive_period).not.toHaveBeenCalled();
+  });
+
+  it("same data version on a new UTC day: refetches (day-relative fields)", async () => {
+    get_group.mockResolvedValue(grp(["me"]));
+    const out = await widget_snapshot_orchestrator(create_trace_context(false), {
+      ...base,
+      group_id: "g1",
+      have_version: widget_view_version(42, base.now_ms - 86_400_000),
+    });
+    expect(out.status).toBe("data");
   });
 });

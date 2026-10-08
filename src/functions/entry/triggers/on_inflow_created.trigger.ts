@@ -69,7 +69,7 @@ export const on_inflow_created = onDocumentCreated(
     }
 
     // Invalidate derived-period cache — new income changes derive ([[Firestore-Read-Cost-Reduction]]).
-    void bump_derive_version(user_id).catch(() => {});
+    await bump_derive_version(user_id).catch(() => {});
 
     console.log(
       `[on_inflow_created] Trigger fired for inflow ${inflow_id}, user ${user_id}`

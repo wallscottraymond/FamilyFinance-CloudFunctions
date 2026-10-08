@@ -47,8 +47,8 @@ export const on_transaction_written = onDocumentWritten(
     // single `user_data_versions/{uid}` doc (write contention). The bump is now coalesced to
     // each WRITE BOUNDARY: the sync orchestrator, the assignment batch, the account
     // hide/restore orchestrators, and the single-edit callables (updateTransactionSplits,
-    // assign_split_to_outflow) each `bump_derive_version` ONCE. The derive cache's ~10-min TTL
-    // backstops any writer that forgets (bounded staleness, never permanent).
+    // assign_split_to_outflow) each `bump_derive_version` ONCE. The derive cache's 24h TTL
+    // backstops any writer that forgets — so a NEW writer of a derive input MUST bump.
 
     // Idempotency: the trace's key (`trigger:${id}:${event.id}`) flows into the
     // orchestrator's per-event job deduplication keys, so trigger replays of the

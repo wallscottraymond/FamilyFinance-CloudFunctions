@@ -37,6 +37,7 @@ import { group_repo } from "../../repositories/sharing";
 import { create_job } from "../../infrastructure/job_queue";
 import { create_budget_orchestrator } from "../budgets/create_budget.orchestrator";
 import { ensure_group_everything_else } from "./group_everything_else";
+import { bump_owner_versions } from "./versions";
 
 /** Repo budget → the fields the view rules need. */
 function to_view_budget(b: BudgetEntity | null): ViewBudget | null {
@@ -72,6 +73,9 @@ async function apply_move(
       : [];
   await budget_repo.set_owner(ctx, budget.id, new_owner_key, brought_by, actor_id);
   await budget_period_repo.set_owner_for_budget(ctx, budget.id, new_owner_key);
+  // The budget write bumped both keys BEFORE its periods were re-keyed; a derive in between
+  // cached the budget without its stored periods (rollover / edited amounts). Bump again.
+  await bump_owner_versions([old_owner_key, new_owner_key]);
   if (affected.length > 0) {
     await create_job(
       "assign_transactions_batch",

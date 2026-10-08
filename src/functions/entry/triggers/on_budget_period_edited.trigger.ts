@@ -62,7 +62,7 @@ export const on_budget_period_edited = onDocumentUpdated(
     // ([[Firestore-Read-Cost-Reduction]]). Pure `spent` recomputes were already
     // filtered by the guard above (they flow from transactions, which bump directly).
     const owner = (af.userId ?? af.ownerId) as string | undefined;
-    if (owner) void bump_derive_version(owner).catch(() => {});
+    if (owner) await bump_derive_version(owner).catch(() => {});
 
     const trace = create_trigger_trace(period_id, event.id);
 

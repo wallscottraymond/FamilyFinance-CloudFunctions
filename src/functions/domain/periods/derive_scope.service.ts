@@ -175,3 +175,40 @@ export function group_view_version(
   const hex = createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 13);
   return parseInt(hex, 16);
 }
+
+/**
+ * A Me view's cache version. With no groups it is the user's own version, unchanged. In a
+ * group, Me also pairs transfers against other members' transactions on the group's shared
+ * accounts (D12), so it fingerprints the user's own version, each group + its members, and
+ * every other member's version: a partner's sync, share/unshare, or any join/leave moves it.
+ * Deterministic; a safe integer. PURE.
+ */
+export function me_view_version(
+  own_version: number,
+  groups: Array<{ id: string; member_ids: string[] }>,
+  member_versions: Record<string, number>
+): number {
+  if (groups.length === 0) return own_version;
+  const parts = [
+    `me=${own_version}`,
+    ...[...groups]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((g) => `${g.id}:${[...g.member_ids].sort().join(",")}`),
+    ...Object.keys(member_versions)
+      .sort()
+      .map((m) => `${m}=${member_versions[m]}`),
+  ];
+  const hex = createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 13);
+  return parseInt(hex, 16);
+}
+
+/**
+ * A widget's "unchanged" version: the view version plus the UTC day. The widget payload
+ * carries day-relative fields (current period, `overdue` vs today's UTC start), so a widget
+ * must refetch once per UTC day even when no data changed. Deterministic; a safe integer. PURE.
+ */
+export function widget_view_version(view_version: number, now_ms: number): number {
+  const day = Math.floor(now_ms / (24 * 60 * 60 * 1000));
+  const hex = createHash("sha1").update(`v=${view_version}|d=${day}`).digest("hex").slice(0, 13);
+  return parseInt(hex, 16);
+}

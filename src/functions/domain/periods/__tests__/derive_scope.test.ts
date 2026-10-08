@@ -7,6 +7,8 @@ import {
   build_group_scope,
   account_in_scope,
   transaction_in_scope,
+  me_view_version,
+  widget_view_version,
 } from "../derive_scope.service";
 
 const DAY = 86_400_000;
@@ -74,5 +76,54 @@ describe("one place per account (P1)", () => {
     for (const id of ["jc_doc", "jc_plaid", "visa_plaid"]) {
       expect(Number(account_in_scope(me, id)) + Number(account_in_scope(g, id))).toBe(1);
     }
+  });
+});
+
+describe("Me view version (Performance-Review-4 G7)", () => {
+  const g1 = { id: "g1", member_ids: ["alex", "sam"] };
+  it("no groups → the user's own version, unchanged (existing caches stay valid)", () => {
+    expect(me_view_version(7, [], {})).toBe(7);
+  });
+  it("in a group → a partner's change moves it", () => {
+    const before = me_view_version(7, [g1], { sam: 3 });
+    expect(me_view_version(7, [g1], { sam: 4 })).not.toBe(before);
+    expect(me_view_version(8, [g1], { sam: 3 })).not.toBe(before);
+  });
+  it("membership change moves it", () => {
+    const before = me_view_version(7, [g1], { sam: 3 });
+    const joined = { id: "g1", member_ids: ["alex", "sam", "kai"] };
+    expect(me_view_version(7, [joined], { sam: 3, kai: 0 })).not.toBe(before);
+    expect(me_view_version(7, [g1, { id: "g2", member_ids: ["alex"] }], { sam: 3 })).not.toBe(
+      before
+    );
+  });
+  it("deterministic regardless of order; a safe integer", () => {
+    const a = me_view_version(
+      7,
+      [g1, { id: "g2", member_ids: ["kai", "alex"] }],
+      { sam: 3, kai: 1 }
+    );
+    const b = me_view_version(
+      7,
+      [{ id: "g2", member_ids: ["alex", "kai"] }, { id: "g1", member_ids: ["sam", "alex"] }],
+      { kai: 1, sam: 3 }
+    );
+    expect(a).toBe(b);
+    expect(Number.isSafeInteger(a)).toBe(true);
+  });
+});
+
+describe("widget view version (Performance-Review-4 G11)", () => {
+  const NOON = Date.UTC(2026, 9, 8, 12);
+  it("same view version + same UTC day → same (\"unchanged\")", () => {
+    expect(widget_view_version(5, NOON)).toBe(widget_view_version(5, NOON + 6 * 3_600_000));
+  });
+  it("next UTC day → different, so the widget refetches day-relative fields", () => {
+    expect(widget_view_version(5, NOON)).not.toBe(widget_view_version(5, NOON + DAY));
+  });
+  it("data change → different; a non-negative safe integer", () => {
+    expect(widget_view_version(5, NOON)).not.toBe(widget_view_version(6, NOON));
+    const v = widget_view_version(5, NOON);
+    expect(Number.isSafeInteger(v) && v >= 0).toBe(true);
   });
 });

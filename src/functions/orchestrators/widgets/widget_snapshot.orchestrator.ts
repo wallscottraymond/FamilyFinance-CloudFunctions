@@ -3,9 +3,10 @@
  *
  * Serves the iOS widgets' self-fetch (every ~30 min with the app closed, or immediately when
  * the running app asks WidgetKit to reload). The backend is the single source of widget data:
- *   1. token → sha256 → user + current data version (2 reads); a group widget uses that group's
- *      view version instead (membership checked: not a member → "not_member")
- *   2. widget already has this version → "unchanged" (done)
+ *   1. token → sha256 → user; then the view version (Me or group — membership checked: not a
+ *      member → "not_member"), combined with the UTC day into the widget's version
+ *   2. widget already has this version → "unchanged" (done). The day is part of it because the
+ *      payload is day-relative (current period, `overdue`): a widget refetches once per UTC day
  *   3. else only the derives this widget KIND needs (same windows the app derives, so they
  *      share the derived-period cache) → pure builders that mirror the app's formulas.
  *
@@ -44,7 +45,10 @@ import {
 import { SourcePeriodEntity } from "../../repositories/source_period.repo";
 import { group_repo } from "../../repositories/sharing";
 import { is_member } from "../../domain/sharing/group.service";
-import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
+import {
+  DeriveScopeRequest,
+  widget_view_version,
+} from "../../domain/periods/derive_scope.service";
 import { resolve_view_version } from "../../resolvers/periods/view_version.resolver";
 
 export type WidgetCadence = "monthly" | "weekly" | "bi_monthly";
@@ -99,7 +103,6 @@ export async function widget_snapshot_orchestrator(
       return { status: "unauthorized" };
     }
     const { user_id } = request;
-    let version = request.data_version;
 
     // A group widget: the caller must still be a member; its "unchanged" check uses the group
     // view's version (moves when any member's data or the group's budgets change).
@@ -113,8 +116,11 @@ export async function widget_snapshot_orchestrator(
       }
       scope = { kind: "group", group_id: input.group_id };
       group_name = group!.name;
-      version = (await resolve_view_version(ctx, user_id, scope)).version;
     }
+    const version = widget_view_version(
+      (await resolve_view_version(ctx, user_id, scope)).version,
+      input.now_ms
+    );
     if (input.have_version !== null && input.have_version === version) {
       log_operation_success(span, user_id);
       return { status: "unchanged", version };

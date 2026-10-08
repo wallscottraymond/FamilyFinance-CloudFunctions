@@ -59,7 +59,7 @@ export async function handle_recurring_write(
   const owner =
     ((after?.userId ?? after?.ownerId) as string | undefined) ||
     ((before?.userId ?? before?.ownerId) as string | undefined);
-  if (owner) void bump_derive_version(owner).catch(() => {});
+  if (owner) await bump_derive_version(owner).catch(() => {});
 
   if (!after) return false; // deletion → the removal cascade handles soft-delete
   const user_id =
