@@ -100,9 +100,19 @@ import {
 } from "../../orchestrators/recurring/reconcile_user_recurring.orchestrator";
 
 /**
- * Maximum jobs to process per invocation.
+ * Maximum jobs to process per invocation. Debounced (`scheduled_for`) jobs run ONLY through
+ * this sweep, so its capacity is the whole queue's capacity for delayed work. At the old 10 per
+ * 5-minute run (120/hour, all users) one new user's first Plaid import (~700 coalesced
+ * `recompute_budget_spent` jobs, one per transaction day) blocked every user's delayed jobs —
+ * including a freshly-linked item's `resync_transactions` — for ~5 hours.
  */
-const MAX_JOBS_PER_RUN = 10;
+const MAX_JOBS_PER_RUN = 300;
+
+/** Jobs run in parallel (each handler recomputes from current state, so order is free). */
+const CONCURRENCY = 6;
+
+/** Stop claiming new jobs after this long so in-flight ones finish inside the 540s timeout. */
+const RUN_BUDGET_MS = 7 * 60 * 1000;
 
 /**
  * Job type handlers.
@@ -274,7 +284,8 @@ export const process_job_queue = onSchedule(
   {
     schedule: "every 5 minutes",
     timeoutSeconds: 540, // 9 minutes
-    memory: "512MiB",
+    // 1GiB: up to CONCURRENCY jobs (incl. an occasional purge/backfill) in memory at once.
+    memory: "1GiB",
     secrets: [PLAID_CLIENT_ID, PLAID_SECRET, TOKEN_ENCRYPTION_KEY],
   },
   async () => {
@@ -305,8 +316,10 @@ export const process_job_queue = onSchedule(
         `[${ctx.trace_id}] Found ${pending_jobs.length} pending jobs to process`
       );
 
-      // Process each job
-      for (const job of pending_jobs) {
+      const started_at = Date.now();
+      let skipped_for_time = 0;
+
+      const process_one = async (job: Job): Promise<void> => {
         try {
           // Claim the job atomically
           const claimed_job = await claim_job(job.job_id);
@@ -315,12 +328,15 @@ export const process_job_queue = onSchedule(
             console.log(
               `[${ctx.trace_id}] Job ${job.job_id} already claimed, skipping`
             );
-            continue;
+            return;
           }
 
-          console.log(
-            `[${ctx.trace_id}] Processing job ${job.job_id} of type ${job.job_type}`
-          );
+          // Skip the per-job line for the highest-volume type to keep logs capturable.
+          if (job.job_type !== "recompute_budget_spent") {
+            console.log(
+              `[${ctx.trace_id}] Processing job ${job.job_id} of type ${job.job_type}`
+            );
+          }
 
           // Find the handler
           const handler = JOB_HANDLERS[job.job_type];
@@ -331,7 +347,7 @@ export const process_job_queue = onSchedule(
             );
             await mark_job_failed(job.job_id, `Unknown job type: ${job.job_type}`);
             failed++;
-            continue;
+            return;
           }
 
           // Execute the handler
@@ -345,10 +361,6 @@ export const process_job_queue = onSchedule(
           // Mark as completed
           await mark_job_completed(job.job_id);
           processed++;
-
-          console.log(
-            `[${ctx.trace_id}] Job ${job.job_id} completed successfully`
-          );
         } catch (error) {
           console.error(
             `[${ctx.trace_id}] Job ${job.job_id} failed:`,
@@ -373,6 +385,30 @@ export const process_job_queue = onSchedule(
 
           failed++;
         }
+      };
+
+      // Bounded worker pool: CONCURRENCY workers pull from the shared list until it is empty or
+      // the time budget is spent (unclaimed jobs stay pending for the next run).
+      let next = 0;
+      const worker = async (): Promise<void> => {
+        while (next < pending_jobs.length) {
+          if (Date.now() - started_at > RUN_BUDGET_MS) {
+            skipped_for_time = pending_jobs.length - next;
+            next = pending_jobs.length;
+            return;
+          }
+          const job = pending_jobs[next++];
+          await process_one(job);
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, pending_jobs.length) }, () => worker())
+      );
+
+      if (skipped_for_time > 0) {
+        console.log(
+          `[${ctx.trace_id}] Time budget reached; ${skipped_for_time} job(s) left for the next run`
+        );
       }
 
       log_operation_success(span, "system");
