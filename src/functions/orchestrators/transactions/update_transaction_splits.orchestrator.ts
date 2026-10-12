@@ -30,6 +30,7 @@ import { is_transfer_category } from "../../domain/transactions/category_semanti
 import { txn_effective_category } from "../../resolvers/shared/on_read_matching";
 import { create_in_memory_assigner } from "./assign_in_memory";
 import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
+import { classify_transfers_around } from "../plaid/classify_internal_transfers.orchestrator";
 import {
   enqueue_recompute_budget_spent,
   enqueue_reconcile_recurring,
@@ -157,11 +158,24 @@ async function apply_edit(
 
   const after = { ...txn, ...update };
   if (stamped && edit.assignment_relevant) {
+    // Only a category move INTO or OUT OF a transfer category can form / break a matched transfer
+    // pair (pairing reads the transaction's transfer meaning — on_read_matching
+    // `txn_effective_category`). Groceries → Shopping can't, and the transfer check reads months
+    // of transactions, so it runs only when the transfer meaning actually changed.
+    const transfer_meaning_changed =
+      edit.category_changed &&
+      is_transfer_category(txn_effective_category(txn, catalog)) !==
+        is_transfer_category(txn_effective_category(after, catalog));
     await run_sync_follow_ups(ctx, owner_id, {
       ...follow_ups_from_written([{ doc_id: transaction_id, before: txn, after }]),
-      // A category move can form / break a matched transfer pair; nothing else can.
-      transfers_changed: edit.category_changed,
+      transfers_changed: false,
     }).catch((error) => console.error(`[${ctx.trace_id}] split-edit follow-up failed:`, error));
+    if (transfer_meaning_changed && txn_date_ms !== undefined) {
+      // Re-pair only around this transaction (its legs are within the pairing slack).
+      await classify_transfers_around(ctx, owner_id, txn_date_ms).catch((error) =>
+        console.error(`[${ctx.trace_id}] split-edit transfer re-check failed:`, error)
+      );
+    }
   } else if (stamped && txn_date_ms !== undefined) {
     // Spend only: coalesced recompute (+ reconcile a bill / income a split pays — its paid
     // amount moved); repeated status taps merge into one run.

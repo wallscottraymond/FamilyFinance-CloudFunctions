@@ -240,6 +240,57 @@ export async function classify_internal_transfers_orchestrator(
   return { hidden_outflows: out.hide.length, hidden_inflows: inf.hide.length, skipped: false };
 }
 
+/**
+ * Re-decide transfer roles only AROUND one transaction (a user moved it into / out of a transfer
+ * category). A role depends only on legs within the pairing slack, so the transactions within
+ * [date − slack, date + slack] are re-decided with the SAME pairing as the full run (which reads
+ * ~6 months); stream hiding is left to the daily full pass. Changed roles are written, re-assigned
+ * in one batch with one follow-up, and partners refreshed — exactly as the full run does.
+ */
+export async function classify_transfers_around(
+  ctx: TraceContext,
+  user_id: string,
+  txn_date_ms: number
+): Promise<void> {
+  const catalog = await load_category_catalog(ctx);
+  const from_ms = txn_date_ms - ROLE_PAIRING_BUFFER_MS;
+  const to_ms = txn_date_ms + ROLE_PAIRING_BUFFER_MS;
+  // The user's own transactions over the window ± slack (the roles resolver pairs over exactly
+  // this pool for a [from, to] window).
+  const own = await transaction_repo.get_active_in_date_range(
+    ctx,
+    user_id,
+    from_ms - ROLE_PAIRING_BUFFER_MS,
+    to_ms + ROLE_PAIRING_BUFFER_MS
+  );
+  const roles = await resolve_transfer_roles(ctx, user_id, from_ms, to_ms, catalog, own);
+  const changed = new Map<string, string>();
+  for (const t of own) {
+    const ms = (t.data.transactionDate as Timestamp).toMillis();
+    if (ms < from_ms || ms > to_ms || t.data.userId !== user_id) continue;
+    const next = roles.get(t.id) ?? (t.data.transferRole ? "none" : undefined);
+    if (next !== undefined && next !== t.data.transferRole) changed.set(t.id, next);
+  }
+  if (changed.size === 0) return;
+  await transaction_repo.set_transfer_roles(ctx, changed, generate_id());
+  const written: SyncWrittenDoc[] = [];
+  await assign_transactions_batch_orchestrator(ctx, {
+    user_id,
+    transaction_ids: [...changed.keys()],
+    run_id: generate_id(),
+    collect_into: written,
+  });
+  if (written.length) {
+    await run_sync_follow_ups(ctx, user_id, {
+      ...follow_ups_from_written(written),
+      transfers_changed: false,
+    });
+  }
+  if ([...changed.values()].some((r) => r === "edge_in" || r === "edge_out")) {
+    await enqueue_partner_classification(ctx, user_id);
+  }
+}
+
 /** Job type: re-classify one user's transfers (forced) — a partner's pair changed. */
 export const CLASSIFY_TRANSFERS_JOB = "classify_transfers";
 
