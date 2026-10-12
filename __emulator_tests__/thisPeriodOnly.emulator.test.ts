@@ -111,5 +111,15 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
     const budget = (await db.collection('budgets').doc(B).get()).data()!;
     expect(budget.amount).toBeCloseTo(600, 0);
   });
+  it('All Periods Forward on a month that has a This Period Only override sets the NORMAL amount', async () => {
+    await db.collection('budgets').doc(B).update({ amount: 400 });
+    await db.collection('budget_periods').doc(P).update({
+      allocatedAmount: 400, modifiedAmount: 300, isModified: true, isPrime: true,
+      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
+    });
+    await edit_amount({ budgetPeriodId: P, newAmount: 500, cascadeScope: 'all_forward' });
+    const budget = (await db.collection('budgets').doc(B).get()).data()!;
+    expect(budget.amount).toBeCloseTo(500, 2); // not 400 × 500/300 = 666.67
+  });
 });
 /* eslint-enable @typescript-eslint/naming-convention */

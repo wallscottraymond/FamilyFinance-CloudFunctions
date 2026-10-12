@@ -15,6 +15,7 @@
  * Memory: 512MiB, Timeout: 60s
  */
 
+import { period_allocation } from "../../../domain/budgets/period_override.service";
 import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -232,9 +233,9 @@ export const updateBudgetPeriodAmount = onCall<
       // Since user edited the non-prime amount, we need to back-calculate what the prime should be
       // This is complex - for now, we'll apply the same $ change to the prime
       const currentNonPrimeAmount = period.allocatedAmount;
-      const currentPrimeAmount = targetPrimePeriod.isModified
-        ? (targetPrimePeriod.modifiedAmount || targetPrimePeriod.allocatedAmount)
-        : targetPrimePeriod.allocatedAmount;
+      // The month's current amount (its own "This Period Only" override counts, even $0) — the
+      // base for a same-dollar "This Period Only" change.
+      const currentPrimeAmount = period_allocation(targetPrimePeriod);
 
       // Calculate the ratio and apply to prime
       const ratio = currentNonPrimeAmount > 0 ? newAmount / currentNonPrimeAmount : 1;
@@ -247,8 +248,12 @@ export const updateBudgetPeriodAmount = onCall<
         0,
         Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
       );
+      // "All Periods Forward" changes the budget's NORMAL amount — scaled from the month's normal
+      // allocation, never from a one-off override.
       forwardPrimeAmount =
-        currentNonPrimeAmount > 0 ? Math.round(adjustedPrimeAmount * 100) / 100 : primeAmount;
+        currentNonPrimeAmount > 0
+          ? Math.round((targetPrimePeriod.allocatedAmount ?? 0) * ratio * 100) / 100
+          : primeAmount;
       console.log(
         `[updateBudgetPeriodAmount] Prime gets the same $ change: $${currentPrimeAmount} → ` +
         `$${primeAmount} (ratio ${ratio.toFixed(4)} would give ${adjustedPrimeAmount.toFixed(2)})`
@@ -463,11 +468,10 @@ async function updateAllPeriodsForward(
 ): Promise<{ periodsUpdated: number; budgetUpdated: boolean }> {
   console.log(`[updateAllPeriodsForward] Updating budget ${budget.id} and all current/future periods`);
 
-  // Calculate what the new budget base amount should be
-  // If user edited a weekly period, we need to convert back to monthly
-  const effectiveCurrentAmount = targetPeriod.isModified
-    ? (targetPeriod.modifiedAmount || targetPeriod.allocatedAmount)
-    : targetPeriod.allocatedAmount;
+  // The budget's new base amount: the same ratio as the period's NORMAL allocation — never its
+  // one-off "This Period Only" override (a $300 override + "forward $500" must give $500, not
+  // 500/300 of the budget).
+  const effectiveCurrentAmount = targetPeriod.allocatedAmount ?? 0;
 
   const ratio = effectiveCurrentAmount > 0 ? newAmount / effectiveCurrentAmount : 1;
   const newBudgetAmount = Math.round(budget.amount * ratio * 100) / 100;
