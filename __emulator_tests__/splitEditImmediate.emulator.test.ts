@@ -156,4 +156,12 @@ describe('updateTransactionSplits applies the edit immediately (emulator)', () =
     expect(doc.transferRole).toBe('none');
     expect(doc.splits[0].monthlyBudgetId).toBe(EAT); // and it's spending now
   });
+
+  it('splits that add up to MORE than the transaction are refused (never over-counted)', async () => {
+    const s0 = (await split()).splits[0];
+    await expect(call({ transactionId: TXN, splits: [{ ...s0, amount: 40 }, { amount: 20 }] }))
+      .rejects.toThrow(/more than the transaction/);
+    expect((await split()).splits).toHaveLength(1); // nothing written
+  });
 });
+

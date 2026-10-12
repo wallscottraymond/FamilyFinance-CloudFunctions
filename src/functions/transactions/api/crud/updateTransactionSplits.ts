@@ -77,6 +77,20 @@ export const updateTransactionSplits = onCall<
       throw new HttpsError("permission-denied", "Cannot update this transaction");
     }
 
+    // The parts can never add up to MORE than the transaction (else the extra is counted in
+    // budgets as money that was never spent). Any app version passes through here.
+    const txn_total = Math.abs(Number((existingTransaction as unknown as { amount?: number }).amount) || 0);
+    const parts_total = (splits as Array<{ amount?: number }>).reduce(
+      (t, s) => t + Math.abs(Number(s.amount) || 0),
+      0
+    );
+    if (txn_total > 0 && parts_total > txn_total + 0.01) {
+      throw new HttpsError(
+        "invalid-argument",
+        `The splits add up to ${parts_total.toFixed(2)}, more than the transaction's ${txn_total.toFixed(2)}`
+      );
+    }
+
     // Applied immediately, in memory, written once (orchestrators/transactions/
     // update_transaction_splits — canon O2 / M3, Transaction-Integrity-Review 3g).
     const updatedTransaction = await update_transaction_splits_orchestrator(
