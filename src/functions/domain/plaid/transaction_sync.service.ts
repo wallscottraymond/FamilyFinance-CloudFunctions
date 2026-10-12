@@ -188,7 +188,8 @@ export function detect_material_changes(
  * PURE FUNCTION - no IO, deterministic.
  *
  * When a pending transaction posts with a different amount,
- * we adjust each split proportionally to preserve the user's allocation.
+ * we adjust each split proportionally to preserve the user's allocation — and the adjusted splits
+ * always add up to the new amount exactly (to the cent).
  *
  * @param splits - Original splits from pending transaction
  * @param old_amount - Original total amount
@@ -200,21 +201,25 @@ export function calculate_proportional_splits(
   old_amount: number,
   new_amount: number
 ): TransactionSplitForMigration[] {
-  if (old_amount === 0) {
-    // Avoid division by zero - distribute evenly
-    const per_split = new_amount / splits.length;
-    return splits.map(s => ({
-      ...s,
-      amount: per_split,
-    }));
+  if (splits.length === 0) return [];
+  // Work in CENTS so the splits always add up to the posted amount exactly: each split's share is
+  // rounded, and the rounding remainder (a cent or two) goes to the largest split.
+  const target = Math.round(new_amount * 100);
+  const weights =
+    old_amount === 0
+      ? splits.map(() => 1) // avoid division by zero — distribute evenly
+      : splits.map((s) => s.amount / old_amount);
+  const weight_total = weights.reduce((t, w) => t + w, 0) || 1;
+  const cents = weights.map((w) => Math.round((target * w) / weight_total));
+  const remainder = target - cents.reduce((t, c) => t + c, 0);
+  if (remainder !== 0) {
+    let largest = 0;
+    cents.forEach((c, i) => {
+      if (Math.abs(c) > Math.abs(cents[largest])) largest = i;
+    });
+    cents[largest] += remainder;
   }
-
-  const ratio = new_amount / old_amount;
-
-  return splits.map(s => ({
-    ...s,
-    amount: Math.round(s.amount * ratio * 100) / 100, // Round to 2 decimal places
-  }));
+  return splits.map((s, i) => ({ ...s, amount: cents[i] / 100 }));
 }
 
 /**
