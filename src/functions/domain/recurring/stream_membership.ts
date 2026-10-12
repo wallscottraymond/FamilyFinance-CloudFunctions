@@ -106,6 +106,15 @@ export function splits_paying_recurring<T>(
   return splits.filter((sp) => link(sp) === null && !off(sp));
 }
 
+/**
+ * Edge money (3d: a transfer crossing the view — stored role `edge_out` / `edge_in`) is never a
+ * bill payment or a paycheck: every reader drops its recurring links (the period page's
+ * `without_recurring_links`). PURE.
+ */
+export function is_edge_money(transfer_role: unknown): boolean {
+  return transfer_role === "edge_out" || transfer_role === "edge_in";
+}
+
 /** Is this split ON its transaction's Plaid stream (member, not taken off)? PURE. */
 export function is_split_on_stream(split: unknown, kind: "outflow" | "inflow"): boolean {
   return kind === "outflow"
@@ -114,18 +123,21 @@ export function is_split_on_stream(split: unknown, kind: "outflow" | "inflow"): 
 }
 
 /**
- * Does this split count as "other income received" (PURE)? An INCOME-meaning split — by its
- * EFFECTIVE category (`semantic_code`; a user's pick decides, canon M7) — that isn't paying an
- * income (on its stream, or linked by `inflowId`) and isn't pinned to a budget (a pinned income
- * credit counts in that budget — canon A13 — never also as income).
+ * Does this split count as "other income received" (PURE)? A CREDIT (money in — a debit the
+ * user mis-tagged as income isn't income received) whose EFFECTIVE category (`semantic_code`; a
+ * user's pick decides, canon M7) means income, that isn't paying an income (on its stream, or
+ * linked by `inflowId`) and isn't pinned to a budget (a pinned income credit counts in that
+ * budget — canon A13 — never also as income).
  */
 export function is_other_income_split(
   split: unknown,
   semantic_code: string,
-  on_inflow_stream: boolean
+  on_inflow_stream: boolean,
+  is_credit: boolean
 ): boolean {
   const sp = (split ?? {}) as Record<string, unknown>;
   return (
+    is_credit &&
     semantic_code.startsWith("INCOME") &&
     !on_inflow_stream &&
     ((sp.inflowId as string | null | undefined) ?? null) === null &&

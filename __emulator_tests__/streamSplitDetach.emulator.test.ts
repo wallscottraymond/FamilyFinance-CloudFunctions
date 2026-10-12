@@ -28,7 +28,7 @@ beforeAll(() => {
 });
 
 /* eslint-disable @typescript-eslint/naming-convention */
-async function seed(second_split: Record<string, unknown>) {
+async function seed(second_split: Record<string, unknown>, txn_extra: Record<string, unknown> = {}) {
   const userId = rid('u');
   const outflowId = rid('outflow');
   const plaidId = rid('ptx');
@@ -47,6 +47,7 @@ async function seed(second_split: Record<string, unknown>) {
   await db.collection('transactions').doc(`plaid_${plaidId}`).set({
     transactionId: plaidId, userId, ownerId: userId, isActive: true, isPending: false,
     transactionDate: Timestamp.fromMillis(Date.UTC(2026, 7, 14)), amount: 150, type: 'expense',
+    ...txn_extra,
     splits: [
       { splitId: 'a', amount: 100, isDefault: true },
       { splitId: 'b', amount: 50, ...second_split },
@@ -63,6 +64,10 @@ describe('per-split stream detach (emulator)', () => {
 
   it('a "remove from bill" on ONE split leaves the other split paying the bill ($100)', async () => {
     expect(await seed({ outflowAssignmentSource: 'manual', outflowId: null })).toBe(100);
+  });
+
+  it('edge money (a transfer crossing the view) in the stream pays nothing — as the period page', async () => {
+    expect(await seed({}, { transferRole: 'edge_out' })).toBe(0);
   });
 
   it('CONTROL: neither split taken off → the whole payment ($150)', async () => {

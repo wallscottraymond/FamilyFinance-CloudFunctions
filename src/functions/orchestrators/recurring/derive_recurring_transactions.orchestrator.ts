@@ -14,7 +14,10 @@ import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
-import { splits_paying_recurring } from "../../domain/recurring/stream_membership";
+import {
+  is_edge_money,
+  splits_paying_recurring,
+} from "../../domain/recurring/stream_membership";
 
 export type RecurringKind = "outflow" | "inflow";
 
@@ -53,12 +56,15 @@ export async function derive_recurring_transactions_orchestrator(
     // or a budget pin takes only THAT split off; no paying split → not one of its payments.
     .map((data) => ({
       data,
-      splits: splits_paying_recurring(
-        ((data as { splits?: unknown[] }).splits ?? []) as Array<Record<string, unknown>>,
-        kind,
-        recurring_id,
-        true
-      ),
+      // Edge money (a transfer crossing the view) pays nothing — as the period page.
+      splits: is_edge_money((data as { transferRole?: unknown }).transferRole)
+        ? []
+        : splits_paying_recurring(
+          ((data as { splits?: unknown[] }).splits ?? []) as Array<Record<string, unknown>>,
+          kind,
+          recurring_id,
+          true
+        ),
     }))
     .filter(({ splits }) => splits.length > 0)
     .map(({ data, splits }) => {

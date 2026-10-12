@@ -19,7 +19,10 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
-import { splits_paying_recurring } from "../../domain/recurring/stream_membership";
+import {
+  is_edge_money,
+  splits_paying_recurring,
+} from "../../domain/recurring/stream_membership";
 import { fingerprint_stored } from "../../domain/recurring/reconciliation_fingerprint";
 
 export type RecurringType = "outflow" | "inflow";
@@ -189,8 +192,11 @@ export async function resolve_recurring_reconciliation(
   // pin. A transaction with no paying split isn't a payment.
   const kind = is_outflow ? "outflow" : "inflow";
   const stream_ids = new Set(stream_txns.map((t) => t.id));
+  // Edge money (a transfer crossing the view) pays nothing — as the period page drops its links.
   const paying = (t: { id: string; splits?: unknown[] }) =>
-    splits_paying_recurring(t.splits ?? [], kind, input.recurring_id, stream_ids.has(t.id));
+    is_edge_money((t as { transferRole?: unknown }).transferRole)
+      ? []
+      : splits_paying_recurring(t.splits ?? [], kind, input.recurring_id, stream_ids.has(t.id));
   const txns = [...link_txns, ...stream_txns].filter((t) => {
     const key = t.id;
     if (!key || seen.has(key)) return false;

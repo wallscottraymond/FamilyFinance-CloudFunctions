@@ -626,7 +626,6 @@ export function shape_period_derivation_deps(
       !!linked_outflow_id && is_split_on_stream(sp, "outflow");
     const on_inflow_stream = (sp: unknown) =>
       !!linked_inflow_id && is_split_on_stream(sp, "inflow");
-    let income_amount = 0;
     // "Other income received", per split: an INCOME-meaning split (its EFFECTIVE category — a
     // user's pick decides, canon M7) not on an income stream, not linked to an income, and not
     // pinned to a budget (a pinned income credit counts in that budget — canon A13).
@@ -655,10 +654,18 @@ export function shape_period_derivation_deps(
       if (is_edge && crossing.out_ids.has(id)) {
         matched.is_edge_out = true;
       }
-      if (is_other_income_split(s, matched.semantic_code, on_inflow_stream(s))) {
+      if (is_other_income_split(s, matched.semantic_code, on_inflow_stream(s), txn_is_income)) {
+        other_income_amount += Math.abs(amount);
+      } else if (
+        crossing.in_ids.has(id) &&
+        s.budgetAssignmentSource !== "manual" &&
+        is_transfer_category(matched.semantic_code)
+      ) {
+        // D12: money moved INTO this view from a member's account outside it (e.g. a share sent
+        // to the joint account) is income for this view, on the day it arrived — per split: a
+        // split re-categorized to spending / pinned counts in that budget instead, never both.
         other_income_amount += Math.abs(amount);
       }
-      income_amount += Math.abs(amount);
       // Outflow (bills) attribute via the split's stored link; MANUAL inflows via
       // split.inflowId — but a Plaid income txn is attributed ONCE below via
       // transaction_ids (skip its split link here to avoid double-counting).
@@ -706,14 +713,10 @@ export function shape_period_derivation_deps(
         });
       }
     }
-    // "Other income received" (accumulated per split above). An income category naturally
-    // excludes internal transfers (TRANSFER_*) + most refunds.
+    // "Other income received" (accumulated per split above: income-meaning credits + edge-in
+    // transfer money). An income category naturally excludes internal transfers + most refunds.
     if (other_income_amount > 0 && !txn_is_internal_transfer) {
       other_income_credits.push({ date_ms: txn_date_ms, amount: other_income_amount });
-    } else if (crossing.in_ids.has(id)) {
-      // D12: money moved INTO this view from a member's account outside it (e.g. a share sent
-      // to the joint account) is income for this view, on the day it arrived.
-      other_income_credits.push({ date_ms: txn_date_ms, amount: income_amount });
     }
   }
   for (const r of recurring) {
