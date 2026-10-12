@@ -12,6 +12,7 @@ import {
   is_split_detached_from_inflow,
   is_txn_detached_from_inflow,
   splits_paying_recurring,
+  is_other_income_split,
 } from "../stream_membership";
 
 describe("build_stream_membership_map", () => {
@@ -100,6 +101,17 @@ describe("manual bill detach", () => {
     expect(splits_paying_recurring([plain], "outflow", "bill", false)).toEqual([]);
     // A split pinned to ANOTHER bill isn't this bill's.
     expect(splits_paying_recurring([{ outflowId: "x", outflowAssignmentSource: "manual" }], "outflow", "bill", true)).toEqual([]);
+  });
+
+  it("is_other_income_split: by the split's EFFECTIVE category, never also paying / pinned", () => {
+    expect(is_other_income_split({}, "INCOME_WAGES", false)).toBe(true);
+    // a deposit the user re-categorized to Groceries nets Groceries — not ALSO income
+    expect(is_other_income_split({}, "FOOD_AND_DRINK_GROCERIES", false)).toBe(false);
+    // a transfer the user re-categorized to income IS income (was counted nowhere)
+    expect(is_other_income_split({ plaidDetailedCategory: "TRANSFER_IN_DEPOSIT" }, "INCOME_OTHER_INCOME", false)).toBe(true);
+    expect(is_other_income_split({}, "INCOME_WAGES", true)).toBe(false); // on its income stream
+    expect(is_other_income_split({ inflowId: "inc" }, "INCOME_WAGES", false)).toBe(false);
+    expect(is_other_income_split({ budgetAssignmentSource: "manual" }, "INCOME_WAGES", false)).toBe(false);
   });
 });
 

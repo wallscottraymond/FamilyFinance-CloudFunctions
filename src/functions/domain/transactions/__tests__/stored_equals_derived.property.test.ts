@@ -185,12 +185,17 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
       inflowId: stored.inflow_id,
     };
 
-    // PAGE — the period page's own calls over the same budget set, on the written split.
-    const m0 = map_raw_split_to_on_read_match(written, {
+    // PAGE — the period page's own calls over the same budget set, on the written split (for
+    // edge money the page drops every recurring link — `without_recurring_links`).
+    const is_edge_role = live_role === "edge_out" || live_role === "edge_in";
+    const page_split = is_edge_role ? { ...written, outflowId: null, inflowId: null } : written;
+    const m0 = map_raw_split_to_on_read_match(page_split, {
       txn_date_ms: date, is_pending: false, is_transfer: false,
       is_income: is_income_txn, merchant_name: txn.merchantName, name: txn.name,
       // The period page's stream membership: off when detached / budget-pinned.
-      is_recurring_member: in_stream && is_split_on_stream(written, is_income_txn ? "inflow" : "outflow"),
+      // Edge money (edge_out / edge_in) is never a stream member on the page (all links dropped).
+      is_recurring_member:
+        in_stream && !is_edge_role && is_split_on_stream(written, is_income_txn ? "inflow" : "outflow"),
     }, catalog);
     const m = { ...m0, is_transfer: live_role === "internal", is_edge_out: live_role === "edge_out" };
     const ee = match.primary_everything_else_id;

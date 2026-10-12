@@ -47,7 +47,9 @@ import { find_crossing_transfers } from "../../domain/periods/edge_transfers.ser
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import {
   build_stream_membership_map,
+  is_other_income_split,
   is_split_on_stream,
+  splits_paying_recurring,
 } from "../../domain/recurring/stream_membership";
 import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
 import { PeriodInstanceType } from "../../domain/budgets";
@@ -625,6 +627,10 @@ export function shape_period_derivation_deps(
     const on_inflow_stream = (sp: unknown) =>
       !!linked_inflow_id && is_split_on_stream(sp, "inflow");
     let income_amount = 0;
+    // "Other income received", per split: an INCOME-meaning split (its EFFECTIVE category — a
+    // user's pick decides, canon M7) not on an income stream, not linked to an income, and not
+    // pinned to a budget (a pinned income credit counts in that budget — canon A13).
+    let other_income_amount = 0;
     for (const s of raw) {
       const outflow_id = (s.outflowId as string | null) ?? null;
       const inflow_id = (s.inflowId as string | null) ?? null;
@@ -645,8 +651,12 @@ export function shape_period_derivation_deps(
           name: (data.name as string | null) ?? null,
         }, catalog)
       );
+      const matched = splits_for_match[splits_for_match.length - 1];
       if (is_edge && crossing.out_ids.has(id)) {
-        splits_for_match[splits_for_match.length - 1].is_edge_out = true;
+        matched.is_edge_out = true;
+      }
+      if (is_other_income_split(s, matched.semantic_code, on_inflow_stream(s))) {
+        other_income_amount += Math.abs(amount);
       }
       income_amount += Math.abs(amount);
       // Outflow (bills) attribute via the split's stored link; MANUAL inflows via
@@ -680,42 +690,25 @@ export function shape_period_derivation_deps(
     // already links this txn to a bill (the split link is precise + wins), so we never
     // double-count. Covers historical/unlinked payments whose `split.outflowId` was
     // never set — the root cause of paid bills reading unpaid on read.
+    // Same rule as reconcile (`splits_paying_recurring`): splits linked to THIS bill paid it in
+    // the split-link pass above; with none, the stream's unlinked, not-taken-off splits pay it.
     if (linked_outflow_id && payments_by_id.has(linked_outflow_id)) {
-      const any_split_outflow_linked = raw.some(
-        (s) => ((s.outflowId as string | null) ?? null) !== null
-      );
-      const outflow_on = raw.filter(on_outflow_stream);
-      if (!any_split_outflow_linked && outflow_on.length) {
+      const linked_here = raw.some((sp) => (sp.outflowId ?? null) === linked_outflow_id);
+      const stream_paying = linked_here
+        ? []
+        : splits_paying_recurring(raw, "outflow", linked_outflow_id, true);
+      if (stream_paying.length) {
         payments_by_id.get(linked_outflow_id)!.push({
           transaction_id: id,
           split_id: null,
           date_ms: txn_date_ms,
-          amount: sum_abs(outflow_on), // the splits still on the stream (all, unless some taken off)
+          amount: sum_abs(stream_paying),
         });
       }
     }
-    // "Other income received": a real INCOME_* credit not part of any recurring inflow
-    // (no Plaid-stream link AND no split.inflowId). INCOME_* naturally excludes internal
-    // transfers (TRANSFER_*) + most refunds.
-    const txn_cat =
-      (data.plaidDetailedCategory as string | null) ??
-      (raw[0]?.plaidDetailedCategory as string | null) ??
-      "";
-    // Per split: not on an income stream, not linked to an income, and not pinned to a budget (a
-    // pinned income credit counts in that budget — canon A13 — never ALSO as income).
-    const other_income_amount = sum_abs(
-      raw.filter(
-        (sp) =>
-          !on_inflow_stream(sp) &&
-          ((sp.inflowId as string | null) ?? null) === null &&
-          sp.budgetAssignmentSource !== "manual"
-      )
-    );
-    if (
-      txn_cat.startsWith("INCOME") &&
-      other_income_amount > 0 &&
-      !txn_is_internal_transfer
-    ) {
+    // "Other income received" (accumulated per split above). An income category naturally
+    // excludes internal transfers (TRANSFER_*) + most refunds.
+    if (other_income_amount > 0 && !txn_is_internal_transfer) {
       other_income_credits.push({ date_ms: txn_date_ms, amount: other_income_amount });
     } else if (crossing.in_ids.has(id)) {
       // D12: money moved INTO this view from a member's account outside it (e.g. a share sent

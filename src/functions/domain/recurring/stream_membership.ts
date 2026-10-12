@@ -113,3 +113,23 @@ export function is_split_on_stream(split: unknown, kind: "outflow" | "inflow"): 
     : !is_split_detached_from_inflow(split);
 }
 
+/**
+ * Does this split count as "other income received" (PURE)? An INCOME-meaning split — by its
+ * EFFECTIVE category (`semantic_code`; a user's pick decides, canon M7) — that isn't paying an
+ * income (on its stream, or linked by `inflowId`) and isn't pinned to a budget (a pinned income
+ * credit counts in that budget — canon A13 — never also as income).
+ */
+export function is_other_income_split(
+  split: unknown,
+  semantic_code: string,
+  on_inflow_stream: boolean
+): boolean {
+  const sp = (split ?? {}) as Record<string, unknown>;
+  return (
+    semantic_code.startsWith("INCOME") &&
+    !on_inflow_stream &&
+    ((sp.inflowId as string | null | undefined) ?? null) === null &&
+    sp.budgetAssignmentSource !== "manual"
+  );
+}
+
