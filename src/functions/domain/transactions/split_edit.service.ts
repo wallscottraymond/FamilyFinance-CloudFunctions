@@ -8,7 +8,8 @@
  *     income links, the legacy budget alias) always come from the STORED split: the app echoes
  *     whatever it last read, which may be older than a re-assign that landed since. From the app
  *     we take only the user's intents — a new budget pin, and status / amount / tags / notes / tax
- *     flag (bill pins go through `assign_split_to_outflow`). A new split takes the app's fields
+ *     flag (bill pins go through `assign_split_to_outflow`; a new budget pin takes the split off a
+ *     manually pinned bill — canon A4). A new split takes the app's fields
  *     (the engine runs on it).
  *   - Category fields come from the one edit rule (split_category_edit: pick / "use auto" / an old
  *     build's bare categoryId; Plaid codes immutable; `internal*` null).
@@ -88,10 +89,21 @@ function engine_owned_fields(split: Raw, before: Raw): Raw {
   }
 
   // Bill links: pinned / detached / cleared only through `assign_split_to_outflow`; a split edit
-  // never changes them.
-  out.outflowId = before.outflowId ?? null;
-  out.outflowAssignmentSource = before.outflowAssignmentSource ?? "auto";
-  out.outflowPinnedPeriodId = before.outflowPinnedPeriodId ?? null;
+  // never sets them — except that a NEW budget pin takes the split off its bill (canon A4: a
+  // budget pin detaches recurring; the app warns "will remove it from bill tracking"). A manual
+  // bill pin would otherwise win over the budget pin's detach in the engine.
+  const new_budget_pin = out.budgetAssignmentSource === "manual" && !(
+    pin_before && before.budgetId === out.budgetId
+  );
+  if (new_budget_pin && before.outflowAssignmentSource === "manual") {
+    out.outflowId = null;
+    out.outflowAssignmentSource = "auto";
+    out.outflowPinnedPeriodId = null;
+  } else {
+    out.outflowId = before.outflowId ?? null;
+    out.outflowAssignmentSource = before.outflowAssignmentSource ?? "auto";
+    out.outflowPinnedPeriodId = before.outflowPinnedPeriodId ?? null;
+  }
   return out;
 }
 

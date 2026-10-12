@@ -302,6 +302,39 @@ describe('reassign_user_orchestrator (emulator)', () => {
     expect((await txn(id)).splits[0].monthlyBudgetId).toBe(u.shop);
   });
 
+  it('an invocation killed by the timeout counts as a failure; the 3rd ends the run and frees the slot', async () => {
+    const u = await seedUser(10);
+    const run_id = `ra_to_${RUN}`;
+    // The last invocation started (open) but never recorded its end; 2 failures already.
+    await db.collection('_reassign_runs').doc(run_id).set({
+      run_id, user_id: u.userId, reason: 'manual', dry_run: false, scope: {}, status: 'running',
+      cursor: null, scanned: 0, changed: 0, picks_carried: 0, moves: {}, samples: [],
+      follow_ups: null, max_txns: 100, dedup_key: `reassign_user:${u.userId}`, walk_done: false,
+      invocations: 2, failures: 2, invocation_open: true,
+      started_at: Timestamp.now(), updated_at: Timestamp.now(),
+    });
+    await db.collection('_reassign_locks').doc(`user_${u.userId}`).set({ run_id, heartbeat: Timestamp.now() });
+    const r = await reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id });
+    expect(r.status).toBe('failed');
+    const saved = (await db.collection('_reassign_runs').doc(run_id).get()).data()!;
+    expect([saved.status, saved.failures, saved.invocation_open]).toEqual(['failed', 3, false]);
+    expect((await db.collection('_reassign_locks').doc(`user_${u.userId}`).get()).exists).toBe(false);
+  });
+
+  it("a request never merges into a pending retry of a STARTED run (it couldn't re-walk done pages)", async () => {
+    const u = `ra_ns_${RUN}`;
+    const key = `reassign_user:${u}`;
+    // A started run whose retry job is pending with the request key.
+    await db.collection('_reassign_runs').doc(`ra_ns_run_${RUN}`).set({ run_id: `ra_ns_run_${RUN}`, user_id: u, status: 'running' });
+    await db.collection('_jobs').doc(`ra_ns_job_${RUN}`).set({
+      job_type: 'reassign_user', status: 'pending', dedup_key: `reassign_user::${key}`,
+      payload: { user_id: u, deduplication_key: key, run_id: `ra_ns_run_${RUN}` },
+      created_at: Timestamp.now(), updated_at: Timestamp.now(), scheduled_for: Timestamp.fromMillis(Date.now() + 3_600_000),
+    });
+    expect(await enqueue_reassign_user({ user_id: u }, 't')).toBe(true); // its own job
+    expect(await enqueue_reassign_user({ user_id: u }, 't')).toBe(false); // that one absorbs the next
+  });
+
   it('a run that keeps throwing is marked failed after 3 invocations (never retries forever)', async () => {
     const u = await seedUser(7);
     const run_id = `ra_fail_${RUN}`;

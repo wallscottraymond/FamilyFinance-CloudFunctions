@@ -140,10 +140,16 @@ export async function enqueue_reassign_user(
     {
       trace_id,
       delay_seconds: Math.max(delay_seconds ?? 0, running ? RERUN_DELAY_SECONDS : 0),
+      can_merge_into: not_started,
     }
   );
   return job !== null;
 }
+
+/** A queued re-assign request can absorb a new one only while its run hasn't STARTED: a started
+ *  run's pending retry resumes from its cursor and wouldn't re-walk the pages it already did. */
+const not_started = async (pending: { run_id?: string }): Promise<boolean> =>
+  !pending.run_id || (await reassign_run_repo.get(pending.run_id)) === null;
 
 /** A continuation of a run (its own key — never merges with a NEW request). */
 async function continue_run(ctx: TraceContext, run: ReassignRun, delay_seconds = 0): Promise<void> {
@@ -193,15 +199,38 @@ export async function reassign_user_orchestrator(
   // re-checks later). Every invocation claims, so a continuation can't run beside a newer run.
   const slot = reassign_slot_id(run.user_id, run.dedup_key, run.dry_run);
   if (!(await reassign_run_repo.claim_slot(slot, run.run_id, STALE_RUN_MS))) {
-    await create_job(
-      REASSIGN_JOB,
-      { ...input, run_id: run.run_id },
-      { trace_id: ctx.trace_id, delay_seconds: RERUN_DELAY_SECONDS }
-    );
+    if (existing) {
+      // A started run (its progress is saved) always gets its own re-check.
+      await create_job(
+        REASSIGN_JOB,
+        { ...input, run_id: run.run_id },
+        { trace_id: ctx.trace_id, delay_seconds: RERUN_DELAY_SECONDS }
+      );
+    } else {
+      // A NEW run hasn't saved anything: merge into a queued request with its key (if any) so a
+      // burst of requests during a long run becomes ONE queued run, not one per re-check.
+      await coalesce_job(
+        REASSIGN_JOB,
+        { ...input, deduplication_key: run.dedup_key, run_id: run.run_id },
+        { trace_id: ctx.trace_id, delay_seconds: RERUN_DELAY_SECONDS, can_merge_into: not_started }
+      );
+    }
     log_operation_success(span, input.user_id);
     return { run_id: run.run_id, status: "continuing", scanned: 0, changed: 0 };
   }
+
+  // An invocation that never recorded its end (killed by the function timeout — it never reached
+  // the catch) counts as a failure, so a run that keeps timing out also ends ("failed") instead
+  // of re-claiming its slot forever.
+  if (existing && run.invocation_open === true) {
+    run.failures = (run.failures ?? 0) + 1;
+    run.last_error = "previous invocation ended without finishing (timeout?)";
+    if (run.failures >= MAX_RUN_FAILURES) {
+      return fail_run(ctx, run, slot);
+    }
+  }
   run.invocations++;
+  run.invocation_open = true;
   await reassign_run_repo.save(run);
 
   try {
@@ -330,6 +359,7 @@ export async function reassign_user_orchestrator(
 
     if (run.status === "running" && !run.walk_done) {
       // Out of time: continue from the cursor in a new job.
+      run.invocation_open = false;
       await reassign_run_repo.save(run);
       await continue_run(ctx, run);
       log_operation_success(span, input.user_id);
@@ -345,6 +375,7 @@ export async function reassign_user_orchestrator(
     // followed up). It isn't time-budgeted, so a late walk hands it to its own job.
     if (!run.dry_run && run.follow_ups?.transactions_changed) {
       if (run.status === "running" && now_ms() - started > FOLLOW_UP_START_LIMIT_MS) {
+        run.invocation_open = false;
         await reassign_run_repo.save(run);
         await continue_run(ctx, run);
         log_operation_success(span, input.user_id);
@@ -370,6 +401,7 @@ export async function reassign_user_orchestrator(
       }
     }
     if (run.status === "running") run.status = "done";
+    run.invocation_open = false;
     await reassign_run_repo.save(run);
     await reassign_run_repo.release_slot(slot, run.run_id); // the user's next run may start
 
@@ -391,40 +423,49 @@ export async function reassign_user_orchestrator(
       error instanceof Error ? error : new Error(String(error)),
       { user_id: input.user_id, error_code: "REASSIGN_USER_FAILED" }
     );
-    const saved = await reassign_run_repo.get(run.run_id).catch(() => null);
-    if (saved && saved.status === "running") {
-      saved.failures = (saved.failures ?? 0) + 1;
-      saved.last_error = error instanceof Error ? error.message : String(error);
-      // The in-memory follow-ups include this invocation's committed writes (the saved cursor
-      // doesn't move past the failed page, so counters stay as saved).
-      saved.follow_ups = run.follow_ups ?? saved.follow_ups;
-      if (saved.failures >= MAX_RUN_FAILURES) {
-        saved.status = "failed";
+    // Bookkeeping never masks the original error.
+    try {
+      const saved = await reassign_run_repo.get(run.run_id);
+      if (saved && saved.status === "running") {
+        saved.failures = (saved.failures ?? 0) + 1;
+        saved.last_error = error instanceof Error ? error.message : String(error);
+        saved.invocation_open = false; // ended (by an error) — recorded
+        // The in-memory follow-ups include this invocation's committed writes (the saved cursor
+        // doesn't move past the failed page, so counters stay as saved).
+        saved.follow_ups = run.follow_ups ?? saved.follow_ups;
+        if (saved.failures >= MAX_RUN_FAILURES) return await fail_run(ctx, saved, slot);
         await reassign_run_repo.save(saved);
-        await reassign_run_repo
-          .release_slot(reassign_slot_id(saved.user_id, saved.dedup_key, saved.dry_run), run.run_id)
-          .catch(() => {});
-        // What the run DID write is still followed up (bills, budget spend, derive cache).
-        if (!saved.dry_run && saved.follow_ups?.transactions_changed) {
-          await run_sync_follow_ups(ctx, saved.user_id, saved.follow_ups).catch((e) =>
-            console.error(`[${ctx.trace_id}] reassign_user ${run.run_id}: follow-up failed:`, e)
-          );
-        }
-        // ALERT: a failed run's request is not re-queued (that would retry forever); the
-        // assignment audit reports what it left unfixed.
-        console.error(
-          `[${ctx.trace_id}] REASSIGN_RUN_FAILED ${run.run_id}: user=${saved.user_id} ` +
-            `reason=${saved.reason} failures=${saved.failures} error=${saved.last_error}`
-        );
-        return {
-          run_id: run.run_id,
-          status: "failed",
-          scanned: saved.scanned,
-          changed: saved.changed,
-        };
       }
-      await reassign_run_repo.save(saved);
+    } catch (bookkeeping_error) {
+      console.error(`[${ctx.trace_id}] reassign_user ${run.run_id}: failure bookkeeping failed:`,
+        bookkeeping_error);
     }
     throw error;
   }
+}
+
+/**
+ * End a run as "failed" (it threw / timed out MAX_RUN_FAILURES times): save it, free its slot,
+ * follow up what it DID write (bills, budget spend, derive cache), and alert. Its request is not
+ * re-queued (that would retry forever); the assignment audit reports what it left unfixed.
+ */
+async function fail_run(
+  ctx: TraceContext,
+  run: ReassignRun,
+  slot: string
+): Promise<ReassignUserResult> {
+  run.status = "failed";
+  run.invocation_open = false;
+  await reassign_run_repo.save(run);
+  await reassign_run_repo.release_slot(slot, run.run_id).catch(() => {});
+  if (!run.dry_run && run.follow_ups?.transactions_changed) {
+    await run_sync_follow_ups(ctx, run.user_id, run.follow_ups).catch((e) =>
+      console.error(`[${ctx.trace_id}] reassign_user ${run.run_id}: follow-up failed:`, e)
+    );
+  }
+  console.error(
+    `[${ctx.trace_id}] REASSIGN_RUN_FAILED ${run.run_id}: user=${run.user_id} ` +
+      `reason=${run.reason} failures=${run.failures} error=${run.last_error}`
+  );
+  return { run_id: run.run_id, status: "failed", scanned: run.scanned, changed: run.changed };
 }

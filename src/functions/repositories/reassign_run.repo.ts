@@ -82,8 +82,11 @@ export interface ReassignRun {
   /** All pages walked; only the follow-up pass is left (it may get its own job). */
   walk_done: boolean;
   invocations: number;
-  /** Invocations that threw (the run is "failed" after a few). */
+  /** Invocations that threw or timed out (the run is "failed" after a few). */
   failures?: number;
+  /** Set when an invocation starts, cleared when it ends (normally or by an error); still set at
+   *  the next start = the previous invocation was killed (timeout) → counted as a failure. */
+  invocation_open?: boolean;
   last_error?: string;
   started_at: Timestamp;
   updated_at: Timestamp;

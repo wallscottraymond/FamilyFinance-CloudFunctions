@@ -658,17 +658,31 @@ export async function create_job_if_not_exists<TPayload extends { deduplication_
 export async function coalesce_job<TPayload extends { deduplication_key: string }>(
   job_type: string,
   payload: TPayload,
-  options: { delay_seconds: number; trace_id?: string; max_retries?: number }
+  options: {
+    delay_seconds: number;
+    trace_id?: string;
+    max_retries?: number;
+    /** Only merge into a pending job this accepts (e.g. a re-assign run that hasn't STARTED —
+     *  a pending retry of a started run resumes from its cursor, so it can't absorb a change). */
+    can_merge_into?: (pending_payload: TPayload) => Promise<boolean>;
+  }
 ): Promise<Job<TPayload> | null> {
+  const { can_merge_into, ...create_options } = options;
   const dedup_key = build_dedup_key(job_type, payload.deduplication_key);
   const pending = await getFirestore()
     .collection(COLLECTIONS.JOBS)
     .where("dedup_key", "==", dedup_key)
     .where("status", "==", "pending")
-    .limit(1)
+    .limit(can_merge_into ? 5 : 1)
     .get();
-  if (!pending.empty) return null; // merged into the pending run
-  return create_job(job_type, payload, { ...options, dedup_key });
+  if (!can_merge_into) {
+    if (!pending.empty) return null; // merged into the pending run
+  } else {
+    for (const doc of pending.docs) {
+      if (await can_merge_into((doc.data() as Job<TPayload>).payload)) return null; // merged
+    }
+  }
+  return create_job(job_type, payload, { ...create_options, dedup_key });
 }
 
 /**

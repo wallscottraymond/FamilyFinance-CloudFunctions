@@ -69,6 +69,8 @@ describe("build_split_edit", () => {
     expect(echoed.splits[0]).toMatchObject({ budgetAssignmentSource: "manual", budgetId: "b_x" });
     const bill = run([{ ...stored, outflowId: "other_bill", outflowAssignmentSource: "manual" }]);
     expect(bill.splits[0]).toMatchObject({ outflowId: "bill", outflowAssignmentSource: "manual" });
+    // ...but a NEW budget pin takes the split off its manually pinned bill (canon A4).
+    expect(pinned.splits[0]).toMatchObject({ outflowId: null, outflowAssignmentSource: "auto" });
   });
 
   it("category_changed only when a category moved", () => {
