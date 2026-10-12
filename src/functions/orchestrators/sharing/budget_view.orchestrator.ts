@@ -32,12 +32,11 @@ import {
 } from "../../domain/sharing/budget_view.service";
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
-import { transaction_repo } from "../../repositories/transaction.repo";
 import { group_repo } from "../../repositories/sharing";
-import { create_job } from "../../infrastructure/job_queue";
 import { create_budget_orchestrator } from "../budgets/create_budget.orchestrator";
 import { ensure_group_everything_else } from "./group_everything_else";
 import { bump_owner_versions } from "./versions";
+import { reassign_view } from "./view_reassign";
 
 /** Repo budget → the fields the view rules need. */
 function to_view_budget(b: BudgetEntity | null): ViewBudget | null {
@@ -67,24 +66,17 @@ async function apply_move(
   actor_id: string
 ): Promise<void> {
   const old_owner_key = budget.owner_key;
-  const affected =
-    group_id_of_key(old_owner_key) === null
-      ? await transaction_repo.get_ids_referencing_budget(ctx, old_owner_key, budget.id)
-      : [];
   await budget_repo.set_owner(ctx, budget.id, new_owner_key, brought_by, actor_id);
   await budget_period_repo.set_owner_for_budget(ctx, budget.id, new_owner_key);
   // The budget write bumped both keys BEFORE its periods were re-keyed; a derive in between
   // cached the budget without its stored periods (rollover / edited amounts). Bump again.
   await bump_owner_versions([old_owner_key, new_owner_key]);
-  if (affected.length > 0) {
-    await create_job(
-      "assign_transactions_batch",
-      { user_id: old_owner_key, transaction_ids: affected },
-      { trace_id: ctx.trace_id }
-    );
-  }
   const to_group = group_id_of_key(new_owner_key);
   if (to_group) await ensure_group_everything_else(ctx, to_group);
+  // Both views' budgets changed: re-assign everything that counts in either (H6) — the bounded
+  // engine, after the target view has its Everything Else.
+  await reassign_view(ctx, old_owner_key);
+  await reassign_view(ctx, new_owner_key);
 }
 
 export interface BudgetViewResult {

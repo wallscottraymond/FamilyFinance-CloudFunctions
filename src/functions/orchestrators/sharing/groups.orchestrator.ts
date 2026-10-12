@@ -54,6 +54,7 @@ import { DomainResult } from "../../types";
 import { ensure_group_everything_else } from "./group_everything_else";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
 import { bump_owner_versions } from "./versions";
+import { reassign_accounts } from "./view_reassign";
 
 export interface SharingWriteResult {
   success: boolean;
@@ -205,6 +206,7 @@ export async function respond_to_request_orchestrator(
         ctx, deps.account!.id, placement.entity, answer.from_user_id
       );
       await bump_owner_versions([answer.from_user_id]);
+      await reassign_accounts(ctx, [{ id: deps.account!.id, user_id: answer.from_user_id }]);
     }
     await request_repo.save_many(ctx, [answer, ...siblings]);
     log_operation_success(span, ctx.user_id);
@@ -280,6 +282,7 @@ export async function manage_group_orchestrator(
     await bump_owner_versions(
       group_accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
     );
+    await reassign_accounts(ctx, group_accounts.filter((a) => released.includes(a.id)));
     await request_repo.save_many(
       ctx, cancel_requests(requests_released(pending, leaving), now_ms)
     );

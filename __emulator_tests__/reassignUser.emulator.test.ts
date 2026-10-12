@@ -70,10 +70,12 @@ function split(code: string, budgetId: string, over: Record<string, unknown> = {
   };
 }
 
-async function seedTxn(id: string, userId: string, dateISO: string, s: Record<string, unknown>) {
+async function seedTxn(
+  id: string, userId: string, dateISO: string, s: Record<string, unknown>, accountId = 'acc1'
+) {
   await db.collection('transactions').doc(id).set({
     transactionId: id, userId, isActive: true, transactionDate: ts(dateISO),
-    merchantName: id, name: id, type: 'expense', accountId: 'acc1', splits: [s],
+    merchantName: id, name: id, type: 'expense', accountId, splits: [s],
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   });
 }
@@ -153,6 +155,20 @@ describe('reassign_user_orchestrator (emulator)', () => {
     // RE-RUN: idempotent.
     const again = await reassign_user_orchestrator(ctx(), { user_id: u.userId, reason: 'manual' });
     expect(again.changed).toBe(0);
+  });
+
+  it('a view-change run (scoped to accounts) touches only those accounts', async () => {
+    const u = await seedUser(4);
+    const inScope = `ra_scope_in_${RUN}`;
+    const outScope = `ra_scope_out_${RUN}`;
+    await seedTxn(inScope, u.userId, '2026-05-03', split(SHOP_CODE, u.ee.m), 'acc_shared');
+    await seedTxn(outScope, u.userId, '2026-05-04', split(SHOP_CODE, u.ee.m), 'acc_private');
+    const r = await reassign_user_orchestrator(ctx(), {
+      user_id: u.userId, reason: 'view_change', scope: { account_ids: ['acc_shared'] },
+    });
+    expect(r.status).toBe('done');
+    expect((await txn(inScope)).splits[0].monthlyBudgetId).toBe(u.shop);
+    expect((await txn(outScope)).splits[0].monthlyBudgetId).toBe(u.ee.m); // untouched
   });
 
   it('kill switch stops a run before it touches anything', async () => {

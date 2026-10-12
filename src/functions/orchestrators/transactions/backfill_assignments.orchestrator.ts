@@ -38,10 +38,8 @@ import {
   build_self_provision_budget_created_payload,
   compute_ee_coverage_start,
 } from "../../domain/budgets";
-import {
-  resolve_backfill_user_ids,
-  resolve_user_backfill_targets,
-} from "../../resolvers/transactions/backfill_targets.resolver";
+import { resolve_backfill_user_ids } from "../../resolvers/transactions/backfill_targets.resolver";
+import { budget_repo } from "../../repositories/budget.repo";
 
 /** Input: backfill one user, or (no user_id) fan out to all users. */
 export interface BackfillAssignmentsInput {
@@ -102,7 +100,7 @@ export async function backfill_assignments_orchestrator(
 
     // Per-user mode: ONE bounded re-assign run (3-R — date-ordered pages, legacy overrides
     // carried into user picks, written once, one follow-up), then heal budgets missing periods.
-    const { budgets } = await resolve_user_backfill_targets(ctx, input.user_id);
+    const budgets = await budget_repo.get_by_user_id(ctx, input.user_id);
     await enqueue_reassign_user(
       { user_id: input.user_id, reason: "backfill", dry_run: input.dry_run === true },
       ctx.trace_id

@@ -30,6 +30,7 @@ import { PersonView } from "../../types/sharing.types";
 import { account_repo } from "../../repositories/account.repo";
 import { request_repo } from "../../repositories/sharing";
 import { bump_owner_versions } from "./versions";
+import { reassign_accounts } from "./view_reassign";
 
 export interface ShareAccountResult {
   success: boolean;
@@ -80,6 +81,7 @@ export async function share_account_orchestrator(
       ctx, ctx.input.account_id, plan.entity.placement, ctx.user_id
     );
     await bump_owner_versions([ctx.user_id]);
+    await reassign_accounts(ctx, [{ id: ctx.input.account_id, user_id: ctx.user_id }]);
   }
   await request_repo.save_many(ctx, plan.entity.requests);
 
@@ -110,6 +112,7 @@ export async function unshare_account_orchestrator(
   if (plan.entity) {
     await account_repo.set_placement(ctx, ctx.input.account_id, null, ctx.user_id);
     await bump_owner_versions([ctx.user_id]);
+    await reassign_accounts(ctx, [{ id: ctx.input.account_id, user_id: ctx.user_id }]);
   }
   await request_repo.save_many(ctx, cancelled);
 

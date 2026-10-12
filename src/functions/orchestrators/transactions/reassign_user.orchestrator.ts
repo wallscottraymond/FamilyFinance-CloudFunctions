@@ -19,8 +19,8 @@
  *     periods, one derive bump) — the engine's writes are stamped `assignRunId` so the
  *     transaction trigger doesn't fan out per write.
  *
- * Single-flight per user: the job is enqueued with dedup key `reassign_user:{uid}` and a
- * continuation re-uses it.
+ * Single-flight per (user, scope): the job is enqueued with dedup key `reassign_user:{uid}[:scope]`
+ * and a continuation re-uses it.
  *
  * @module orchestrators/transactions/reassign_user
  */
@@ -88,17 +88,23 @@ const MAX_SAMPLES = 50;
 
 /** The job type + its single-flight dedup key. */
 export const REASSIGN_JOB = "reassign_user";
-export const reassign_dedup_key = (user_id: string): string => `reassign_user:${user_id}`;
+/** One run per (user, scope): a narrower / different scope queued meanwhile isn't swallowed. */
+export const reassign_dedup_key = (user_id: string, scope: ReassignScope = {}): string => {
+  const accounts = [...(scope.account_ids ?? [])].sort().join(",");
+  const sig = `${accounts}|${scope.from_ms ?? ""}|${scope.to_ms ?? ""}`;
+  return sig === "||" ? `reassign_user:${user_id}` : `reassign_user:${user_id}:${sig}`;
+};
 
 /** Enqueue a re-assign run for a user (single-flight; returns false when one is already queued). */
 export async function enqueue_reassign_user(
   input: Omit<ReassignUserInput, "run_id">,
-  trace_id: string
+  trace_id: string,
+  delay_seconds?: number
 ): Promise<boolean> {
   const job = await create_job_if_not_exists(
     REASSIGN_JOB,
-    { deduplication_key: reassign_dedup_key(input.user_id), ...input },
-    { trace_id }
+    { deduplication_key: reassign_dedup_key(input.user_id, input.scope), ...input },
+    { trace_id, delay_seconds }
   );
   return job !== null;
 }
@@ -234,13 +240,13 @@ export async function reassign_user_orchestrator(
       await create_job(
         REASSIGN_JOB,
         {
-          deduplication_key: reassign_dedup_key(run.user_id),
+          deduplication_key: reassign_dedup_key(run.user_id, run.scope),
           user_id: run.user_id,
           run_id: run.run_id,
         },
         {
           trace_id: ctx.trace_id,
-          dedup_key: build_dedup_key(REASSIGN_JOB, reassign_dedup_key(run.user_id)),
+          dedup_key: build_dedup_key(REASSIGN_JOB, reassign_dedup_key(run.user_id, run.scope)),
         }
       );
       log_operation_success(span, input.user_id);
