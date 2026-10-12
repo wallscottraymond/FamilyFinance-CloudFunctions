@@ -121,6 +121,16 @@ export interface CreateBudgetDependencies {
   category_owners: Record<string, string | null>;
   /** The user's "Everything Else" budget ID, if one exists */
   everything_else_budget_id: string | null;
+  /** The view's budgets (same owner key) — who owns what, per view (canon A3). */
+  view_budgets: Array<{
+    id: string;
+    name: string;
+    category_ids: string[];
+    is_everything_else: boolean;
+    start_ms: number;
+  }>;
+  /** category id (slug or legacy Plaid code) → the first category it means. */
+  first_by_category: Record<string, string>;
 }
 
 // ============================================================================
@@ -175,6 +185,8 @@ export interface ProcessBudgetCreatedPayload {
   is_recurring: boolean;
   claims: CategoryClaim[];
   everything_else_budget_id: string | null;
+  /** Re-assign the view's transactions from here (earliest start of this + source budgets). */
+  rehome_from_ms?: number;
   /**
    * When true, generate ONLY prime periods (skip non-prime). Used by the
    * per-lens Everything Else budgets, which must appear in their OWN period view

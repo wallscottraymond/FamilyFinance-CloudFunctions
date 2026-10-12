@@ -16,6 +16,7 @@ import {
   log_operation_success,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { resolve_view_ownership } from "./view_ownership.resolver";
 import { budget_cadence_to_instance } from "../../domain/budgets";
 import {
   CreateBudgetInput,
@@ -84,6 +85,9 @@ export async function resolve_create_budget_dependencies(
     }
   }
 
+  // 4. The view's ownership (canon A3: per view — `user_id` here is the view's owner key).
+  const ownership = await resolve_view_ownership(ctx, budgets, input.category_ids);
+
   log_operation_success(span, user_id);
 
   return {
@@ -92,5 +96,6 @@ export async function resolve_create_budget_dependencies(
     existing_budget_count,
     category_owners,
     everything_else_budget_id: everything_else?.id ?? null,
+    ...ownership,
   };
 }

@@ -15,10 +15,16 @@ import { resolve_group_accounts } from "../../resolvers/sharing/sharing.resolver
 import { group_id_of_key } from "../../domain/sharing/budget_view.service";
 import { account_repo } from "../../repositories/account.repo";
 
+/** A budget counts from the start of the period its start falls in (budget-start period snap), so
+ *  a re-home reaches back one period before the earliest start. */
+export const REHOME_BACK_MS = 31 * 24 * 60 * 60 * 1000;
+
 /** Re-assign these accounts' transactions (grouped per owner, scoped to the accounts). */
 export async function reassign_accounts(
   ctx: TraceContext,
-  accounts: Array<{ id: string; user_id: string }>
+  accounts: Array<{ id: string; user_id: string }>,
+  from_ms?: number,
+  reason: "view_change" | "budget_categories" = "view_change"
 ): Promise<void> {
   // A transaction's `accountId` may be the account doc id or its Plaid account id — scope both.
   const docs = await Promise.all(
@@ -33,7 +39,7 @@ export async function reassign_accounts(
   for (const [user_id, account_ids] of by_owner) {
     try {
       await enqueue_reassign_user(
-        { user_id, reason: "view_change", scope: { account_ids } },
+        { user_id, reason, scope: { account_ids, ...(from_ms !== undefined ? { from_ms } : {}) } },
         ctx.trace_id
       );
     } catch (error) {
@@ -47,16 +53,32 @@ export async function reassign_accounts(
  * transactions (unscoped — shared accounts resolve to their group and are left unchanged); a
  * group = each member's accounts shared with it.
  */
-export async function reassign_view(ctx: TraceContext, owner_key: string): Promise<void> {
+export async function reassign_view(
+  ctx: TraceContext,
+  owner_key: string,
+  from_ms?: number
+): Promise<void> {
   const gid = group_id_of_key(owner_key);
   if (!gid) {
     try {
-      await enqueue_reassign_user({ user_id: owner_key, reason: "budget_categories" }, ctx.trace_id);
+      await enqueue_reassign_user(
+        {
+          user_id: owner_key,
+          reason: "budget_categories",
+          ...(from_ms !== undefined ? { scope: { from_ms } } : {}),
+        },
+        ctx.trace_id
+      );
     } catch (error) {
       console.error(`[${ctx.trace_id}] view re-assign enqueue failed for ${owner_key}:`, error);
     }
     return;
   }
   const accounts = await resolve_group_accounts(ctx, gid).catch(() => []);
-  await reassign_accounts(ctx, accounts.map((a) => ({ id: a.id, user_id: a.user_id })));
+  await reassign_accounts(
+    ctx,
+    accounts.map((a) => ({ id: a.id, user_id: a.user_id })),
+    from_ms,
+    "budget_categories"
+  );
 }

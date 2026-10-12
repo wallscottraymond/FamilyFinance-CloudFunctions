@@ -8,6 +8,7 @@
  * @module orchestrators/budgets/update_budget
  */
 
+import { plan_view_claims } from "../../domain/budgets/category_ownership.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { ValidationError } from "../../types/errors";
@@ -81,14 +82,26 @@ export async function update_budget_orchestrator(
     }
     const entity = computed.entity;
 
-    // 3. Persist the updated budget document
-    await budget_repo.save(ctx, entity);
+    // 3. Plan the claims for added categories in THIS budget's view (canon A3/A3b): taken from
+    //    the budget that owns them there — refused before any write if that would leave it empty.
+    const plan = plan_view_claims({
+      budget_id: entity.id,
+      added_category_ids: dependencies.added_category_ids,
+      view_budgets: dependencies.view_budgets,
+      first_of: (id) => dependencies.first_by_category[id] ?? null,
+    });
+    if (plan.validation_errors || !plan.entity) {
+      throw new ValidationError(plan.validation_errors ?? ["category claim failed"]);
+    }
+    const added_claims = plan.entity.claims;
+    const sources = new Set(added_claims.map((c) => c.from_budget_id).filter(Boolean));
+    const rehome_from_ms = Math.min(
+      entity.start_date.toMillis(),
+      ...dependencies.view_budgets.filter((b) => sources.has(b.id)).map((b) => b.start_ms)
+    );
 
-    // 4. Build claims for added categories from the resolved owner map.
-    const added_claims = dependencies.added_category_ids.map((category_id) => ({
-      category_id,
-      from_budget_id: null as string | null,
-    }));
+    // 4. Persist the updated budget document
+    await budget_repo.save(ctx, entity);
 
     // 5. Enqueue cascade (claims/releases + period reallocation + rename)
     const name_changed = entity.name !== dependencies.existing.name;
@@ -118,6 +131,7 @@ export async function update_budget_orchestrator(
         added_claims,
         released_category_ids: dependencies.removed_category_ids,
         everything_else_budget_id: dependencies.everything_else_budget_id,
+        rehome_from_ms,
         regenerate_periods: dependencies.amount_changed,
         name_changed,
       };

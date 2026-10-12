@@ -23,9 +23,7 @@ import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { compute_budget_periods } from "../../domain/budgets/period_generation.service";
 import { create_job } from "../../infrastructure/job_queue";
-import {
-  resolve_created_rehome_transaction_ids,
-} from "../../resolvers/budgets/budget_rehome.resolver";
+import { reassign_view, REHOME_BACK_MS } from "../sharing/view_reassign";
 import { ProcessBudgetCreatedPayload } from "../../types/budgets/create_budget.types";
 
 /**
@@ -61,34 +59,21 @@ export async function process_budget_created_orchestrator(
 }
 
 /**
- * Enqueue re-assignment of transactions currently on Everything Else that fall
- * in the new budget's range, so the engine can move the ones now claimed by it.
+ * Re-assign the view's transactions from the earliest affected budget start, through the ONE
+ * bounded re-assign engine (canon A3b / Transaction-Integrity-Review 3-R): moves splits from
+ * Everything Else AND from the budgets this one took categories from (the old path only looked at
+ * Everything Else, so a split on a source budget stayed there).
  */
 async function rehome_claimed_transactions(
   ctx: TraceContext,
   payload: ProcessBudgetCreatedPayload
 ): Promise<void> {
-  const txn_ids = await resolve_created_rehome_transaction_ids(
+  if (payload.category_ids.length === 0) return;
+  await reassign_view(
     ctx,
     payload.user_id,
-    payload.budget_id,
-    payload.everything_else_budget_id,
-    payload.start_ms,
-    payload.generation_end_ms
+    (payload.rehome_from_ms ?? payload.start_ms) - REHOME_BACK_MS
   );
-  // Re-home the matching transactions in ONE batch (shared context + candidates resolved once)
-  // rather than N per-transaction jobs each re-reading every reference collection.
-  if (txn_ids.length > 0) {
-    await create_job(
-      "assign_transactions_batch",
-      { user_id: payload.user_id, transaction_ids: txn_ids },
-      { trace_id: ctx.trace_id }
-    );
-    console.log(
-      `[${ctx.trace_id}] process_budget_created: re-homed ${txn_ids.length} ` +
-        `transactions for budget ${payload.budget_id}`
-    );
-  }
 }
 
 /**

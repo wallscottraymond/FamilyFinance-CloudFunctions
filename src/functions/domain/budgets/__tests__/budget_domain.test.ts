@@ -368,6 +368,8 @@ describe("compute_create_budget", () => {
         existing_budget_count: 3,
         category_owners: { cat_food: "everything_else" },
         everything_else_budget_id: "everything_else",
+        view_budgets: [],
+        first_by_category: {},
       },
       now: NOW,
     });
@@ -387,6 +389,8 @@ describe("compute_create_budget", () => {
         existing_budget_count: 50,
         category_owners: {},
         everything_else_budget_id: null,
+        view_budgets: [],
+        first_by_category: {},
       },
       now: NOW,
     });
@@ -404,6 +408,8 @@ describe("compute_create_budget", () => {
         existing_budget_count: 0,
         category_owners: {},
         everything_else_budget_id: null,
+        view_budgets: [],
+        first_by_category: {},
       },
       now: NOW,
     });
@@ -422,6 +428,8 @@ describe("compute_update_budget", () => {
         removed_category_ids: [],
         everything_else_budget_id: "everything_else",
         amount_changed: true,
+        view_budgets: [],
+        first_by_category: {},
       },
       now: NOW,
     });
@@ -442,6 +450,8 @@ describe("compute_update_budget", () => {
         removed_category_ids: [],
         everything_else_budget_id: "ee",
         amount_changed: true,
+        view_budgets: [],
+        first_by_category: {},
       },
       now: NOW,
     });

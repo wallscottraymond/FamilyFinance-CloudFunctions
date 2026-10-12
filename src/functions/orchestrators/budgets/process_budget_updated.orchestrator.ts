@@ -26,10 +26,7 @@ import {
   compute_budget_periods,
   compute_reallocated_periods,
 } from "../../domain/budgets/period_generation.service";
-import { create_job } from "../../infrastructure/job_queue";
-import {
-  resolve_updated_rehome_transaction_ids,
-} from "../../resolvers/budgets/budget_rehome.resolver";
+import { reassign_view, REHOME_BACK_MS } from "../sharing/view_reassign";
 import { ProcessBudgetUpdatedPayload } from "../../types/budgets/update_budget.types";
 
 /**
@@ -89,8 +86,9 @@ export async function process_budget_updated_orchestrator(
 }
 
 /**
- * Re-assign transactions affected by a category add/remove so spend moves
- * Everything Else ⇄ this budget. No-op when no categories changed.
+ * A category add / remove / take moves splits between this budget, the budgets it took categories
+ * from, and Everything Else: re-assign the view's transactions from the earliest affected start
+ * through the ONE bounded re-assign engine (canon A3b / 3-R). No-op when no category changed.
  */
 async function rehome_changed_categories(
   ctx: TraceContext,
@@ -98,28 +96,12 @@ async function rehome_changed_categories(
 ): Promise<void> {
   const categories_changed =
     payload.added_claims.length > 0 || payload.released_category_ids.length > 0;
-  const txn_ids = await resolve_updated_rehome_transaction_ids(
+  if (!categories_changed) return;
+  await reassign_view(
     ctx,
     payload.user_id,
-    payload.budget_id,
-    payload.everything_else_budget_id,
-    categories_changed,
-    payload.start_ms,
-    payload.generation_end_ms
+    (payload.rehome_from_ms ?? payload.start_ms) - REHOME_BACK_MS
   );
-  // Re-home the matching transactions in ONE batch (shared context + candidates resolved once)
-  // rather than N per-transaction jobs each re-reading every reference collection.
-  if (txn_ids.length > 0) {
-    await create_job(
-      "assign_transactions_batch",
-      { user_id: payload.user_id, transaction_ids: txn_ids },
-      { trace_id: ctx.trace_id }
-    );
-    console.log(
-      `[${ctx.trace_id}] process_budget_updated: re-homed ${txn_ids.length} ` +
-        `transactions for budget ${payload.budget_id}`
-    );
-  }
 }
 
 /**

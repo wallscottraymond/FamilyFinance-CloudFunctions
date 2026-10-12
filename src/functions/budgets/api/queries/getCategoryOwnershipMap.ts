@@ -1,7 +1,8 @@
 /**
  * Get Category Ownership Map (callable)
  *
- * Returns which budget owns each category for the authenticated user. Consumed by the mobile
+ * Returns which budget owns each category IN A VIEW (canon A3 — one budget per category per
+ * view): the caller's own budgets (Me), or a group's when `{ groupId }` is passed (members only). Consumed by the mobile
  * app via `httpsCallable('getCategoryOwnershipMap')` — so this MUST be an `onCall`, not an
  * `onRequest` (the previous onRequest silently failed the callable protocol → the budget-wizard
  * grey-out never received ownership data).
@@ -19,6 +20,9 @@ import {
   getActiveCategories,
   getUserBudgets,
 } from "../../utils/categoryOwnership";
+import { group_repo } from "../../../repositories/sharing";
+import { is_member } from "../../../domain/sharing/group.service";
+import { group_view_key } from "../../../domain/sharing/budget_view.service";
 
 interface CategoryOwnershipResponse {
   ownership: Record<string, string | null>;
@@ -38,7 +42,16 @@ export const getCategoryOwnershipMap = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
-    const userId = request.auth.uid;
+    const callerId = request.auth.uid;
+    const groupId = (request.data as { groupId?: string } | null)?.groupId;
+    let userId = callerId; // the view's owner key
+    if (groupId) {
+      const group = await group_repo.get({ trace_id: "ownership", span_id: "ownership" }, groupId);
+      if (!group || !is_member(group, callerId)) {
+        throw new HttpsError("permission-denied", "Not a member of this group");
+      }
+      userId = group_view_key(groupId);
+    }
 
     try {
       console.log(`[getCategoryOwnershipMap] Fetching ownership map for user: ${userId}`);

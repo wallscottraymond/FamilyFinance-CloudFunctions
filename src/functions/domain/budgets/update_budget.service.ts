@@ -46,6 +46,16 @@ export function compute_update_budget(
     }
   }
 
+  // A real budget always keeps at least one category (canon A3b) — only checked when the
+  // categories are part of this edit.
+  if (
+    input.category_ids !== undefined &&
+    !existing.is_system_everything_else &&
+    input.category_ids.length === 0
+  ) {
+    validation_errors.push("A budget needs at least one category.");
+  }
+
   // Fixed end date validation
   let budget_end: Date | null = existing.budget_end_date
     ? existing.budget_end_date.toDate()

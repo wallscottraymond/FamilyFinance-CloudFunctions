@@ -16,6 +16,7 @@ import {
   log_operation_success,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { resolve_view_ownership } from "./view_ownership.resolver";
 import { budget_cadence_to_instance } from "../../domain/budgets";
 import {
   UpdateBudgetInput,
@@ -73,6 +74,16 @@ export async function resolve_update_budget_dependencies(
   const amount_changed =
     input.amount !== undefined && input.amount !== existing.amount;
 
+  // Taking categories: who owns them in THIS budget's view (canon A3 — per view).
+  const ownership =
+    added_category_ids.length > 0
+      ? await resolve_view_ownership(
+        ctx,
+        await budget_repo.get_by_user_id(ctx, existing.user_id),
+        added_category_ids
+      )
+      : { view_budgets: [], first_by_category: {} };
+
   log_operation_success(span, user_id);
 
   return {
@@ -81,5 +92,6 @@ export async function resolve_update_budget_dependencies(
     removed_category_ids,
     everything_else_budget_id: everything_else?.id ?? null,
     amount_changed,
+    ...ownership,
   };
 }

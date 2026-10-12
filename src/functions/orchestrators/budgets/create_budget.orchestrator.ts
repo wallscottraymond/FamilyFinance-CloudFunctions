@@ -26,7 +26,7 @@ import {
 import { create_job } from "../../infrastructure/job_queue";
 import { budget_repo } from "../../repositories/budget.repo";
 import { compute_create_budget } from "../../domain/budgets/create_budget.service";
-import { compute_create_transfer_plan } from "../../domain/budgets/category_ownership.service";
+import { plan_view_claims } from "../../domain/budgets/category_ownership.service";
 import {
   budget_cadence_to_instance,
   compute_period_generation_end,
@@ -107,15 +107,25 @@ export async function create_budget_orchestrator(
     }
     const entity = computed.entity;
 
-    // 4. Persist the budget document
-    await budget_repo.save(ctx, entity);
-
-    // 5. Compute the category transfer plan (pure)
-    const plan = compute_create_transfer_plan(
-      entity.category_ids,
-      dependencies.category_owners,
-      budget_id
+    // 4. Plan the category claims in THIS view (pure; canon A3/A3b) — refused before anything is
+    //    written when it would leave another budget with no categories.
+    const plan = plan_view_claims({
+      budget_id,
+      added_category_ids: entity.category_ids,
+      view_budgets: dependencies.view_budgets,
+      first_of: (id) => dependencies.first_by_category[id] ?? null,
+    });
+    if (plan.validation_errors || !plan.entity) {
+      throw new ValidationError(plan.validation_errors ?? ["category claim failed"]);
+    }
+    const sources = new Set(plan.entity.claims.map((c) => c.from_budget_id).filter(Boolean));
+    const rehome_from_ms = Math.min(
+      entity.start_date.toMillis(),
+      ...dependencies.view_budgets.filter((b) => sources.has(b.id)).map((b) => b.start_ms)
     );
+
+    // 5. Persist the budget document
+    await budget_repo.save(ctx, entity);
 
     // 6. Enqueue the cascade job (category transfer + period generation).
     // Generation spans the full horizon (12mo ahead for ongoing budgets), NOT
@@ -136,11 +146,9 @@ export async function create_budget_orchestrator(
       start_ms: entity.start_date.toMillis(),
       generation_end_ms: generation_end.getTime(),
       is_recurring: entity.is_ongoing,
-      claims: plan.entity?.claims.map((c) => ({
-        category_id: c.category_id,
-        from_budget_id: c.from_budget_id,
-      })) ?? [],
+      claims: plan.entity.claims,
       everything_else_budget_id: dependencies.everything_else_budget_id,
+      rehome_from_ms,
     };
     await create_job("process_budget_created", payload, { trace_id: ctx.trace_id });
 
