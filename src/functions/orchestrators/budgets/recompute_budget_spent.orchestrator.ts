@@ -74,6 +74,12 @@ export async function recompute_budget_spent_orchestrator(
       // matched on (monthly→monthlyBudgetId, weekly→weeklyBudgetId, …), applied to
       // ALL its periods (prime + non-prime). Reused for the rollover gate below.
       const budget = await budget_repo.get_by_id(ctx, budget_id);
+      // A GROUP budget's spend comes from every member's shared accounts; this job only loads
+      // the user's own transactions, so it would store a partial number. Group views derive
+      // their budgets on read — leave the group budget's stored mirror alone.
+      if (budget && String(budget.user_id ?? "").startsWith("group:")) {
+        continue;
+      }
       const cadence = budget
         ? budget_cadence_to_instance(budget.period)
         : "monthly";

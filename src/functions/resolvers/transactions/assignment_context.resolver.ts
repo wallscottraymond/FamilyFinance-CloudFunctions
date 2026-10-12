@@ -20,6 +20,10 @@ import {
   log_operation_success,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { account_repo } from "../../repositories/account.repo";
+import { user_repo } from "../../repositories/user.repo";
+import { group_repo } from "../../repositories/sharing";
+import { is_member } from "../../domain/sharing/group.service";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { category_repo } from "../../repositories/category.repo";
@@ -77,6 +81,22 @@ export interface SharedAssignmentContext {
    *  matcher (empty-merchant bills, missing periods) misses these (S1 root cause). */
   outflow_tx_to_id: Map<string, string>;
   inflow_tx_to_id: Map<string, string>;
+  /**
+   * Account-Rooted-Sharing: an account the user shared with a group counts in THAT group's view
+   * (from its share-from date), so its transactions are assigned against the GROUP's budgets —
+   * the same rule `derive_period` uses on read. Without it, a shared account's transaction was
+   * stored as the user's personal Everything Else while the group view counted it in the group's
+   * budget (e.g. "Santo Taco" → Everything Else vs "Eating Out and Snacks"). Keyed by the
+   * account's doc id AND Plaid id.
+   */
+  group_views_by_account: Map<string, { from_ms: number | null; view: ViewBudgets }>;
+}
+
+/** One view's budgets, as the engine matches against them. */
+export interface ViewBudgets {
+  real_budgets: BudgetForMatch[];
+  budget_names: Record<string, string>;
+  everything_else_budget_ids: Record<PeriodLens, string | null>;
 }
 
 /**
@@ -109,36 +129,8 @@ export async function resolve_shared_assignment_context(
   );
 
   // Real budgets (+ the Everything Else id PER LENS for the structural fallback).
-  // A budget's period maps to exactly one lens (weekly/monthly/bi_monthly); the
-  // three EE budgets are keyed by their own lens.
-  const real_budgets: BudgetForMatch[] = [];
-  const budget_names: Record<string, string> = {};
-  const everything_else_budget_ids: Record<PeriodLens, string | null> = {
-    monthly: null,
-    weekly: null,
-    bi_monthly: null,
-  };
-  for (const b of budgets) {
-    budget_names[b.id] = b.name;
-    const cadence = budget_cadence_to_instance(b.period);
-    if (b.is_system_everything_else) {
-      // The EE budget's `period` IS its lens (new EE budgets set period = lens;
-      // the legacy single EE has period 'monthly').
-      if (!everything_else_budget_ids[cadence]) {
-        everything_else_budget_ids[cadence] = b.id;
-      }
-      continue;
-    }
-    const end_ts = b.budget_end_date ?? b.end_date;
-    real_budgets.push({
-      id: b.id,
-      category_ids: b.category_ids,
-      start_ms: b.start_date.toMillis(),
-      end_ms: b.is_ongoing ? null : end_ts.toMillis(),
-      is_ongoing: b.is_ongoing,
-      cadence,
-    });
-  }
+  const { real_budgets, budget_names, everything_else_budget_ids } = build_view_budgets(budgets);
+  const group_views_by_account = await resolve_group_views(ctx, user_id);
 
   // Category rules (merchants / keywords). The category DOC ID (= the detailed
   // Plaid enum) is the match vocabulary, so a merchant/keyword upgrade yields a
@@ -171,7 +163,80 @@ export async function resolve_shared_assignment_context(
     category_slugs_by_plaid,
     outflow_tx_to_id,
     inflow_tx_to_id,
+    group_views_by_account,
   };
+}
+
+/**
+ * A view's budgets → what the engine matches: real budgets + the Everything Else id PER LENS.
+ * A budget's period maps to exactly one lens; the three EE budgets are keyed by their own lens.
+ */
+function build_view_budgets(budgets: Awaited<ReturnType<typeof budget_repo.get_by_user_id>>): ViewBudgets {
+  const real_budgets: BudgetForMatch[] = [];
+  const budget_names: Record<string, string> = {};
+  const everything_else_budget_ids: Record<PeriodLens, string | null> = {
+    monthly: null,
+    weekly: null,
+    bi_monthly: null,
+  };
+  for (const b of budgets) {
+    budget_names[b.id] = b.name;
+    const cadence = budget_cadence_to_instance(b.period);
+    if (b.is_system_everything_else) {
+      // The EE budget's `period` IS its lens (new EE budgets set period = lens;
+      // the legacy single EE has period 'monthly').
+      if (!everything_else_budget_ids[cadence]) {
+        everything_else_budget_ids[cadence] = b.id;
+      }
+      continue;
+    }
+    const end_ts = b.budget_end_date ?? b.end_date;
+    real_budgets.push({
+      id: b.id,
+      category_ids: b.category_ids,
+      start_ms: b.start_date.toMillis(),
+      end_ms: b.is_ongoing ? null : end_ts.toMillis(),
+      is_ongoing: b.is_ongoing,
+      cadence,
+    });
+  }
+  return { real_budgets, budget_names, everything_else_budget_ids };
+}
+
+/**
+ * The user's accounts placed in a group they belong to → that group's budgets (by doc + Plaid
+ * account id). Same membership rule as `resolve_derive_scope` (a stale placement counts in Me).
+ * Empty — and no extra reads beyond the user doc — for someone in no groups.
+ */
+async function resolve_group_views(
+  ctx: TraceContext,
+  user_id: string
+): Promise<Map<string, { from_ms: number | null; view: ViewBudgets }>> {
+  const out = new Map<string, { from_ms: number | null; view: ViewBudgets }>();
+  const user = await user_repo.get_by_id(ctx, user_id);
+  const group_ids = (user?.data.groupIds as string[] | undefined) ?? [];
+  if (group_ids.length === 0) return out;
+  const [accounts, groups] = await Promise.all([
+    account_repo.get_by_user_id(ctx, user_id),
+    group_repo.get_many(ctx, group_ids),
+  ]);
+  const member_of = new Set(groups.filter((g) => is_member(g, user_id)).map((g) => g.id));
+  const placed = accounts.filter((a) => a.placement && member_of.has(a.placement.group_id));
+  if (placed.length === 0) return out;
+  const views = new Map<string, ViewBudgets>();
+  await Promise.all(
+    [...new Set(placed.map((a) => a.placement!.group_id))].map(async (gid) => {
+      views.set(gid, build_view_budgets(await budget_repo.get_by_user_id(ctx, `group:${gid}`)));
+    })
+  );
+  for (const a of placed) {
+    const view = views.get(a.placement!.group_id);
+    if (!view) continue;
+    const entry = { from_ms: a.placement!.shared_from_ms ?? null, view };
+    out.set(a.id, entry);
+    if (a.account_id) out.set(a.account_id, entry);
+  }
+  return out;
 }
 
 /**
@@ -254,13 +319,15 @@ export async function resolve_assignment_context(
 
   const recurring_by_split = await recurring_by_split_promise;
 
-  const {
-    real_budgets,
-    budget_names,
-    everything_else_budget_ids,
-    category_rules,
-    category_slugs_by_plaid,
-  } = resolved_shared;
+  // Which view this transaction counts in: a shared account's group (from its share-from date
+  // on), else the user's own budgets.
+  const placed = resolved_shared.group_views_by_account.get((data.accountId as string) ?? "");
+  const view: ViewBudgets =
+    placed && (placed.from_ms === null || txn_date_ms >= placed.from_ms)
+      ? placed.view
+      : resolved_shared;
+  const { real_budgets, budget_names, everything_else_budget_ids } = view;
+  const { category_rules, category_slugs_by_plaid } = resolved_shared;
 
   // The engine matches budgets on the DETAILED Plaid category: category doc ids
   // ARE the detailed enums, budgets store them in `categoryIds`, and splits
