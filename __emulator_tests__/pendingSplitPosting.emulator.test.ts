@@ -65,7 +65,11 @@ async function budget(userId: string, id: string, categoryIds: string[], ee = fa
 }
 
 /** Seed a user with a $100 pending split three ways; Plaid posts it as `posted_amount`. */
-async function post_split_pending(posted_amount: number, amounts = [60, 30, 10]) {
+async function post_split_pending(
+  posted_amount: number,
+  amounts = [60, 30, 10],
+  opts: { rule?: boolean } = {}
+) {
   const userId = rid('u');
   const itemDocId = rid('itemdoc');
   const plaidItemId = rid('plaiditem');
@@ -90,6 +94,16 @@ async function post_split_pending(posted_amount: number, amounts = [60, 30, 10])
   await budget(userId, `${B.ee}_w`, [], true, 'weekly');
   await budget(userId, `${B.ee}_b`, [], true, 'bi_monthly');
 
+  if (opts.rule) {
+    // A Rule Book rule that would pin every Costco charge to Groceries (it ran when the PENDING
+    // was created; the user then edited the pending).
+    await db.collection('rules').doc(rid('rule')).set({
+      userId, isActive: true, priority: 100, name: 'Costco → Groceries',
+      conditions: { op: 'AND', conditions: [{ variable: 'merchant', operator: 'contains', value: 'costco' }] },
+      actions: { assign_budget_id: B.groc, assign_category: `ps_groceries_${RUN}` },
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+  }
   const code = `PS_GROC_${RUN}`;
   const total = amounts.reduce((a, b) => a + b, 0);
   await db.collection('transactions').doc(`plaid_${pendingTxId}`).set({
@@ -131,7 +145,7 @@ async function post_split_pending(posted_amount: number, amounts = [60, 30, 10])
   const posted = (await db.collection('transactions').doc(`plaid_${postedTxId}`).get()).data()!;
   const pending = (await db.collection('transactions').doc(`plaid_${pendingTxId}`).get()).data()!;
   const by = (id: string) => (posted.splits as Array<Record<string, unknown>>).find((s) => (s.splitId ?? s.id) === id)!;
-  return { posted, pending, by, B };
+  return { posted, pending, by, B, userId, itemDocId, plaidItemId, accountId, postedTxId, code };
 }
 
 const status = (s: Record<string, unknown>) =>
@@ -139,6 +153,59 @@ const status = (s: Record<string, unknown>) =>
 const cents = (n: unknown) => Math.round(Number(n) * 100);
 
 describe('a split PENDING transaction, then Plaid posts it (emulator)', () => {
+  it('a Rule Book rule does NOT re-run on the posted transaction (it would overwrite the edits)', async () => {
+    const { by, B } = await post_split_pending(100, [60, 30, 10], { rule: true });
+    expect(by('s2')).toMatchObject({ categorySource: 'user', firstCategoryId: `ps_shopping_${RUN}`, monthlyBudgetId: B.shop });
+    expect(by('s3')).toMatchObject({ budgetAssignmentSource: 'manual', monthlyBudgetId: B.fun });
+  });
+
+  it('a Plaid "modified" update racing a user edit never overwrites the edit (re-merged onto it)', async () => {
+    const { userId, itemDocId, plaidItemId, accountId, postedTxId, code } = await post_split_pending(100);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { transaction_repo } = require('../src/functions/repositories/transaction.repo');
+    const real = transaction_repo.get_by_plaid_transaction_ids.bind(transaction_repo);
+    let landed = false;
+    const spy = jest.spyOn(transaction_repo, 'get_by_plaid_transaction_ids').mockImplementation(
+      async (...args: unknown[]) => {
+        const out = await real(...args);
+        if (!landed && (args[2] as string[]).includes(postedTxId)) {
+          landed = true;
+          // The user re-categorizes s1 AFTER the sync read the doc, BEFORE it writes.
+          const ref = db.collection('transactions').doc(`plaid_${postedTxId}`);
+          const splits = (await ref.get()).data()!.splits;
+          splits[0] = { ...splits[0], categorySource: 'user', firstCategoryId: `ps_shopping_${RUN}` };
+          await ref.update({ splits, userNotes: 'mine' });
+        }
+        return out;
+      }
+    );
+    mockSync.mockResolvedValue({
+      added: [],
+      modified: [{
+        transaction_id: postedTxId, account_id: accountId, amount: 100, iso_currency_code: 'USD',
+        unofficial_currency_code: null, name: 'COSTCO WHOLESALE #12', merchant_name: 'Costco',
+        date: '2026-08-21', authorized_date: '2026-08-20', pending: false, payment_channel: 'in store',
+        personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: code },
+        category: ['Shops'], category_id: '19000000',
+      }],
+      removed: [], has_more: false, next_cursor: rid('cur'),
+    });
+    try {
+      await sync_transactions_orchestrator({
+        trace_id: rid('t'), span_id: rid('s'),
+        input: { item_id: itemDocId, user_id: userId, plaid_item_id: plaidItemId },
+        user_id: userId, idempotency_key: rid('idem'),
+      } as never);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(landed).toBe(true);
+    const doc = (await db.collection('transactions').doc(`plaid_${postedTxId}`).get()).data()!;
+    expect(doc.name).toBe('COSTCO WHOLESALE #12'); // Plaid's update applied
+    expect(doc.userNotes).toBe('mine'); // …onto the user's edit, which survived
+    expect(doc.splits[0]).toMatchObject({ categorySource: 'user', firstCategoryId: `ps_shopping_${RUN}` });
+  });
+
   it('same amount: every user choice carries over and each split lands where it was', async () => {
     const { posted, pending, by, B } = await post_split_pending(100);
     expect(posted.isPending).toBe(false);

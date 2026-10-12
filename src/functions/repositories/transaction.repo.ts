@@ -387,10 +387,12 @@ export const transaction_repo = {
       // Existence lookup for the WHOLE chunk in ⌈N/30⌉ batched `in` queries (matches by the
       // `transactionId` field, so it finds both deterministic `plaid_${id}` docs AND legacy
       // random-id docs) — instead of one indexed query PER transaction (the O(N)/sync read line).
+      const update_times = new Map<string, Timestamp>();
       const existing_docs = await this.get_by_plaid_transaction_ids(
         ctx,
         user_id,
-        chunk.map((t) => t.transaction_id)
+        chunk.map((t) => t.transaction_id),
+        update_times
       );
       const existing_by_txn_id = new Map<
         string,
@@ -403,37 +405,59 @@ export const transaction_repo = {
           doc: d, // full doc, already read by the lookup (the merge needs no extra reads)
         });
       }
+      // Updates are written CONDITIONALLY (after the creates' batch): a user edit saved after
+      // this read must never be overwritten with the stale copy.
+      const conditional_updates: Array<() => Promise<void>> = [];
 
       for (const txn of chunk) {
         const existing = existing_by_txn_id.get(txn.transaction_id) ?? null;
 
         if (existing) {
-          // UPDATE: Update the existing document
+          // UPDATE: Update the existing document — only if it's unchanged since our read; else
+          // re-read it and re-merge Plaid's fresh fields onto the NEWER doc (a user's edit wins).
           const fresh_doc = map_to_doc({ ...txn, id: existing.doc_id }, now);
           fresh_doc.createdAt = existing.created_at; // Preserve original creation time
           fresh_doc.updatedAt = now;
-          const { id: _existing_id, ...existing_doc } =
+          const ref = doc_ref(existing.doc_id);
+          let { id: _existing_id, ...existing_doc } =
             existing.doc as unknown as Record<string, unknown>;
-          const merged = on_update
-            ? on_update(existing_doc, fresh_doc as unknown as Record<string, unknown>)
-            : (fresh_doc as unknown as Record<string, unknown>);
-          // Final shape decided BEFORE the write (e.g. the assignment engine run in memory), so
-          // the transaction is written once, finished.
-          const shaped = opts?.before_write
-            ? await opts.before_write(existing.doc_id, merged, existing_doc)
-            : merged;
-          const doc_data = { ...shaped, ...tag };
-
-          batch.update(doc_ref(existing.doc_id), doc_data);
-
-          results.push({
-            plaid_transaction_id: txn.transaction_id,
-            doc_id: existing.doc_id,
-            action: "updated",
+          let read_time = update_times.get(existing.doc_id);
+          conditional_updates.push(async () => {
+            for (let attempt = 1; ; attempt++) {
+              const merged = on_update
+                ? on_update(existing_doc, fresh_doc as unknown as Record<string, unknown>)
+                : (fresh_doc as unknown as Record<string, unknown>);
+              // Final shape decided BEFORE the write (e.g. the assignment engine run in memory),
+              // so the transaction is written once, finished.
+              const shaped = opts?.before_write
+                ? await opts.before_write(existing.doc_id, merged, existing_doc)
+                : merged;
+              const doc_data = { ...shaped, ...tag };
+              try {
+                if (read_time) await ref.update(doc_data, { lastUpdateTime: read_time });
+                else await ref.update(doc_data);
+              } catch (error) {
+                if ((error as { code?: number }).code !== 9 || attempt >= 3) throw error;
+                const snap = await ref.get(); // a newer write landed — merge onto it
+                if (!snap.exists) return;
+                ({ id: _existing_id, ...existing_doc } = {
+                  ...(snap.data() as Record<string, unknown>),
+                  id: snap.id,
+                });
+                read_time = snap.updateTime;
+                continue;
+              }
+              results.push({
+                plaid_transaction_id: txn.transaction_id,
+                doc_id: existing.doc_id,
+                action: "updated",
+              });
+              written.push({ doc_id: existing.doc_id, before: existing_doc, after: doc_data });
+              audits.push({ doc_id: existing.doc_id, action: "updated" });
+              updated++;
+              return;
+            }
           });
-          written.push({ doc_id: existing.doc_id, before: existing_doc, after: doc_data });
-          audits.push({ doc_id: existing.doc_id, action: "updated" });
-          updated++;
         } else {
           // CREATE: New transaction.
           // DETERMINISTIC doc id derived from the Plaid transaction_id (NOT random)
@@ -469,6 +493,10 @@ export const transaction_repo = {
       }
 
       await batch.commit();
+      // The conditional updates (bounded concurrency).
+      for (let i = 0; i < conditional_updates.length; i += 20) {
+        await Promise.all(conditional_updates.slice(i, i + 20).map((run) => run()));
+      }
 
       // ONE audit entry per page (ids only) instead of a full-copy, fire-and-forget entry per
       // transaction — 3,000 audit docs per first link became 6. Awaited so it isn't dropped.
@@ -508,7 +536,9 @@ export const transaction_repo = {
   async get_by_plaid_transaction_ids(
     ctx: TraceContext,
     user_id: string,
-    plaid_transaction_ids: string[]
+    plaid_transaction_ids: string[],
+    /** Optional sink: doc id → its update time (for a conditional write; no extra reads). */
+    update_times?: Map<string, Timestamp>
   ): Promise<LegacyTransactionDoc[]> {
     if (plaid_transaction_ids.length === 0) {
       return [];
@@ -529,6 +559,7 @@ export const transaction_repo = {
         const data = doc.data() as LegacyTransactionDoc;
         if (data.ownerId === user_id) {
           out.push({ ...data, id: doc.id });
+          update_times?.set(doc.id, doc.updateTime);
         }
       }
     }

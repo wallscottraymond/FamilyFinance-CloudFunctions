@@ -475,14 +475,20 @@ async function process_added_transactions(
       console.log(`[${ctx.trace_id}] Step 6a: Transformed ${transactions_for_persistence.length} transactions (${migrated} inherited splits from a posted pending)`);
 
       // Step 6b: Upsert transactions via new repository. The `on_create` hook (the Rules Engine)
-      // applies ONLY to genuinely-new docs inside upsert's create branch (first-write-only) —
-      // pending->posted migrations go through the UPDATE branch and are untouched here.
+      // applies ONLY to genuinely-new docs inside upsert's create branch (first-write-only). A
+      // posted transaction that INHERITED its pending's splits is a new doc (new Plaid id) but not
+      // a new transaction: the rules already ran on the pending, and the user may have edited it
+      // since — re-running them would overwrite those edits. So it skips the rules.
+      const on_create_new_only = on_create
+        ? (t: TransactionForPersistence): TransactionForPersistence =>
+          migration_by_posted.has(t.transaction_id) ? t : on_create(t)
+        : undefined;
       const upsert_result = await transaction_repo.upsert_from_plaid_sync(
         create_child_span(ctx),
         transactions_for_persistence,
         ctx.user_id,
         deps.plaid_item.plaid_item_id,
-        on_create,
+        on_create_new_only,
         // Existing doc → keep the user's edits, refresh only Plaid's fields.
         merge_modified_into_existing,
         write_opts
