@@ -44,7 +44,6 @@ export interface UpdateTransactionSplitsInput {
   txn: Record<string, unknown>;
   splits: Array<Record<string, unknown>>;
   user_notes?: string;
-  is_hidden?: boolean;
   is_recurring?: boolean;
 }
 
@@ -97,7 +96,6 @@ async function apply_edit(
     updatedAt: now,
     updatedBy: input.user_id,
     ...(input.user_notes !== undefined ? { userNotes: input.user_notes } : {}),
-    ...(input.is_hidden !== undefined ? { isHidden: input.is_hidden } : {}),
     ...(input.is_recurring !== undefined ? { isRecurring: input.is_recurring } : {}),
   };
   // A transaction the user re-categorized OUT of transfers is no longer a transfer: clear its

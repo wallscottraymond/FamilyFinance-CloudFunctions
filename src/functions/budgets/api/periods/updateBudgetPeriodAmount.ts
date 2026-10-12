@@ -248,12 +248,11 @@ export const updateBudgetPeriodAmount = onCall<
         0,
         Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
       );
-      // "All Periods Forward" changes the budget's NORMAL amount — scaled from the month's normal
-      // allocation, never from a one-off override.
+      // "All Periods Forward": the week's figure was spread from the month's CURRENT amount (its
+      // override, if any), so scale that same base; `updateAllPeriodsForward` then takes the
+      // budget's new normal amount as this ÷ the month's normal allocation.
       forwardPrimeAmount =
-        currentNonPrimeAmount > 0
-          ? Math.round((targetPrimePeriod.allocatedAmount ?? 0) * ratio * 100) / 100
-          : primeAmount;
+        currentNonPrimeAmount > 0 ? Math.round(adjustedPrimeAmount * 100) / 100 : primeAmount;
       console.log(
         `[updateBudgetPeriodAmount] Prime gets the same $ change: $${currentPrimeAmount} → ` +
         `$${primeAmount} (ratio ${ratio.toFixed(4)} would give ${adjustedPrimeAmount.toFixed(2)})`
@@ -474,7 +473,10 @@ async function updateAllPeriodsForward(
   const effectiveCurrentAmount = targetPeriod.allocatedAmount ?? 0;
 
   const ratio = effectiveCurrentAmount > 0 ? newAmount / effectiveCurrentAmount : 1;
-  const newBudgetAmount = Math.round(budget.amount * ratio * 100) / 100;
+  // A period with no normal allocation ($0 / missing): the amount entered IS the new normal
+  // amount (a ratio from 0 would silently keep the budget unchanged).
+  const newBudgetAmount =
+    effectiveCurrentAmount > 0 ? Math.round(budget.amount * ratio * 100) / 100 : newAmount;
 
   console.log(`[updateAllPeriodsForward] Budget amount: $${budget.amount} → $${newBudgetAmount} (ratio: ${ratio.toFixed(4)})`);
 

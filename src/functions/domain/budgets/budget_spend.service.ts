@@ -154,22 +154,6 @@ export function compute_budget_spent(
 }
 
 /**
- * A transaction's splits as every money reader counts them: a HIDDEN transaction (the user's
- * "Hide") counts nowhere — each split reads as Ignored — without touching the stored statuses, so
- * Unhide brings the user's own Counted / Ignored / Refund choices back. PURE.
- */
-/* eslint-disable @typescript-eslint/naming-convention */
-export function splits_as_counted(txn: {
-  isHidden?: unknown;
-  splits?: unknown;
-}): Array<Record<string, unknown>> {
-  const splits = (txn.splits as Array<Record<string, unknown>> | undefined) ?? [];
-  if (txn.isHidden !== true) return splits;
-  return splits.map((s) => ({ ...s, spendStatus: "ignored" }));
-}
-/* eslint-enable @typescript-eslint/naming-convention */
-
-/**
  * A stored split's spend status — THE one reading (the period page, stored spend and every other
  * reader): explicit `spendStatus` wins, else the legacy `isIgnored` / `isRefund` booleans, else
  * "counted". PURE.

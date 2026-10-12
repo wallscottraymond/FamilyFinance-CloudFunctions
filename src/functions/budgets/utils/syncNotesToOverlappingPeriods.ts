@@ -285,7 +285,8 @@ export async function syncModifiedAmountToOverlappingPeriods(
 
       if (periodsOverlap(sourceStart, sourceEnd, periodStart, periodEnd)) {
         const updates: any = {
-          isModified: newModifiedAmount !== undefined,
+          // A cleared override (null / undefined) leaves the copy NOT modified.
+          isModified: newModifiedAmount !== undefined && newModifiedAmount !== null,
           updatedAt: Timestamp.now(),
           modifiedAmountSyncedFrom: sourcePeriod.id,
           modifiedAmountSyncedAt: Timestamp.now()

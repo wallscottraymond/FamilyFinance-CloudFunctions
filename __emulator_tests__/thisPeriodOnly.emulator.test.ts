@@ -121,5 +121,19 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
     const budget = (await db.collection('budgets').doc(B).get()).data()!;
     expect(budget.amount).toBeCloseTo(500, 2); // not 400 × 500/300 = 666.67
   });
+  it('All Periods Forward from a WEEK whose month has an override: the week ends at what was typed', async () => {
+    const W = `${B}_2031W28`;
+    await db.collection('budgets').doc(B).update({ amount: 400 });
+    // Month $400 with a $300 "This Period Only": the week is spread from the $300 (300 × 7/31).
+    await db.collection('budget_periods').doc(P).update({
+      allocatedAmount: 400, modifiedAmount: 300, isModified: true, isPrime: true,
+      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
+    });
+    await db.collection('budget_periods').doc(W).update({ allocatedAmount: 67.74 });
+    await edit_amount({ budgetPeriodId: W, newAmount: 100, cascadeScope: 'all_forward' });
+    const budget = (await db.collection('budgets').doc(B).get()).data()!;
+    // 300 × (100 / 67.74) = 442.87 → the week shows ≈ $100, not 400 × 1.476 = $590.
+    expect(budget.amount).toBeCloseTo(442.87, 0);
+  });
 });
 /* eslint-enable @typescript-eslint/naming-convention */

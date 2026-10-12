@@ -27,7 +27,7 @@ import {
   build_match_budgets,
 } from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
-import { SplitForSpend, splits_as_counted } from "../../domain/budgets/budget_spend.service";
+import { SplitForSpend } from "../../domain/budgets/budget_spend.service";
 import {
   owned_splits_for_budget,
   SplitForOnReadMatch,
@@ -88,7 +88,7 @@ export async function resolve_on_read_spend_splits(
     const is_pending = d.isPending === true;
     const txn_is_internal_transfer = internal_ids.has(id);
     const txn_is_income = d.type === "income";
-    const raw = splits_as_counted(d); // a hidden transaction counts nowhere
+    const raw = (d.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of raw) {
       splits.push(
         map_raw_split_to_on_read_match(s, {

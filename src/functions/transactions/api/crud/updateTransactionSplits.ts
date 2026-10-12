@@ -17,6 +17,7 @@ interface UpdateTransactionSplitsRequest {
   transactionId: string;
   splits: TransactionSplit[];
   userNotes?: string;
+  /** Ignored — Hide was removed (an old app build may still send it). */
   isHidden?: boolean;
   isRecurring?: boolean;
 }
@@ -50,7 +51,7 @@ export const updateTransactionSplits = onCall<
   }
 
   const userId = request.auth.uid;
-  const { transactionId, splits, userNotes, isHidden, isRecurring } = request.data;
+  const { transactionId, splits, userNotes, isRecurring } = request.data;
 
   // Validate required fields
   if (!transactionId) {
@@ -101,7 +102,6 @@ export const updateTransactionSplits = onCall<
         txn: existingTransaction as unknown as Record<string, unknown>,
         splits: splits as unknown as Array<Record<string, unknown>>,
         user_notes: userNotes,
-        is_hidden: isHidden,
         is_recurring: isRecurring,
       }
     );

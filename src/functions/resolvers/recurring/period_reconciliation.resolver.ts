@@ -19,7 +19,6 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
-import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
 import {
   RemovalInterval,
   is_payment_suppressed,
@@ -211,7 +210,7 @@ export async function resolve_recurring_reconciliation(
     is_edge_money((t as { transferRole?: unknown }).transferRole)
       ? []
       : splits_paying_recurring(
-        splits_as_counted(t),
+        t.splits ?? [],
         kind,
         input.recurring_id,
         stream_ids.has(t.id)

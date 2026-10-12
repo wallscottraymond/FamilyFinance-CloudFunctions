@@ -44,7 +44,6 @@ import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.ser
 import {
   is_transfer_category,
   split_spend_status,
-  splits_as_counted,
 } from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers_from_txns,
@@ -676,11 +675,10 @@ export function shape_period_derivation_deps(
     // one) isn't this view's bill payment: drop the link so the money counts here as ordinary
     // spending / money in, instead of vanishing (Account-Rooted-Sharing). No-op for Me with
     // nothing shared. Edge money drops every link.
-    // A hidden transaction counts nowhere (each split reads as Ignored).
     const raw = is_edge
-      ? without_recurring_links(splits_as_counted(data))
+      ? without_recurring_links((data.splits as Array<Record<string, unknown>>) ?? [])
       : without_out_of_view_links(
-        splits_as_counted(data),
+        (data.splits as Array<Record<string, unknown>>) ?? [],
         released.size
           ? new Set([...out_of_view_recurring_ids, ...released])
           : out_of_view_recurring_ids
@@ -810,7 +808,7 @@ export function shape_period_derivation_deps(
     // Released bills (removed / paused for this payment's month) are dropped here too.
     const pool_released = released_at((data.transactionDate as Timestamp).toMillis());
     const pinned_splits = without_out_of_view_links(
-      splits_as_counted(data),
+      (data.splits as Array<Record<string, unknown>>) ?? [],
       pool_released.size
         ? new Set([...out_of_view_recurring_ids, ...pool_released])
         : out_of_view_recurring_ids
@@ -845,8 +843,6 @@ export function shape_period_derivation_deps(
   if (inflow_tx_to_id.size > 0) {
     const history_by_inflow = new Map<string, DepositForSlot[]>();
     for (const d of raw.inflow_history_docs) {
-      // A hidden deposit counts nowhere — not in the estimate either.
-      if ((d as unknown as Record<string, unknown>).isHidden === true) continue;
       const inflow_id = inflow_tx_to_id.get(d.transactionId as string);
       if (!inflow_id) continue;
       const splits = (d.splits as Array<{ amount?: number }>) ?? [];

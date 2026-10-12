@@ -11,7 +11,6 @@
  */
 
 import { is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
-import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
 import {
   compute_countable_split_net,
   CountableSplitInput,
@@ -76,8 +75,7 @@ export async function derive_recurring_transactions_orchestrator(
       splits: is_edge_money((data as { transferRole?: unknown }).transferRole)
         ? []
         : splits_paying_recurring(
-          // A hidden transaction counts nowhere (its splits read as Ignored).
-          splits_as_counted(data as unknown as Record<string, unknown>),
+          ((data as { splits?: unknown[] }).splits ?? []) as Array<Record<string, unknown>>,
           kind,
           recurring_id,
           true

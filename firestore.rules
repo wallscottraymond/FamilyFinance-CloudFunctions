@@ -1228,11 +1228,12 @@ service cloud.firestore {
       let resource_data = resource.data;
       let changedFields = data.diff(resource_data).affectedKeys();
 
-      // The ONLY fields a client writes directly (Transaction-Integrity-Review 3-S): notes and
-      // visibility. Splits, categories, budgets and their derived summaries go through the
+      // The ONLY fields a client writes directly (Transaction-Integrity-Review 3-S): notes.
+      // Splits, categories, budgets and their derived summaries go through the
       // `updateTransactionSplits` callable, which runs the one category function + the
       // assignment engine — a direct client write would bypass both (canon M2/M7, A1).
-      let allowedFields = ['userNotes', 'notes', 'isHidden', 'updatedAt'];
+      // (Hide was removed — Ignore covers "doesn't count", visibly.)
+      let allowedFields = ['userNotes', 'notes', 'updatedAt'];
 
       // Only check that changed fields are in allowed list
       // Skip timestamp comparison for now (potential comparison issue)

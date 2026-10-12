@@ -42,8 +42,12 @@ beforeEach(async () => {
 
 const alex = () => env.authenticatedContext("alex").firestore();
 
-it("a client may still write notes / visibility directly", async () => {
-  await assertSucceeds(updateDoc(doc(alex(), "transactions/t1"), { userNotes: "hi", isHidden: true }));
+it("a client may still write notes directly", async () => {
+  await assertSucceeds(updateDoc(doc(alex(), "transactions/t1"), { userNotes: "hi" }));
+});
+
+it("a client can't hide a transaction (Hide was removed — an old build can't set it)", async () => {
+  await assertFails(updateDoc(doc(alex(), "transactions/t1"), { isHidden: true }));
 });
 
 it("a client can't create a transaction (could plant splits in another user's budgets)", async () => {
