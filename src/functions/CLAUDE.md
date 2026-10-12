@@ -115,6 +115,23 @@ transaction.resolver.ts
    Pure, testable, deterministic
 ```
 
+### 1.2a Plaid sync + bulk writers: one writer, one write, one follow-up (2026-10-11)
+
+```
+1. EVERY Plaid sync goes through `sync_item` (orchestrators/plaid/sync_item.orchestrator.ts):
+   link, webhooks, crons, manual refresh, reauth. Never call sync_transactions/sync_recurring
+   from a new entry point — `enqueue_item_sync(...)` (or `sync_item_orchestrator` for a
+   synchronous callable). It holds a per-item lease (_item_sync_leases): one sync per item.
+2. Bills/income BEFORE transactions; transactions assigned IN MEMORY (assign_in_memory) and
+   written ONCE. Never write a transaction bare and let the trigger assign it.
+3. A bulk writer stamps its run id (`syncRunId` / `assignRunId`) and runs ONE follow-up pass
+   (sync_follow_ups: reconcile touched streams, multi-date recompute, transfer check, one
+   derive bump). `on_transaction_written` and the recurring triggers SKIP stamped writes —
+   so a new bulk writer that doesn't stamp + follow up will fan out per document again.
+4. Webhooks only ACK + enqueue (30 s timeout). No syncing inside a webhook.
+5. Never write a null cursor; save the cursor only after every page is processed.
+```
+
 ### 1.3 NO LAYER SKIPPING - Detailed (CRITICAL)
 
 **Every orchestrator MUST call Resolver, Domain Service, and Repository in that order.**
