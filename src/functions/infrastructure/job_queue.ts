@@ -235,19 +235,33 @@ export async function get_pending_jobs<TPayload = unknown>(
     query = query.where("job_type", "==", job_type);
   }
 
-  // Get jobs that are either not scheduled or scheduled for now/past
-  const snapshot = await query
-    .orderBy("created_at", "asc")
-    .limit(limit)
-    .get();
+  // Oldest pending jobs (incl. un-scheduled ones whose immediate trigger failed)…
+  const oldest = query.orderBy("created_at", "asc").limit(limit).get();
+  // …plus the DUE delayed jobs directly. Taking only the oldest N and dropping the future ones in
+  // memory let a pile of future-dated retries at the head of the queue starve jobs that were due.
+  // Needs the (status, scheduled_for) index; without it, fall back to the oldest-N set alone.
+  const due = job_type
+    ? Promise.resolve(null)
+    : query
+      .where("scheduled_for", "<=", now)
+      .orderBy("scheduled_for", "asc")
+      .limit(limit)
+      .get()
+      .catch((e) => {
+        console.warn("[job_queue] due-jobs query failed (index building?) — oldest-N only:", e?.message);
+        return null;
+      });
+  const [oldest_snap, due_snap] = await Promise.all([oldest, due]);
 
-  // Filter out jobs scheduled for the future
-  return snapshot.docs
-    .map((doc) => doc.data() as Job<TPayload>)
-    .filter((job) => {
-      if (!job.scheduled_for) return true;
-      return job.scheduled_for.toMillis() <= now.toMillis();
-    });
+  const by_id = new Map<string, Job<TPayload>>();
+  for (const doc of [...(due_snap?.docs ?? []), ...oldest_snap.docs]) {
+    by_id.set(doc.id, doc.data() as Job<TPayload>);
+  }
+  // Filter out jobs scheduled for the future; due ones first, oldest first.
+  return [...by_id.values()]
+    .filter((job) => !job.scheduled_for || job.scheduled_for.toMillis() <= now.toMillis())
+    .sort((a, b) => (a.created_at?.toMillis?.() ?? 0) - (b.created_at?.toMillis?.() ?? 0))
+    .slice(0, limit);
 }
 
 /**
