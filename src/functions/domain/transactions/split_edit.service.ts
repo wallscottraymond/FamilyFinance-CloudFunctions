@@ -96,8 +96,10 @@ function engine_owned_fields(split: Raw, before: Raw): Raw {
     pin_before && before.budgetId === out.budgetId
   );
   if (new_budget_pin && before.outflowAssignmentSource === "manual") {
+    // A manual DETACH (manual + no bill) — never "auto", which would let Plaid stream membership
+    // re-link it (and an existing detach stays a detach).
     out.outflowId = null;
-    out.outflowAssignmentSource = "auto";
+    out.outflowAssignmentSource = "manual";
     out.outflowPinnedPeriodId = null;
   } else {
     out.outflowId = before.outflowId ?? null;

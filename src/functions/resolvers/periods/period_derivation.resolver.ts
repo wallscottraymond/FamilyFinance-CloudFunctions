@@ -47,6 +47,7 @@ import { find_crossing_transfers } from "../../domain/periods/edge_transfers.ser
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import {
   build_stream_membership_map,
+  is_txn_detached_from_inflow,
   is_txn_detached_from_outflow,
 } from "../../domain/recurring/stream_membership";
 import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
@@ -600,10 +601,15 @@ export function shape_period_derivation_deps(
     const txn_is_income = data.type === "income";
     // Edge money (D12, see 3b): crosses the view boundary.
     const is_edge = crossing.ids.has(id);
-    // Is this transaction part of a Plaid income stream? (Plaid id → inflow.)
+    // Is this transaction part of a Plaid income stream? (Plaid id → inflow.) A budget pin
+    // takes it off (canon A4).
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
     const linked_inflow_id =
-      plaid_txn_id && !is_edge ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
+      plaid_txn_id &&
+      !is_edge &&
+      !is_txn_detached_from_inflow(data.splits as unknown[] | undefined)
+        ? inflow_tx_to_id.get(plaid_txn_id)
+        : undefined;
     // A split linked to a bill / income that lives in ANOTHER view (its account isn't in this
     // one) isn't this view's bill payment: drop the link so the money counts here as ordinary
     // spending / money in, instead of vanishing (Account-Rooted-Sharing). No-op for Me with
@@ -614,8 +620,8 @@ export function shape_period_derivation_deps(
         (data.splits as Array<Record<string, unknown>>) ?? [],
         out_of_view_recurring_ids
       );
-    // A manual "remove from bill" beats Plaid stream membership: the txn is neither a bill
-    // payment nor excluded from budget spend as a recurring member.
+    // A manual "remove from bill" or a budget pin beats Plaid stream membership: the txn is
+    // neither a bill payment nor excluded from budget spend as a recurring member.
     const linked_outflow_id =
       plaid_txn_id && !is_edge && !is_txn_detached_from_outflow(raw)
         ? outflow_tx_to_id.get(plaid_txn_id)

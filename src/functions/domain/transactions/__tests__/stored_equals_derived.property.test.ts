@@ -7,16 +7,18 @@
  *   - budgets: monthly / weekly / bi-monthly, created MID-period, ongoing or with an end date
  *     (`budget_end_date`), manual pins (live, to any lens's Everything Else, to a deleted budget);
  *   - money: purchases, refunds (credits in a spending category), income, and transfers in
- *     every matched-pair role (internal / edge_out / edge_in / external / unclassified).
+ *     every matched-pair role (internal / edge_out / edge_in / external / unclassified);
+ *   - bills / income: Plaid stream membership, manual bill pins and "remove from bill" detaches
+ *     (a budget pin takes a split off its streams — canon A4).
  *
  * ENGINE (what's stored): split_category_input_from_raw → compute_transaction_assignment over
  *   THE budget set (build_match_budgets).
  * PAGE (what's counted): map_raw_split_to_on_read_match → owned_splits_for_budget → is_countable
- *   over the same budget set — exactly the period page's calls.
+ *   over the same budget set, on the split AS WRITTEN — exactly the period page's calls.
  * STORED SPEND (budget_period.spent → summaries / widgets): stored_split_for_spend over the
  *   engine's written split, in EVERY lens, → is_countable.
- * Claim: the engine stores budget B (monthly lens) ⇔ the page counts the split in B; the engine
- * stores "unassigned" ⇔ the page counts it nowhere; stored spend counts it in each lens's stored
+ * Claim: the engine stores budget B (monthly lens) with NO bill / income link ⇔ the page counts
+ * the split in B; otherwise (unassigned, or a bill / income payment) the page counts it nowhere; stored spend counts it in each lens's stored
  * budget ⇔ the page counts it. Plus: the engine is idempotent.
  */
 
@@ -39,6 +41,10 @@ import {
 } from "../../budgets/match_budgets.service";
 import { map_raw_split_to_on_read_match } from "../../../resolvers/shared/on_read_matching";
 import { stored_split_for_spend } from "../../../resolvers/budgets/budget_spend.resolver";
+import {
+  is_txn_detached_from_inflow,
+  is_txn_detached_from_outflow,
+} from "../../recurring/stream_membership";
 
 const CODES: Array<[string, string]> = [
   ["FOOD_AND_DRINK_GROCERIES", "groceries"],
@@ -123,6 +129,12 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
         : k < 0.7 ? pick(Object.values(EE_IDS)) // any lens's Everything Else
         : "deleted_budget";
     }
+    // Bills: a manual "remove from bill" detach, or a manual pin to a bill.
+    const bill_roll = r();
+    if (bill_roll < 0.1) { raw.outflowAssignmentSource = "manual"; raw.outflowId = null; }
+    else if (bill_roll < 0.15) { raw.outflowAssignmentSource = "manual"; raw.outflowId = "bill"; }
+    // Plaid stream membership (its id is in a bill's / income's `transactionIds`).
+    const in_stream = r() < 0.25;
     const txn = { merchantName: r() < 0.15 ? "Santo Taco" : "Store", name: "x" };
 
     // ENGINE
@@ -130,7 +142,10 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
     const input: SplitForAssignment = {
       split_id: "s1", budget_id: raw.budgetId as string,
       budget_assignment_source: raw.budgetAssignmentSource as "category" | "manual",
-      plaid_match_category: code, outflow_id: null, inflow_id: null,
+      plaid_match_category: code,
+      outflow_id: (raw.outflowId as string | null) ?? null,
+      outflow_source: raw.outflowAssignmentSource as "auto" | "manual" | undefined,
+      inflow_id: null,
       monthly_period_id: null, weekly_period_id: null, bi_weekly_period_id: null,
       overall_category_id: cat.overall_category_id ?? null, first_category_id: cat.first_category_id ?? null,
       second_category_id: cat.second_category_id ?? null, category_source: cat.category_source ?? "plaid",
@@ -139,37 +154,25 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
       txn_date_ms: date, txn_merchant_name: txn.merchantName, txn_name: txn.name,
       txn_is_income: is_income_txn, txn_transfer_role: role ?? null,
       real_budgets: match.real_budgets, everything_else_budget_ids: match.everything_else_ids,
-      category_catalog: catalog, source_periods: [], recurring_by_split: {},
+      category_catalog: catalog, source_periods: [],
+      // The stream link the resolver injects (single split → its stream's bill / income).
+      recurring_by_split: in_stream
+        ? { s1: is_income_txn ? { outflow_id: null, inflow_id: "inc" } : { outflow_id: "bill", inflow_id: null } }
+        : {},
     };
 
-    // PAGE — the period page's own calls over the same budget set.
-    // The page pairs LIVE over the split's effective category (a user pick away from a transfer is
-    // never paired); the classifier stores the same answer as `transferRole` — so a role only
-    // exists for a transfer-category split (stale roles are cleared by the classifier).
-    const m0 = map_raw_split_to_on_read_match(raw, {
+    // The transfer role: the page pairs LIVE over the split's effective category (a user pick
+    // away from a transfer is never paired); the classifier stores the same answer as
+    // `transferRole` — so a role only exists for a transfer-category split.
+    const semantic = map_raw_split_to_on_read_match(raw, {
       txn_date_ms: date, is_pending: false, is_transfer: false,
       is_income: is_income_txn, merchant_name: txn.merchantName, name: txn.name,
-    }, catalog);
-    const live_role = is_transfer_category(m0.semantic_code) ? role : undefined;
+    }, catalog).semantic_code;
+    const live_role = is_transfer_category(semantic) ? role : undefined;
     ctx.txn_transfer_role = live_role ?? null;
-    const m = { ...m0, is_transfer: live_role === "internal", is_edge_out: live_role === "edge_out" };
+
+    // ENGINE → the split as WRITTEN (what every reader reads).
     const stored = compute_transaction_assignment([input], ctx).splits[0];
-    const ee = match.primary_everything_else_id;
-    const aliases = match.everything_else_id_set;
-    const owner = resolve_split_owner(m, match.real_budgets, ee, aliases);
-    const counted = owned_splits_for_budget(owner, match.real_budgets, ee, [m], aliases)
-      .some(is_countable);
-
-    // Transfers the classifier hasn't reached yet keep the old rule (excluded) on BOTH sides: the
-    // page's blanket transfer-category exclusion; no role → engine excludes. Only edge_out counts.
-    if (stored.monthly_budget_id === UNASSIGNED_BUDGET_ID) {
-      expect([i, code, role, "page counts it", counted]).toEqual([i, code, role, "page counts it", false]);
-    } else {
-      expect([i, code, role, "counted in", counted ? owner : null])
-        .toEqual([i, code, role, "counted in", stored.monthly_budget_id]);
-    }
-
-    // STORED SPEND: the written split, read back by recompute_budget_spent in every lens.
     const written: Record<string, unknown> = {
       ...raw,
       budgetId: stored.budget_id,
@@ -180,7 +183,39 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
       firstCategoryId: stored.first_category_id,
       secondCategoryId: stored.second_category_id,
       categorySource: stored.category_source,
+      outflowId: stored.outflow_id,
+      outflowAssignmentSource: stored.outflow_source,
+      inflowId: stored.inflow_id,
     };
+
+    // PAGE — the period page's own calls over the same budget set, on the written split.
+    const m0 = map_raw_split_to_on_read_match(written, {
+      txn_date_ms: date, is_pending: false, is_transfer: false,
+      is_income: is_income_txn, merchant_name: txn.merchantName, name: txn.name,
+      // The period page's stream membership: off when detached / budget-pinned.
+      is_recurring_member: in_stream && (is_income_txn
+        ? !is_txn_detached_from_inflow([written])
+        : !is_txn_detached_from_outflow([written])),
+    }, catalog);
+    const m = { ...m0, is_transfer: live_role === "internal", is_edge_out: live_role === "edge_out" };
+    const ee = match.primary_everything_else_id;
+    const aliases = match.everything_else_id_set;
+    const owner = resolve_split_owner(m, match.real_budgets, ee, aliases);
+    const counted = owned_splits_for_budget(owner, match.real_budgets, ee, [m], aliases)
+      .some(is_countable);
+
+    // Transfers the classifier hasn't reached yet keep the old rule (excluded) on BOTH sides: the
+    // page's blanket transfer-category exclusion; no role → engine excludes. Only edge_out counts.
+    const stored_spends =
+      stored.monthly_budget_id !== UNASSIGNED_BUDGET_ID && !stored.outflow_id && !stored.inflow_id;
+    if (!stored_spends) {
+      expect([i, code, role, "page counts it", counted]).toEqual([i, code, role, "page counts it", false]);
+    } else {
+      expect([i, code, role, "counted in", counted ? owner : null])
+        .toEqual([i, code, role, "counted in", stored.monthly_budget_id]);
+    }
+
+    // STORED SPEND: the written split, read back by recompute_budget_spent in every lens.
     for (const [lens, id] of [
       ["monthly", stored.monthly_budget_id],
       ["weekly", stored.weekly_budget_id],
@@ -203,6 +238,7 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
       bi_weekly_budget_id: stored.bi_weekly_budget_id,
       overall_category_id: stored.overall_category_id, first_category_id: stored.first_category_id,
       second_category_id: stored.second_category_id, category_source: stored.category_source,
+      outflow_id: stored.outflow_id, outflow_source: stored.outflow_source, inflow_id: stored.inflow_id,
     }], ctx);
     expect([i, again.changed]).toEqual([i, false]);
   }

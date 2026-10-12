@@ -19,7 +19,10 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
-import { is_txn_detached_from_outflow } from "../../domain/recurring/stream_membership";
+import {
+  is_txn_detached_from_inflow,
+  is_txn_detached_from_outflow,
+} from "../../domain/recurring/stream_membership";
 import { fingerprint_stored } from "../../domain/recurring/reconciliation_fingerprint";
 
 export type RecurringType = "outflow" | "inflow";
@@ -184,14 +187,13 @@ export async function resolve_recurring_reconciliation(
     transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, transaction_ids),
   ]);
   const seen = new Set<string>();
-  // A manual "remove from bill" beats the (stale-able) stream membership: drop stream-only
-  // matches the user detached. (A durable split link, source (a), still wins.)
+  // A manual "remove from bill" or a budget pin beats the (stale-able) stream membership: drop
+  // stream-only matches the user took off. (A durable split link, source (a), still wins.)
   const link_ids = new Set(link_txns.map((t) => t.id));
   const kept_stream_txns = stream_txns.filter(
     (t) =>
-      !is_outflow ||
       link_ids.has(t.id) ||
-      !is_txn_detached_from_outflow(t.splits)
+      !(is_outflow ? is_txn_detached_from_outflow(t.splits) : is_txn_detached_from_inflow(t.splits))
   );
   const txns = [...link_txns, ...kept_stream_txns].filter((t) => {
     const key = t.id;

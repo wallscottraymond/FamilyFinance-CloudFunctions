@@ -9,6 +9,8 @@ import {
   build_stream_membership_map,
   is_split_detached_from_outflow,
   is_txn_detached_from_outflow,
+  is_split_detached_from_inflow,
+  is_txn_detached_from_inflow,
 } from "../stream_membership";
 
 describe("build_stream_membership_map", () => {
@@ -75,5 +77,15 @@ describe("manual bill detach", () => {
     ).toBe(true);
     expect(is_txn_detached_from_outflow([{ outflowAssignmentSource: "auto" }])).toBe(false);
     expect(is_txn_detached_from_outflow(undefined)).toBe(false);
+  });
+
+  it("a manual BUDGET pin takes a split off its bills and income (canon A4)", () => {
+    expect(is_split_detached_from_outflow({ budgetAssignmentSource: "manual" })).toBe(true);
+    expect(is_split_detached_from_inflow({ budgetAssignmentSource: "manual" })).toBe(true);
+    // ...unless the user ALSO pinned it to a bill
+    expect(is_split_detached_from_outflow({
+      budgetAssignmentSource: "manual", outflowAssignmentSource: "manual", outflowId: "b",
+    })).toBe(false);
+    expect(is_txn_detached_from_inflow([{ budgetAssignmentSource: "category" }])).toBe(false);
   });
 });

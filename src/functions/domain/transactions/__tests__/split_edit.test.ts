@@ -70,7 +70,8 @@ describe("build_split_edit", () => {
     const bill = run([{ ...stored, outflowId: "other_bill", outflowAssignmentSource: "manual" }]);
     expect(bill.splits[0]).toMatchObject({ outflowId: "bill", outflowAssignmentSource: "manual" });
     // ...but a NEW budget pin takes the split off its manually pinned bill (canon A4).
-    expect(pinned.splits[0]).toMatchObject({ outflowId: null, outflowAssignmentSource: "auto" });
+    // (as a manual DETACH — never "auto", which stream membership would re-link)
+    expect(pinned.splits[0]).toMatchObject({ outflowId: null, outflowAssignmentSource: "manual" });
   });
 
   it("category_changed only when a category moved", () => {

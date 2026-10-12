@@ -36,23 +36,48 @@ export function build_stream_membership_map(
   return map;
 }
 
+/* eslint-disable @typescript-eslint/naming-convention */
+type SplitPins = {
+  outflowAssignmentSource?: unknown;
+  outflowId?: unknown;
+  budgetAssignmentSource?: unknown;
+};
+/* eslint-enable @typescript-eslint/naming-convention */
+
 /**
- * Manual bill DETACH ("remove from bill"): the user said this split is NOT a payment for
- * any bill. Stored as `outflowAssignmentSource: "manual"` with no `outflowId` (a manual
- * pin to "none"). It must beat every automatic link — the engine's recurring matcher AND
- * Plaid stream `transactionIds` membership (derive + reconcile) — or the payment silently
- * re-attaches. PURE.
+ * Is this split OFF its bills? It must beat every automatic link — the engine's recurring
+ * matcher AND Plaid stream `transactionIds` membership (derive + reconcile) — or the payment
+ * silently re-attaches. Off when:
+ *   - a manual bill DETACH ("remove from bill"): `outflowAssignmentSource: "manual"` with no
+ *     `outflowId` (a manual pin to "none");
+ *   - a manual BUDGET pin without a manual bill pin (canon A4: a budget pin detaches recurring —
+ *     the engine stores no bill link, so the page and reconcile must not re-link it by stream).
+ * A manual bill pin (with a bill) is ON that bill, whatever the budget. PURE.
  */
 export function is_split_detached_from_outflow(split: unknown): boolean {
-  // Firestore split field names (camelCase).
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  const s = (split ?? {}) as { outflowAssignmentSource?: unknown; outflowId?: unknown };
-  return s.outflowAssignmentSource === "manual" && !s.outflowId;
+  const s = (split ?? {}) as SplitPins;
+  if (s.outflowAssignmentSource === "manual") return !s.outflowId;
+  return s.budgetAssignmentSource === "manual";
 }
 
-/** True when ANY split of the transaction is manually detached from bills. PURE. */
+/** True when ANY split of the transaction is off its bills. PURE. */
 export function is_txn_detached_from_outflow(
   splits: ReadonlyArray<unknown> | null | undefined
 ): boolean {
   return (splits ?? []).some(is_split_detached_from_outflow);
+}
+
+/**
+ * Is this split OFF its income streams? A manual budget pin (canon A4 / A13: a pinned income
+ * credit counts in the pinned budget; the engine stores no income link). PURE.
+ */
+export function is_split_detached_from_inflow(split: unknown): boolean {
+  return ((split ?? {}) as SplitPins).budgetAssignmentSource === "manual";
+}
+
+/** True when ANY split of the transaction is off its income streams. PURE. */
+export function is_txn_detached_from_inflow(
+  splits: ReadonlyArray<unknown> | null | undefined
+): boolean {
+  return (splits ?? []).some(is_split_detached_from_inflow);
 }
