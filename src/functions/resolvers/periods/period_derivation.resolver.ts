@@ -843,6 +843,8 @@ export function shape_period_derivation_deps(
   if (inflow_tx_to_id.size > 0) {
     const history_by_inflow = new Map<string, DepositForSlot[]>();
     for (const d of raw.inflow_history_docs) {
+      // A removed account's / superseded pending's deposit isn't real income — not in the estimate.
+      if (d.isActive === false) continue;
       const inflow_id = inflow_tx_to_id.get(d.transactionId as string);
       if (!inflow_id) continue;
       const splits = (d.splits as Array<{ amount?: number }>) ?? [];

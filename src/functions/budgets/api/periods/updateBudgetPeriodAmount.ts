@@ -97,6 +97,22 @@ function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
   return diffDays + 1;
 }
 
+/** Inclusive UTC days two periods share (0 when they don't overlap). */
+function overlapDays(
+  aStart: Timestamp,
+  aEnd: Timestamp,
+  bStart: Timestamp,
+  bEnd: Timestamp
+): number {
+  const day = (t: Timestamp): number => {
+    const d = t.toDate();
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86_400_000;
+  };
+  const from = Math.max(day(aStart), day(bStart));
+  const to = Math.min(day(aEnd), day(bEnd));
+  return to >= from ? to - from + 1 : 0;
+}
+
 /**
  * Calculate daily rate with 6 decimal precision (for prime periods)
  */
@@ -211,7 +227,10 @@ export const updateBudgetPeriodAmount = onCall<
     //  - "This Period Only": the same DOLLAR change lands on the month (the week's extra money);
     //  - "All Periods Forward": the same RATIO (the budget's rate changes, at its own cadence).
     let primeAmount = newAmount;
-    let forwardPrimeAmount = newAmount;
+    // "All Periods Forward" sets the budget's NORMAL amount so the edited period, un-overridden,
+    // gets exactly what was typed: amount ÷ the period's normal share of the budget (1 for the
+    // budget's own period; for a week of a monthly budget, Σ overlap days ÷ that month's days).
+    let forwardBudgetAmount = newAmount;
 
     if (period.isPrime === false && period.primePeriodIds && period.primePeriodIds.length > 0) {
       // This is a non-prime period - find the primary prime it references
@@ -229,33 +248,31 @@ export const updateBudgetPeriodAmount = onCall<
 
       console.log(`[updateBudgetPeriodAmount] Non-prime period detected. Editing underlying prime: ${targetPrimePeriodId}`);
 
-      // Recalculate the newAmount to be the prime period equivalent
-      // Since user edited the non-prime amount, we need to back-calculate what the prime should be
-      // This is complex - for now, we'll apply the same $ change to the prime
+      // "This Period Only": the same DOLLAR change lands on the month the week starts in (the
+      // week's extra money). The month's current amount (its own override counts, even $0) is
+      // the base.
       const currentNonPrimeAmount = period.allocatedAmount;
-      // The month's current amount (its own "This Period Only" override counts, even $0) — the
-      // base for a same-dollar "This Period Only" change.
       const currentPrimeAmount = period_allocation(targetPrimePeriod);
-
-      // Calculate the ratio and apply to prime
-      const ratio = currentNonPrimeAmount > 0 ? newAmount / currentNonPrimeAmount : 1;
-      const adjustedPrimeAmount = currentPrimeAmount * ratio;
-
-      console.log(`[updateBudgetPeriodAmount] Non-prime adjustment: $${currentNonPrimeAmount} → $${newAmount} (ratio: ${ratio.toFixed(4)})`);
-      console.log(`[updateBudgetPeriodAmount] Prime adjustment: $${currentPrimeAmount} → $${adjustedPrimeAmount.toFixed(2)}`);
-
       primeAmount = Math.max(
         0,
         Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
       );
-      // "All Periods Forward": the week's figure was spread from the month's CURRENT amount (its
-      // override, if any), so scale that same base; `updateAllPeriodsForward` then takes the
-      // budget's new normal amount as this ÷ the month's normal allocation.
-      forwardPrimeAmount =
-        currentNonPrimeAmount > 0 ? Math.round(adjustedPrimeAmount * 100) / 100 : primeAmount;
+      // The edited period's normal share of the budget, over EVERY prime it overlaps (a month of
+      // a weekly budget spans 4–5 weeks; a week can straddle two months).
+      const primeDocs = await Promise.all(
+        period.primePeriodIds.map((id) => db.collection("budget_periods").doc(id).get())
+      );
+      const share = primeDocs.reduce((sum, d) => {
+        if (!d.exists) return sum;
+        const pr = d.data() as BudgetPeriodDocument;
+        const overlap =
+          overlapDays(period.periodStart, period.periodEnd, pr.periodStart, pr.periodEnd);
+        return sum + overlap / getDaysInPeriod(pr.periodStart, pr.periodEnd);
+      }, 0);
+      if (share > 0) forwardBudgetAmount = Math.round((newAmount / share) * 100) / 100;
       console.log(
-        `[updateBudgetPeriodAmount] Prime gets the same $ change: $${currentPrimeAmount} → ` +
-        `$${primeAmount} (ratio ${ratio.toFixed(4)} would give ${adjustedPrimeAmount.toFixed(2)})`
+        `[updateBudgetPeriodAmount] Non-prime edit: this-period month $${currentPrimeAmount} → ` +
+        `$${primeAmount}; forward budget → $${forwardBudgetAmount} (share ${share.toFixed(4)})`
       );
     }
 
@@ -275,12 +292,7 @@ export const updateBudgetPeriodAmount = onCall<
       );
     } else {
       // 'all_forward'
-      const result = await updateAllPeriodsForward(
-        db,
-        budget,
-        targetPrimePeriod,
-        forwardPrimeAmount
-      );
+      const result = await updateAllPeriodsForward(db, budget, forwardBudgetAmount);
       periodsUpdated = result.periodsUpdated;
       budgetUpdated = result.budgetUpdated;
     }
@@ -462,23 +474,14 @@ function isPrimePeriod(period: BudgetPeriodDocument, budgetPeriodType: string): 
 async function updateAllPeriodsForward(
   db: admin.firestore.Firestore,
   budget: Budget,
-  targetPeriod: BudgetPeriodDocument,
-  newAmount: number
+  newBudgetAmount: number
 ): Promise<{ periodsUpdated: number; budgetUpdated: boolean }> {
   console.log(`[updateAllPeriodsForward] Updating budget ${budget.id} and all current/future periods`);
 
-  // The budget's new base amount: the same ratio as the period's NORMAL allocation — never its
-  // one-off "This Period Only" override (a $300 override + "forward $500" must give $500, not
-  // 500/300 of the budget).
-  const effectiveCurrentAmount = targetPeriod.allocatedAmount ?? 0;
-
-  const ratio = effectiveCurrentAmount > 0 ? newAmount / effectiveCurrentAmount : 1;
-  // A period with no normal allocation ($0 / missing): the amount entered IS the new normal
-  // amount (a ratio from 0 would silently keep the budget unchanged).
-  const newBudgetAmount =
-    effectiveCurrentAmount > 0 ? Math.round(budget.amount * ratio * 100) / 100 : newAmount;
-
-  console.log(`[updateAllPeriodsForward] Budget amount: $${budget.amount} → $${newBudgetAmount} (ratio: ${ratio.toFixed(4)})`);
+  // `newBudgetAmount` is the budget's new NORMAL amount (the caller converted the entered
+  // period amount by that period's share of the budget); every current / future prime period
+  // gets it, and their one-off "This Period Only" overrides are cleared.
+  console.log(`[updateAllPeriodsForward] Budget amount: $${budget.amount} → $${newBudgetAmount}`);
 
   // Get budget period type - this determines what's "prime"
   // Prime periods match the budget's period type (e.g., monthly budget = monthly periods are prime)

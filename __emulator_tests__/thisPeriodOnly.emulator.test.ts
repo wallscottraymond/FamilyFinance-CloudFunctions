@@ -135,5 +135,42 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
     // 300 × (100 / 67.74) = 442.87 → the week shows ≈ $100, not 400 × 1.476 = $590.
     expect(budget.amount).toBeCloseTo(442.87, 0);
   });
+  it('All Periods Forward on a WEEKLY budget from the MONTHLY tab: the month ends at what was typed', async () => {
+    // Weekly budget; October 2031 (31 days) overlaps 5 weeks: 4 + 7 + 7 + 7 + 6 days.
+    for (const amount of [100, 0]) { // a $0 budget too (was a silent no-op / wrong units)
+      const WB = `${B}_weekly_${amount}`;
+      await db.collection('budgets').doc(WB).set({
+        id: WB, userId: U, createdBy: U, groupIds: [], isActive: true,
+        access: { ownerId: U, createdBy: U, groupIds: [], isPrivate: true },
+        name: 'Weekly', amount, currency: 'USD', categoryIds: ['groceries'], period: 'weekly',
+        budgetType: 'recurring', startDate: ts('2031-01-01T00:00:00Z'), isOngoing: true,
+        createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      });
+      const weeks: Array<[string, string, string]> = [
+        ['2031W40', '2031-09-28', '2031-10-04'], ['2031W41', '2031-10-05', '2031-10-11'],
+        ['2031W42', '2031-10-12', '2031-10-18'], ['2031W43', '2031-10-19', '2031-10-25'],
+        ['2031W44', '2031-10-26', '2031-11-01'],
+      ];
+      for (const [pid, s0, e0] of weeks) {
+        await db.collection('budget_periods').doc(`${WB}_${pid}`).set({
+          id: `${WB}_${pid}`, budgetId: WB, userId: U, groupIds: [], periodId: pid, sourcePeriodId: pid,
+          periodType: 'weekly', periodStart: ts(`${s0}T00:00:00Z`), periodEnd: ts(`${e0}T23:59:59.999Z`),
+          allocatedAmount: amount, spent: 0, isActive: true, isPrime: true,
+          // the first October week carries a $50 "This Period Only" — must not skew the result
+          ...(pid === '2031W40' ? { modifiedAmount: 50, isModified: true } : {}),
+        });
+      }
+      const M = `${WB}_2031M10`;
+      await db.collection('budget_periods').doc(M).set({
+        id: M, budgetId: WB, userId: U, groupIds: [], periodId: '2031M10', sourcePeriodId: '2031M10',
+        periodType: 'monthly', periodStart: ts('2031-10-01T00:00:00Z'), periodEnd: ts('2031-10-31T23:59:59.999Z'),
+        allocatedAmount: Math.round(amount * 31 / 7 * 100) / 100, spent: 0, isActive: true, isPrime: false,
+        primePeriodIds: weeks.map(([pid]) => `${WB}_${pid}`),
+      });
+      await edit_amount({ budgetPeriodId: M, newAmount: 500, cascadeScope: 'all_forward' });
+      const budget = (await db.collection('budgets').doc(WB).get()).data()!;
+      expect(budget.amount).toBeCloseTo(500 * 7 / 31, 1); // $112.90/week → October = $500
+    }
+  });
 });
 /* eslint-enable @typescript-eslint/naming-convention */
