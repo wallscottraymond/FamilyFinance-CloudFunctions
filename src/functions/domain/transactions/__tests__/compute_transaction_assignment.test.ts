@@ -12,6 +12,13 @@ import {
   SplitForAssignment,
 } from "../compute_transaction_assignment.service";
 import { BudgetForMatch } from "../match_budget.service";
+import { build_category_catalog, CategoryDocForCatalog } from "../split_category.service";
+
+const CATEGORY_DOCS: CategoryDocForCatalog[] = [
+  { id: "FOOD_AND_DRINK", data: { overallCategoryId: "food_and_drink", firstCategoryId: "eating_out" } },
+  { id: "SHOPPING_ELECTRONICS", data: { overallCategoryId: "shopping", firstCategoryId: "electronics" } },
+  { id: "OTHER_EXPENSE", data: { overallCategoryId: "other", firstCategoryId: "other" } },
+];
 
 const JUN_15 = Date.UTC(2026, 5, 15);
 const EE = "ee_budget";
@@ -38,10 +45,7 @@ function ctx(over: Partial<AssignmentContext> = {}): AssignmentContext {
     txn_is_income: false,
     real_budgets: [groceries],
     everything_else_budget_ids: { monthly: EE, weekly: EE, bi_monthly: EE },
-    category_rules: [],
-    category_slugs_by_plaid: {
-      FOOD_AND_DRINK: { overall_category_id: "food_and_drink", first_category_id: "eating_out" },
-    },
+    category_catalog: build_category_catalog(CATEGORY_DOCS),
     source_periods: periods,
     recurring_by_split: {},
     ...over,
@@ -53,7 +57,6 @@ function split(over: Partial<SplitForAssignment> = {}): SplitForAssignment {
     split_id: "s1",
     budget_id: "unset",
     budget_assignment_source: "category",
-    internal_match_category: null,
     plaid_match_category: "FOOD_AND_DRINK",
     outflow_id: null,
     inflow_id: null,
@@ -322,7 +325,16 @@ describe("compute_transaction_assignment", () => {
       [split({ plaid_match_category: "OTHER_EXPENSE" })],
       ctx({
         txn_merchant_name: "Whole Foods",
-        category_rules: [{ category: "FOOD_AND_DRINK", merchants: ["whole foods"], keywords: [] }],
+        category_catalog: build_category_catalog([
+          {
+            id: "FOOD_AND_DRINK",
+            data: {
+              overallCategoryId: "food_and_drink",
+              firstCategoryId: "eating_out",
+              merchants: ["whole foods"],
+            },
+          },
+        ]),
       })
     );
     expect(r.splits[0].budget_id).toBe("b_groceries"); // resolved category → matched budget
@@ -492,13 +504,13 @@ describe("compute_transaction_assignment", () => {
     expect(s.second_category_id).toBeNull();
   });
 
-  it("null slugs when the Plaid detailed is unmapped", () => {
+  it("an unmapped Plaid detailed falls to Other, never null (canon C7)", () => {
     const s = compute_transaction_assignment(
       [split({ plaid_match_category: "TRAVEL" })],
       ctx()
     ).splits[0];
-    expect(s.overall_category_id).toBeNull();
-    expect(s.first_category_id).toBeNull();
+    expect(s.overall_category_id).toBe("other");
+    expect(s.first_category_id).toBe("other");
     expect(s.category_source).toBe("plaid");
   });
 

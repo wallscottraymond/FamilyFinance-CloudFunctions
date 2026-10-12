@@ -20,6 +20,8 @@ import {
   is_income_category,
 } from "../../domain/budgets/budget_spend.service";
 import { detect_internal_transfers_from_txns } from "../shared/on_read_matching";
+import { load_category_catalog } from "../shared/category_catalog.resolver";
+import { resolve_split_category } from "../../domain/transactions/split_category.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
 /** Active transactions in a window (what `transaction_repo.get_active_in_date_range` returns). */
@@ -80,7 +82,8 @@ export async function resolve_spend_splits(
   // Matched-pair internal-transfer detection: only OWN-account transfers (a matching
   // opposite leg on another account) are excluded — external ACH bills that Plaid
   // tags TRANSFER (mortgage, rent) stay countable. Same rule as the on-read paths.
-  const { internal_ids } = detect_internal_transfers_from_txns(txns);
+  const catalog = await load_category_catalog(ctx);
+  const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
 
   const lens_field = LENS_FIELD[cadence];
   const out: SplitForSpend[] = [];
@@ -100,8 +103,20 @@ export async function resolve_spend_splits(
       if (assigned !== budget_id) {
         continue;
       }
-      const effective_category =
-        (s.internalDetailedCategory as string | null) ?? (s.plaidDetailedCategory as string | null);
+      // The category's meaning from the ONE category function (a user pick away from income
+      // makes it spending).
+      const effective_category = resolve_split_category(
+        {
+          plaid_detailed: (s.plaidDetailedCategory as string | null) ?? null,
+          category_source: (s.categorySource as "plaid" | "user" | undefined) ?? "plaid",
+          first_category_id: (s.firstCategoryId as string | null) ?? null,
+          overall_category_id: (s.overallCategoryId as string | null) ?? null,
+          second_category_id: (s.secondCategoryId as string | null) ?? null,
+          merchant_name: (d.merchantName as string | null) ?? null,
+          name: (d.name as string | null) ?? null,
+        },
+        catalog
+      ).semantic_code;
       out.push({
         budget_id,
         amount: (s.amount as number) ?? 0,

@@ -36,6 +36,11 @@ import {
 } from "../../domain/transactions/match_budget.service";
 import { budget_cadence_to_instance } from "../../domain/budgets";
 import { CategoryRule } from "../../domain/transactions/match_category.service";
+import {
+  build_category_catalog,
+  budget_first_ids,
+  CategoryCatalog,
+} from "../../domain/transactions/split_category.service";
 import { SourcePeriodForMatch } from "../../domain/transactions/match_source_periods.service";
 import {
   SplitForAssignment,
@@ -70,6 +75,8 @@ export interface SharedAssignmentContext {
   /** Everything Else budget id PER LENS (each period cadence has its own EE). */
   everything_else_budget_ids: Record<PeriodLens, string | null>;
   category_rules: CategoryRule[];
+  /** The ONE category function's catalog (canon M7). */
+  category_catalog: CategoryCatalog;
   /** plaidDetailed (= category doc id) → the two app-category slugs. */
   category_slugs_by_plaid: Record<
     string,
@@ -128,9 +135,14 @@ export async function resolve_shared_assignment_context(
     inflows.filter((i) => i.is_active && !i.is_hidden)
   );
 
+  // The `categories` collection as the one category function needs it (canon M7).
+  const category_catalog = build_category_catalog(category_docs);
   // Real budgets (+ the Everything Else id PER LENS for the structural fallback).
-  const { real_budgets, budget_names, everything_else_budget_ids } = build_view_budgets(budgets);
-  const group_views_by_account = await resolve_group_views(ctx, user_id);
+  const { real_budgets, budget_names, everything_else_budget_ids } = build_view_budgets(
+    budgets,
+    category_catalog
+  );
+  const group_views_by_account = await resolve_group_views(ctx, user_id, category_catalog);
 
   // Category rules (merchants / keywords). The category DOC ID (= the detailed
   // Plaid enum) is the match vocabulary, so a merchant/keyword upgrade yields a
@@ -161,6 +173,7 @@ export async function resolve_shared_assignment_context(
     everything_else_budget_ids,
     category_rules,
     category_slugs_by_plaid,
+    category_catalog,
     outflow_tx_to_id,
     inflow_tx_to_id,
     group_views_by_account,
@@ -171,7 +184,10 @@ export async function resolve_shared_assignment_context(
  * A view's budgets → what the engine matches: real budgets + the Everything Else id PER LENS.
  * A budget's period maps to exactly one lens; the three EE budgets are keyed by their own lens.
  */
-function build_view_budgets(budgets: Awaited<ReturnType<typeof budget_repo.get_by_user_id>>): ViewBudgets {
+function build_view_budgets(
+  budgets: Awaited<ReturnType<typeof budget_repo.get_by_user_id>>,
+  catalog: CategoryCatalog
+): ViewBudgets {
   const real_budgets: BudgetForMatch[] = [];
   const budget_names: Record<string, string> = {};
   const everything_else_budget_ids: Record<PeriodLens, string | null> = {
@@ -198,6 +214,9 @@ function build_view_budgets(budgets: Awaited<ReturnType<typeof budget_repo.get_b
       end_ms: b.is_ongoing ? null : end_ts.toMillis(),
       is_ongoing: b.is_ongoing,
       cadence,
+      // Firsts it covers (slugs + legacy Plaid codes) — so a user pick matches a budget that
+      // still stores codes (until the slug migration).
+      first_ids: budget_first_ids(b.category_ids, catalog),
     });
   }
   return { real_budgets, budget_names, everything_else_budget_ids };
@@ -210,7 +229,8 @@ function build_view_budgets(budgets: Awaited<ReturnType<typeof budget_repo.get_b
  */
 async function resolve_group_views(
   ctx: TraceContext,
-  user_id: string
+  user_id: string,
+  catalog: CategoryCatalog
 ): Promise<Map<string, { from_ms: number | null; view: ViewBudgets }>> {
   const out = new Map<string, { from_ms: number | null; view: ViewBudgets }>();
   const user = await user_repo.get_by_id(ctx, user_id);
@@ -226,7 +246,7 @@ async function resolve_group_views(
   const views = new Map<string, ViewBudgets>();
   await Promise.all(
     [...new Set(placed.map((a) => a.placement!.group_id))].map(async (gid) => {
-      views.set(gid, build_view_budgets(await budget_repo.get_by_user_id(ctx, `group:${gid}`)));
+      views.set(gid, build_view_budgets(await budget_repo.get_by_user_id(ctx, `group:${gid}`), catalog));
     })
   );
   for (const a of placed) {
@@ -327,7 +347,6 @@ export async function resolve_assignment_context(
       ? placed.view
       : resolved_shared;
   const { real_budgets, budget_names, everything_else_budget_ids } = view;
-  const { category_rules, category_slugs_by_plaid } = resolved_shared;
 
   // The engine matches budgets on the DETAILED Plaid category: category doc ids
   // ARE the detailed enums, budgets store them in `categoryIds`, and splits
@@ -345,7 +364,6 @@ export async function resolve_assignment_context(
     monthly_budget_id: (s.monthlyBudgetId as string | undefined) ?? undefined,
     weekly_budget_id: (s.weeklyBudgetId as string | undefined) ?? undefined,
     bi_weekly_budget_id: (s.biWeeklyBudgetId as string | undefined) ?? undefined,
-    internal_match_category: (s.internalDetailedCategory as string | null) ?? null,
     plaid_match_category: (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE",
     outflow_id: (s.outflowId as string | null) ?? null,
     // Manual bill-pin source — preserved so a user's bill assignment survives re-sync.
@@ -368,8 +386,7 @@ export async function resolve_assignment_context(
     txn_is_income: txn_type === "income",
     real_budgets,
     everything_else_budget_ids,
-    category_rules,
-    category_slugs_by_plaid,
+    category_catalog: resolved_shared.category_catalog,
     source_periods,
     recurring_by_split,
   };

@@ -1,14 +1,14 @@
 /**
  * match_budget Domain Service — Unit Tests
  *
- * Pure function, no mocks. Verifies category+date matching, the user-override
- * category precedence, the Everything Else STRUCTURAL fallback (not categoryIds-
+ * Pure function, no mocks. Verifies category+date matching (by the ranked
+ * `match_keys` the one category function produces), user picks matching a budget's
+ * first ids, the Everything Else STRUCTURAL fallback (not categoryIds-
  * matched), the missing-EE case, and the drift (tie) signal.
  */
 
 import {
   match_budget,
-  resolve_split_category,
   is_within_budget_range,
   BudgetForMatch,
   UNASSIGNED_BUDGET_ID,
@@ -34,26 +34,6 @@ function budget(over: Partial<BudgetForMatch> = {}): BudgetForMatch {
   };
 }
 
-describe("resolve_split_category", () => {
-  it("prefers the user override over the Plaid category", () => {
-    expect(
-      resolve_split_category({
-        internal_match_category: "Groceries",
-        plaid_match_category: "FOOD_AND_DRINK",
-      })
-    ).toBe("Groceries");
-  });
-
-  it("falls back to the Plaid category, then null", () => {
-    expect(
-      resolve_split_category({ internal_match_category: null, plaid_match_category: "X" })
-    ).toBe("X");
-    expect(
-      resolve_split_category({ internal_match_category: null, plaid_match_category: null })
-    ).toBeNull();
-  });
-});
-
 describe("is_within_budget_range", () => {
   it("ongoing: any date on/after start", () => {
     expect(is_within_budget_range(JUN_15, budget({ start_ms: JUN_01, is_ongoing: true }))).toBe(true);
@@ -68,7 +48,7 @@ describe("is_within_budget_range", () => {
 });
 
 describe("match_budget", () => {
-  const split = { internal_match_category: null, plaid_match_category: "FOOD_AND_DRINK" };
+  const split = { match_keys: ["FOOD_AND_DRINK"] };
 
   it("matches a real budget by category + date", () => {
     const r = match_budget(split, JUN_15, [budget()], EE);
@@ -80,7 +60,7 @@ describe("match_budget", () => {
 
   it("falls to Everything Else when no real budget owns the category", () => {
     const r = match_budget(
-      { internal_match_category: null, plaid_match_category: "TRAVEL" },
+      { match_keys: ["TRAVEL"] },
       JUN_15,
       [budget()],
       EE
@@ -99,7 +79,7 @@ describe("match_budget", () => {
   it("EE is structural — a category NOT in any real budget still routes to EE", () => {
     // EE is never passed as a real budget; even an unknown category lands in EE.
     const r = match_budget(
-      { internal_match_category: "BRAND_NEW_CATEGORY", plaid_match_category: null },
+      { match_keys: ["BRAND_NEW_CATEGORY"] },
       JUN_15,
       [budget()],
       EE
@@ -107,16 +87,44 @@ describe("match_budget", () => {
     expect(r.budget_id).toBe(EE);
   });
 
-  it("uses the user override category to match a real budget", () => {
-    const groceries = budget({ category_ids: ["Groceries"] });
+  it("a user pick matches a budget by its first slug", () => {
+    const groceries = budget({ category_ids: ["groceries"] });
     const r = match_budget(
-      { internal_match_category: "Groceries", plaid_match_category: "FOOD_AND_DRINK" },
+      { match_keys: ["groceries", "food"], is_user_pick: true, first_category_id: "groceries" },
       JUN_15,
       [groceries],
       EE
     );
     expect(r.budget_id).toBe("b_groceries");
-    expect(r.matched_category).toBe("Groceries");
+    expect(r.matched_category).toBe("groceries");
+  });
+
+  it("a user pick matches a legacy budget that still stores Plaid codes (via first_ids)", () => {
+    const legacy = budget({
+      category_ids: ["FOOD_AND_DRINK_GROCERIES"],
+      first_ids: ["groceries"],
+    });
+    const r = match_budget(
+      { match_keys: ["groceries"], is_user_pick: true, first_category_id: "groceries" },
+      JUN_15,
+      [legacy],
+      EE
+    );
+    expect(r.budget_id).toBe("b_groceries");
+  });
+
+  it("first_ids never widen a PLAID split (exact-code matching only)", () => {
+    const legacy = budget({
+      category_ids: ["FOOD_AND_DRINK_GROCERIES"],
+      first_ids: ["groceries"],
+    });
+    const r = match_budget(
+      { match_keys: ["FOOD_AND_DRINK_SUPERMARKET", "groceries"], first_category_id: "groceries" },
+      JUN_15,
+      [legacy],
+      EE
+    );
+    expect(r.budget_id).toBe(EE);
   });
 
   it("flags a tie when two real budgets own the same category (drift)", () => {
@@ -129,7 +137,7 @@ describe("match_budget", () => {
 
   it("returns unassigned + no_everything_else when the user has no EE budget", () => {
     const r = match_budget(
-      { internal_match_category: null, plaid_match_category: "TRAVEL" },
+      { match_keys: ["TRAVEL"] },
       JUN_15,
       [budget()],
       null
@@ -140,7 +148,7 @@ describe("match_budget", () => {
 
   it("a split with no category falls to EE", () => {
     const r = match_budget(
-      { internal_match_category: null, plaid_match_category: null },
+      { match_keys: [] },
       JUN_15,
       [budget()],
       EE
@@ -158,10 +166,8 @@ describe("match_budget", () => {
 
   it("matches a budget that stores the split's firstCategoryId slug", () => {
     const slugSplit = {
-      internal_match_category: null,
-      plaid_match_category: "FOOD_AND_DRINK_GROCERIES",
+      match_keys: ["FOOD_AND_DRINK_GROCERIES", "groceries", "groceries"],
       first_category_id: "groceries",
-      overall_category_id: "groceries",
     };
     const b = budget({ id: "b_slug", category_ids: ["groceries"] });
     const r = match_budget(slugSplit, JUN_15, [b], EE);
@@ -171,10 +177,8 @@ describe("match_budget", () => {
 
   it("matches a budget storing the overallCategoryId (broad) — auto-includes the detailed", () => {
     const slugSplit = {
-      internal_match_category: null,
-      plaid_match_category: "FOOD_AND_DRINK_COFFEE",
+      match_keys: ["FOOD_AND_DRINK_COFFEE", "eating_out", "food_and_drink"],
       first_category_id: "eating_out",
-      overall_category_id: "food_and_drink",
     };
     const broad = budget({ id: "b_food", category_ids: ["food_and_drink"] });
     expect(match_budget(slugSplit, JUN_15, [broad], EE).budget_id).toBe("b_food");
@@ -182,10 +186,8 @@ describe("match_budget", () => {
 
   it("prefers the MORE SPECIFIC budget when both a specific + broad budget claim the split", () => {
     const slugSplit = {
-      internal_match_category: null,
-      plaid_match_category: "FOOD_AND_DRINK_COFFEE",
+      match_keys: ["FOOD_AND_DRINK_COFFEE", "eating_out", "food_and_drink"],
       first_category_id: "eating_out",
-      overall_category_id: "food_and_drink",
     };
     const broad = budget({ id: "b_food", category_ids: ["food_and_drink"] });
     const specific = budget({ id: "b_dining", category_ids: ["eating_out"] });
@@ -196,10 +198,8 @@ describe("match_budget", () => {
 
   it("legacy detailed-based budgets still match (back-compat)", () => {
     const slugSplit = {
-      internal_match_category: null,
-      plaid_match_category: "FOOD_AND_DRINK_GROCERIES",
+      match_keys: ["FOOD_AND_DRINK_GROCERIES", "groceries", "groceries"],
       first_category_id: "groceries",
-      overall_category_id: "groceries",
     };
     const legacy = budget({ id: "b_legacy", category_ids: ["FOOD_AND_DRINK_GROCERIES"] });
     expect(match_budget(slugSplit, JUN_15, [legacy], EE).budget_id).toBe("b_legacy");

@@ -49,11 +49,12 @@ export interface SplitForOnReadMatch {
   /** Txn is in a recurring bill/income Plaid stream (even if this split's link is
    *  unset) → excluded from budget spend (S5). Optional; defaults false. */
   is_recurring_member?: boolean;
-  // Category inputs (for match_budget)
-  internal_match_category: string | null;
-  plaid_match_category: string | null;
-  overall_category_id?: string | null;
+  // Category inputs — from the ONE category function (domain/transactions/split_category)
+  match_keys: string[];
+  is_user_pick?: boolean;
   first_category_id?: string | null;
+  /** The Plaid code giving the category its meaning (income? transfer?). */
+  semantic_code: string;
   /** Manual budget pin (user assigned this split to a budget); null otherwise. */
   manual_pin_budget_id: string | null;
   /** Account-Rooted-Sharing D12: this split is money leaving the VIEW through a transfer to a
@@ -115,10 +116,8 @@ export function owned_splits_for_budget(
       is_pending: s.is_pending,
       is_transfer: s.is_transfer,
       is_income: s.is_income,
-      is_income_category: is_income_category(s.internal_match_category ?? s.plaid_match_category),
-      is_transfer_category:
-        !s.is_edge_out &&
-        is_transfer_category(s.internal_match_category ?? s.plaid_match_category),
+      is_income_category: is_income_category(s.semantic_code),
+      is_transfer_category: !s.is_edge_out && is_transfer_category(s.semantic_code),
       spend_status: s.spend_status,
       outflow_id: s.outflow_id,
       inflow_id: s.inflow_id,

@@ -16,17 +16,16 @@
  * @module domain/transactions/match_budget
  */
 
-/** The minimal split shape this matcher needs. */
+/**
+ * The minimal split shape this matcher needs — produced by `resolve_split_category`
+ * (domain/transactions/split_category), the ONE category function (canon M7).
+ */
 export interface SplitForBudgetMatch {
-  /** User-set category override (wins over the Plaid category). */
-  internal_match_category: string | null;
-  /** Plaid-derived category. */
-  plaid_match_category: string | null;
-  /** App-category slugs (Simplified-Transaction-Categories). A budget may claim a
-   *  split by its `firstCategoryId` or `overallCategoryId` slug — not just the raw
-   *  Plaid detailed — so slug-based budgets auto-include new detaileds. The MOST
-   *  SPECIFIC match wins: detailed → first → overall. */
-  overall_category_id?: string | null;
+  /** Identifiers a budget can claim the split by, MOST SPECIFIC FIRST. */
+  match_keys: string[];
+  /** A user / rule pick: budgets also claim it by the FIRST it falls under (incl. legacy codes). */
+  is_user_pick?: boolean;
+  /** The split's first-category slug (used with `is_user_pick`). */
   first_category_id?: string | null;
 }
 
@@ -44,6 +43,9 @@ export interface BudgetForMatch {
   is_ongoing: boolean;
   /** The budget's prime cadence — used to filter budgets per assignment lens. */
   cadence: PeriodLens;
+  /** First-category slugs the budget covers (from slugs AND legacy Plaid codes in
+   *  `category_ids`) — lets a user pick match a budget that still stores codes. */
+  first_ids?: string[];
 }
 
 /** Result of matching a split to a budget. */
@@ -60,14 +62,6 @@ export interface BudgetMatchResult {
 
 /** Sentinel used when a split cannot be placed (no Everything Else budget exists). */
 export const UNASSIGNED_BUDGET_ID = "unassigned";
-
-/**
- * Resolve the split's effective category (user override wins).
- * PURE.
- */
-export function resolve_split_category(split: SplitForBudgetMatch): string | null {
-  return split.internal_match_category || split.plaid_match_category || null;
-}
 
 /**
  * Whether a transaction date falls within a budget's active range.
@@ -104,15 +98,8 @@ export function match_budget(
   real_budgets: BudgetForMatch[],
   everything_else_budget_id: string | null
 ): BudgetMatchResult {
-  const detailed = resolve_split_category(split);
-  // The identifiers a budget can claim this split by, MOST SPECIFIC FIRST:
-  // Plaid detailed → firstCategoryId slug → overallCategoryId slug. A budget's
-  // `category_ids` may hold any mix (legacy detaileds and/or the new slugs).
-  const ranked: Array<string | null> = [
-    detailed,
-    split.first_category_id ?? null,
-    split.overall_category_id ?? null,
-  ];
+  const ranked = split.match_keys;
+  const pick_first = split.is_user_pick ? split.first_category_id ?? null : null;
 
   // Collect every real budget that owns ANY of the split's identifiers for this
   // date, keeping the MOST SPECIFIC hit (a specific budget beats a broad one).
@@ -126,7 +113,11 @@ export function match_budget(
     let rank = -1;
     for (let r = 0; r < ranked.length; r++) {
       const id = ranked[r];
-      if (id && budget.category_ids.includes(id)) {
+      if (
+        id &&
+        (budget.category_ids.includes(id) ||
+          (id === pick_first && (budget.first_ids ?? []).includes(id)))
+      ) {
         rank = r;
         break;
       }
@@ -134,7 +125,7 @@ export function match_budget(
     if (rank >= 0) {
       match_count++;
       if (best === null || rank < best.rank) {
-        best = { budget, rank, matched: ranked[rank] as string };
+        best = { budget, rank, matched: ranked[rank] };
       }
     }
   }

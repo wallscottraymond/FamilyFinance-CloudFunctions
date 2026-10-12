@@ -30,14 +30,10 @@ export interface CrossingTransfers {
   plaid_ids: Set<string>;
 }
 
-/** Effective category of a transaction: its first split's override, else Plaid's. */
-function effective_category(data: Record<string, unknown>): string {
+/** Default category meaning of a transaction: its first split's Plaid code. */
+function plaid_category(data: Record<string, unknown>): string {
   const first = ((data.splits as Array<Record<string, unknown>>) ?? [])[0] ?? {};
-  return (
-    (first.internalDetailedCategory as string | null) ??
-    (first.plaidDetailedCategory as string | null) ??
-    ""
-  );
+  return (first.plaidDetailedCategory as string | null) ?? "";
 }
 
 /**
@@ -51,7 +47,9 @@ function effective_category(data: Record<string, unknown>): string {
 export function find_crossing_transfers(
   all_members: PairingResult,
   view_internal_ids: Set<string>,
-  view_txns: Array<{ id: string; data: Record<string, unknown> }>
+  view_txns: Array<{ id: string; data: Record<string, unknown> }>,
+  /** The category meaning (a Plaid code) — callers pass the ONE category function's. */
+  category_of: (data: Record<string, unknown>) => string = plaid_category
 ): CrossingTransfers {
   const out: CrossingTransfers = {
     ids: new Set(),
@@ -62,7 +60,7 @@ export function find_crossing_transfers(
   for (const { id, data } of view_txns) {
     if (!all_members.internal_ids.has(id) || view_internal_ids.has(id)) continue;
     out.ids.add(id);
-    if (effective_category(data).startsWith("TRANSFER_IN")) out.in_ids.add(id);
+    if (category_of(data).startsWith("TRANSFER_IN")) out.in_ids.add(id);
     else out.out_ids.add(id);
     const plaid_id = (data.transactionId as string | null) ?? null;
     if (plaid_id) out.plaid_ids.add(plaid_id);

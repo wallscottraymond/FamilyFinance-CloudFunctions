@@ -45,9 +45,12 @@ import {
   transaction_in_scope,
 } from "../../domain/periods/derive_scope.service";
 import { resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
+import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
+import { budget_first_ids } from "../../domain/transactions/split_category.service";
 import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
 import {
   detect_internal_transfers_from_txns,
+  txn_effective_category,
   map_raw_split_to_on_read_match,
 } from "../../resolvers/shared/on_read_matching";
 
@@ -119,6 +122,7 @@ export async function derive_budget_transactions_orchestrator(
   let monthly_ee_id: string | null = null;
   let any_ee_id: string | null = null;
   let target_is_ee = false;
+  const catalog = await load_category_catalog(ctx);
   for (const b of budgets) {
     if (b.is_system_everything_else) {
       any_ee_id = any_ee_id ?? b.id;
@@ -128,6 +132,7 @@ export async function derive_budget_transactions_orchestrator(
       real_budgets.push({
         id: b.id,
         category_ids: b.category_ids,
+        first_ids: budget_first_ids(b.category_ids, catalog),
         start_ms: b.start_date.toMillis(),
         end_ms: b.is_ongoing ? null : b.end_date.toMillis(),
         is_ongoing: b.is_ongoing,
@@ -191,11 +196,15 @@ export async function derive_budget_transactions_orchestrator(
 
   // 3. Matched-pair internal-transfer detection over the buffered window, then (two-stage, as
   //    on the period page) the view's leftovers against the members' other accounts → edge money.
-  const { internal_ids } = detect_internal_transfers_from_txns(txns);
+  const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
   const crossing = find_crossing_transfers(
-    detect_internal_transfers_from_txns(all_member_txns.filter((t) => !internal_ids.has(t.id))),
+    detect_internal_transfers_from_txns(
+      all_member_txns.filter((t) => !internal_ids.has(t.id)),
+      catalog
+    ),
     internal_ids,
-    txns
+    txns,
+    (d) => txn_effective_category(d, catalog)
   );
 
   // 4. Resolve ownership on read; keep only splits owned by the target budget, in-window.
@@ -228,7 +237,9 @@ export async function derive_budget_transactions_orchestrator(
         is_pending,
         is_transfer: txn_is_internal_transfer,
         is_income: data.type === "income",
-      });
+        merchant_name: (data.merchantName as string | null) ?? null,
+        name: (data.name as string | null) ?? null,
+      }, catalog);
       if (is_edge && crossing.out_ids.has(id)) match.is_edge_out = true;
 
       if (resolve_split_owner(match, real_budgets, ee_id) !== budget_id) continue;
@@ -239,7 +250,7 @@ export async function derive_budget_transactions_orchestrator(
       if (txn_is_internal_transfer) {
         spend_status = "ignored";
         ignored_reason = "transfer";
-      } else if (is_income_category(match.internal_match_category ?? match.plaid_match_category)) {
+      } else if (is_income_category(match.semantic_code)) {
         spend_status = "ignored";
         ignored_reason = "income";
       } else if (match.spend_status === "ignored") {

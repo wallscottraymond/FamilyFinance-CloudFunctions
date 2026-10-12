@@ -36,6 +36,7 @@ import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.ser
 import { is_transfer_category } from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers_from_txns,
+  txn_effective_category,
   map_raw_split_to_on_read_match,
 } from "../shared/on_read_matching";
 import {
@@ -58,6 +59,11 @@ import {
   transaction_in_scope,
 } from "../../domain/periods/derive_scope.service";
 import { resolve_derive_scope, load_pairing_extra_txns } from "./derive_scope.resolver";
+import { load_category_catalog } from "../shared/category_catalog.resolver";
+import {
+  budget_first_ids,
+  CategoryCatalog,
+} from "../../domain/transactions/split_category.service";
 
 function to_cadence(period: string): PeriodLens {
   return period === "weekly" ? "weekly" : period === "bi_monthly" ? "bi_monthly" : "monthly";
@@ -121,6 +127,8 @@ export interface PeriodDerivationRaw {
    * bill). Empty for Me with nothing shared.
    */
   out_of_view_recurring: { ids: Set<string>; stream_txn_ids: Set<string> };
+  /** The category collection (canon M7) — module-cached reference data, not a per-call read. */
+  category_catalog: CategoryCatalog;
 }
 
 export interface DerivationWindow {
@@ -222,8 +230,15 @@ export async function load_period_derivation_raw(
 
   // 1. Everything that only needs the view + the requested range, in ONE parallel round-trip.
   // Only the transaction read depends on the derived period spans (computed below).
-  const [overlapping, budget_entities, monthly_period_docs, all_outflows, all_inflows, goals_raw] =
-    await Promise.all([
+  const [
+    overlapping,
+    budget_entities,
+    monthly_period_docs,
+    all_outflows,
+    all_inflows,
+    goals_raw,
+    category_catalog,
+  ] = await Promise.all([
       source_period_repo.get_overlapping(
         ctx,
         Timestamp.fromMillis(range_start_ms),
@@ -239,6 +254,7 @@ export async function load_period_derivation_raw(
       per_member(scope, (m) => outflow_repo.get_by_user_id(ctx, m)),
       per_member(scope, (m) => inflow_repo.get_by_user_id(ctx, m)),
       per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
+      load_category_catalog(ctx),
     ]);
   // Bills / income / goals follow their account's view (an item with no account stays in Me).
   const outflows = all_outflows.filter((o) => account_in_scope(scope, o.account_id));
@@ -313,6 +329,7 @@ export async function load_period_derivation_raw(
     inflow_history_docs,
     scope,
     out_of_view_recurring,
+    category_catalog,
   };
 }
 
@@ -358,6 +375,7 @@ export function shape_period_derivation_deps(
   window_end_ms: number
 ): PeriodDerivationDeps {
   const { budget_entities, monthly_period_docs, outflows, inflows, all_goals } = raw;
+  const catalog = raw.category_catalog;
   // Group views tag each bill/income with its member (owner badge); Me stays unchanged.
   const owner_of = (user_id: string) => (raw.scope.kind === "group" ? { owner_user_id: user_id } : {});
   const out_of_view_recurring_ids = raw.out_of_view_recurring.ids;
@@ -441,6 +459,7 @@ export function shape_period_derivation_deps(
       real_budgets.push({
         id: b.id,
         category_ids: b.category_ids,
+        first_ids: budget_first_ids(b.category_ids, catalog),
         start_ms: active_start_ms,
         end_ms: active_end_ms,
         is_ongoing: b.is_ongoing,
@@ -486,7 +505,7 @@ export function shape_period_derivation_deps(
   // as TRANSFER_OUT_ACCOUNT_TRANSFER. A transfer is INTERNAL only when it pairs with
   // an opposite transfer of the same amount on ANOTHER account within a few days;
   // unpaired transfers are EXTERNAL (real spending/bills) and are NOT excluded.
-  const { internal_ids, internal_plaid_ids } = detect_internal_transfers_from_txns(txns);
+  const { internal_ids, internal_plaid_ids } = detect_internal_transfers_from_txns(txns, catalog);
   // A recurring stream is an internal transfer when any of its transactions are.
   const is_internal_stream = (transaction_ids: string[] | undefined): boolean =>
     (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
@@ -505,9 +524,13 @@ export function shape_period_derivation_deps(
   // transfers are then paired against the members' other accounts (stage 2), so a cross-view
   // match can never steal one of the view's own pairs.
   const crossing = find_crossing_transfers(
-    detect_internal_transfers_from_txns(all_in_span.filter((t) => !internal_ids.has(t.id))),
+    detect_internal_transfers_from_txns(
+      all_in_span.filter((t) => !internal_ids.has(t.id)),
+      catalog
+    ),
     internal_ids,
-    txns
+    txns,
+    (d) => txn_effective_category(d, catalog)
   );
 
   const recurring: RecurringForDerivation[] = [];
@@ -637,7 +660,9 @@ export function shape_period_derivation_deps(
           // Txn belongs to a recurring bill/income Plaid stream → not discretionary spend,
           // so it never counts toward a budget even if its split link was never set (S5).
           is_recurring_member: !!(linked_outflow_id || linked_inflow_id),
-        })
+          merchant_name: (data.merchantName as string | null) ?? null,
+          name: (data.name as string | null) ?? null,
+        }, catalog)
       );
       if (is_edge && crossing.out_ids.has(id)) {
         splits_for_match[splits_for_match.length - 1].is_edge_out = true;

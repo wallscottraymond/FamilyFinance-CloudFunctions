@@ -27,9 +27,10 @@ import {
   BudgetForMatch,
 } from "../domain/transactions/match_budget.service";
 import {
-  match_category,
-  CategoryRule,
-} from "../domain/transactions/match_category.service";
+  build_category_catalog,
+  budget_first_ids,
+  resolve_split_category,
+} from "../domain/transactions/split_category.service";
 import { create_job } from "../infrastructure/job_queue";
 import { generate_id } from "../observability";
 
@@ -71,6 +72,7 @@ export const auditTransactionAssignments = onRequest(
       realBudgets.push({
         id: doc.id,
         category_ids: (d.categoryIds as string[]) ?? [],
+        first_ids: [],
         start_ms: (d.startDate as Timestamp).toMillis(),
         end_ms: d.isOngoing ? null : endTs?.toMillis() ?? null,
         is_ongoing: !!d.isOngoing,
@@ -83,19 +85,15 @@ export const auditTransactionAssignments = onRequest(
       });
     }
 
-    // 2. Category upgrade rules (merchant / keyword), keyed by detailed enum.
+    // 2. The category collection → the ONE category function's catalog (canon M7).
     const catSnap = await db
       .collection("categories")
       .where("isActive", "==", true)
       .get();
-    const categoryRules: CategoryRule[] = catSnap.docs.map((doc) => {
-      const c = doc.data();
-      return {
-        category: doc.id,
-        merchants: (c.merchants as string[]) ?? [],
-        keywords: (c.keywords as string[]) ?? [],
-      };
-    });
+    const catalog = build_category_catalog(
+      catSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() }))
+    );
+    for (const b of realBudgets) b.first_ids = budget_first_ids(b.category_ids, catalog);
 
     // 3. All of the user's transactions.
     const txnSnap = await db
@@ -131,20 +129,32 @@ export const auditTransactionAssignments = onRequest(
       for (const s of splits) {
         totalSplits++;
         const plaidCat = (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE";
-        const internalCat = (s.internalDetailedCategory as string | null) ?? null;
         const currentBudget = (s.budgetId as string) ?? "unassigned";
         const source =
           (s.budgetAssignmentSource as "category" | "manual") ?? "category";
 
-        // Effective category (may upgrade OTHER_EXPENSE via merchant/keyword).
-        const resolvedCat = match_category(
-          { plaid_match_category: plaidCat, merchant_name: merchant, name },
-          categoryRules
-        ).category;
+        // The split's category, from the same function the engine uses.
+        const category = resolve_split_category(
+          {
+            plaid_detailed: plaidCat,
+            category_source: (s.categorySource as "plaid" | "user" | undefined) ?? "plaid",
+            first_category_id: (s.firstCategoryId as string | null) ?? null,
+            overall_category_id: (s.overallCategoryId as string | null) ?? null,
+            second_category_id: (s.secondCategoryId as string | null) ?? null,
+            merchant_name: merchant,
+            name,
+          },
+          catalog
+        );
+        const resolvedCat = category.semantic_code;
 
         // Natural category-home, IGNORING any manual pin.
         const natural = match_budget(
-          { internal_match_category: internalCat, plaid_match_category: resolvedCat },
+          {
+            match_keys: category.match_keys,
+            is_user_pick: category.is_user_pick,
+            first_category_id: category.first_category_id,
+          },
           txnDateMs,
           realBudgets,
           everythingElseId
@@ -165,7 +175,7 @@ export const auditTransactionAssignments = onRequest(
               txn_date: new Date(txnDateMs).toISOString().slice(0, 10),
               split_id: s.splitId ?? null,
               plaidDetailedCategory: plaidCat,
-              internalDetailedCategory: internalCat,
+              firstCategoryId: category.first_category_id,
               resolved_category: resolvedCat,
               current_budget: currentBudget,
               current_budget_name: budgetNames.get(currentBudget) ?? null,

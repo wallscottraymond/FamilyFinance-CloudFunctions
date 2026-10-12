@@ -3,6 +3,9 @@
  */
 
 import { find_crossing_transfers } from "../edge_transfers.service";
+import { build_category_catalog } from "../../transactions/split_category.service";
+
+const EMPTY_CATALOG = build_category_catalog([]);
 import { detect_internal_transfers_from_txns } from "../../../resolvers/shared/on_read_matching";
 import { Timestamp } from "firebase-admin/firestore";
 
@@ -31,10 +34,13 @@ function txn(
 /** Crossing set for a view = accounts in `view_accounts`, members' txns = `all`. */
 function crossing(all: ReturnType<typeof txn>[], view_accounts: string[]) {
   const view = all.filter((t) => view_accounts.includes(t.data.accountId as string));
-  const view_internal = detect_internal_transfers_from_txns(view).internal_ids;
+  const view_internal = detect_internal_transfers_from_txns(view, EMPTY_CATALOG).internal_ids;
   // Two-stage pairing, exactly as the resolver does it.
   return find_crossing_transfers(
-    detect_internal_transfers_from_txns(all.filter((t) => !view_internal.has(t.id))),
+    detect_internal_transfers_from_txns(
+      all.filter((t) => !view_internal.has(t.id)),
+      EMPTY_CATALOG
+    ),
     view_internal,
     view
   );

@@ -21,6 +21,10 @@ import {
   TransferForPairing,
 } from "../../domain/transactions/internal_transfer.service";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
+import {
+  resolve_split_category,
+  CategoryCatalog,
+} from "../../domain/transactions/split_category.service";
 
 /** Transaction-level context a split inherits (computed once per transaction). */
 export interface TxnMatchContext {
@@ -34,6 +38,9 @@ export interface TxnMatchContext {
    *  the split's `outflowId`/`inflowId` link is unset. Excludes it from budget spend (S5).
    *  Optional; callers without stream context omit it (defaults false). */
   is_recurring_member?: boolean;
+  /** For the category function's merchant / keyword rules. */
+  merchant_name?: string | null;
+  name?: string | null;
 }
 
 /**
@@ -43,10 +50,23 @@ export interface TxnMatchContext {
  */
 export function map_raw_split_to_on_read_match(
   raw_split: Record<string, unknown>,
-  ctx: TxnMatchContext
+  ctx: TxnMatchContext,
+  catalog: CategoryCatalog
 ): SplitForOnReadMatch {
-  const internal_category = (raw_split.internalDetailedCategory as string | null) ?? null;
-  const plaid_category = (raw_split.plaidDetailedCategory as string) ?? "OTHER_EXPENSE";
+  // The ONE category function (canon M7) — the same call the assignment engine makes, so the
+  // period page and the stored fields can't disagree. Legacy `internal*` fields are not read.
+  const category = resolve_split_category(
+    {
+      plaid_detailed: (raw_split.plaidDetailedCategory as string | null) ?? null,
+      category_source: (raw_split.categorySource as "plaid" | "user" | undefined) ?? "plaid",
+      first_category_id: (raw_split.firstCategoryId as string | null) ?? null,
+      overall_category_id: (raw_split.overallCategoryId as string | null) ?? null,
+      second_category_id: (raw_split.secondCategoryId as string | null) ?? null,
+      merchant_name: ctx.merchant_name ?? null,
+      name: ctx.name ?? null,
+    },
+    catalog
+  );
   return {
     amount: (raw_split.amount as number) ?? 0,
     txn_date_ms: ctx.txn_date_ms,
@@ -63,10 +83,10 @@ export function map_raw_split_to_on_read_match(
     outflow_id: (raw_split.outflowId as string | null) ?? null,
     inflow_id: (raw_split.inflowId as string | null) ?? null,
     is_recurring_member: ctx.is_recurring_member ?? false,
-    internal_match_category: internal_category,
-    plaid_match_category: plaid_category,
-    overall_category_id: (raw_split.overallCategoryId as string | null) ?? null,
-    first_category_id: (raw_split.firstCategoryId as string | null) ?? null,
+    match_keys: category.match_keys,
+    is_user_pick: category.is_user_pick,
+    first_category_id: category.first_category_id,
+    semantic_code: category.semantic_code,
     manual_pin_budget_id:
       (raw_split.budgetAssignmentSource as string) === "manual"
         ? (raw_split.budgetId as string) ?? null
@@ -74,14 +94,28 @@ export function map_raw_split_to_on_read_match(
   };
 }
 
-/** The effective (internal-override-aware) category of a transaction's first split. */
-export function txn_effective_category(data: Record<string, unknown>): string {
+/**
+ * The category MEANING (a Plaid code) of a transaction's first split, from the ONE category
+ * function: a user pick away from a transfer category makes it spending, not a transfer.
+ */
+export function txn_effective_category(
+  data: Record<string, unknown>,
+  catalog: CategoryCatalog
+): string {
   const first = ((data.splits as Array<Record<string, unknown>>) ?? [])[0] ?? {};
-  return (
-    (first.internalDetailedCategory as string | null) ??
-    (first.plaidDetailedCategory as string | null) ??
-    ""
-  );
+  const plaid = (first.plaidDetailedCategory as string | null) ?? "";
+  return resolve_split_category(
+    {
+      plaid_detailed: plaid || null,
+      category_source: (first.categorySource as "plaid" | "user" | undefined) ?? "plaid",
+      first_category_id: (first.firstCategoryId as string | null) ?? null,
+      overall_category_id: (first.overallCategoryId as string | null) ?? null,
+      second_category_id: (first.secondCategoryId as string | null) ?? null,
+      merchant_name: (data.merchantName as string | null) ?? null,
+      name: (data.name as string | null) ?? null,
+    },
+    catalog
+  ).semantic_code;
 }
 
 /**
@@ -90,11 +124,12 @@ export function txn_effective_category(data: Record<string, unknown>): string {
  * `detect_internal_transfers`. Returns internal doc-ids + Plaid-ids.
  */
 export function detect_internal_transfers_from_txns(
-  txns: Array<{ id: string; data: Record<string, unknown> }>
+  txns: Array<{ id: string; data: Record<string, unknown> }>,
+  catalog: CategoryCatalog
 ): InternalTransferResult {
   const transfers: TransferForPairing[] = [];
   for (const { id, data } of txns) {
-    const eff = txn_effective_category(data);
+    const eff = txn_effective_category(data, catalog);
     if (!is_transfer_category(eff)) continue;
     const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
     transfers.push({

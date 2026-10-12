@@ -15,6 +15,10 @@ const get_active_in_date_range = jest.fn(async (_c: unknown, _u: string, s: numb
   },
 ]);
 
+// The category collection (reference data) — empty catalog: Plaid codes resolve to themselves.
+jest.mock("../../../repositories/category.repo", () => ({
+  category_repo: { get_active_cached: jest.fn(async () => []) },
+}));
 jest.mock("../../../repositories/transaction.repo", () => ({
   transaction_repo: { get_active_in_date_range },
 }));

@@ -21,6 +21,8 @@ import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { budget_repo } from "../../repositories/budget.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { load_category_catalog } from "../shared/category_catalog.resolver";
+import { budget_first_ids } from "../../domain/transactions/split_category.service";
 import { SplitForSpend } from "../../domain/budgets/budget_spend.service";
 import {
   owned_splits_for_budget,
@@ -57,6 +59,7 @@ export async function resolve_on_read_spend_splits(
 ): Promise<SplitForSpend[]> {
   // 1. Load the user's budgets → real budgets (for category ownership) + the EE id.
   const budgets = await budget_repo.get_by_user_id(ctx, user_id);
+  const catalog = await load_category_catalog(ctx);
   const real_budgets: BudgetForMatch[] = [];
   let monthly_ee_id: string | null = null;
   let any_ee_id: string | null = null;
@@ -71,6 +74,7 @@ export async function resolve_on_read_spend_splits(
     real_budgets.push({
       id: b.id,
       category_ids: b.category_ids,
+      first_ids: budget_first_ids(b.category_ids, catalog),
       start_ms: b.start_date.toMillis(),
       end_ms: b.is_ongoing ? null : b.end_date.toMillis(),
       is_ongoing: b.is_ongoing,
@@ -85,7 +89,7 @@ export async function resolve_on_read_spend_splits(
   const txns = await transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
   // Only INTERNAL (matched-pair own-account) transfers are excluded from spend —
   // external ACH bills Plaid tags TRANSFER stay countable. Same rule everywhere.
-  const { internal_ids } = detect_internal_transfers_from_txns(txns);
+  const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
   const splits: SplitForOnReadMatch[] = [];
   for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
@@ -100,7 +104,9 @@ export async function resolve_on_read_spend_splits(
           is_pending,
           is_transfer: txn_is_internal_transfer,
           is_income: txn_is_income,
-        })
+          merchant_name: (d.merchantName as string | null) ?? null,
+          name: (d.name as string | null) ?? null,
+        }, catalog)
       );
     }
   }

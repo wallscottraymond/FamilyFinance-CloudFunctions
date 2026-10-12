@@ -28,6 +28,7 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
+import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import {
   get_transfer_classification_state,
   set_transfer_classification_state,
@@ -132,7 +133,10 @@ export async function classify_internal_transfers_orchestrator(
   );
 
   // 2. Matched-pair internal-transfer detection over the window's transfers.
-  const { internal_plaid_ids } = detect_internal_transfers_from_txns(txns);
+  const { internal_plaid_ids } = detect_internal_transfers_from_txns(
+    txns,
+    await load_category_catalog(ctx)
+  );
 
   // 3. Split each collection into hide / unhide (self-correcting).
   const partition = (records: ClassifiableRecord[]): { hide: string[]; unhide: string[] } => {

@@ -27,8 +27,8 @@ import {
 
 /** The three period lenses, in a stable order. */
 export const PERIOD_LENSES: PeriodLens[] = ["monthly", "weekly", "bi_monthly"];
-import { match_category, CategoryRule } from "./match_category.service";
 import { is_transfer_category } from "./category_semantics.service";
+import { resolve_split_category, CategoryCatalog } from "./split_category.service";
 import {
   match_source_periods,
   SourcePeriodForMatch,
@@ -46,7 +46,8 @@ export interface SplitForAssignment {
   monthly_budget_id?: string;
   weekly_budget_id?: string;
   bi_weekly_budget_id?: string;
-  internal_match_category: string | null;
+  /** Raw Plaid detailed code (immutable). The legacy `internalDetailedCategory` override is
+   *  NOT an input any more (canon M2) — user picks live in the slug fields + `category_source`. */
   plaid_match_category: string;
   outflow_id: string | null;
   /** Manual bill-assignment pin: when `"manual"`, `outflow_id` is a user-chosen bill
@@ -85,13 +86,8 @@ export interface AssignmentContext {
   real_budgets: BudgetForMatch[];
   /** The Everything Else budget id PER LENS (null for a lens with no EE budget). */
   everything_else_budget_ids: Record<PeriodLens, string | null>;
-  category_rules: CategoryRule[];
-  /** plaidDetailed → the two app-category slugs, from the `categories` collection.
-   *  Missing key → the split gets null slugs (unmapped Plaid detailed). */
-  category_slugs_by_plaid: Record<
-    string,
-    { overall_category_id: string | null; first_category_id: string | null }
-  >;
+  /** The `categories` collection as the ONE category function needs it (canon M7). */
+  category_catalog: CategoryCatalog;
   source_periods: SourcePeriodForMatch[];
   /** Recurring match per split id (empty = no recurring match). */
   recurring_by_split: Record<string, RecurringMatch>;
@@ -179,52 +175,31 @@ export function compute_transaction_assignment(
     if (split.outflow_id) touched_outflow.add(split.outflow_id); // before
     if (split.inflow_id) touched_inflow.add(split.inflow_id); // before
 
-    // --- App-category classification (Simplified-Transaction-Categories) ---
-    // Resolve the effective Plaid detailed ONCE (merchant/keyword upgrade of
-    // OTHER_EXPENSE). Reused for the category label (EVERY split) and for budget
-    // matching in the category path below.
-    const resolved_plaid = match_category(
+    // --- Category: the ONE category function (canon M7) — user / rule pick → merchant &
+    // keyword rules → Plaid code → collection → Other. Its `match_keys` drive budget matching
+    // (a user pick never ranks the original Plaid code) and `semantic_code` gives it its
+    // income / transfer meaning.
+    const category = resolve_split_category(
       {
-        plaid_match_category: split.plaid_match_category,
+        plaid_detailed: split.plaid_match_category,
+        category_source: split.category_source ?? "plaid",
+        first_category_id: split.first_category_id ?? null,
+        overall_category_id: split.overall_category_id ?? null,
+        second_category_id: split.second_category_id ?? null,
         merchant_name: context.txn_merchant_name,
         name: context.txn_name,
       },
-      context.category_rules
-    ).category;
+      context.category_catalog
+    );
+    const overall_category_id = category.overall_category_id;
+    const first_category_id = category.first_category_id;
+    const second_category_id = category.second_category_id;
+    const category_source = category.category_source;
 
-    // The split's two user-facing category slugs, derived from that resolved Plaid
-    // detailed. A user override (`category_source === "user"`) is PRESERVED — the
-    // engine never clobbers a manual reclassification.
-    let overall_category_id: string | null;
-    let first_category_id: string | null;
-    let second_category_id: string | null;
-    let category_source: "plaid" | "user";
-    if (split.category_source === "user") {
-      overall_category_id = split.overall_category_id ?? null;
-      first_category_id = split.first_category_id ?? null;
-      second_category_id = split.second_category_id ?? null;
-      category_source = "user";
-    } else {
-      const slugs = context.category_slugs_by_plaid[resolved_plaid];
-      overall_category_id = slugs?.overall_category_id ?? null;
-      first_category_id = slugs?.first_category_id ?? null;
-      // Plaid splits derive their secondary from the resolved detailed at read time
-      // (doc id == detailed), so we don't persist it here — avoids write churn.
-      second_category_id = null;
-      category_source = "plaid";
-    }
-
-    // Effective detailed for BUDGET matching: a user override to a specific
-    // second_category matches budgets keyed by that detailed; a first-only override
-    // has no effective detailed (matches only by first/overall slug); a plaid split
-    // uses its resolved detailed as before.
-    const effective_detailed =
-      category_source === "user" ? second_category_id : resolved_plaid;
-
-    // A Plaid account-transfer split (TRANSFER_IN/OUT) is money moving between
-    // accounts, not spending — it NEVER auto-assigns to a budget (mirrors the
-    // income B1 rule). A user override to a non-transfer category clears this.
-    const is_transfer = is_transfer_category(effective_detailed ?? resolved_plaid);
+    // A Plaid account-transfer split (TRANSFER_IN/OUT) is money moving between accounts, not
+    // spending — it never auto-assigns to a budget (mirrors the income B1 rule). A user pick of
+    // a non-transfer category makes it spending.
+    const is_transfer = is_transfer_category(category.semantic_code);
 
     let monthly_id: string;
     let weekly_id: string;
@@ -275,11 +250,8 @@ export function compute_transaction_assignment(
         budget_reason = is_transfer ? "transfer_excluded" : "income_excluded";
       } else {
         const split_cat = {
-          internal_match_category: split.internal_match_category,
-          plaid_match_category: effective_detailed,
-          // Slug-level budget matching (Phase 4b): a budget may claim this split by
-          // its overall/first slug, not just the Plaid detailed.
-          overall_category_id,
+          match_keys: category.match_keys,
+          is_user_pick: category.is_user_pick,
           first_category_id,
         };
         const per_lens = {} as Record<PeriodLens, ReturnType<typeof match_budget>>;
