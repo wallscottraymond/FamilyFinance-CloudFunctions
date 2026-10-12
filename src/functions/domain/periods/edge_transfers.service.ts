@@ -37,6 +37,15 @@ function plaid_category(data: Record<string, unknown>): string {
 }
 
 /**
+ * THE pairing slack every transfer pairer uses on each side of the window it counts: a transfer
+ * leg posted a few days outside (an ACH landing on the 2nd for a debit on the 31st) still pairs.
+ * Everyone who pairs live (the period page, a budget's transaction list, on-read / stored spend)
+ * and the stored transfer roles pair over [window − this, window + this] and COUNT only the
+ * window — so they decide the same pairs (canon A14).
+ */
+export const TRANSFER_PAIRING_BUFFER_MS = 5 * 24 * 60 * 60 * 1000;
+
+/**
  * The view's transactions that are internal across ALL the members' accounts
  * (`all_members`) but NOT internal inside the view (`view_internal_ids`).
  *

@@ -21,7 +21,10 @@ import { transaction_repo } from "../../repositories/transaction.repo";
 import { group_repo } from "../../repositories/sharing";
 import { CategoryCatalog } from "../../domain/transactions/split_category.service";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
-import { find_crossing_transfers } from "../../domain/periods/edge_transfers.service";
+import {
+  find_crossing_transfers,
+  TRANSFER_PAIRING_BUFFER_MS,
+} from "../../domain/periods/edge_transfers.service";
 import { transaction_in_scope, DeriveScope } from "../../domain/periods/derive_scope.service";
 import {
   detect_internal_transfers_from_txns,
@@ -33,8 +36,8 @@ export type TransferRole = "internal" | "edge_out" | "edge_in" | "external";
 
 type Txn = { id: string; data: Record<string, unknown> };
 
-/** The pairing window's slack each side (as on the period page). */
-const PAIRING_BUFFER_MS = 5 * 24 * 60 * 60 * 1000;
+/** The pairing window's slack each side — THE shared one (the period page pairs the same). */
+const PAIRING_BUFFER_MS = TRANSFER_PAIRING_BUFFER_MS;
 
 /** Roles for one view, for the user's own transfer transactions in [from, to]. PURE given IO. */
 function roles_in_view(

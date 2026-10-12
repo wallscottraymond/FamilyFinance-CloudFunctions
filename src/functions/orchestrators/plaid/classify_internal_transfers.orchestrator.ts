@@ -21,6 +21,7 @@
  * @module orchestrators/plaid/classify_internal_transfers
  */
 
+import { TRANSFER_PAIRING_BUFFER_MS } from "../../domain/periods/edge_transfers.service";
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
@@ -47,8 +48,8 @@ import { createHash } from "crypto";
 const CC_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
 /** Window of transactions loaded for matched-pair detection. */
 const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
-/** Pairing slack each side (as on the period page). */
-const ROLE_PAIRING_BUFFER_MS = 5 * 24 * 60 * 60 * 1000;
+/** Pairing slack each side — THE shared one (the period page pairs the same). */
+const ROLE_PAIRING_BUFFER_MS = TRANSFER_PAIRING_BUFFER_MS;
 /** A forced run (transfers just synced) re-decides roles only this far back. */
 const FORCED_ROLE_WINDOW_MS = 35 * 24 * 60 * 60 * 1000;
 /** Max age of a skipped (unchanged-fingerprint) result before a full re-run is forced. */

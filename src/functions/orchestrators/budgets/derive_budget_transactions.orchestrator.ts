@@ -35,7 +35,10 @@ import {
   resolve_derive_scope,
   load_pairing_extra_txns,
 } from "../../resolvers/periods/derive_scope.resolver";
-import { find_crossing_transfers } from "../../domain/periods/edge_transfers.service";
+import {
+  find_crossing_transfers,
+  TRANSFER_PAIRING_BUFFER_MS,
+} from "../../domain/periods/edge_transfers.service";
 import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
 import {
@@ -56,8 +59,9 @@ import {
   map_raw_split_to_on_read_match,
 } from "../../resolvers/shared/on_read_matching";
 
-// widen the window so cross-day transfer pairs match
-const PAIRING_BUFFER_MS = 7 * 24 * 60 * 60 * 1000;
+// widen the window so cross-day transfer pairs match — THE shared slack (as the period page and
+// the stored transfer roles pair)
+const PAIRING_BUFFER_MS = TRANSFER_PAIRING_BUFFER_MS;
 
 /** L2 cache collection for this callable ([[Firestore-Read-Cost-Reduction]] B′). */
 const BUDGET_TXN_CACHE = "derived_budget_txn_cache";

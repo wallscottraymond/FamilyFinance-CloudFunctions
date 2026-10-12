@@ -17,6 +17,7 @@
  * @module resolvers/budgets/on_read_spend
  */
 
+import { TRANSFER_PAIRING_BUFFER_MS } from "../../domain/periods/edge_transfers.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { budget_repo } from "../../repositories/budget.repo";
@@ -66,10 +67,21 @@ export async function resolve_on_read_spend_splits(
   const ee_id = target_is_ee ? target_budget_id : match.primary_everything_else_id;
 
   // 2. Load the window's transactions and map splits to the matcher's shape.
-  const txns = await transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
+  // Loaded with the shared pairing slack (a transfer's other leg just outside still pairs);
+  // only the window is counted.
+  const pool = await transaction_repo.get_active_in_date_range(
+    ctx,
+    user_id,
+    start_ms - TRANSFER_PAIRING_BUFFER_MS,
+    end_ms + TRANSFER_PAIRING_BUFFER_MS
+  );
+  const txns = pool.filter((t) => {
+    const ms = (t.data.transactionDate as Timestamp).toMillis();
+    return ms >= start_ms && ms <= end_ms;
+  });
   // Only INTERNAL (matched-pair own-account) transfers are excluded from spend —
   // external ACH bills Plaid tags TRANSFER stay countable. Same rule everywhere.
-  const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
+  const { internal_ids } = detect_internal_transfers_from_txns(pool, catalog);
   const splits: SplitForOnReadMatch[] = [];
   for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();

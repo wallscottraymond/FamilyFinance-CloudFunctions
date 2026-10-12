@@ -43,7 +43,10 @@ import {
   BudgetForMatch,
 } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
-import { find_crossing_transfers } from "../../domain/periods/edge_transfers.service";
+import {
+  find_crossing_transfers,
+  TRANSFER_PAIRING_BUFFER_MS,
+} from "../../domain/periods/edge_transfers.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import {
   build_stream_membership_map,
@@ -279,8 +282,10 @@ export async function load_period_derivation_raw(
       w.end_ms
     )
   );
-  const txn_start_ms = Math.min(...spans.map((sp) => sp.span_start_ms));
-  const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms));
+  // Padded by the transfer pairing slack: a transfer's other leg just outside the span still
+  // pairs (only the span is counted — see shape).
+  const txn_start_ms = Math.min(...spans.map((sp) => sp.span_start_ms)) - TRANSFER_PAIRING_BUFFER_MS;
+  const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms)) + TRANSFER_PAIRING_BUFFER_MS;
   const [member_txns, pairing_extra] = await Promise.all([
     per_member(scope, (m) =>
       transaction_repo.get_active_in_date_range(ctx, m, txn_start_ms, txn_end_ms)
@@ -474,17 +479,26 @@ export function shape_period_derivation_deps(
 
   // 3. The window's transactions (the per-window query's inclusive date range, re-filtered
   // from the raw load in its original order).
-  const txns = raw.txns.filter((t) => {
+  const in_range = (lo_ms: number, hi_ms: number) => (t: { data: Record<string, unknown> }) => {
     const d = t.data.transactionDate as Timestamp;
-    return ts_cmp(d, span_start_ms) >= 0 && ts_cmp(d, span_end_ms) <= 0;
-  });
+    return ts_cmp(d, lo_ms) >= 0 && ts_cmp(d, hi_ms) <= 0;
+  };
+  const txns = raw.txns.filter(in_range(span_start_ms, span_end_ms));
+  // The pairing pool: the span ± the shared pairing slack (as the stored transfer roles pair) —
+  // pairs are decided over it, only `txns` (the span) is counted.
+  const pool_lo = span_start_ms - TRANSFER_PAIRING_BUFFER_MS;
+  const pool_hi = span_end_ms + TRANSFER_PAIRING_BUFFER_MS;
+  const view_pool = raw.txns.filter(in_range(pool_lo, pool_hi));
 
   // 3a. Matched-pair INTERNAL-transfer detection. `TRANSFER_*` alone is ambiguous —
   // Plaid tags both own-account transfers AND external ACH bills (mortgage, subs)
   // as TRANSFER_OUT_ACCOUNT_TRANSFER. A transfer is INTERNAL only when it pairs with
   // an opposite transfer of the same amount on ANOTHER account within a few days;
   // unpaired transfers are EXTERNAL (real spending/bills) and are NOT excluded.
-  const { internal_ids, internal_plaid_ids } = detect_internal_transfers_from_txns(txns, catalog);
+  const { internal_ids, internal_plaid_ids } = detect_internal_transfers_from_txns(
+    view_pool,
+    catalog
+  );
   // A recurring stream is an internal transfer when any of its transactions are.
   const is_internal_stream = (transaction_ids: string[] | undefined): boolean =>
     (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
@@ -495,20 +509,17 @@ export function shape_period_derivation_deps(
   // out of it = spending (Everything Else / a budget by category). Bill / income links and
   // recurring-stream membership are ignored for edge money (it isn't a bill or a paycheck), and
   // hidden transfer streams stay hidden. With nothing shared, `crossing` is empty.
-  const all_in_span = raw.all_member_txns.filter((t) => {
-    const d = t.data.transactionDate as Timestamp;
-    return ts_cmp(d, span_start_ms) >= 0 && ts_cmp(d, span_end_ms) <= 0;
-  });
+  const all_in_pool = raw.all_member_txns.filter(in_range(pool_lo, pool_hi));
   // Two-stage pairing: pairs INSIDE the view win (stage 1, above); only the view's leftover
   // transfers are then paired against the members' other accounts (stage 2), so a cross-view
   // match can never steal one of the view's own pairs.
   const crossing = find_crossing_transfers(
     detect_internal_transfers_from_txns(
-      all_in_span.filter((t) => !internal_ids.has(t.id)),
+      all_in_pool.filter((t) => !internal_ids.has(t.id)),
       catalog
     ),
     internal_ids,
-    txns,
+    view_pool,
     (d) => txn_effective_category(d, catalog)
   );
 

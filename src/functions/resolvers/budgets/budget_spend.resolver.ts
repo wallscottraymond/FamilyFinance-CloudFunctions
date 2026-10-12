@@ -12,6 +12,7 @@
  * @module resolvers/budgets/budget_spend
  */
 
+import { TRANSFER_PAIRING_BUFFER_MS } from "../../domain/periods/edge_transfers.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
@@ -19,7 +20,11 @@ import {
   SplitForSpend,
   is_income_category,
 } from "../../domain/budgets/budget_spend.service";
-import { detect_internal_transfers_from_txns } from "../shared/on_read_matching";
+import {
+  detect_internal_transfers_from_txns,
+  txn_effective_category,
+} from "../shared/on_read_matching";
+import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
 import { resolve_split_category } from "../../domain/transactions/split_category.service";
 import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
@@ -76,15 +81,24 @@ export async function resolve_spend_splits(
   cadence: PeriodInstanceType = "monthly",
   load_txns?: (start_ms: number, end_ms: number) => Promise<WindowTxns>
 ): Promise<SplitForSpend[]> {
-  const txns = load_txns
-    ? await load_txns(start_ms, end_ms)
-    : await transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
+  const load = (lo: number, hi: number) =>
+    load_txns ? load_txns(lo, hi) : transaction_repo.get_active_in_date_range(ctx, user_id, lo, hi);
+  const txns = await load(start_ms, end_ms);
 
   // Internal transfers are excluded as on the period page: the stored matched-pair role when the
-  // classifier has decided it (it decides per VIEW — an edge_out contribution counts), else
-  // live pairing over the window.
+  // classifier has decided it (it decides per VIEW — an edge_out contribution counts), else live
+  // pairing over the period ± the shared slack (as the page pairs). The wider read happens only
+  // when a transfer hasn't been classified yet (rare: the classifier runs right after a sync).
   const catalog = await load_category_catalog(ctx);
-  const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
+  const needs_live = txns.some(
+    (t) =>
+      t.data.transferRole === undefined &&
+      is_transfer_category(txn_effective_category(t.data, catalog))
+  );
+  const pool = needs_live
+    ? await load(start_ms - TRANSFER_PAIRING_BUFFER_MS, end_ms + TRANSFER_PAIRING_BUFFER_MS)
+    : txns;
+  const { internal_ids } = detect_internal_transfers_from_txns(pool, catalog);
 
   const out: SplitForSpend[] = [];
   for (const { id, data: d } of txns) {
