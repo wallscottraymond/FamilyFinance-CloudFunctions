@@ -9,7 +9,7 @@
  *            receives 2,400 (Oct 2) + 1,400 (Oct 3)
  *   Sam:  CHK-S (private)  paycheck +3,000 (Oct 1), sends 1,400 to JC (Oct 3)
  *         AMEX-S (SHARED from Oct 10): Target 30.00 (Oct 8, BEFORE share-from) and 64.20 (Oct 12)
- *   Group budget "Groceries" (FOOD_AND_DRINK_GROCERIES). Riley is not a member.
+ *   Group budget "Groceries" (slug "groceries" ← FOOD_AND_DRINK_GROCERIES). Riley is not a member.
  *
  * Expected, 2031M10:
  *   The Walls: Groceries 476.20 (412 + 64.20) · EE 2,000 (rent) · Other income 3,800 (2,400 + 1,400)
@@ -48,6 +48,7 @@ import { derive_period_range_orchestrator } from "../src/functions/orchestrators
 import { derive_budget_transactions_orchestrator } from "../src/functions/orchestrators/budgets/derive_budget_transactions.orchestrator";
 import { derive_budget_view_orchestrator } from "../src/functions/orchestrators/budgets/derive_budget_view.orchestrator";
 import { createEverythingElseBudget } from "../src/functions/budgets/utils/createEverythingElseBudget";
+import { invalidate_category_cache } from "../src/functions/repositories/category.repo";
 import { account_repo } from "../src/functions/repositories/account.repo";
 import { bump_derive_version } from "../src/functions/repositories/derive_version.repo";
 import { PermissionDeniedError } from "../src/functions/types";
@@ -143,8 +144,19 @@ beforeAll(async () => {
   await account_repo.set_placement(t(), id("jc"), { group_id, shared_from_ms: null, shared_by: ALEX, shared_at_ms: SHARE_FROM }, ALEX);
   await account_repo.set_placement(t(), id("amex_s"), { group_id, shared_from_ms: SHARE_FROM, shared_by: SAM, shared_at_ms: SHARE_FROM }, SAM);
 
+  // The categories collection translates Plaid codes to OUR categories; budgets own slugs (A2).
+  await db.collection("categories").doc("FOOD_AND_DRINK_GROCERIES").set({
+    name: "Groceries", type: "Outflow", isActive: true, overallCategoryId: "food_and_drink",
+    firstCategoryId: "groceries", first_category: "Groceries", overall_category: "Food and Drink",
+  });
+  await db.collection("categories").doc("FOOD_AND_DRINK_COFFEE").set({
+    name: "Coffee", type: "Outflow", isActive: true, overallCategoryId: "food_and_drink",
+    firstCategoryId: "eating_out", first_category: "Eating out", overall_category: "Food and Drink",
+  });
+  invalidate_category_cache();
+
   groceries_id = (await create_budget_orchestrator(t(), ALEX, require("crypto").randomUUID(), {
-    name: "Groceries", amount: 600, category_ids: ["FOOD_AND_DRINK_GROCERIES"], period: "monthly" as never,
+    name: "Groceries", amount: 600, category_ids: ["groceries"], period: "monthly" as never,
     budget_type: "recurring" as never, start_date: "2031-01-01T00:00:00.000Z", alert_threshold: 80,
     is_shared: false, is_ongoing: true, view_group_id: group_id,
   })).budget_id;

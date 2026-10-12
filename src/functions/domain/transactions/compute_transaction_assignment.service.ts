@@ -258,11 +258,8 @@ export function compute_transaction_assignment(
         monthly_id = weekly_id = bi_weekly_id = UNASSIGNED_BUDGET_ID;
         budget_reason = is_transfer ? "transfer_excluded" : "income_excluded";
       } else {
-        const split_cat = {
-          match_keys: category.match_keys,
-          is_user_pick: category.is_user_pick,
-          first_category_id,
-        };
+        // Slugs only (canon A2) — the function's first (Plaid's, when a stored pick is unreadable).
+        const split_cat = { first_category_id: category.first_category_id };
         const per_lens = {} as Record<PeriodLens, ReturnType<typeof match_budget>>;
         for (const lens of PERIOD_LENSES) {
           per_lens[lens] = match_budget(

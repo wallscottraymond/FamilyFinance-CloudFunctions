@@ -39,7 +39,6 @@ import { CategoryRule } from "../../domain/transactions/match_category.service";
 import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 import {
   build_category_catalog,
-  budget_first_ids,
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
 import { SourcePeriodForMatch } from "../../domain/transactions/match_source_periods.service";
@@ -217,7 +216,6 @@ function build_view_budgets(
       cadence,
       // Firsts it covers (slugs + legacy Plaid codes) — so a user pick matches a budget that
       // still stores codes (until the slug migration).
-      first_ids: budget_first_ids(b.category_ids, catalog),
     });
   }
   return { real_budgets, budget_names, everything_else_budget_ids };

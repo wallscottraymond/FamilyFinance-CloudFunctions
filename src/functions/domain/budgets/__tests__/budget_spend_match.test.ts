@@ -46,7 +46,7 @@ function split(over: Partial<SplitForOnReadMatch> = {}): SplitForOnReadMatch {
     spend_status: "counted",
     outflow_id: null,
     inflow_id: null,
-    match_keys: ["groceries"],
+    first_category_id: "groceries",
     semantic_code: "FOOD_AND_DRINK_GROCERIES",
     manual_pin_budget_id: null,
     ...over,
@@ -60,7 +60,7 @@ describe("resolve_split_owner", () => {
 
   it("falls to Everything-Else when no real budget owns the category", () => {
     expect(
-      resolve_split_owner(split({ match_keys: ["travel"] }), REAL_BUDGETS, EE)
+      resolve_split_owner(split({ first_category_id: "travel" }), REAL_BUDGETS, EE)
     ).toBe(EE);
   });
 
@@ -76,7 +76,7 @@ describe("resolve_split_owner", () => {
     // the original code, so the dining budget owns it.
     expect(
       resolve_split_owner(
-        split({ match_keys: ["dining"], is_user_pick: true, first_category_id: "dining" }),
+        split({ first_category_id: "dining" }),
         REAL_BUDGETS,
         EE
       )
@@ -88,7 +88,7 @@ describe("resolve_split_owner", () => {
     // owned by no real budget → it must fall to EE, not orphan on the deleted id.
     expect(
       resolve_split_owner(
-        split({ manual_pin_budget_id: "deleted_budget_id", match_keys: ["travel"] }),
+        split({ manual_pin_budget_id: "deleted_budget_id", first_category_id: "travel" }),
         REAL_BUDGETS,
         EE
       )
@@ -99,7 +99,7 @@ describe("resolve_split_owner", () => {
     // Pinned to a deleted budget, but the category (groceries) is owned by a live budget.
     expect(
       resolve_split_owner(
-        split({ manual_pin_budget_id: "deleted_budget_id", match_keys: ["groceries"] }),
+        split({ manual_pin_budget_id: "deleted_budget_id", first_category_id: "groceries" }),
         REAL_BUDGETS,
         EE
       )
@@ -110,10 +110,10 @@ describe("resolve_split_owner", () => {
 describe("owned_splits_for_budget + spend", () => {
   it("sums only the splits a budget owns on read (instant, no stored assignment)", () => {
     const splits = [
-      split({ amount: 30, match_keys: ["groceries"] }), // → groceries
-      split({ amount: 20, match_keys: ["groceries"] }), // → groceries
-      split({ amount: 99, match_keys: ["dining"] }), // → dining
-      split({ amount: 5, match_keys: ["travel"] }), // → EE
+      split({ amount: 30, first_category_id: "groceries" }), // → groceries
+      split({ amount: 20, first_category_id: "groceries" }), // → groceries
+      split({ amount: 99, first_category_id: "dining" }), // → dining
+      split({ amount: 5, first_category_id: "travel" }), // → EE
     ];
     const owned = owned_splits_for_budget(B_GROCERIES, REAL_BUDGETS, EE, splits);
     const r = compute_budget_spent(B_GROCERIES, JAN_2026, JAN_2026, owned);
@@ -122,9 +122,9 @@ describe("owned_splits_for_budget + spend", () => {
 
   it("Everything-Else gets the unmatched remainder", () => {
     const splits = [
-      split({ amount: 30, match_keys: ["groceries"] }),
-      split({ amount: 5, match_keys: ["travel"] }),
-      split({ amount: 7, match_keys: ["misc"] }),
+      split({ amount: 30, first_category_id: "groceries" }),
+      split({ amount: 5, first_category_id: "travel" }),
+      split({ amount: 7, first_category_id: "misc" }),
     ];
     const owned = owned_splits_for_budget(EE, REAL_BUDGETS, EE, splits);
     const r = compute_budget_spent(EE, JAN_2026, JAN_2026, owned);
@@ -133,8 +133,8 @@ describe("owned_splits_for_budget + spend", () => {
 
   it("recurring-linked split is owned but NOT counted (is_countable excludes it)", () => {
     const splits = [
-      split({ amount: 40, match_keys: ["groceries"], outflow_id: "o1" }),
-      split({ amount: 10, match_keys: ["groceries"] }),
+      split({ amount: 40, first_category_id: "groceries", outflow_id: "o1" }),
+      split({ amount: 10, first_category_id: "groceries" }),
     ];
     const owned = owned_splits_for_budget(B_GROCERIES, REAL_BUDGETS, EE, splits);
     const r = compute_budget_spent(B_GROCERIES, JAN_2026, JAN_2026, owned);

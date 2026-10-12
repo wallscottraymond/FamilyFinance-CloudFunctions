@@ -87,7 +87,7 @@ async function seedUser(n = 0) {
   const food = `ra_food_b_${RUN}_${n}`;
   const ee = { m: `ra_ee_m_${RUN}_${n}`, w: `ra_ee_w_${RUN}_${n}`, b: `ra_ee_b_${RUN}_${n}` };
   await seedBudget(shop, userId, { categoryIds: [SHOP] }); // slug-only Shopping budget
-  await seedBudget(food, userId, { categoryIds: [FOOD_CODE] }); // legacy: stores the Plaid code
+  await seedBudget(food, userId, { categoryIds: [FOOD] }); // budgets own slugs (A2)
   await seedBudget(ee.m, userId, { isSystemEverythingElse: true, period: 'monthly' });
   await seedBudget(ee.w, userId, { isSystemEverythingElse: true, period: 'weekly' });
   await seedBudget(ee.b, userId, { isSystemEverythingElse: true, period: 'bi_monthly' });
@@ -144,7 +144,7 @@ describe('reassign_user_orchestrator (emulator)', () => {
     const l = await txn(legacy);
     expect(l.splits[0]).toMatchObject({
       categorySource: 'user', firstCategoryId: FOOD, internalDetailedCategory: null,
-      monthlyBudgetId: u.food, // a user pick lands in a budget that still stores the code
+      monthlyBudgetId: u.food, // the carried-over pick lands in the Food budget
     });
     // Untouched: the already-correct transaction was not rewritten.
     expect((await db.collection('transactions').doc(ok).get()).updateTime!.isEqual(okBefore)).toBe(true);

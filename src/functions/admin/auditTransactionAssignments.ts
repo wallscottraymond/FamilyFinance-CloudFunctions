@@ -28,7 +28,6 @@ import {
 } from "../domain/transactions/match_budget.service";
 import {
   build_category_catalog,
-  budget_first_ids,
   resolve_split_category,
 } from "../domain/transactions/split_category.service";
 import { split_category_input_from_raw } from "../domain/transactions/split_category_edit.service";
@@ -73,7 +72,6 @@ export const auditTransactionAssignments = onRequest(
       realBudgets.push({
         id: doc.id,
         category_ids: (d.categoryIds as string[]) ?? [],
-        first_ids: [],
         start_ms: (d.startDate as Timestamp).toMillis(),
         end_ms: d.isOngoing ? null : endTs?.toMillis() ?? null,
         is_ongoing: !!d.isOngoing,
@@ -94,7 +92,6 @@ export const auditTransactionAssignments = onRequest(
     const catalog = build_category_catalog(
       catSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() }))
     );
-    for (const b of realBudgets) b.first_ids = budget_first_ids(b.category_ids, catalog);
 
     // 3. All of the user's transactions.
     const txnSnap = await db
@@ -143,11 +140,7 @@ export const auditTransactionAssignments = onRequest(
 
         // Natural category-home, IGNORING any manual pin.
         const natural = match_budget(
-          {
-            match_keys: category.match_keys,
-            is_user_pick: category.is_user_pick,
-            first_category_id: category.first_category_id,
-          },
+          { first_category_id: category.first_category_id },
           txnDateMs,
           realBudgets,
           everythingElseId

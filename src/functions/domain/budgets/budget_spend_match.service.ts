@@ -50,9 +50,7 @@ export interface SplitForOnReadMatch {
    *  unset) → excluded from budget spend (S5). Optional; defaults false. */
   is_recurring_member?: boolean;
   // Category inputs — from the ONE category function (domain/transactions/split_category)
-  match_keys: string[];
-  is_user_pick?: boolean;
-  first_category_id?: string | null;
+  first_category_id: string | null;
   /** The Plaid code giving the category its meaning (income? transfer?). */
   semantic_code: string;
   /** Manual budget pin (user assigned this split to a budget); null otherwise. */

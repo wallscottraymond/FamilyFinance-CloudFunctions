@@ -20,6 +20,7 @@ const db = admin.firestore();
 
 import { assign_transaction_orchestrator } from '../src/functions/orchestrators/transactions/assign_transaction.orchestrator';
 import { assign_transactions_batch_orchestrator } from '../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator';
+import { invalidate_category_cache } from '../src/functions/repositories/category.repo';
 
 const ctx = () => ({ trace_id: `t_${Date.now()}`, span_id: `s_${Date.now()}` });
 const uid = () => `u_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -107,21 +108,22 @@ async function seedFuzzyExpenseTxn(id: string, userId: string, merchant: string,
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
-async function jobsFor(jobType: string, transactionId: string) {
-  const snap = await db.collection('_jobs').where('job_type', '==', jobType).get();
-  return snap.docs.map((d) => d.data()).filter(
-    (j) => (j.payload as { transaction_id?: string })?.transaction_id === transactionId
-  );
-}
-
 describe('assign_transaction_orchestrator (emulator)', () => {
+  beforeAll(async () => {
+    // The categories collection translates the Plaid code to OUR category; budgets own slugs (A2).
+    await db.collection('categories').doc('FOOD_AND_DRINK').set({
+      isActive: true, type: 'Outflow', firstCategoryId: 'ra_eating_out', overallCategoryId: 'ra_food',
+      first_category: 'Eating out', overall_category: 'Food',
+    });
+    invalidate_category_cache();
+  });
   afterAll(async () => { await db.terminate(); });
 
   it('assigns per-split (category → budget, else Everything Else) + writes splitBudgetIds + fans out', async () => {
     const userId = uid();
     const txnId = `txn_${Date.now()}`;
     // A MONTHLY groceries budget + all three per-lens Everything Else budgets.
-    await seedBudget(`groceries_${txnId}`, userId, { categoryIds: ['FOOD_AND_DRINK'], isSystemEverythingElse: false, period: 'monthly' });
+    await seedBudget(`groceries_${txnId}`, userId, { categoryIds: ['ra_eating_out'], isSystemEverythingElse: false, period: 'monthly' });
     await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'monthly' });
     await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'weekly' });
     await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'bi_monthly' });
@@ -158,8 +160,10 @@ describe('assign_transaction_orchestrator (emulator)', () => {
       [`groceries_${txnId}`, `ee_m_${txnId}`, `ee_w_${txnId}`, `ee_b_${txnId}`].sort()
     );
 
-    // fan-out enqueued for the touched budgets (all lenses)
-    const jobs = await jobsFor('recompute_budget_spent', txnId);
+    // fan-out enqueued for the touched budgets (all lenses) — one coalesced recompute per user
+    const jobs = (await db.collection('_jobs').where('job_type', '==', 'recompute_budget_spent').get())
+      .docs.map((d) => d.data())
+      .filter((j) => (j.payload as { user_id?: string })?.user_id === userId);
     expect(jobs).toHaveLength(1);
     expect((jobs[0].payload as { budget_ids: string[] }).budget_ids).toEqual(
       expect.arrayContaining([`groceries_${txnId}`, `ee_m_${txnId}`, `ee_w_${txnId}`, `ee_b_${txnId}`])
@@ -169,7 +173,7 @@ describe('assign_transaction_orchestrator (emulator)', () => {
   it('is idempotent — a second run makes no change (skip-if-unchanged)', async () => {
     const userId = uid();
     const txnId = `txn2_${Date.now()}`;
-    await seedBudget(`g_${txnId}`, userId, { categoryIds: ['FOOD_AND_DRINK'], isSystemEverythingElse: false });
+    await seedBudget(`g_${txnId}`, userId, { categoryIds: ['ra_eating_out'], isSystemEverythingElse: false });
     await seedBudget(`ee_${txnId}`, userId, { isSystemEverythingElse: true });
     await seedSourcePeriod(`${txnId}_m`, 'monthly', '2026-06-01', '2026-06-30');
     await seedTransaction(txnId, userId, [split('s1', 'FOOD_AND_DRINK', 100)]);

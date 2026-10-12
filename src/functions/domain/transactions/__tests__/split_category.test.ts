@@ -5,11 +5,7 @@
  * Includes the Transaction-Integrity-Review worked examples (Mous, Santo Taco).
  */
 
-import {
-  build_category_catalog,
-  budget_first_ids,
-  resolve_split_category,
-} from "../split_category.service";
+import { build_category_catalog, resolve_split_category } from "../split_category.service";
 import { match_budget, BudgetForMatch } from "../match_budget.service";
 
 const catalog = build_category_catalog([
@@ -49,7 +45,6 @@ function budget(id: string, category_ids: string[]): BudgetForMatch {
   return {
     id,
     category_ids,
-    first_ids: budget_first_ids(category_ids, catalog),
     start_ms: Date.UTC(2026, 0, 1),
     end_ms: null,
     is_ongoing: true,
@@ -108,21 +103,12 @@ describe("resolve_split_category", () => {
     );
     expect(r.first_category_id).toBe("eating_out");
     expect(r.overall_category_id).toBe("food_and_drink");
-    expect(r.match_keys).not.toContain("FOOD_AND_DRINK_GROCERIES");
-    // A budget still holding the original code can't beat the pick.
-    const groceriesByCode = budget("b_gro", ["FOOD_AND_DRINK_GROCERIES"]);
+    // The Groceries budget can't keep it: matching compares the pick's first only.
+    const groceries = budget("b_gro", ["groceries"]);
     const eatingOut = budget("b_eat", ["eating_out"]);
-    expect(match_budget(r, JUN, [groceriesByCode, eatingOut], EE).budget_id).toBe("b_eat");
+    expect(match_budget(r, JUN, [groceries, eatingOut], EE).budget_id).toBe("b_eat");
   });
 
-  it("a user pick lands in a LEGACY budget that stores Plaid codes of that first", () => {
-    const r = resolve_split_category(
-      { plaid_detailed: "OTHER_EXPENSE", category_source: "user", first_category_id: "eating_out" },
-      catalog
-    );
-    const legacy = budget("b_legacy", ["FOOD_AND_DRINK_RESTAURANT"]);
-    expect(match_budget(r, JUN, [legacy], EE).budget_id).toBe("b_legacy");
-  });
 
   it("a user pick away from a transfer gives it spending meaning", () => {
     const r = resolve_split_category(
@@ -189,13 +175,5 @@ describe("resolve_split_category", () => {
       ]
     );
     expect(reversed.plaid_by_first.x).toBe("A_CODE");
-  });
-});
-
-describe("budget_first_ids", () => {
-  it("maps slugs AND legacy codes to the firsts they cover", () => {
-    expect(
-      budget_first_ids(["FOOD_AND_DRINK_RESTAURANT", "groceries", "UNKNOWN"], catalog).sort()
-    ).toEqual(["eating_out", "groceries"]);
   });
 });

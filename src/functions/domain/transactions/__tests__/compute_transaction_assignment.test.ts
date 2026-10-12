@@ -25,7 +25,7 @@ const EE = "ee_budget";
 
 const groceries: BudgetForMatch = {
   id: "b_groceries",
-  category_ids: ["FOOD_AND_DRINK"],
+  category_ids: ["eating_out"],
   start_ms: Date.UTC(2026, 0, 1),
   end_ms: null,
   is_ongoing: true,
@@ -139,7 +139,7 @@ describe("compute_transaction_assignment", () => {
   it("PER-LENS: a WEEKLY budget claims only the weekly lens; monthly+biweekly fall to their own EE", () => {
     const weeklyGroceries: BudgetForMatch = {
       id: "b_weekly_groceries",
-      category_ids: ["FOOD_AND_DRINK"],
+      category_ids: ["eating_out"],
       start_ms: Date.UTC(2026, 0, 1),
       end_ms: null,
       is_ongoing: true,
@@ -462,12 +462,12 @@ describe("compute_transaction_assignment", () => {
     expect(s.budget_id).toBe("b_groceries"); // FOOD_AND_DRINK still matches meanwhile
   });
 
-  it("a SECOND-level override retargets budget matching to the chosen detailed", () => {
-    // A budget keyed by the specific detailed the user picked (not the split's
-    // original FOOD_AND_DRINK) claims the split via the override's second_category_id.
+  it("a SECOND-level override matches by the first it falls under", () => {
+    // The pick's detailed resolves to its first (electronics); the budget owning that slug
+    // claims the split (budgets own slugs only — canon A2).
     const electronicsBudget: BudgetForMatch = {
       id: "b_electronics",
-      category_ids: ["SHOPPING_ELECTRONICS"],
+      category_ids: ["electronics"],
       start_ms: Date.UTC(2026, 0, 1),
       end_ms: null,
       is_ongoing: true,

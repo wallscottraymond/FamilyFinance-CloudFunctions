@@ -95,13 +95,6 @@ export interface ResolvedSplitCategory {
    * pick — so reclassifying a transfer to "Shopping" makes it spending, everywhere.
    */
   semantic_code: string;
-  /**
-   * The identifiers a budget can claim this split by, MOST SPECIFIC FIRST. A user pick never
-   * includes the original Plaid code (so a budget still holding that code can't beat the pick).
-   */
-  match_keys: string[];
-  /** True for a user pick (budgets claim it by the first it falls under, incl. legacy codes). */
-  is_user_pick: boolean;
 }
 
 export function resolve_split_category(
@@ -128,8 +121,6 @@ export function resolve_split_category(
       second_category_id: second,
       category_source: "user",
       semantic_code: semantic,
-      match_keys: [second, first, overall].filter((k): k is string => !!k),
-      is_user_pick: true,
     };
   }
 
@@ -153,25 +144,5 @@ export function resolve_split_category(
     second_category_id: null,
     category_source: "plaid",
     semantic_code: resolved,
-    match_keys: [resolved, slugs.first_category_id, slugs.overall_category_id].filter(
-      (k): k is string => !!k
-    ),
-    is_user_pick: false,
   };
-}
-
-/**
- * The first-category slugs a budget covers, from whatever its `categoryIds` hold (slugs and/or
- * legacy Plaid codes) — so a user pick of "groceries" lands in a budget that still stores
- * `FOOD_AND_DRINK_GROCERIES`. Used only to match USER picks (Plaid splits keep exact-code
- * matching, so a budget holding one code of a first never silently widens to the whole first).
- */
-export function budget_first_ids(category_ids: string[], catalog: CategoryCatalog): string[] {
-  const out = new Set<string>();
-  for (const id of category_ids) {
-    const first =
-      catalog.slugs_by_plaid[id]?.first_category_id ?? (id in catalog.plaid_by_first ? id : null);
-    if (first) out.add(first);
-  }
-  return [...out];
 }

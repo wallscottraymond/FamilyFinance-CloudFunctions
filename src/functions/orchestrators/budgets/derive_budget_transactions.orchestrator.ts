@@ -46,7 +46,6 @@ import {
 } from "../../domain/periods/derive_scope.service";
 import { resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
-import { budget_first_ids } from "../../domain/transactions/split_category.service";
 import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
 import {
   detect_internal_transfers_from_txns,
@@ -132,7 +131,6 @@ export async function derive_budget_transactions_orchestrator(
       real_budgets.push({
         id: b.id,
         category_ids: b.category_ids,
-        first_ids: budget_first_ids(b.category_ids, catalog),
         start_ms: b.start_date.toMillis(),
         end_ms: b.is_ongoing ? null : b.end_date.toMillis(),
         is_ongoing: b.is_ongoing,

@@ -61,7 +61,6 @@ import {
 import { resolve_derive_scope, load_pairing_extra_txns } from "./derive_scope.resolver";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
 import {
-  budget_first_ids,
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
 
@@ -459,7 +458,6 @@ export function shape_period_derivation_deps(
       real_budgets.push({
         id: b.id,
         category_ids: b.category_ids,
-        first_ids: budget_first_ids(b.category_ids, catalog),
         start_ms: active_start_ms,
         end_ms: active_end_ms,
         is_ongoing: b.is_ongoing,

@@ -22,7 +22,6 @@ import { TraceContext } from "../../types";
 import { budget_repo } from "../../repositories/budget.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
-import { budget_first_ids } from "../../domain/transactions/split_category.service";
 import { SplitForSpend } from "../../domain/budgets/budget_spend.service";
 import {
   owned_splits_for_budget,
@@ -74,7 +73,6 @@ export async function resolve_on_read_spend_splits(
     real_budgets.push({
       id: b.id,
       category_ids: b.category_ids,
-      first_ids: budget_first_ids(b.category_ids, catalog),
       start_ms: b.start_date.toMillis(),
       end_ms: b.is_ongoing ? null : b.end_date.toMillis(),
       is_ongoing: b.is_ongoing,

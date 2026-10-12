@@ -80,8 +80,6 @@ export function map_raw_split_to_on_read_match(
     outflow_id: (raw_split.outflowId as string | null) ?? null,
     inflow_id: (raw_split.inflowId as string | null) ?? null,
     is_recurring_member: ctx.is_recurring_member ?? false,
-    match_keys: category.match_keys,
-    is_user_pick: category.is_user_pick,
     first_category_id: category.first_category_id,
     semantic_code: category.semantic_code,
     manual_pin_budget_id:

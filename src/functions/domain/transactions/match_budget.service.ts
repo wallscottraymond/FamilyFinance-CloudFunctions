@@ -17,16 +17,12 @@
  */
 
 /**
- * The minimal split shape this matcher needs — produced by `resolve_split_category`
- * (domain/transactions/split_category), the ONE category function (canon M7).
+ * The minimal split shape this matcher needs: its FIRST category, from `resolve_split_category`
+ * (domain/transactions/split_category), the ONE category function (canon M7). Budgets own
+ * `firstCategoryId` slugs and matching compares slugs only (canon A2).
  */
 export interface SplitForBudgetMatch {
-  /** Identifiers a budget can claim the split by, MOST SPECIFIC FIRST. */
-  match_keys: string[];
-  /** A user / rule pick: budgets also claim it by the FIRST it falls under (incl. legacy codes). */
-  is_user_pick?: boolean;
-  /** The split's first-category slug (used with `is_user_pick`). */
-  first_category_id?: string | null;
+  first_category_id: string | null;
 }
 
 /** The three period lenses a budget (and its assignment) can belong to. */
@@ -43,9 +39,6 @@ export interface BudgetForMatch {
   is_ongoing: boolean;
   /** The budget's prime cadence — used to filter budgets per assignment lens. */
   cadence: PeriodLens;
-  /** First-category slugs the budget covers (from slugs AND legacy Plaid codes in
-   *  `category_ids`) — lets a user pick match a budget that still stores codes. */
-  first_ids?: string[];
 }
 
 /** Result of matching a split to a budget. */
@@ -98,35 +91,18 @@ export function match_budget(
   real_budgets: BudgetForMatch[],
   everything_else_budget_id: string | null
 ): BudgetMatchResult {
-  const ranked = split.match_keys;
-  const pick_first = split.is_user_pick ? split.first_category_id ?? null : null;
-
-  // Collect every real budget that owns ANY of the split's identifiers for this
-  // date, keeping the MOST SPECIFIC hit (a specific budget beats a broad one).
+  // Slugs only (canon A2): a budget owns the split when it lists the split's first category.
   // `match_count` still flags multi-budget claims (drift) without changing the result.
-  let best: { budget: BudgetForMatch; rank: number; matched: string } | null = null;
+  const first = split.first_category_id ?? null;
+  let best: { budget: BudgetForMatch; matched: string } | null = null;
   let match_count = 0;
   for (const budget of real_budgets) {
-    if (!is_within_budget_range(txn_date_ms, budget)) {
+    if (!first || !is_within_budget_range(txn_date_ms, budget)) {
       continue;
     }
-    let rank = -1;
-    for (let r = 0; r < ranked.length; r++) {
-      const id = ranked[r];
-      if (
-        id &&
-        (budget.category_ids.includes(id) ||
-          (id === pick_first && (budget.first_ids ?? []).includes(id)))
-      ) {
-        rank = r;
-        break;
-      }
-    }
-    if (rank >= 0) {
+    if (budget.category_ids.includes(first)) {
       match_count++;
-      if (best === null || rank < best.rank) {
-        best = { budget, rank, matched: ranked[rank] };
-      }
+      if (best === null) best = { budget, matched: first };
     }
   }
 
