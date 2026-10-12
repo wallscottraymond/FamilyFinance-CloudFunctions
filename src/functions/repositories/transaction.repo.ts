@@ -1423,14 +1423,25 @@ export const transaction_repo = {
    * for the ones that changed. A role change is an assignment input (field guard), so the
    * debounced per-user assignment batch re-assigns exactly those.
    */
-  async set_transfer_roles(_ctx: TraceContext, roles: Map<string, string>): Promise<number> {
+  async set_transfer_roles(
+    _ctx: TraceContext,
+    roles: Map<string, string>,
+    /** Stamped (assignRunId) — the caller re-assigns these itself; the trigger skips them. */
+    run_id: string
+  ): Promise<number> {
     const db = getFirestore();
     const entries = [...roles.entries()];
     for (let i = 0; i < entries.length; i += 450) {
       const batch = db.batch();
       for (const [id, role] of entries.slice(i, i + 450)) {
-        /* eslint-disable-next-line @typescript-eslint/naming-convention */
-        batch.update(doc_ref(id), { transferRole: role, updatedAt: Timestamp.now() });
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), {
+          transferRole: role,
+          assignRunId: run_id,
+          lastWriteSource: "transfer_roles",
+          updatedAt: Timestamp.now(),
+        });
+        /* eslint-enable @typescript-eslint/naming-convention */
       }
       await batch.commit();
     }

@@ -30,6 +30,13 @@ import { is_transfer_category } from "../../domain/transactions/category_semanti
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import { resolve_transfer_roles } from "../../resolvers/transactions/transfer_roles.resolver";
+import { Timestamp } from "firebase-admin/firestore";
+import { generate_id } from "../../observability";
+import type { SyncWrittenDoc } from "../../repositories/transaction.repo";
+import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
+import { follow_ups_from_written, run_sync_follow_ups } from "./sync_follow_ups";
+import { coalesce_job } from "../../infrastructure/job_queue";
+import { group_repo } from "../../repositories/sharing";
 import {
   get_transfer_classification_state,
   set_transfer_classification_state,
@@ -40,6 +47,10 @@ import { createHash } from "crypto";
 const CC_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
 /** Window of transactions loaded for matched-pair detection. */
 const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
+/** Pairing slack each side (as on the period page). */
+const ROLE_PAIRING_BUFFER_MS = 5 * 24 * 60 * 60 * 1000;
+/** A forced run (transfers just synced) re-decides roles only this far back. */
+const FORCED_ROLE_WINDOW_MS = 35 * 24 * 60 * 60 * 1000;
 /** Max age of a skipped (unchanged-fingerprint) result before a full re-run is forced. */
 const FULL_RECLASSIFY_MS = 24 * 60 * 60 * 1000;
 /** Bump when the classification logic changes, to invalidate every stored fingerprint. */
@@ -126,10 +137,11 @@ export async function classify_internal_transfers_orchestrator(
     return { hidden_outflows: 0, hidden_inflows: 0, skipped: true };
   }
 
+  // +5 days of pairing slack so a pair straddling the window edge keeps its partner.
   const txns = await transaction_repo.get_active_in_date_range(
     ctx,
     user_id,
-    now_ms - PAIRING_WINDOW_MS,
+    now_ms - PAIRING_WINDOW_MS - ROLE_PAIRING_BUFFER_MS,
     now_ms
   );
 
@@ -173,20 +185,43 @@ export async function classify_internal_transfers_orchestrator(
   ]);
 
   // 3b. Transfer roles on the user's own transfer transactions (3d) — decided exactly as the
-  //     period page decides them; only changed roles are written (an assignment input, so the
-  //     debounced assignment batch re-homes an edge_out contribution into Everything Else).
+  //     period page decides them. A FORCED run (new transfers just synced) re-decides only the
+  //     recent window; the 24h backstop re-decides the full window. Only changed roles are
+  //     written (stamped), and a transaction that STOPPED being a transfer (re-categorized) gets
+  //     "none" so the app never trusts a stale role. The changed transactions are re-assigned
+  //     here in ONE batch with one follow-up (no trigger chain, no transfer re-scan).
   const catalog = await load_category_catalog(ctx);
-  const roles = await resolve_transfer_roles(
-    ctx,
-    user_id,
-    now_ms - PAIRING_WINDOW_MS,
-    now_ms,
-    catalog,
-    txns
-  );
-  const stored = new Map(txns.map((t) => [t.id, t.data.transferRole as string | undefined]));
-  const changed = new Map([...roles].filter(([id, role]) => stored.get(id) !== role));
-  if (changed.size > 0) await transaction_repo.set_transfer_roles(ctx, changed);
+  const role_from_ms = now_ms - (opts?.force ? FORCED_ROLE_WINDOW_MS : PAIRING_WINDOW_MS);
+  const roles = await resolve_transfer_roles(ctx, user_id, role_from_ms, now_ms, catalog, txns);
+  const changed = new Map<string, string>();
+  for (const t of txns) {
+    const ms = (t.data.transactionDate as Timestamp).toMillis();
+    if (ms < role_from_ms || t.data.userId !== user_id) continue;
+    const next = roles.get(t.id) ?? (t.data.transferRole ? "none" : undefined);
+    if (next !== undefined && next !== t.data.transferRole) changed.set(t.id, next);
+  }
+  if (changed.size > 0) {
+    const run_id = generate_id();
+    await transaction_repo.set_transfer_roles(ctx, changed, run_id);
+    const written: SyncWrittenDoc[] = [];
+    await assign_transactions_batch_orchestrator(ctx, {
+      user_id,
+      transaction_ids: [...changed.keys()],
+      run_id: generate_id(), // its own stamp: a new id on this write is what the trigger skips
+      collect_into: written,
+    });
+    if (written.length) {
+      await run_sync_follow_ups(ctx, user_id, {
+        ...follow_ups_from_written(written),
+        transfers_changed: false,
+      });
+    }
+    // A pair across the view boundary also changes the OTHER members' edge legs: refresh theirs
+    // (coalesced, delayed — one per member per burst).
+    if ([...changed.values()].some((r) => r === "edge_in" || r === "edge_out")) {
+      await enqueue_partner_classification(ctx, user_id);
+    }
+  }
 
   // 4. Remember what we classified (hashing the flags as they are NOW, after the writes),
   //    so the next run with unchanged inputs skips. Only reached if every write succeeded.
@@ -202,4 +237,19 @@ export async function classify_internal_transfers_orchestrator(
   });
 
   return { hidden_outflows: out.hide.length, hidden_inflows: inf.hide.length, skipped: false };
+}
+
+/** Job type: re-classify one user's transfers (forced) — a partner's pair changed. */
+export const CLASSIFY_TRANSFERS_JOB = "classify_transfers";
+
+async function enqueue_partner_classification(ctx: TraceContext, user_id: string): Promise<void> {
+  const groups = await group_repo.get_for_user(ctx, user_id).catch(() => []);
+  const partners = new Set(groups.flatMap((g) => g.member_ids).filter((m) => m !== user_id));
+  for (const partner of partners) {
+    await coalesce_job(
+      CLASSIFY_TRANSFERS_JOB,
+      { deduplication_key: `classify:${partner}`, user_id: partner },
+      { delay_seconds: 60, trace_id: ctx.trace_id }
+    ).catch(() => {});
+  }
 }

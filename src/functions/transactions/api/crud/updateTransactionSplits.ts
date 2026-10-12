@@ -163,6 +163,17 @@ export const updateTransactionSplits = onCall<
     // (reconcile touched bills, recompute touched budget periods, one derive bump). Before: the
     // write queued a 15-s debounced re-assign that waited for the 5-minute sweep.
     const owner_id = (txn.userId as string) || userId;
+    const cat_key = (s: Record<string, unknown>) =>
+      `${s.categorySource ?? ""}|${s.firstCategoryId ?? ""}|${s.secondCategoryId ?? ""}`;
+    const stored_cats = new Map(
+      ((txn.splits ?? []) as Array<Record<string, unknown>>).map((s) => [
+        (s.splitId as string) || (s.id as string),
+        cat_key(s),
+      ])
+    );
+    const category_changed = (updateData.splits as Array<Record<string, unknown>>).some(
+      (s) => stored_cats.get(s.splitId as string) !== cat_key(s)
+    );
     const tctx = create_trace_context(false);
     const txn_date_ms = (txn.transactionDate as admin.firestore.Timestamp | undefined)?.toMillis?.();
     const run_id = generate_id();
@@ -202,9 +213,10 @@ export const updateTransactionSplits = onCall<
           ...follow_ups_from_written([
             { doc_id: transactionId, before: txn, after: { ...txn, ...updateData } },
           ]),
-          // A split edit never changes amounts / dates / accounts of the transaction, so it
-          // can't form or break a matched transfer pair — skip the transfer re-scan (reads).
-          transfers_changed: false,
+          // Pairing follows the category's MEANING: re-categorizing a split can form or break a
+          // matched transfer pair, so re-check transfers only then (status / amount / note
+          // edits can't — skip the scan's reads).
+          transfers_changed: category_changed,
         }
       ).catch((error) => console.error("[updateTransactionSplits] follow-up failed:", error));
     } else {

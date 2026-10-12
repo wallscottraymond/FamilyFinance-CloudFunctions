@@ -71,6 +71,7 @@ import {
   recompute_budget_rollover_orchestrator,
   RecomputeBudgetRolloverInput,
 } from "../../orchestrators/budgets/recompute_budget_rollover.orchestrator";
+import { classify_internal_transfers_orchestrator } from "../../orchestrators/plaid/classify_internal_transfers.orchestrator";
 import {
   reassign_user_orchestrator,
   ReassignUserInput,
@@ -197,6 +198,10 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   },
   reassign_user: async (ctx, payload) => {
     await reassign_user_orchestrator(ctx, payload as ReassignUserInput);
+  },
+  classify_transfers: async (ctx, payload) => {
+    const { user_id } = payload as { user_id: string };
+    await classify_internal_transfers_orchestrator(ctx, user_id, Date.now(), { force: true });
   },
 
   // Recurring reconciliation: recompute a recurring doc's period paid/received status

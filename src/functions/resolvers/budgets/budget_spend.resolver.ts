@@ -80,9 +80,9 @@ export async function resolve_spend_splits(
     ? await load_txns(start_ms, end_ms)
     : await transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
 
-  // Matched-pair internal-transfer detection: only OWN-account transfers (a matching
-  // opposite leg on another account) are excluded — external ACH bills that Plaid
-  // tags TRANSFER (mortgage, rent) stay countable. Same rule as the on-read paths.
+  // Internal transfers are excluded as on the period page: the stored matched-pair role when the
+  // classifier has decided it (it decides per VIEW — an edge_out contribution counts), else
+  // live pairing over the window.
   const catalog = await load_category_catalog(ctx);
   const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
 
@@ -91,7 +91,9 @@ export async function resolve_spend_splits(
   for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
     const is_pending = d.isPending === true;
-    const txn_is_internal_transfer = internal_ids.has(id);
+    const role = d.transferRole as string | undefined;
+    const txn_is_internal_transfer =
+      role !== undefined ? role === "internal" : internal_ids.has(id);
     const txn_is_income = d.type === "income";
     const splits = (d.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of splits) {
@@ -110,16 +112,16 @@ export async function resolve_spend_splits(
         split_category_input_from_raw(s, d, catalog),
         catalog
       ).semantic_code;
+      // A manual pin counts in its budget whatever the money is (canon A4) — as on the page.
+      const pinned = s.budgetAssignmentSource === "manual" && s.budgetId === budget_id;
       out.push({
         budget_id,
         amount: (s.amount as number) ?? 0,
         txn_date_ms,
         is_pending,
-        // Only INTERNAL (matched-pair own-account) transfers are excluded from spend
-        // by is_countable — external ACH bills tagged TRANSFER stay countable.
-        is_transfer: txn_is_internal_transfer,
+        is_transfer: !pinned && txn_is_internal_transfer,
         is_income: txn_is_income,
-        is_income_category: is_income_category(effective_category),
+        is_income_category: !pinned && is_income_category(effective_category),
         // Derive on read (no migration): explicit spendStatus wins, else fall back
         // to the legacy isIgnored/isRefund booleans, else 'counted'.
         spend_status:

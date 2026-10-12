@@ -14,6 +14,8 @@ import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrato
 import { resolve_group_accounts } from "../../resolvers/sharing/sharing.resolver";
 import { group_id_of_key } from "../../domain/sharing/budget_view.service";
 import { account_repo } from "../../repositories/account.repo";
+import { coalesce_job } from "../../infrastructure/job_queue";
+import { CLASSIFY_TRANSFERS_JOB } from "../plaid/classify_internal_transfers.orchestrator";
 
 /** A budget counts from the start of the period its start falls in (budget-start period snap), so
  *  a re-home reaches back one period before the earliest start. */
@@ -37,6 +39,13 @@ export async function reassign_accounts(
     by_owner.set(a.user_id, [...(by_owner.get(a.user_id) ?? []), ...ids]);
   });
   for (const [user_id, account_ids] of by_owner) {
+    // The accounts' view changed, so which transfers pair INSIDE a view (and which cross it)
+    // changed too: re-decide the owner's transfer roles (coalesced) before / alongside.
+    await coalesce_job(
+      CLASSIFY_TRANSFERS_JOB,
+      { deduplication_key: `classify:${user_id}`, user_id },
+      { delay_seconds: 0, trace_id: ctx.trace_id }
+    ).catch(() => {});
     try {
       await enqueue_reassign_user(
         { user_id, reason, scope: { account_ids, ...(from_ms !== undefined ? { from_ms } : {}) } },
