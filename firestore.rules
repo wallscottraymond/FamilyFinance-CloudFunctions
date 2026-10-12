@@ -1365,10 +1365,13 @@ service cloud.firestore {
     }
 
     // Server-only engine state (Transaction-Integrity-Review 3-R / 3c / first-link lease):
-    // re-assign runs, migration reports + undo snapshots, item-sync leases, the kill switch.
+    // re-assign runs + their single-flight locks, migration reports + undo snapshots, item-sync leases, the kill switch.
     // Written and read only by Cloud Functions (admin SDK). Explicit for clarity — the catch-all
     // below would deny them too.
     match /_reassign_runs/{runId} {
+      allow read, write: if false;
+    }
+    match /_reassign_locks/{slotId} {
       allow read, write: if false;
     }
     match /_migration_reports/{runId} {

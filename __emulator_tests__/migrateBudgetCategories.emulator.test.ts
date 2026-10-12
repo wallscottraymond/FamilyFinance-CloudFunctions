@@ -48,11 +48,15 @@ describe('migrate_budget_categories (emulator)', () => {
     await seedBudget(`mb_ee_${RUN}`, u, ['a', 'b'], true);
     await seedBudget(`mb_edit_${RUN}`, u, [], true);
     await db.collection('budgets').doc(`mb_edit_${RUN}`).update({ categoryIds: ['z'] });
+    // A budget in no view (no userId) with an unmappable id: flagged, and never crashes the report.
+    await seedBudget(`mb_noowner_${RUN}`, u, [`mb_unknown_${RUN}`]);
+    await db.collection('budgets').doc(`mb_noowner_${RUN}`).update({ userId: admin.firestore.FieldValue.delete() });
 
     const dry = await migrate_budget_categories_orchestrator(ctx(), { dry_run: true });
     expect(await ids(`mb_codes_${RUN}`)).toEqual([`MB_A_${RUN}`]); // nothing written
     const report = (await db.collection('_migration_reports').doc(dry.run_id).get()).data()!;
     const mine = report.changes.filter((c: { budget_id: string }) => c.budget_id.endsWith(RUN));
+    expect(report.flags.some((f: { budget_id: string }) => f.budget_id === `mb_noowner_${RUN}`)).toBe(true);
     expect(mine).toEqual(expect.arrayContaining([
       expect.objectContaining({ budget_id: `mb_codes_${RUN}`, after: [`mb_first_${RUN}`] }),
       expect.objectContaining({ budget_id: `mb_ee_${RUN}`, after: [] }),

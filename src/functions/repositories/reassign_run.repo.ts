@@ -3,6 +3,8 @@
  * progress + report, and its kill switch.
  *
  *   `_reassign_runs/{run_id}`  one run: scope, cursor, counters, merged follow-ups, dry-run report
+ *   `_reassign_locks/{slot}`   `{ run_id, heartbeat }` — atomic single-flight (one real run per
+ *                              user; one dry run per key); a stale heartbeat frees it
  *   `_config/reassign`         `{ enabled: false }` stops every run at its next page (kill switch)
  *
  * Server-only collections (deny-all in Firestore rules — 3-S).
@@ -10,10 +12,27 @@
  * @module repositories/reassign_run
  */
 
+import { createHash } from "crypto";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import type { SyncFollowUps } from "../orchestrators/plaid/sync_follow_ups";
 
 const RUNS = "_reassign_runs";
+/** One doc per run slot: `{ run_id, heartbeat }` — the atomic single-flight lock. */
+const LOCKS = "_reassign_locks";
+
+const is_fresh = (snap: FirebaseFirestore.DocumentSnapshot, stale_ms: number): boolean =>
+  Date.now() - ((snap.get("heartbeat") as Timestamp | undefined)?.toMillis() ?? 0) < stale_ms;
+
+/**
+ * The slot a run holds while it runs. Real runs: ONE per user, whatever the scope (a run uses the
+ * budgets / categories it loaded when its invocation began, so two real runs in parallel could
+ * overwrite each other with an older view). Dry runs (write nothing): one per key.
+ */
+export function reassign_slot_id(user_id: string, dedup_key: string, dry_run: boolean): string {
+  return dry_run
+    ? `dry_${createHash("sha1").update(dedup_key).digest("hex")}`
+    : `user_${user_id}`;
+}
 
 export type ReassignReason =
   | "backfill" // the one-time repair (3-0b + re-assign everything)
@@ -84,43 +103,34 @@ export const reassign_run_repo = {
   },
 
   /**
-   * Is another run with this key RUNNING right now? A run that hasn't saved progress for
-   * `stale_ms` is dead (its job crashed past retries) and doesn't block.
+   * Claim (or keep) a run SLOT — atomic single-flight. One slot per user for real runs, one per
+   * key for dry runs (`reassign_slot_id`). Succeeds when the slot is free, held by this run, or
+   * its holder hasn't heartbeat for `stale_ms` (crashed / timed out); then (re)stamps the
+   * heartbeat. Called at the start of every invocation and after every page.
    */
-  async has_running(dedup_key: string, except_run_id: string, stale_ms: number): Promise<boolean> {
-    const snap = await getFirestore()
-      .collection(RUNS)
-      .where("dedup_key", "==", dedup_key)
-      .where("status", "==", "running")
-      .limit(5)
-      .get();
-    const fresh_after = Date.now() - stale_ms;
-    return snap.docs.some(
-      (d) =>
-        d.id !== except_run_id &&
-        ((d.get("updated_at") as Timestamp | undefined)?.toMillis() ?? 0) > fresh_after
-    );
+  async claim_slot(slot_id: string, run_id: string, stale_ms: number): Promise<boolean> {
+    const ref = getFirestore().collection(LOCKS).doc(slot_id);
+    return getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.get("run_id") !== run_id && is_fresh(snap, stale_ms)) return false;
+      tx.set(ref, { run_id, heartbeat: Timestamp.now() });
+      return true;
+    });
   },
 
-  /** Is any REAL (not dry-run) run of this user RUNNING right now (fresh, not `except_run_id`)? */
-  async has_running_real_for_user(
-    user_id: string,
-    except_run_id: string,
-    stale_ms: number
-  ): Promise<boolean> {
-    const snap = await getFirestore()
-      .collection(RUNS)
-      .where("user_id", "==", user_id)
-      .where("status", "==", "running")
-      .limit(10)
-      .get();
-    const fresh_after = Date.now() - stale_ms;
-    return snap.docs.some(
-      (d) =>
-        d.id !== except_run_id &&
-        d.get("dry_run") !== true &&
-        ((d.get("updated_at") as Timestamp | undefined)?.toMillis() ?? 0) > fresh_after
-    );
+  /** Is the slot held by another run with a fresh heartbeat? (Read-only: the enqueue's delay.) */
+  async slot_busy(slot_id: string, except_run_id: string, stale_ms: number): Promise<boolean> {
+    const snap = await getFirestore().collection(LOCKS).doc(slot_id).get();
+    return snap.exists && snap.get("run_id") !== except_run_id && is_fresh(snap, stale_ms);
+  },
+
+  /** Free the slot if this run holds it (the run ended: done / capped / stopped / failed). */
+  async release_slot(slot_id: string, run_id: string): Promise<void> {
+    const ref = getFirestore().collection(LOCKS).doc(slot_id);
+    await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.get("run_id") === run_id) tx.delete(ref);
+    });
   },
 
   /**

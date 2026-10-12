@@ -28,6 +28,7 @@ import { assign_transactions_batch_orchestrator } from '../src/functions/orchest
 import { transaction_repo } from '../src/functions/repositories/transaction.repo';
 import { request_category_reassign } from '../src/functions/orchestrators/transactions/reassign_fanout.orchestrator';
 import { invalidate_category_cache } from '../src/functions/repositories/category.repo';
+import { reassign_run_repo } from '../src/functions/repositories/reassign_run.repo';
 
 const ctx = () => ({ trace_id: `t_${Date.now()}`, span_id: `s_${Date.now()}` });
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -231,9 +232,9 @@ describe('reassign_user_orchestrator (emulator)', () => {
 
   it('real runs are single-flight PER USER: a different-scope request waits for the running one', async () => {
     const u = `ra_pu_${RUN}`;
-    await db.collection('_reassign_runs').doc(`ra_pu_run_${RUN}`).set({
-      run_id: `ra_pu_run_${RUN}`, user_id: u, dry_run: false, status: 'running',
-      dedup_key: `reassign_user:${u}:|1000|`, updated_at: Timestamp.now(),
+    // A real run of a DIFFERENT scope holds the user's slot.
+    await db.collection('_reassign_locks').doc(`user_${u}`).set({
+      run_id: `ra_pu_run_${RUN}`, heartbeat: Timestamp.now(),
     });
     // A different scope (other key) is still delayed until the running run is done.
     expect(await enqueue_reassign_user({ user_id: u, scope: { from_ms: 5000 } }, 't')).toBe(true);
@@ -246,6 +247,59 @@ describe('reassign_user_orchestrator (emulator)', () => {
     const dry = (await db.collection('_jobs').where('job_type', '==', 'reassign_user').get()).docs
       .map((d) => d.data()).filter((j) => j.payload?.user_id === u && j.payload?.dry_run === true);
     expect((dry[0].scheduled_for?.toMillis?.() ?? 0)).toBeLessThan(Date.now() + 60_000);
+  });
+
+  it('the slot claim is atomic: of two runs starting together exactly one runs; it frees the slot when done', async () => {
+    const u = await seedUser(8);
+    await seedTxn(`ra_atom_${RUN}`, u.userId, '2026-05-04', split(SHOP_CODE, u.ee.m));
+    const slot = `user_${u.userId}`;
+    // Five runs claim at the same moment: exactly one wins (transactional claim).
+    const wins = await Promise.all([1, 2, 3, 4, 5].map((k) =>
+      reassign_run_repo.claim_slot(slot, `ra_atom_${k}_${RUN}`, 20 * 60_000)));
+    expect(wins.filter(Boolean)).toHaveLength(1);
+    // While it holds the slot, another real run (any scope) waits — re-queued, not dropped.
+    const blocked = await reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id: `ra_atom_b_${RUN}`, scope: { from_ms: 2 } });
+    expect(blocked.status).toBe('continuing');
+    expect((await db.collection('_reassign_runs').doc(`ra_atom_b_${RUN}`).get()).exists).toBe(false); // never started
+    // The holder runs and frees the slot when done.
+    const holder = `ra_atom_${wins.indexOf(true) + 1}_${RUN}`;
+    expect((await reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id: holder })).status).toBe('done');
+    expect((await db.collection('_reassign_locks').doc(slot).get()).exists).toBe(false);
+    // A stale holder (crashed / timed out) never blocks forever.
+    await db.collection('_reassign_locks').doc(`user_${u.userId}`).set({
+      run_id: 'dead', heartbeat: Timestamp.fromMillis(Date.now() - 21 * 60_000),
+    });
+    const c = await reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id: `ra_atom_c_${RUN}` });
+    expect(c.status).toBe('done');
+  });
+
+  it('a page that throws after some writes landed still follows them up (saved on the run)', async () => {
+    const u = await seedUser(9);
+    const id = `ra_fu_${RUN}`;
+    await seedTxn(id, u.userId, '2026-05-05', split(SHOP_CODE, u.ee.m)); // wrong → will be written
+    await seedTxn(`${id}_2`, u.userId, '2026-05-06', split(SHOP_CODE, u.ee.m));
+    const run_id = `ra_fu_run_${RUN}`;
+    const real = transaction_repo.apply_split_assignments.bind(transaction_repo);
+    let calls = 0;
+    const spy = jest.spyOn(transaction_repo, 'apply_split_assignments').mockImplementation(
+      async (...args) => {
+        const ok = await real(...args);
+        if (++calls === 2) {
+          await new Promise((r) => setTimeout(r, 300)); // the first write has been recorded
+          throw new Error('after-write failure');
+        }
+        return ok;
+      }
+    );
+    try {
+      await expect(reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id })).rejects.toThrow('after-write');
+    } finally {
+      spy.mockRestore();
+    }
+    const saved = (await db.collection('_reassign_runs').doc(run_id).get()).data()!;
+    expect(saved.failures).toBe(1);
+    expect(saved.follow_ups.transactions_changed).toBe(true); // the landed write is remembered
+    expect((await txn(id)).splits[0].monthlyBudgetId).toBe(u.shop);
   });
 
   it('a run that keeps throwing is marked failed after 3 invocations (never retries forever)', async () => {
@@ -273,9 +327,9 @@ describe('reassign_user_orchestrator (emulator)', () => {
 
   it('a request while a run is RUNNING is queued delayed, never dropped; a queued one merges', async () => {
     const u = `ra_sf_${RUN}`;
-    await db.collection('_reassign_runs').doc(`ra_sf_run_${RUN}`).set({
-      run_id: `ra_sf_run_${RUN}`, user_id: u, dedup_key: `reassign_user:${u}`, status: 'running',
-      updated_at: Timestamp.now(),
+    // Another run holds the user's slot (fresh heartbeat).
+    await db.collection('_reassign_locks').doc(`user_${u}`).set({
+      run_id: `ra_sf_run_${RUN}`, heartbeat: Timestamp.now(),
     });
     expect(await enqueue_reassign_user({ user_id: u }, 't')).toBe(true);
     expect(await enqueue_reassign_user({ user_id: u }, 't')).toBe(false); // merged into the queued one

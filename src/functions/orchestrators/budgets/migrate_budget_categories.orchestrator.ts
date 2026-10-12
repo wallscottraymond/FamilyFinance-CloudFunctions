@@ -50,7 +50,9 @@ export async function migrate_budget_categories_orchestrator(
   const plan = plan_budget_category_migration(
     budgets.map((b) => ({
       id: b.id,
-      owner_key: b.user_id,
+      // The view key (a user id, or a group's key). A budget without one is in no view: it's
+      // still planned (and reported) but no view is re-assigned for it.
+      owner_key: b.user_id ?? "",
       name: b.name,
       category_ids: b.category_ids ?? [],
       is_everything_else: b.is_system_everything_else === true,
@@ -113,7 +115,9 @@ export async function migrate_budget_categories_orchestrator(
   }
   // Re-assign every view whose REAL budgets the reviewed plan changes (idempotent — a re-run
   // after a crash covers views whose budgets were written before it).
-  for (const c of reviewed_changes) if (real.has(c.budget_id)) views_to_reassign.add(c.owner_key);
+  for (const c of reviewed_changes) {
+    if (real.has(c.budget_id) && c.owner_key) views_to_reassign.add(c.owner_key);
+  }
   for (const owner_key of views_to_reassign) await reassign_view(ctx, owner_key);
 
   await migration_report_repo.mark_applied(run_id, { applied, skipped_changed_since: skipped });

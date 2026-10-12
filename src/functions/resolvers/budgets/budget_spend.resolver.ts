@@ -86,7 +86,6 @@ export async function resolve_spend_splits(
   const catalog = await load_category_catalog(ctx);
   const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
 
-  const lens_field = LENS_FIELD[cadence];
   const out: SplitForSpend[] = [];
   for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
@@ -97,44 +96,62 @@ export async function resolve_spend_splits(
     const txn_is_income = d.type === "income";
     const splits = (d.splits as Array<Record<string, unknown>>) ?? [];
     for (const s of splits) {
-      // The split's assignment in this budget's lens; monthly falls back to the
-      // legacy `budgetId` for pre-migration docs.
-      let assigned = s[lens_field] as string | undefined;
-      if (assigned === undefined && cadence === "monthly") {
-        assigned = s.budgetId as string | undefined;
-      }
-      if (assigned !== budget_id) {
-        continue;
-      }
-      // The category's meaning from the ONE category function (a user pick away from income
-      // makes it spending).
-      const effective_category = resolve_split_category(
-        split_category_input_from_raw(s, d, catalog),
-        catalog
-      ).semantic_code;
-      // A manual pin counts in its budget whatever the money is (canon A4) — as on the page.
-      const pinned = s.budgetAssignmentSource === "manual" && s.budgetId === budget_id;
-      out.push({
-        budget_id,
-        amount: (s.amount as number) ?? 0,
+      const spend = stored_split_for_spend(s, d, budget_id, cadence, catalog, {
         txn_date_ms,
         is_pending,
-        is_transfer: !pinned && txn_is_internal_transfer,
+        is_transfer: txn_is_internal_transfer,
         is_income: txn_is_income,
-        is_income_category: !pinned && is_income_category(effective_category),
-        // Derive on read (no migration): explicit spendStatus wins, else fall back
-        // to the legacy isIgnored/isRefund booleans, else 'counted'.
-        spend_status:
-          (s.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
-          (s.isIgnored === true
-            ? "ignored"
-            : s.isRefund === true
-              ? "refund"
-              : "counted"),
-        outflow_id: (s.outflowId as string | null) ?? null,
-        inflow_id: (s.inflowId as string | null) ?? null,
       });
+      if (spend) out.push(spend);
     }
   }
   return out;
+}
+
+/**
+ * One STORED split → the spend domain's input for `budget_id` in `cadence`'s lens, or null when
+ * the split isn't stored in that budget. PURE — the stored half of "stored == derived" (the
+ * property test runs it against the engine and the period page).
+ */
+export function stored_split_for_spend(
+  s: Record<string, unknown>,
+  txn: Record<string, unknown>,
+  budget_id: string,
+  cadence: PeriodInstanceType,
+  catalog: Awaited<ReturnType<typeof load_category_catalog>>,
+  t: { txn_date_ms: number; is_pending: boolean; is_transfer: boolean; is_income: boolean }
+): SplitForSpend | null {
+  // The split's assignment in this budget's lens; monthly falls back to the legacy `budgetId`
+  // for pre-migration docs.
+  let assigned = s[LENS_FIELD[cadence]] as string | undefined;
+  if (assigned === undefined && cadence === "monthly") {
+    assigned = s.budgetId as string | undefined;
+  }
+  if (assigned !== budget_id) return null;
+  // The category's meaning from the ONE category function (a user pick away from income makes
+  // it spending).
+  const effective_category = resolve_split_category(
+    split_category_input_from_raw(s, txn, catalog),
+    catalog
+  ).semantic_code;
+  // A manual pin counts in its budget whatever the money is (canon A4) — as on the page. The
+  // engine stores a pin per lens (an Everything Else pin → each lens's own EE), so the pin is
+  // "here" when this lens's stored budget is this budget.
+  const pinned = s.budgetAssignmentSource === "manual";
+  return {
+    budget_id,
+    amount: (s.amount as number) ?? 0,
+    txn_date_ms: t.txn_date_ms,
+    is_pending: t.is_pending,
+    is_transfer: !pinned && t.is_transfer,
+    is_income: t.is_income,
+    is_income_category: !pinned && is_income_category(effective_category),
+    // Derive on read (no migration): explicit spendStatus wins, else fall back to the legacy
+    // isIgnored/isRefund booleans, else 'counted'.
+    spend_status:
+      (s.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
+      (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted"),
+    outflow_id: (s.outflowId as string | null) ?? null,
+    inflow_id: (s.inflowId as string | null) ?? null,
+  };
 }

@@ -36,11 +36,39 @@ describe("build_split_edit", () => {
     expect(run([{ ...stored, amount: 30 }]).assignment_relevant).toBe(true);
   });
 
-  it("a category pick, a budget pin, a bill pin or a split add IS", () => {
+  it("a category pick, a budget pin or a split add IS", () => {
     expect(run([{ ...stored, categorySource: "user", firstCategoryId: "shopping" }]).assignment_relevant).toBe(true);
     expect(run([{ ...stored, budgetAssignmentSource: "manual", budgetId: "b_x" }]).assignment_relevant).toBe(true);
-    expect(run([{ ...stored, outflowId: "other_bill" }]).assignment_relevant).toBe(true);
     expect(run([stored, { amount: 5 }]).assignment_relevant).toBe(true);
+  });
+
+  it("engine-owned fields the app echoes back stale are ignored (the stored split wins)", () => {
+    // The app read the split while it was in Everything Else; a re-assign moved it since.
+    const stale_echo = {
+      ...stored, spendStatus: "ignored", budgetId: "ee", monthlyBudgetId: "ee",
+      weeklyBudgetId: "ee_w", outflowId: null, monthlyPeriodId: "old", inflowId: "inc",
+    };
+    const r = run([stale_echo]);
+    expect(r.splits[0]).toMatchObject({
+      spendStatus: "ignored", budgetId: "b_g", monthlyBudgetId: "b_g", outflowId: "bill",
+      outflowAssignmentSource: "manual", inflowId: null,
+    });
+    expect(r.assignment_relevant).toBe(false); // spend-only: nothing the engine decides moved
+  });
+
+  it("the user's new budget pin IS taken from the app; bill links never are", () => {
+    const pinned = run([{ ...stored, budgetAssignmentSource: "manual", budgetId: "b_x" }]);
+    expect(pinned.splits[0]).toMatchObject({ budgetAssignmentSource: "manual", budgetId: "b_x" });
+    expect(pinned.assignment_relevant).toBe(true);
+    // A stale echo of "category" over a stored pin is NOT an unpin (the app never sends one).
+    const was_pinned = { splits: [{ ...stored, budgetAssignmentSource: "manual", budgetId: "b_x" }] };
+    const echoed = build_split_edit(
+      [{ ...stored, budgetAssignmentSource: "category", budgetId: "b_g" }],
+      was_pinned, catalog, "u", "NOW", (i) => `n_${i}`
+    );
+    expect(echoed.splits[0]).toMatchObject({ budgetAssignmentSource: "manual", budgetId: "b_x" });
+    const bill = run([{ ...stored, outflowId: "other_bill", outflowAssignmentSource: "manual" }]);
+    expect(bill.splits[0]).toMatchObject({ outflowId: "bill", outflowAssignmentSource: "manual" });
   });
 
   it("category_changed only when a category moved", () => {

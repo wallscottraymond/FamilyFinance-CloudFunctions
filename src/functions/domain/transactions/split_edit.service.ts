@@ -4,6 +4,12 @@
  *   - Each incoming split is MERGED onto the stored split with the same id: the app re-sends the
  *     whole array, and an older build may leave fields out (spendStatus, tags, tax flag, a manual
  *     bill pin, per-lens budgets) — omission must never erase them.
+ *   - Fields only the ENGINE sets (per-lens budgets + names + sources, source periods, auto bill /
+ *     income links, the legacy budget alias) always come from the STORED split: the app echoes
+ *     whatever it last read, which may be older than a re-assign that landed since. From the app
+ *     we take only the user's intents — a new budget pin, and status / amount / tags / notes / tax
+ *     flag (bill pins go through `assign_split_to_outflow`). A new split takes the app's fields
+ *     (the engine runs on it).
  *   - Category fields come from the one edit rule (split_category_edit: pick / "use auto" / an old
  *     build's bare categoryId; Plaid codes immutable; `internal*` null).
  *   - Totals + the refund / ignored summaries are recomputed from the final splits.
@@ -53,7 +59,42 @@ const status_of = (s: Raw): string =>
   (typeof s.spendStatus === "string" && s.spendStatus) ||
   (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted");
 
+/** The engine's per-split outputs — never taken from the app for an existing split. */
+const ENGINE_FIELDS = [
+  "monthlyBudgetId", "weeklyBudgetId", "biWeeklyBudgetId",
+  "monthlyBudgetName", "weeklyBudgetName", "biWeeklyBudgetName",
+  "monthlyBudgetSource", "weeklyBudgetSource", "biWeeklyBudgetSource",
+  "monthlyPeriodId", "weeklyPeriodId", "biWeeklyPeriodId",
+  "budgetName", "inflowId",
+] as const;
+
 /* eslint-disable @typescript-eslint/naming-convention */
+/** Engine-owned fields from the stored split, except where the app states a user intent. */
+function engine_owned_fields(split: Raw, before: Raw): Raw {
+  const out: Raw = {};
+  for (const f of ENGINE_FIELDS) out[f] = before[f] ?? null;
+
+  // Budget: only a NEW manual pin (or a pin to a different budget) is the user's — the app sends
+  // `budgetAssignmentSource: "manual"` + the budget when the user picks one. It never sends an
+  // unpin, so anything else is an echo: keep the stored budget + source.
+  const pin_now = split.budgetAssignmentSource === "manual";
+  const pin_before = before.budgetAssignmentSource === "manual";
+  if (pin_now && (!pin_before || split.budgetId !== before.budgetId)) {
+    out.budgetId = split.budgetId;
+    out.budgetAssignmentSource = "manual";
+  } else {
+    out.budgetId = before.budgetId ?? null;
+    out.budgetAssignmentSource = before.budgetAssignmentSource ?? "category";
+  }
+
+  // Bill links: pinned / detached / cleared only through `assign_split_to_outflow`; a split edit
+  // never changes them.
+  out.outflowId = before.outflowId ?? null;
+  out.outflowAssignmentSource = before.outflowAssignmentSource ?? "auto";
+  out.outflowPinnedPeriodId = before.outflowPinnedPeriodId ?? null;
+  return out;
+}
+
 export function build_split_edit(
   incoming: Raw[],
   txn: Raw,
@@ -74,6 +115,7 @@ export function build_split_edit(
     return {
       ...(before ?? {}),
       ...split,
+      ...(before ? engine_owned_fields(split, before) : {}),
       splitId: split_id,
       id: split_id,
       ...category,

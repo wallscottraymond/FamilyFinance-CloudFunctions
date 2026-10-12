@@ -13,8 +13,11 @@
  *   THE budget set (build_match_budgets).
  * PAGE (what's counted): map_raw_split_to_on_read_match → owned_splits_for_budget → is_countable
  *   over the same budget set — exactly the period page's calls.
+ * STORED SPEND (budget_period.spent → summaries / widgets): stored_split_for_spend over the
+ *   engine's written split, in EVERY lens, → is_countable.
  * Claim: the engine stores budget B (monthly lens) ⇔ the page counts the split in B; the engine
- * stores "unassigned" ⇔ the page counts it nowhere. Plus: the engine is idempotent.
+ * stores "unassigned" ⇔ the page counts it nowhere; stored spend counts it in each lens's stored
+ * budget ⇔ the page counts it. Plus: the engine is idempotent.
  */
 
 import { build_category_catalog } from "../split_category.service";
@@ -35,6 +38,7 @@ import {
   build_match_budgets,
 } from "../../budgets/match_budgets.service";
 import { map_raw_split_to_on_read_match } from "../../../resolvers/shared/on_read_matching";
+import { stored_split_for_spend } from "../../../resolvers/budgets/budget_spend.resolver";
 
 const CODES: Array<[string, string]> = [
   ["FOOD_AND_DRINK_GROCERIES", "groceries"],
@@ -163,6 +167,32 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
     } else {
       expect([i, code, role, "counted in", counted ? owner : null])
         .toEqual([i, code, role, "counted in", stored.monthly_budget_id]);
+    }
+
+    // STORED SPEND: the written split, read back by recompute_budget_spent in every lens.
+    const written: Record<string, unknown> = {
+      ...raw,
+      budgetId: stored.budget_id,
+      budgetAssignmentSource: stored.budget_assignment_source,
+      monthlyBudgetId: stored.monthly_budget_id,
+      weeklyBudgetId: stored.weekly_budget_id,
+      biWeeklyBudgetId: stored.bi_weekly_budget_id,
+      firstCategoryId: stored.first_category_id,
+      secondCategoryId: stored.second_category_id,
+      categorySource: stored.category_source,
+    };
+    for (const [lens, id] of [
+      ["monthly", stored.monthly_budget_id],
+      ["weekly", stored.weekly_budget_id],
+      ["bi_monthly", stored.bi_weekly_budget_id],
+    ] as const) {
+      if (id === UNASSIGNED_BUDGET_ID) continue;
+      const spend = stored_split_for_spend(written, txn, id, lens, catalog, {
+        txn_date_ms: date, is_pending: false,
+        is_transfer: live_role === "internal", is_income: is_income_txn,
+      });
+      expect([i, code, role, lens, "stored spend counts", spend !== null && is_countable(spend)])
+        .toEqual([i, code, role, lens, "stored spend counts", counted]);
     }
 
     // Idempotent: the engine over its own output changes nothing.

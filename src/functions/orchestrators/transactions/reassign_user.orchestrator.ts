@@ -24,7 +24,8 @@
  * so a change made mid-run is never lost and two runs never write the same user in parallel.
  * A run that keeps throwing is marked "failed" after a few invocations (never retries forever).
  * The run id is fixed at enqueue, so a retried job RESUMES its run from the cursor. Runs execute
- * only on the immediate job trigger (a full 9-minute budget): the 5-minute sweep hands a due job back to it instead of running it.
+ * only on the immediate job trigger (a full 9-minute budget): the 5-minute sweep hands a due job
+ * back to it instead of running it.
  *
  * @module orchestrators/transactions/reassign_user
  */
@@ -54,6 +55,7 @@ import {
   ReassignReason,
   ReassignRun,
   ReassignScope,
+  reassign_slot_id,
 } from "../../repositories/reassign_run.repo";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import {
@@ -129,7 +131,8 @@ export async function enqueue_reassign_user(
   delay_seconds?: number
 ): Promise<boolean> {
   const key = reassign_dedup_key(input.user_id, input.scope, input.dry_run === true);
-  const running = await blocking_run_exists(input.user_id, key, input.dry_run === true, "");
+  const slot = reassign_slot_id(input.user_id, key, input.dry_run === true);
+  const running = await reassign_run_repo.slot_busy(slot, "", STALE_RUN_MS);
   const job = await coalesce_job(
     REASSIGN_JOB,
     // The run id is fixed now, so a retried first job resumes the same run.
@@ -140,24 +143,6 @@ export async function enqueue_reassign_user(
     }
   );
   return job !== null;
-}
-
-/**
- * Does a run block this one from starting? Real runs are single-flight PER USER (whatever their
- * scope): a running run uses the budgets / categories it loaded when its invocation began, so a
- * second real run for the same user in parallel could finish first and then be overwritten with
- * the older view. Serialized, the later run always walks after the earlier one. A dry run (audit,
- * writes nothing) only waits for another dry run with its key.
- */
-async function blocking_run_exists(
-  user_id: string,
-  dedup_key: string,
-  dry_run: boolean,
-  except_run_id: string
-): Promise<boolean> {
-  return dry_run
-    ? reassign_run_repo.has_running(dedup_key, except_run_id, STALE_RUN_MS)
-    : reassign_run_repo.has_running_real_for_user(user_id, except_run_id, STALE_RUN_MS);
 }
 
 /** A continuation of a run (its own key — never merges with a NEW request). */
@@ -204,11 +189,10 @@ export async function reassign_user_orchestrator(
     log_operation_success(span, input.user_id);
     return { run_id: run.run_id, status: run.status, scanned: run.scanned, changed: run.changed };
   }
-  // Single-flight: a NEW run waits while another run with its key is running (it re-checks).
-  const blocked =
-    !existing &&
-    (await blocking_run_exists(run.user_id, run.dedup_key, run.dry_run, run.run_id));
-  if (blocked) {
+  // Single-flight (atomic): claim the run's slot — a run waits while another holds it (it
+  // re-checks later). Every invocation claims, so a continuation can't run beside a newer run.
+  const slot = reassign_slot_id(run.user_id, run.dedup_key, run.dry_run);
+  if (!(await reassign_run_repo.claim_slot(slot, run.run_id, STALE_RUN_MS))) {
     await create_job(
       REASSIGN_JOB,
       { ...input, run_id: run.run_id },
@@ -218,7 +202,7 @@ export async function reassign_user_orchestrator(
     return { run_id: run.run_id, status: "continuing", scanned: 0, changed: 0 };
   }
   run.invocations++;
-  await reassign_run_repo.save(run); // claims the key (status running) before any work
+  await reassign_run_repo.save(run);
 
   try {
     const catalog = await load_category_catalog(ctx);
@@ -293,39 +277,45 @@ export async function reassign_user_orchestrator(
           );
         }
         const written: SyncWrittenDoc[] = [];
-        await assign_transactions_batch_orchestrator(ctx, {
-          user_id: run.user_id,
-          transaction_ids: prepared.map((d) => d.id),
-          preloaded_docs: prepared,
-          preloaded_shared: shared,
-          preloaded_candidates: candidates,
-          force_write_ids,
-          extra_fields_by_id,
-          dry_run: run.dry_run,
-          run_id: run.run_id,
-          prepare_fresh: prepare,
-          collect_into: written,
-          on_result: (r) => {
-            if (!r.write) return;
-            run.changed++;
-            for (const m of r.moves) {
-              const key = `${m.before}→${m.after}`;
-              run.moves[key] = (run.moves[key] ?? 0) + 1;
-            }
-            if (r.moves.length && run.samples.length < MAX_SAMPLES) {
-              const date = r.data.transactionDate as Timestamp | undefined;
-              run.samples.push({
-                transaction_id: r.transaction_id,
-                merchant: ((r.data.merchantName ?? r.data.name) as string | null) ?? null,
-                date: date ? new Date(date.toMillis()).toISOString().slice(0, 10) : "",
-                before: r.moves.map((m) => m.before).join(","),
-                after: r.moves.map((m) => m.after).join(","),
-              });
-            }
-          },
-        });
-        if (written.length) {
-          follow_ups = merge_follow_ups(follow_ups, follow_ups_from_written(written));
+        try {
+          await assign_transactions_batch_orchestrator(ctx, {
+            user_id: run.user_id,
+            transaction_ids: prepared.map((d) => d.id),
+            preloaded_docs: prepared,
+            preloaded_shared: shared,
+            preloaded_candidates: candidates,
+            force_write_ids,
+            extra_fields_by_id,
+            dry_run: run.dry_run,
+            run_id: run.run_id,
+            prepare_fresh: prepare,
+            collect_into: written,
+            on_result: (r) => {
+              if (!r.write) return;
+              run.changed++;
+              for (const m of r.moves) {
+                const key = `${m.before}→${m.after}`;
+                run.moves[key] = (run.moves[key] ?? 0) + 1;
+              }
+              if (r.moves.length && run.samples.length < MAX_SAMPLES) {
+                const date = r.data.transactionDate as Timestamp | undefined;
+                run.samples.push({
+                  transaction_id: r.transaction_id,
+                  merchant: ((r.data.merchantName ?? r.data.name) as string | null) ?? null,
+                  date: date ? new Date(date.toMillis()).toISOString().slice(0, 10) : "",
+                  before: r.moves.map((m) => m.before).join(","),
+                  after: r.moves.map((m) => m.after).join(","),
+                });
+              }
+            },
+          });
+        } finally {
+          // Writes that committed before a failure are followed up too: they're stamped (the
+          // trigger skips them) and a retry sees them as unchanged, so nothing else would.
+          if (written.length) {
+            follow_ups = merge_follow_ups(follow_ups, follow_ups_from_written(written));
+          }
+          run.follow_ups = follow_ups;
         }
       }
 
@@ -334,6 +324,8 @@ export async function reassign_user_orchestrator(
       run.follow_ups = follow_ups;
       if (page.exhausted) run.walk_done = true;
       await reassign_run_repo.save(run); // resumable after every page
+      // Heartbeat; if the slot was lost (we went stale), stop and continue later.
+      if (!(await reassign_run_repo.claim_slot(slot, run.run_id, STALE_RUN_MS))) break;
     }
 
     if (run.status === "running" && !run.walk_done) {
@@ -379,6 +371,7 @@ export async function reassign_user_orchestrator(
     }
     if (run.status === "running") run.status = "done";
     await reassign_run_repo.save(run);
+    await reassign_run_repo.release_slot(slot, run.run_id); // the user's next run may start
 
     console.log(
       `[${ctx.trace_id}] reassign_user ${run.run_id}: user=${run.user_id} reason=${run.reason} ` +
@@ -402,11 +395,26 @@ export async function reassign_user_orchestrator(
     if (saved && saved.status === "running") {
       saved.failures = (saved.failures ?? 0) + 1;
       saved.last_error = error instanceof Error ? error.message : String(error);
+      // The in-memory follow-ups include this invocation's committed writes (the saved cursor
+      // doesn't move past the failed page, so counters stay as saved).
+      saved.follow_ups = run.follow_ups ?? saved.follow_ups;
       if (saved.failures >= MAX_RUN_FAILURES) {
         saved.status = "failed";
         await reassign_run_repo.save(saved);
+        await reassign_run_repo
+          .release_slot(reassign_slot_id(saved.user_id, saved.dedup_key, saved.dry_run), run.run_id)
+          .catch(() => {});
+        // What the run DID write is still followed up (bills, budget spend, derive cache).
+        if (!saved.dry_run && saved.follow_ups?.transactions_changed) {
+          await run_sync_follow_ups(ctx, saved.user_id, saved.follow_ups).catch((e) =>
+            console.error(`[${ctx.trace_id}] reassign_user ${run.run_id}: follow-up failed:`, e)
+          );
+        }
+        // ALERT: a failed run's request is not re-queued (that would retry forever); the
+        // assignment audit reports what it left unfixed.
         console.error(
-          `[${ctx.trace_id}] reassign_user ${run.run_id}: failed ${saved.failures}x — giving up`
+          `[${ctx.trace_id}] REASSIGN_RUN_FAILED ${run.run_id}: user=${saved.user_id} ` +
+            `reason=${saved.reason} failures=${saved.failures} error=${saved.last_error}`
         );
         return {
           run_id: run.run_id,
