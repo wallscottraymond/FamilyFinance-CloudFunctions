@@ -250,8 +250,13 @@ describe('a split PENDING transaction, then Plaid posts it (emulator)', () => {
   });
 
   it('posted for MORE (a tip): splits scale proportionally and still add up to the posted amount', async () => {
-    const { posted, by } = await post_split_pending(110);
+    const { posted, by, B } = await post_split_pending(110);
     expect([by('s1').amount, by('s2').amount, by('s3').amount]).toEqual([66, 33, 11]);
+    // …with every choice kept
+    expect(by('s1').monthlyBudgetId).toBe(B.groc);
+    expect(by('s2')).toMatchObject({ categorySource: 'user', monthlyBudgetId: B.shop });
+    expect(by('s3')).toMatchObject({ budgetAssignmentSource: 'manual', monthlyBudgetId: B.fun, tags: ['gift'] });
+    expect(status(by('s3'))).toBe('ignored');
     const sum = (posted.splits as Array<{ amount: number }>).reduce((t, s) => t + cents(s.amount), 0);
     expect(sum).toBe(cents(110));
   });

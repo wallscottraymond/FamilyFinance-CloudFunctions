@@ -40,6 +40,9 @@ export interface ActualPayment {
   split_id: string | null;
   date_ms: number;
   amount: number;
+  /** A payment the user PINNED to a period (the two-stage bill picker): it settles an occurrence
+   *  due inside that period, however far from its date — as stored reconcile places it. */
+  pinned_window?: { start_ms: number; end_ms: number };
 }
 
 /** A reconciled occurrence: canonical + which payment settled it. */
@@ -123,7 +126,11 @@ export function reconcile_occurrences(
         continue;
       }
       const diff = Math.abs(payment.date_ms - occ.due_date_ms);
-      if (diff <= tolerance_ms && diff < best_diff) {
+      const eligible = payment.pinned_window
+        ? occ.due_date_ms >= payment.pinned_window.start_ms &&
+          occ.due_date_ms <= payment.pinned_window.end_ms
+        : diff <= tolerance_ms;
+      if (eligible && diff < best_diff) {
         best_diff = diff;
         best_index = i;
       }

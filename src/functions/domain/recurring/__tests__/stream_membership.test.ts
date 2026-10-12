@@ -115,6 +115,8 @@ describe("manual bill detach", () => {
     expect(is_other_income_split({}, "INCOME_WAGES", true, true)).toBe(false); // on its income stream
     expect(is_other_income_split({ inflowId: "inc" }, "INCOME_WAGES", false, true)).toBe(false);
     expect(is_other_income_split({ budgetAssignmentSource: "manual" }, "INCOME_WAGES", false, true)).toBe(false);
+    // an Ignored income credit isn't income received
+    expect(is_other_income_split({ spendStatus: "ignored" }, "INCOME_WAGES", false, true)).toBe(false);
   });
 
   it("is_edge_money: only a transfer crossing the view", () => {

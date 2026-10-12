@@ -131,7 +131,15 @@ describe("account placement (emulator)", () => {
   });
 
   it("unshare → private again", async () => {
+    const clear_reassign_jobs = async () => {
+      // Only THIS suite's users' jobs (other suites share the emulator).
+      const old = await db.collection("_jobs").where("job_type", "==", "reassign_user").get();
+      await Promise.all(old.docs
+        .filter((d) => [ALEX, SAM].includes(d.data().payload?.user_id))
+        .map((d) => d.ref.delete()));
+    };
     expect((await unshare_account_orchestrator(ctx(SAM, { account_id: JC_A }))).success).toBe(false);
+    await clear_reassign_jobs(); // the earlier Accept queued one — prove THIS action queues its own
     expect((await unshare_account_orchestrator(ctx(ALEX, { account_id: JC_A }))).success).toBe(true);
     expect(await placement_of(JC_A)).toBeNull();
     // Its transactions are re-assigned back to Alex's Me view: a re-assign run scoped to it.
@@ -155,6 +163,14 @@ describe("departures (D13, emulator)", () => {
   it("T-LV-01 Sam leaves → his shared Amex goes private; Alex's account stays shared", async () => {
     await share_and_accept(SAM, ALEX, AMEX);
     await share_and_accept(ALEX, SAM, JC_A);
+    const clear_reassign_jobs = async () => {
+      // Only THIS suite's users' jobs (other suites share the emulator).
+      const old = await db.collection("_jobs").where("job_type", "==", "reassign_user").get();
+      await Promise.all(old.docs
+        .filter((d) => [ALEX, SAM].includes(d.data().payload?.user_id))
+        .map((d) => d.ref.delete()));
+    };
+    await clear_reassign_jobs(); // the Accepts above queued some — prove leaving queues its own
     expect((await manage_group_orchestrator(ctx(SAM, { group_id, action: "leave" }))).success)
       .toBe(true);
     expect(await placement_of(AMEX)).toBeNull();

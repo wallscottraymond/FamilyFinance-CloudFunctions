@@ -220,6 +220,36 @@ describe("a bill payment PINNED to a period pays THAT period on the page (as rec
     expect(paid(nov)).toBe(0);
   });
 
+  it("a bill due on the 1st, paid Nov 3 and pinned to October: November stays UNPAID (no double count)", async () => {
+    await db.collection("outflows").doc(id("rent2")).set({
+      id: id("rent2"), ownerId: ALEX, userId: ALEX, createdBy: ALEX, updatedBy: ALEX,
+      isActive: true, isHidden: false, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      plaidItemId: `item_${ALEX}`, accountId: `p_${id("chk_a")}`, lastAmount: 40, averageAmount: 40,
+      currency: "USD", description: "storage", merchantName: "storage", payerName: "storage", userCustomName: null,
+      frequency: "monthly", firstDate: ts("2031-01-01T00:00:00Z"), lastDate: ts("2031-10-01T00:00:00Z"),
+      predictedNextDate: ts("2031-11-01T00:00:00Z"), plaidPrimaryCategory: "GENERAL_SERVICES",
+      plaidDetailedCategory: "GENERAL_SERVICES_STORAGE", internalPrimaryCategory: null,
+      internalDetailedCategory: null, transactionIds: [], source: "plaid", streamId: id("rent2"),
+    });
+    await txn("rent2_pay", ALEX, id("chk_a"), 40, "2031-11-03T12:00:00Z", "GENERAL_SERVICES_STORAGE");
+    await db.collection("transactions").doc(id("rent2_pay")).update({
+      splits: [{
+        splitId: "r1", amount: 40, plaidPrimaryCategory: "GENERAL_SERVICES",
+        plaidDetailedCategory: "GENERAL_SERVICES_STORAGE", budgetId: "unassigned",
+        outflowId: id("rent2"), outflowAssignmentSource: "manual", outflowPinnedPeriodId: "2031M10", inflowId: null,
+      }],
+      splitOutflowIds: [id("rent2")],
+    });
+    const paid = (r: Awaited<ReturnType<typeof oct>>) =>
+      (r.bills.find((b) => b.recurring_id === id("rent2"))?.groups ?? [])
+        .reduce((t: number, g: { total_paid: number }) => t + g.total_paid, 0);
+    const nov = await derive_period_orchestrator(t(), ALEX, {
+      view_cadence: "monthly", window_start_ms: NOV.start, window_end_ms: NOV.end, force: true, scope: { kind: "me" },
+    });
+    expect(paid(nov)).toBe(0); // the Nov 1 occurrence is NOT paid by October's pinned payment
+    expect(paid(await oct(ALEX, { kind: "me" }))).toBe(40);
+  });
+
   it("an IGNORED split on a bill payment pays nothing on the page (as reconcile nets it)", async () => {
     await db.collection("outflows").doc(id("music")).set({
       id: id("music"), ownerId: ALEX, userId: ALEX, createdBy: ALEX, updatedBy: ALEX,
@@ -240,10 +270,12 @@ describe("a bill payment PINNED to a period pays THAT period on the page (as rec
       }],
       splitOutflowIds: [id("music")],
     });
-    const paid = (r: Awaited<ReturnType<typeof oct>>) =>
-      (r.bills.find((b) => b.recurring_id === id("music"))?.groups ?? [])
-        .reduce((t: number, g: { total_paid: number }) => t + g.total_paid, 0);
-    expect(paid(await oct(ALEX, { kind: "me" }))).toBe(0);
+    const groups = (r: Awaited<ReturnType<typeof oct>>) =>
+      r.bills.find((b) => b.recurring_id === id("music"))?.groups ?? [];
+    const g = groups(await oct(ALEX, { kind: "me" }));
+    expect(g.reduce((t: number, x: { total_paid: number }) => t + x.total_paid, 0)).toBe(0);
+    // …and the occurrence is NOT marked paid (stored reconcile needs a paid amount above zero).
+    expect(g.reduce((t: number, x: { count_paid: number }) => t + x.count_paid, 0)).toBe(0);
   });
 });
 

@@ -37,7 +37,7 @@ import {
   MonthlyPeriodForDerivation,
 } from "../../domain/budgets/budget_view.service";
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
-import { is_transfer_category } from "../../domain/budgets/budget_spend.service";
+import { is_transfer_category, split_spend_status } from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers_from_txns,
   txn_effective_category,
@@ -611,19 +611,27 @@ export function shape_period_derivation_deps(
   // A bill payment PINNED to a period (outflowPinnedPeriodId — the two-stage bill picker) is
   // placed at that period's midpoint, exactly as reconcile places it: it pays THAT period, not
   // the one its date falls in.
-  const period_mid = new Map(
-    raw.overlapping.map((p) => [
-      p.id,
-      Math.floor((p.start_date.toMillis() + p.end_date.toMillis()) / 2),
-    ])
+  const period_range = new Map(
+    raw.overlapping.map((p) => [p.id, { start_ms: p.start_date.toMillis(), end_ms: p.end_date.toMillis() }])
   );
   const in_span = (ms: number) => ms >= span_start_ms && ms <= span_end_ms;
-  const pinned_payment_date = (
+  /** The pinned period's range; `undefined` = not pinned; `null` = pinned to a period this
+   *  derive didn't load (outside its windows) — it pays THAT period, never one here. */
+  const pinned_period = (
     linked: Array<Record<string, unknown>>,
     link: string
-  ): number | null => {
+  ): { start_ms: number; end_ms: number } | null | undefined => {
     const pin = linked.find((sp) => sp.outflowId === link && sp.outflowPinnedPeriodId);
-    return pin ? period_mid.get(pin.outflowPinnedPeriodId as string) ?? null : null;
+    if (!pin) return undefined;
+    return period_range.get(pin.outflowPinnedPeriodId as string) ?? null;
+  };
+  const mid = (r: { start_ms: number; end_ms: number }) => Math.floor((r.start_ms + r.end_ms) / 2);
+  // A payment whose NET is nothing (all its splits Ignored) or negative (a refund) isn't recorded
+  // as a payment — stored reconcile only counts a paid amount above zero, so the page must not
+  // mark an occurrence paid / received with it.
+  const PAYMENT_EPSILON = 0.005;
+  const push_payment = (link: string, p: ActualPayment) => {
+    if (p.amount > PAYMENT_EPSILON) payments_by_id.get(link)!.push(p);
   };
   for (const { id, data } of txns) {
     const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
@@ -691,6 +699,7 @@ export function shape_period_derivation_deps(
       } else if (
         crossing.in_ids.has(id) &&
         s.budgetAssignmentSource !== "manual" &&
+        split_spend_status(s) !== "ignored" &&
         is_transfer_category(matched.semantic_code)
       ) {
         // D12: money moved INTO this view from a member's account outside it (e.g. a share sent
@@ -712,21 +721,23 @@ export function shape_period_derivation_deps(
     const net = (xs: Array<Record<string, unknown>>) =>
       compute_countable_split_net(xs as CountableSplitInput[], id);
     for (const [link, linked] of linked_by_id) {
-      const pinned_ms = pinned_payment_date(linked, link);
-      if (pinned_ms !== null && !in_span(pinned_ms)) continue; // pays its pinned period
+      const pinned = pinned_period(linked, link);
+      // Pinned to another period (loaded or not): it pays THAT period, not one here.
+      if (pinned === null || (pinned !== undefined && !in_span(mid(pinned)))) continue;
       const n = net(linked);
-      payments_by_id.get(link)!.push({
+      push_payment(link, {
         transaction_id: id,
         split_id: n.split_id,
-        date_ms: pinned_ms ?? txn_date_ms,
+        date_ms: pinned ? mid(pinned) : txn_date_ms,
         amount: n.amount,
+        ...(pinned ? { pinned_window: pinned } : {}),
       });
     }
     // Deterministic Plaid income reconciliation: this txn belongs to an inflow
     // stream → it's a received payment for that inflow (its full deposit amount).
     const inflow_on = raw.filter(on_inflow_stream);
     if (linked_inflow_id && inflow_on.length && payments_by_id.has(linked_inflow_id)) {
-      payments_by_id.get(linked_inflow_id)!.push({
+      push_payment(linked_inflow_id, {
         transaction_id: id,
         split_id: null,
         date_ms: txn_date_ms,
@@ -746,7 +757,7 @@ export function shape_period_derivation_deps(
         ? []
         : splits_paying_recurring(raw, "outflow", linked_outflow_id, true);
       if (stream_paying.length) {
-        payments_by_id.get(linked_outflow_id)!.push({
+        push_payment(linked_outflow_id, {
           transaction_id: id,
           split_id: null,
           date_ms: txn_date_ms,
@@ -775,13 +786,14 @@ export function shape_period_derivation_deps(
       if (payments_by_id.has(link)) by_link.set(link, [...(by_link.get(link) ?? []), sp]);
     }
     for (const [link, linked] of by_link) {
-      const pinned_ms = pinned_payment_date(linked, link);
-      if (pinned_ms === null || !in_span(pinned_ms)) continue;
+      const pinned = pinned_period(linked, link);
+      if (!pinned || !in_span(mid(pinned))) continue;
       const n = compute_countable_split_net(linked as CountableSplitInput[], id);
-      payments_by_id.get(link)!.push({
+      push_payment(link, {
+        pinned_window: pinned,
         transaction_id: id,
         split_id: n.split_id,
-        date_ms: pinned_ms,
+        date_ms: mid(pinned),
         amount: n.amount,
       });
     }

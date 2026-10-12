@@ -204,13 +204,15 @@ export function calculate_proportional_splits(
   if (splits.length === 0) return [];
   // Work in CENTS so the splits always add up to the posted amount exactly: each split's share is
   // rounded, and the rounding remainder (a cent or two) goes to the largest split.
-  const target = Math.round(new_amount * 100);
+  // Splits that covered the whole pending cover the whole posted amount; splits that covered
+  // only part of it (a shortfall) keep that same share.
   const weights =
     old_amount === 0
-      ? splits.map(() => 1) // avoid division by zero — distribute evenly
+      ? splits.map(() => 1 / splits.length) // avoid division by zero — distribute evenly
       : splits.map((s) => s.amount / old_amount);
-  const weight_total = weights.reduce((t, w) => t + w, 0) || 1;
-  const cents = weights.map((w) => Math.round((target * w) / weight_total));
+  const weight_total = weights.reduce((t, w) => t + w, 0);
+  const target = Math.round(new_amount * weight_total * 100);
+  const cents = weights.map((w) => Math.round((target * w) / (weight_total || 1)));
   const remainder = target - cents.reduce((t, c) => t + c, 0);
   if (remainder !== 0) {
     let largest = 0;
