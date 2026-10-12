@@ -206,6 +206,34 @@ describe('a split PENDING transaction, then Plaid posts it (emulator)', () => {
     expect(doc.splits[0]).toMatchObject({ categorySource: 'user', firstCategoryId: `ps_shopping_${RUN}` });
   });
 
+  it('Plaid re-categorizes (modified): an untouched split\'s category AND budget follow Plaid; a user pick stays (M4)', async () => {
+    const { userId, itemDocId, plaidItemId, accountId, postedTxId, B } = await post_split_pending(100);
+    mockSync.mockResolvedValue({
+      added: [],
+      modified: [{
+        transaction_id: postedTxId, account_id: accountId, amount: 100, iso_currency_code: 'USD',
+        unofficial_currency_code: null, name: 'COSTCO', merchant_name: 'Costco',
+        date: '2026-08-21', authorized_date: '2026-08-20', pending: false, payment_channel: 'in store',
+        personal_finance_category: { primary: 'GENERAL_MERCHANDISE', detailed: `PS_SHOP_${RUN}` },
+        category: ['Shops'], category_id: '19000000',
+      }],
+      removed: [], has_more: false, next_cursor: rid('cur'),
+    });
+    await sync_transactions_orchestrator({
+      trace_id: rid('t'), span_id: rid('s'),
+      input: { item_id: itemDocId, user_id: userId, plaid_item_id: plaidItemId },
+      user_id: userId, idempotency_key: rid('idem'),
+    } as never);
+    const doc = (await db.collection('transactions').doc(`plaid_${postedTxId}`).get()).data()!;
+    const by = (id: string) => (doc.splits as Array<Record<string, unknown>>).find((x) => x.splitId === id)!;
+    // s1 was untouched (Plaid's Groceries) → now Plaid's Shopping, in the Shopping budget
+    expect(by('s1')).toMatchObject({ plaidDetailedCategory: `PS_SHOP_${RUN}`, firstCategoryId: `ps_shopping_${RUN}`, monthlyBudgetId: B.shop });
+    expect(by('s1').categorySource).not.toBe('user');
+    // s2 the user's pick and s3 the manual pin are kept
+    expect(by('s2')).toMatchObject({ categorySource: 'user', firstCategoryId: `ps_shopping_${RUN}`, monthlyBudgetId: B.shop });
+    expect(by('s3')).toMatchObject({ budgetAssignmentSource: 'manual', monthlyBudgetId: B.fun });
+  });
+
   it('same amount: every user choice carries over and each split lands where it was', async () => {
     const { posted, pending, by, B } = await post_split_pending(100);
     expect(posted.isPending).toBe(false);

@@ -333,3 +333,119 @@ it("multi-split Plaid stream members: per split, engine == page == stored spend;
   }
 });
 
+
+it("split TRANSFERS (every role × per-split transfer / re-categorized / pinned): engine == page == stored spend", () => {
+  const match = build_match_budgets([
+    budget_to_match_input({
+      id: "groc", name: "Groceries", period: "monthly", category_ids: ["groceries"],
+      start_date: ts(Y0), end_date: ts(Y0), is_ongoing: true,
+    }),
+    budget_to_match_input({
+      id: "ee_m", name: "EE", period: "monthly", category_ids: [], start_date: ts(Y0),
+      end_date: ts(Y0), is_ongoing: true, is_system_everything_else: true,
+    }),
+  ]);
+  const STATES = ["transfer", "groceries_pick", "budget_pin"] as const;
+  const ROLES = ["internal", "edge_out", "edge_in", "external", undefined] as const;
+  const date = Y0 + 50 * DAY;
+  const txn = { merchantName: "Zelle", name: "Zelle" };
+  for (const role of ROLES) {
+    const incoming = role === "edge_in";
+    const code = incoming ? "TRANSFER_IN_ACCOUNT_TRANSFER" : "TRANSFER_OUT_ACCOUNT_TRANSFER";
+    for (const a of STATES) {
+      for (const b of STATES) {
+        const raws = [a, b].map((st, k) => ({
+          splitId: `t${k}`, amount: k === 0 ? 200 : 100, plaidDetailedCategory: code,
+          budgetId: st === "budget_pin" ? "groc" : "unassigned",
+          budgetAssignmentSource: st === "budget_pin" ? "manual" : "category",
+          ...(st === "groceries_pick" ? { categorySource: "user", firstCategoryId: "groceries" } : {}),
+        })) as Array<Record<string, unknown>>;
+        const inputs: SplitForAssignment[] = raws.map((r) => {
+          const cat = split_category_input_from_raw(r, txn, catalog);
+          return {
+            split_id: r.splitId as string, budget_id: r.budgetId as string,
+            budget_assignment_source: r.budgetAssignmentSource as "category" | "manual",
+            plaid_match_category: code, outflow_id: null, inflow_id: null,
+            monthly_period_id: null, weekly_period_id: null, bi_weekly_period_id: null,
+            overall_category_id: cat.overall_category_id ?? null, first_category_id: cat.first_category_id ?? null,
+            second_category_id: cat.second_category_id ?? null, category_source: cat.category_source ?? "plaid",
+          };
+        });
+        const stored = compute_transaction_assignment(inputs, {
+          txn_date_ms: date, txn_merchant_name: txn.merchantName, txn_name: txn.name,
+          txn_is_income: incoming, txn_transfer_role: role ?? null,
+          real_budgets: match.real_budgets, everything_else_budget_ids: match.everything_else_ids,
+          category_catalog: catalog, source_periods: [], recurring_by_split: {},
+        }).splits;
+        stored.forEach((st, k) => {
+          const w: Record<string, unknown> = {
+            ...raws[k], budgetId: st.budget_id, budgetAssignmentSource: st.budget_assignment_source,
+            monthlyBudgetId: st.monthly_budget_id, weeklyBudgetId: st.weekly_budget_id,
+            biWeeklyBudgetId: st.bi_weekly_budget_id, firstCategoryId: st.first_category_id,
+            categorySource: st.category_source, outflowId: st.outflow_id, inflowId: st.inflow_id,
+          };
+          // The page: the transaction-level pairing flags (internal / edge_out) — per split inside.
+          const m = {
+            ...map_raw_split_to_on_read_match(w, {
+              txn_date_ms: date, is_pending: false, is_transfer: role === "internal",
+              is_income: incoming, merchant_name: txn.merchantName, name: txn.name,
+            }, catalog),
+            is_edge_out: role === "edge_out",
+          };
+          const owner = resolve_split_owner(m, match.real_budgets, "ee_m", match.everything_else_id_set);
+          const counted = owned_splits_for_budget(owner, match.real_budgets, "ee_m", [m],
+            match.everything_else_id_set).some(is_countable);
+          const label = [role ?? "none", a, b, k];
+          if (st.monthly_budget_id === UNASSIGNED_BUDGET_ID) {
+            expect([label, "page counts it", counted]).toEqual([label, "page counts it", false]);
+          } else {
+            expect([label, "counted in", counted ? owner : null]).toEqual([label, "counted in", st.monthly_budget_id]);
+            const spend = stored_split_for_spend(w, txn, st.monthly_budget_id, "monthly", catalog, {
+              txn_date_ms: date, is_pending: false, is_transfer: role === "internal", is_income: incoming,
+            });
+            expect([label, "stored spend", spend !== null && is_countable(spend)]).toEqual([label, "stored spend", counted]);
+          }
+        });
+      }
+    }
+  }
+});
+
+it("a pin to a budget that ISN'T ACTIVE on the purchase date falls back to category on both sides (never counted nowhere)", () => {
+  const match = build_match_budgets([
+    budget_to_match_input({ // starts Oct 12 → active from Oct 1
+      id: "fun", name: "Fun", period: "monthly", category_ids: ["entertainment"],
+      start_date: ts(Date.UTC(2026, 9, 12)), end_date: ts(Date.UTC(2026, 9, 12)), is_ongoing: true,
+    }),
+    budget_to_match_input({
+      id: "groc", name: "Groceries", period: "monthly", category_ids: ["groceries"],
+      start_date: ts(Y0), end_date: ts(Y0), is_ongoing: true,
+    }),
+    budget_to_match_input({
+      id: "ee_m", name: "EE", period: "monthly", category_ids: [], start_date: ts(Y0),
+      end_date: ts(Y0), is_ongoing: true, is_system_everything_else: true,
+    }),
+  ]);
+  const sep20 = Date.UTC(2026, 8, 20);
+  const raw = { splitId: "s1", amount: 25, plaidDetailedCategory: "FOOD_AND_DRINK_GROCERIES", budgetId: "fun", budgetAssignmentSource: "manual" };
+  const txn = { merchantName: "Store", name: "x" };
+  const cat = split_category_input_from_raw(raw, txn, catalog);
+  const stored = compute_transaction_assignment([{
+    split_id: "s1", budget_id: "fun", budget_assignment_source: "manual",
+    plaid_match_category: raw.plaidDetailedCategory, outflow_id: null, inflow_id: null,
+    monthly_period_id: null, weekly_period_id: null, bi_weekly_period_id: null,
+    overall_category_id: cat.overall_category_id ?? null, first_category_id: cat.first_category_id ?? null,
+    second_category_id: null, category_source: cat.category_source ?? "plaid",
+  }], {
+    txn_date_ms: sep20, txn_merchant_name: txn.merchantName, txn_name: txn.name,
+    txn_is_income: false, txn_transfer_role: null, real_budgets: match.real_budgets,
+    everything_else_budget_ids: match.everything_else_ids, category_catalog: catalog,
+    source_periods: [], recurring_by_split: {},
+  }).splits[0];
+  expect(stored.monthly_budget_id).toBe("groc");
+  const m = map_raw_split_to_on_read_match(raw, {
+    txn_date_ms: sep20, is_pending: false, is_transfer: false, is_income: false,
+    merchant_name: txn.merchantName, name: txn.name,
+  }, catalog);
+  expect(resolve_split_owner(m, match.real_budgets, "ee_m", match.everything_else_id_set)).toBe("groc");
+});

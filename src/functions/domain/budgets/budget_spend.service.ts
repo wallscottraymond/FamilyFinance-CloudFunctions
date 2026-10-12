@@ -152,3 +152,15 @@ export function compute_budget_spent(
     return_amount: round2(return_amount),
   };
 }
+
+/**
+ * A stored split's spend status — THE one reading (the period page, stored spend and every other
+ * reader): explicit `spendStatus` wins, else the legacy `isIgnored` / `isRefund` booleans, else
+ * "counted". PURE.
+ */
+export function split_spend_status(split: Record<string, unknown>): "counted" | "ignored" | "refund" {
+  const status = split.spendStatus;
+  if (status === "counted" || status === "ignored" || status === "refund") return status;
+  return split.isIgnored === true ? "ignored" : split.isRefund === true ? "refund" : "counted";
+}
+

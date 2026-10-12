@@ -14,6 +14,10 @@
  * @module resolvers/periods/period_derivation
  */
 
+import {
+  compute_countable_split_net,
+  CountableSplitInput,
+} from "../../domain/recurring/period_reconciliation.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import {
@@ -604,6 +608,23 @@ export function shape_period_derivation_deps(
   // Real INCOME_* credits in the window NOT tied to any recurring inflow → "Other income
   // received" (off-cycle paychecks, bonuses, contractor/gig), so real income is never hidden.
   const other_income_credits: DepositForSlot[] = [];
+  // A bill payment PINNED to a period (outflowPinnedPeriodId — the two-stage bill picker) is
+  // placed at that period's midpoint, exactly as reconcile places it: it pays THAT period, not
+  // the one its date falls in.
+  const period_mid = new Map(
+    raw.overlapping.map((p) => [
+      p.id,
+      Math.floor((p.start_date.toMillis() + p.end_date.toMillis()) / 2),
+    ])
+  );
+  const in_span = (ms: number) => ms >= span_start_ms && ms <= span_end_ms;
+  const pinned_payment_date = (
+    linked: Array<Record<string, unknown>>,
+    link: string
+  ): number | null => {
+    const pin = linked.find((sp) => sp.outflowId === link && sp.outflowPinnedPeriodId);
+    return pin ? period_mid.get(pin.outflowPinnedPeriodId as string) ?? null : null;
+  };
   for (const { id, data } of txns) {
     const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
     const is_pending = data.isPending === true;
@@ -641,11 +662,11 @@ export function shape_period_derivation_deps(
     // user's pick decides, canon M7) not on an income stream, not linked to an income, and not
     // pinned to a budget (a pinned income credit counts in that budget — canon A13).
     let other_income_amount = 0;
+    const linked_by_id = new Map<string, Array<Record<string, unknown>>>();
     for (const s of raw) {
       const outflow_id = (s.outflowId as string | null) ?? null;
       const inflow_id = (s.inflowId as string | null) ?? null;
       const amount = (s.amount as number) ?? 0;
-      const split_id = (s.splitId as string) ?? (s.id as string) ?? null;
       // Excluded from spend only when it's an INTERNAL account transfer (matched
       // pair). External ACH payments tagged TRANSFER_* stay countable.
       splits_for_match.push(
@@ -682,25 +703,34 @@ export function shape_period_derivation_deps(
       // transaction_ids (skip its split link here to avoid double-counting).
       const link = outflow_id ?? (linked_inflow_id ? null : inflow_id);
       if (link && payments_by_id.has(link)) {
-        payments_by_id.get(link)!.push({
-          transaction_id: id,
-          split_id,
-          date_ms: txn_date_ms,
-          amount: Math.abs(amount),
-        });
+        linked_by_id.set(link, [...(linked_by_id.get(link) ?? []), s]);
       }
+    }
+    // ONE payment per (transaction, bill / income), its NET countable amount — exactly as
+    // reconcile counts it (`compute_countable_split_net`: an Ignored split adds nothing, a Refund
+    // split subtracts) — so the page and the stored paid status agree.
+    const net = (xs: Array<Record<string, unknown>>) =>
+      compute_countable_split_net(xs as CountableSplitInput[], id);
+    for (const [link, linked] of linked_by_id) {
+      const pinned_ms = pinned_payment_date(linked, link);
+      if (pinned_ms !== null && !in_span(pinned_ms)) continue; // pays its pinned period
+      const n = net(linked);
+      payments_by_id.get(link)!.push({
+        transaction_id: id,
+        split_id: n.split_id,
+        date_ms: pinned_ms ?? txn_date_ms,
+        amount: n.amount,
+      });
     }
     // Deterministic Plaid income reconciliation: this txn belongs to an inflow
     // stream → it's a received payment for that inflow (its full deposit amount).
-    const sum_abs = (xs: Array<Record<string, unknown>>) =>
-      xs.reduce((t, sp) => t + Math.abs((sp.amount as number) ?? 0), 0);
     const inflow_on = raw.filter(on_inflow_stream);
     if (linked_inflow_id && inflow_on.length && payments_by_id.has(linked_inflow_id)) {
       payments_by_id.get(linked_inflow_id)!.push({
         transaction_id: id,
         split_id: null,
         date_ms: txn_date_ms,
-        amount: sum_abs(inflow_on), // the splits still on the stream (all, unless some pinned)
+        amount: net(inflow_on).amount, // the splits still on the stream (all, unless some pinned)
       });
     }
     // Deterministic Plaid BILL reconciliation (mirror of income): this txn belongs to
@@ -720,7 +750,7 @@ export function shape_period_derivation_deps(
           transaction_id: id,
           split_id: null,
           date_ms: txn_date_ms,
-          amount: sum_abs(stream_paying),
+          amount: net(stream_paying).amount,
         });
       }
     }
@@ -728,6 +758,32 @@ export function shape_period_derivation_deps(
     // transfer money). An income category naturally excludes internal transfers + most refunds.
     if (other_income_amount > 0 && !txn_is_internal_transfer) {
       other_income_credits.push({ date_ms: txn_date_ms, amount: other_income_amount });
+    }
+  }
+  // Payments dated just OUTSIDE the span (the pairing pool, ± a few days) but PINNED to a period
+  // in it pay that period here (reconcile counts them there too).
+  const counted_ids = new Set(txns.map((t) => t.id));
+  for (const { id, data } of view_pool) {
+    if (counted_ids.has(id) || crossing.ids.has(id)) continue;
+    const pinned_splits = without_out_of_view_links(
+      (data.splits as Array<Record<string, unknown>>) ?? [],
+      out_of_view_recurring_ids
+    ).filter((sp) => sp.outflowId && sp.outflowPinnedPeriodId);
+    const by_link = new Map<string, Array<Record<string, unknown>>>();
+    for (const sp of pinned_splits) {
+      const link = sp.outflowId as string;
+      if (payments_by_id.has(link)) by_link.set(link, [...(by_link.get(link) ?? []), sp]);
+    }
+    for (const [link, linked] of by_link) {
+      const pinned_ms = pinned_payment_date(linked, link);
+      if (pinned_ms === null || !in_span(pinned_ms)) continue;
+      const n = compute_countable_split_net(linked as CountableSplitInput[], id);
+      payments_by_id.get(link)!.push({
+        transaction_id: id,
+        split_id: n.split_id,
+        date_ms: pinned_ms,
+        amount: n.amount,
+      });
     }
   }
   for (const r of recurring) {

@@ -158,8 +158,12 @@ function map_to_pending_info(doc: LegacyTransactionDoc): PendingTransactionInfo 
       amount: s.amount,
       budget_id: s.budgetId,
       outflow_id: s.outflowId || null,
-      internal_primary_category: s.internalPrimaryCategory,
-      internal_detailed_category: s.internalDetailedCategory,
+      // A legacy internal* that merely COPIES the split's own Plaid code isn't a user override —
+      // never carry it (it would read as a pick once Plaid's code on the posted txn differs).
+      internal_primary_category:
+        s.internalPrimaryCategory === s.plaidPrimaryCategory ? null : s.internalPrimaryCategory,
+      internal_detailed_category:
+        s.internalDetailedCategory === s.plaidDetailedCategory ? null : s.internalDetailedCategory,
       is_default: s.isDefault,
       tags: s.tags || [],
       // spendStatus is the source of truth; the booleans are its legacy mirrors.

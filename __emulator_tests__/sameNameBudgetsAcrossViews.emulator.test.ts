@@ -47,6 +47,7 @@ const RILEY = `riley_${RUN}`;
 const id = (s: string) => `${s}_${RUN}`;
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 const OCT = { start: Date.UTC(2031, 9, 1), end: Date.UTC(2031, 9, 31, 23, 59, 59, 999) };
+const NOV = { start: Date.UTC(2031, 10, 1), end: Date.UTC(2031, 10, 30, 23, 59, 59, 999) };
 const SHARE_FROM = Date.UTC(2031, 9, 10);
 
 function octx<T>(user_id: string, input: T) {
@@ -187,3 +188,62 @@ describe("same-named budgets in two views (emulator)", () => {
     expect(s[1].budgetAssignmentSource).toBe("category"); // the invalid cross-view pin was dropped
   });
 });
+
+describe("a bill payment PINNED to a period pays THAT period on the page (as reconcile) (emulator)", () => {
+  it("paid Nov 2, pinned to October → October's bill is paid, November's isn't", async () => {
+    await db.collection("outflows").doc(id("gym")).set({
+      id: id("gym"), ownerId: ALEX, userId: ALEX, createdBy: ALEX, updatedBy: ALEX,
+      isActive: true, isHidden: false, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      plaidItemId: `item_${ALEX}`, accountId: `p_${id("chk_a")}`, lastAmount: 50, averageAmount: 50,
+      currency: "USD", description: "gym", merchantName: "gym", payerName: "gym", userCustomName: null,
+      frequency: "monthly", firstDate: ts("2031-01-15T00:00:00Z"), lastDate: ts("2031-09-15T00:00:00Z"),
+      predictedNextDate: ts("2031-10-15T00:00:00Z"), plaidPrimaryCategory: "PERSONAL_CARE",
+      plaidDetailedCategory: "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS", internalPrimaryCategory: null,
+      internalDetailedCategory: null, transactionIds: [], source: "plaid", streamId: id("gym"),
+    });
+    await txn("gym_pay", ALEX, id("chk_a"), 50, "2031-11-02T12:00:00Z", "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS");
+    await db.collection("transactions").doc(id("gym_pay")).update({
+      splits: [{
+        splitId: "g1", amount: 50, plaidPrimaryCategory: "PERSONAL_CARE",
+        plaidDetailedCategory: "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS", budgetId: "unassigned",
+        outflowId: id("gym"), outflowAssignmentSource: "manual", outflowPinnedPeriodId: "2031M10", inflowId: null,
+      }],
+      splitOutflowIds: [id("gym")],
+    });
+    const paid = (r: Awaited<ReturnType<typeof oct>>) =>
+      (r.bills.find((b) => b.recurring_id === id("gym"))?.groups ?? [])
+        .reduce((t: number, g: { total_paid: number }) => t + g.total_paid, 0);
+    const nov = await derive_period_orchestrator(t(), ALEX, {
+      view_cadence: "monthly", window_start_ms: NOV.start, window_end_ms: NOV.end, force: true, scope: { kind: "me" },
+    });
+    expect(paid(await oct(ALEX, { kind: "me" }))).toBe(50);
+    expect(paid(nov)).toBe(0);
+  });
+
+  it("an IGNORED split on a bill payment pays nothing on the page (as reconcile nets it)", async () => {
+    await db.collection("outflows").doc(id("music")).set({
+      id: id("music"), ownerId: ALEX, userId: ALEX, createdBy: ALEX, updatedBy: ALEX,
+      isActive: true, isHidden: false, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      plaidItemId: `item_${ALEX}`, accountId: `p_${id("chk_a")}`, lastAmount: 15, averageAmount: 15,
+      currency: "USD", description: "music", merchantName: "music", payerName: "music", userCustomName: null,
+      frequency: "monthly", firstDate: ts("2031-01-20T00:00:00Z"), lastDate: ts("2031-09-20T00:00:00Z"),
+      predictedNextDate: ts("2031-10-20T00:00:00Z"), plaidPrimaryCategory: "ENTERTAINMENT",
+      plaidDetailedCategory: "ENTERTAINMENT_MUSIC_AND_AUDIO", internalPrimaryCategory: null,
+      internalDetailedCategory: null, transactionIds: [], source: "plaid", streamId: id("music"),
+    });
+    await txn("music_pay", ALEX, id("chk_a"), 15, "2031-10-20T12:00:00Z", "ENTERTAINMENT_MUSIC_AND_AUDIO");
+    await db.collection("transactions").doc(id("music_pay")).update({
+      splits: [{
+        splitId: "m1", amount: 15, plaidPrimaryCategory: "ENTERTAINMENT",
+        plaidDetailedCategory: "ENTERTAINMENT_MUSIC_AND_AUDIO", budgetId: "unassigned",
+        outflowId: id("music"), outflowAssignmentSource: "manual", inflowId: null, spendStatus: "ignored",
+      }],
+      splitOutflowIds: [id("music")],
+    });
+    const paid = (r: Awaited<ReturnType<typeof oct>>) =>
+      (r.bills.find((b) => b.recurring_id === id("music"))?.groups ?? [])
+        .reduce((t: number, g: { total_paid: number }) => t + g.total_paid, 0);
+    expect(paid(await oct(ALEX, { kind: "me" }))).toBe(0);
+  });
+});
+

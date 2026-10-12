@@ -26,6 +26,8 @@
  *   written from Plaid's payload (canon M2).
  */
 
+import { split_spend_status } from "../budgets/budget_spend.service";
+
 /* eslint-disable @typescript-eslint/naming-convention -- Firestore document shapes are camelCase */
 
 type Doc = Record<string, unknown>;
@@ -120,14 +122,22 @@ export function merge_modified_into_existing(existing: Doc, fresh: Doc): Doc {
     existing.description !== existing.name;
   out.description = renamed ? existing.description : fresh.description ?? existing.description;
 
-  // The legacy `internal*` fields are vestigial (canon M2): nothing reads them and nothing new
-  // is written — the existing values ride along untouched until the one-time backfill turns a
-  // real old override into a user pick (`categorySource: "user"`), which then always wins.
+  // The legacy `internal*` fields are vestigial (canon M2) — only the legacy-override reader
+  // (split_category_edit `legacy_override_first`) still looks at them, until the one-time backfill
+  // turns a real old override into a user pick. A legacy value that merely COPIES the split's OLD
+  // Plaid code is cleared when Plaid's code is refreshed (else it would read as the user's pick
+  // the moment Plaid re-categorizes — canon M4); a real override (≠ the old code) rides along.
 
   // Splits: keep the user's splits; refresh Plaid-owned split fields from the fresh primary split.
   const plaid_split = fresh_splits[0] ?? {};
   let splits = existing_splits.map((sp) => {
     const next: Split = { ...sp };
+    if (sp.internalDetailedCategory && sp.internalDetailedCategory === sp.plaidDetailedCategory) {
+      next.internalDetailedCategory = null;
+    }
+    if (sp.internalPrimaryCategory && sp.internalPrimaryCategory === sp.plaidPrimaryCategory) {
+      next.internalPrimaryCategory = null;
+    }
     for (const f of PLAID_OWNED_SPLIT_FIELDS) {
       if (f in plaid_split) next[f] = plaid_split[f];
     }
@@ -138,9 +148,7 @@ export function merge_modified_into_existing(existing: Doc, fresh: Doc): Doc {
   out.splits = splits;
 
   // Keep the split-derived summaries consistent with the (possibly re-fitted) splits.
-  const status = (sp: Split): string =>
-    (typeof sp.spendStatus === "string" && sp.spendStatus) ||
-    (sp.isIgnored === true ? "ignored" : sp.isRefund === true ? "refund" : "counted");
+  const status = (sp: Split): string => split_spend_status(sp as Record<string, unknown>);
   out.totalAllocated = round2(splits.reduce((s, sp) => s + Math.abs(num(sp.amount)), 0));
   out.isSplit = splits.length > 1;
   if ("returnAmount" in existing || splits.some((sp) => status(sp) === "refund")) {

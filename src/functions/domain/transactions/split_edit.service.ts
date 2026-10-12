@@ -21,6 +21,7 @@
  * @module domain/transactions/split_edit
  */
 
+import { split_spend_status } from "../budgets/budget_spend.service";
 import { CategoryCatalog } from "./split_category.service";
 import { resolve_split_category_edit } from "./split_category_edit.service";
 
@@ -56,9 +57,7 @@ const assignment_key = (s: Raw) =>
     s.outflowAssignmentSource === "manual" ? s.outflowId ?? "" : "",
   ].join("#");
 
-const status_of = (s: Raw): string =>
-  (typeof s.spendStatus === "string" && s.spendStatus) ||
-  (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted");
+const status_of = (s: Raw): string => split_spend_status(s);
 
 /** The engine's per-split outputs — never taken from the app for an existing split. */
 const ENGINE_FIELDS = [

@@ -19,6 +19,7 @@ import { transaction_repo } from "../../repositories/transaction.repo";
 import {
   SplitForSpend,
   is_income_category,
+  split_spend_status,
 } from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers_from_txns,
@@ -157,14 +158,14 @@ export function stored_split_for_spend(
     amount: (s.amount as number) ?? 0,
     txn_date_ms: t.txn_date_ms,
     is_pending: t.is_pending,
-    is_transfer: !pinned && t.is_transfer,
+    // The internal-transfer flag applies only while this split's category is a transfer (as the
+    // engine and the page decide per split).
+    is_transfer: !pinned && t.is_transfer && is_transfer_category(effective_category),
     is_income: t.is_income,
     is_income_category: !pinned && is_income_category(effective_category),
     // Derive on read (no migration): explicit spendStatus wins, else fall back to the legacy
     // isIgnored/isRefund booleans, else 'counted'.
-    spend_status:
-      (s.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
-      (s.isIgnored === true ? "ignored" : s.isRefund === true ? "refund" : "counted"),
+    spend_status: split_spend_status(s),
     outflow_id: (s.outflowId as string | null) ?? null,
     inflow_id: (s.inflowId as string | null) ?? null,
   };

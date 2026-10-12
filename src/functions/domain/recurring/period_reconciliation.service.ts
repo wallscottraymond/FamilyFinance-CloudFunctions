@@ -15,6 +15,8 @@
  * @module domain/recurring/period_reconciliation
  */
 
+import { split_spend_status } from "../budgets/budget_spend.service";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ============================================================================
@@ -379,6 +381,7 @@ export interface CountableSplitInput {
   amount?: number | null;
   isIgnored?: boolean;
   isRefund?: boolean;
+  spendStatus?: string;
   splitId?: string;
 }
 
@@ -398,9 +401,11 @@ export function compute_countable_split_net(
   let amount = 0;
   let split_id = fallback_split_id;
   for (const s of splits) {
-    if (s.isIgnored) continue;
+    // THE status reading (explicit spendStatus, else the legacy booleans) — as every reader.
+    const status = split_spend_status(s as unknown as Record<string, unknown>);
+    if (status === "ignored") continue;
     const magnitude = Math.abs(Number(s.amount ?? 0));
-    amount += s.isRefund ? -magnitude : magnitude;
+    amount += status === "refund" ? -magnitude : magnitude;
     if (s.splitId) split_id = s.splitId;
   }
   return { amount, split_id };

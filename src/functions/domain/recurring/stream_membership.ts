@@ -16,6 +16,8 @@
  * @module domain/recurring/stream_membership
  */
 
+import { split_spend_status } from "../budgets/budget_spend.service";
+
 /** Build the `txn id → recurring id` map, excluding ids claimed by 2+ streams. PURE. */
 export function build_stream_membership_map(
   items: Array<{ id: string; transaction_ids?: string[] | null }>
@@ -138,6 +140,7 @@ export function is_other_income_split(
   const sp = (split ?? {}) as Record<string, unknown>;
   return (
     is_credit &&
+    split_spend_status(sp) !== "ignored" && // an Ignored credit isn't counted anywhere
     semantic_code.startsWith("INCOME") &&
     !on_inflow_stream &&
     ((sp.inflowId as string | null | undefined) ?? null) === null &&

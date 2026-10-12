@@ -24,6 +24,7 @@
  */
 
 import {
+  is_within_budget_range,
   match_budget,
   BudgetForMatch,
 } from "../transactions/match_budget.service";
@@ -102,7 +103,10 @@ function pin_owner(
   if (!pin) return null;
   if (pin === ee_budget_id) return pin;
   if (ee_alias_ids.has(pin)) return ee_budget_id ?? pin;
-  return real_budgets.some((b) => b.id === pin) ? pin : null;
+  // A pin to a real budget holds only while it's ACTIVE on the split's date (as the engine).
+  return real_budgets.some((b) => b.id === pin && is_within_budget_range(split.txn_date_ms, b))
+    ? pin
+    : null;
 }
 
 /**

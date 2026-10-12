@@ -19,6 +19,7 @@
  */
 
 import {
+  is_within_budget_range,
   match_budget,
   BudgetForMatch,
   PeriodLens,
@@ -239,8 +240,14 @@ export function compute_transaction_assignment(
     const pin_is_ee = PERIOD_LENSES.some(
       (lens) => context.everything_else_budget_ids[lens] === split.budget_id
     );
+    // A pin to a real budget holds only while that budget is ACTIVE on the transaction's date
+    // (a September purchase pinned to a budget that starts in October would count nowhere — its
+    // period doesn't exist); else it falls back to category matching, as on the page.
     const pin_budget_valid =
-      pin_is_ee || context.real_budgets.some((b) => b.id === split.budget_id);
+      pin_is_ee ||
+      context.real_budgets.some(
+        (b) => b.id === split.budget_id && is_within_budget_range(context.txn_date_ms, b)
+      );
 
     if (split.budget_assignment_source === "manual" && pin_budget_valid) {
       source = "manual";

@@ -15,6 +15,7 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
+import { split_spend_status } from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers,
   InternalTransferResult,
@@ -68,15 +69,12 @@ export function map_raw_split_to_on_read_match(
     amount: (raw_split.amount as number) ?? 0,
     txn_date_ms: ctx.txn_date_ms,
     is_pending: ctx.is_pending,
-    is_transfer: ctx.is_transfer,
+    // The transaction's internal-transfer flag applies to a split only while ITS category is a
+    // transfer (a split the user re-categorized to spending counts as spending — as the engine
+    // decides per split).
+    is_transfer: ctx.is_transfer && is_transfer_category(category.semantic_code),
     is_income: ctx.is_income,
-    spend_status:
-      (raw_split.spendStatus as "counted" | "ignored" | "refund" | undefined) ??
-      (raw_split.isIgnored === true
-        ? "ignored"
-        : raw_split.isRefund === true
-          ? "refund"
-          : "counted"),
+    spend_status: split_spend_status(raw_split),
     outflow_id: (raw_split.outflowId as string | null) ?? null,
     inflow_id: (raw_split.inflowId as string | null) ?? null,
     is_recurring_member: ctx.is_recurring_member ?? false,
@@ -90,16 +88,21 @@ export function map_raw_split_to_on_read_match(
 }
 
 /**
- * The category MEANING (a Plaid code) of a transaction's first split, from the ONE category
- * function: a user pick away from a transfer category makes it spending, not a transfer.
+ * The category MEANING (a Plaid code) of a transaction for transfer pairing, from the ONE
+ * category function (a user pick away from a transfer category makes that split spending): the
+ * first split that is still a TRANSFER, else the first split. Order-independent — a transaction
+ * with any transfer split pairs, whichever split comes first.
  */
 export function txn_effective_category(
   data: Record<string, unknown>,
   catalog: CategoryCatalog
 ): string {
-  const first = ((data.splits as Array<Record<string, unknown>>) ?? [])[0] ?? {};
-  return resolve_split_category(split_category_input_from_raw(first, data, catalog), catalog)
-    .semantic_code;
+  const splits = (data.splits as Array<Record<string, unknown>>) ?? [];
+  const codes = (splits.length ? splits : [{}]).map(
+    (s) => resolve_split_category(split_category_input_from_raw(s, data, catalog), catalog)
+      .semantic_code
+  );
+  return codes.find((c) => is_transfer_category(c)) ?? codes[0];
 }
 
 /**

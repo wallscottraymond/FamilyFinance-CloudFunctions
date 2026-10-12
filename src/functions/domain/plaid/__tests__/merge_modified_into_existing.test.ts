@@ -234,6 +234,25 @@ describe("merge_modified_into_existing — Plaid-owned fields are REFRESHED", ()
     expect(split(merged(), "s-default").internalDetailedCategory).toBe("FOOD_AND_DRINK_FAST_FOOD");
   });
 
+  it("a legacy internal* that merely COPIES the split's old Plaid code is cleared on refresh (never read as a pick — M4)", () => {
+    const e = existing();
+    const splits = (e.splits as Split[]).map((sp) => sp.splitId === "s-default"
+      ? { ...sp, plaidDetailedCategory: "FOOD_AND_DRINK_RESTAURANT", internalDetailedCategory: "FOOD_AND_DRINK_RESTAURANT", plaidPrimaryCategory: "FOOD_AND_DRINK", internalPrimaryCategory: "FOOD_AND_DRINK" }
+      : sp);
+    const d = split(merge_modified_into_existing({ ...e, splits }, fresh()), "s-default");
+    expect(d.internalDetailedCategory).toBeNull();
+    expect(d.internalPrimaryCategory).toBeNull();
+  });
+
+  it("a REAL old override (≠ the split's old Plaid code) rides along for the backfill", () => {
+    const e = existing();
+    const splits = (e.splits as Split[]).map((sp) => sp.splitId === "s-default"
+      ? { ...sp, plaidDetailedCategory: "FOOD_AND_DRINK_RESTAURANT", internalDetailedCategory: "GENERAL_MERCHANDISE_SUPERSTORES" }
+      : sp);
+    expect(split(merge_modified_into_existing({ ...e, splits }, fresh()), "s-default").internalDetailedCategory)
+      .toBe("GENERAL_MERCHANDISE_SUPERSTORES");
+  });
+
   it("takes Plaid's description when the user never renamed it", () => {
     const e = { ...existing(), description: "CAFE RIO #12" }; // == name → not a rename
     expect(merge_modified_into_existing(e, fresh()).description).toBe("CAFE RIO #12 SLC");

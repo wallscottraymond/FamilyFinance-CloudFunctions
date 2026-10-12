@@ -134,6 +134,10 @@ describe("account placement (emulator)", () => {
     expect((await unshare_account_orchestrator(ctx(SAM, { account_id: JC_A }))).success).toBe(false);
     expect((await unshare_account_orchestrator(ctx(ALEX, { account_id: JC_A }))).success).toBe(true);
     expect(await placement_of(JC_A)).toBeNull();
+    // Its transactions are re-assigned back to Alex's Me view: a re-assign run scoped to it.
+    const jobs = (await db.collection("_jobs").where("job_type", "==", "reassign_user").get()).docs
+      .map((d) => d.data().payload).filter((p) => p?.user_id === ALEX);
+    expect(jobs.some((p) => (p.scope?.account_ids ?? []).includes(JC_A))).toBe(true);
   });
 });
 
@@ -155,6 +159,10 @@ describe("departures (D13, emulator)", () => {
       .toBe(true);
     expect(await placement_of(AMEX)).toBeNull();
     expect((await placement_of(JC_A)).groupId).toBe(group_id);
+    // Sam's Amex transactions are re-assigned back to Sam's Me view.
+    const jobs = (await db.collection("_jobs").where("job_type", "==", "reassign_user").get()).docs
+      .map((d) => d.data().payload).filter((p) => p?.user_id === SAM);
+    expect(jobs.some((p) => (p.scope?.account_ids ?? []).includes(AMEX))).toBe(true);
   });
 
   it("delete → every account in the group goes private", async () => {
