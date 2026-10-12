@@ -69,7 +69,8 @@ export function compute_period_view(
         b.id,
         deps.real_budgets,
         ee_id,
-        deps.splits_for_match
+        deps.splits_for_match,
+        deps.ee_alias_ids
       );
       const periods = derive_budget_view_periods(
         b.id,

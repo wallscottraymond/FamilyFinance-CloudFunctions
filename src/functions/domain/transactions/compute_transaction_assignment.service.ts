@@ -234,16 +234,23 @@ export function compute_transaction_assignment(
     // A manual pin is GLOBAL — it forces ALL THREE lenses onto the pinned budget.
     // Honored only while that budget still EXISTS (a real budget of any cadence, or
     // any lens's Everything Else). A stale pin (budget deleted) falls through to
-    // per-lens category matching so the split re-homes.
+    // per-lens category matching so the split re-homes. A pin to any lens's Everything Else
+    // means "Everything Else": each lens stores ITS Everything Else (as the page counts it).
+    const pin_is_ee = PERIOD_LENSES.some(
+      (lens) => context.everything_else_budget_ids[lens] === split.budget_id
+    );
     const pin_budget_valid =
-      context.real_budgets.some((b) => b.id === split.budget_id) ||
-      PERIOD_LENSES.some(
-        (lens) => context.everything_else_budget_ids[lens] === split.budget_id
-      );
+      pin_is_ee || context.real_budgets.some((b) => b.id === split.budget_id);
 
     if (split.budget_assignment_source === "manual" && pin_budget_valid) {
       source = "manual";
       monthly_id = weekly_id = bi_weekly_id = split.budget_id;
+      if (pin_is_ee) {
+        const ee = context.everything_else_budget_ids;
+        monthly_id = ee.monthly ?? split.budget_id;
+        weekly_id = ee.weekly ?? split.budget_id;
+        bi_weekly_id = ee.bi_monthly ?? split.budget_id;
+      }
       outflow_id = null;
       inflow_id = null;
       budget_reason = "manual";

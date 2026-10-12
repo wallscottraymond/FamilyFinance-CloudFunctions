@@ -92,5 +92,11 @@ export async function resolve_on_read_spend_splits(
   }
 
   // 3. Pure match → the target's owned splits.
-  return owned_splits_for_budget(target_budget_id, real_budgets, ee_id, splits);
+  return owned_splits_for_budget(
+    target_budget_id,
+    real_budgets,
+    ee_id,
+    splits,
+    match.everything_else_id_set
+  );
 }

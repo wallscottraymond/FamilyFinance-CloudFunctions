@@ -20,6 +20,7 @@ const db = admin.firestore();
 
 import { updateTransactionSplits } from '../src/functions/transactions/api/crud/updateTransactionSplits';
 import { invalidate_category_cache } from '../src/functions/repositories/category.repo';
+import { transaction_repo } from '../src/functions/repositories/transaction.repo';
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const U = `se_u_${RUN}`;
@@ -109,5 +110,50 @@ describe('updateTransactionSplits applies the edit immediately (emulator)', () =
       monthlyBudgetId: s0.monthlyBudgetId, plaidDetailedCategory: `SE_GRO_${RUN}`,
     });
     expect(doc.hasIgnoredSplits).toBe(true);
+  });
+
+  it('a write that lands between our read and write is never overwritten: re-read + rebuild', async () => {
+    const s0 = (await split()).splits[0];
+    const real = transaction_repo.update_raw_if_unchanged.bind(transaction_repo);
+    let calls = 0;
+    const spy = jest.spyOn(transaction_repo, 'update_raw_if_unchanged').mockImplementation(
+      async (c, id, fields, t) => {
+        if (++calls === 1) {
+          // A sync lands in between (e.g. the merchant name changes).
+          await db.collection('transactions').doc(TXN).update({ merchantName: 'Store #2' });
+        }
+        return real(c, id, fields, t);
+      }
+    );
+    try {
+      await call({ transactionId: TXN, splits: [{ ...s0, spendStatus: 'counted', userNotes: 'x' }], userNotes: 'note' });
+    } finally {
+      spy.mockRestore();
+    }
+    const doc = await split();
+    expect(calls).toBe(2); // lost the race once, then wrote on the newer doc
+    expect(doc.merchantName).toBe('Store #2'); // the sync's write survived
+    expect(doc.userNotes).toBe('note'); // and so did the edit
+  });
+
+  it('re-categorizing a transfer OUT of transfers clears its stored role in the same write', async () => {
+    const id = `se_xfer_${RUN}`;
+    await db.collection('categories').doc(`TRANSFER_OUT_SE_${RUN}`).set({ isActive: true, firstCategoryId: `se_transfer_${RUN}`, overallCategoryId: 'transfer', first_category: 'Transfer' });
+    invalidate_category_cache();
+    await db.collection('transactions').doc(id).set({
+      transactionId: id, userId: U, ownerId: U, isActive: true, transactionDate: ts('2026-01-10T12:00:00Z'),
+      amount: 50, merchantName: 'Zelle', name: 'Zelle', type: 'transfer', accountId: 'acc', transferRole: 'internal',
+      splits: [{
+        splitId: 's1', id: 's1', amount: 50, isDefault: true, budgetId: 'unassigned',
+        plaidPrimaryCategory: 'TRANSFER_OUT', plaidDetailedCategory: `TRANSFER_OUT_SE_${RUN}`,
+        categorySource: 'plaid', firstCategoryId: `se_transfer_${RUN}`,
+      }],
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+    const s0 = (await db.collection('transactions').doc(id).get()).data()!.splits[0];
+    await call({ transactionId: id, splits: [{ ...s0, categorySource: 'user', firstCategoryId: `se_eating_${RUN}` }] });
+    const doc = (await db.collection('transactions').doc(id).get()).data()!;
+    expect(doc.transferRole).toBe('none');
+    expect(doc.splits[0].monthlyBudgetId).toBe(EAT); // and it's spending now
   });
 });

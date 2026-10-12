@@ -5,7 +5,7 @@
  *   - categories: mapped / unmapped Plaid codes, merchant-rule upgrades, user picks (first,
  *     second, unreadable), legacy `internal*` overrides;
  *   - budgets: monthly / weekly / bi-monthly, created MID-period, ongoing or with an end date
- *     (`budget_end_date`), manual pins (live and to a deleted budget);
+ *     (`budget_end_date`), manual pins (live, to any lens's Everything Else, to a deleted budget);
  *   - money: purchases, refunds (credits in a spending category), income, and transfers in
  *     every matched-pair role (internal / edge_out / edge_in / external / unclassified).
  *
@@ -113,7 +113,11 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
     else if (roll < 0.26) { raw.internalDetailedCategory = pick([...SPEND_FIRSTS, ...CODES.map((c) => c[0])]); }
     if (r() < 0.08) {
       raw.budgetAssignmentSource = "manual";
-      raw.budgetId = r() < 0.5 && match.real_budgets.length ? pick(match.real_budgets).id : "deleted_budget";
+      const k = r();
+      raw.budgetId = k < 0.4 && match.real_budgets.length
+        ? pick(match.real_budgets).id
+        : k < 0.7 ? pick(Object.values(EE_IDS)) // any lens's Everything Else
+        : "deleted_budget";
     }
     const txn = { merchantName: r() < 0.15 ? "Santo Taco" : "Store", name: "x" };
 
@@ -147,8 +151,10 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
     const m = { ...m0, is_transfer: live_role === "internal", is_edge_out: live_role === "edge_out" };
     const stored = compute_transaction_assignment([input], ctx).splits[0];
     const ee = match.primary_everything_else_id;
-    const owner = resolve_split_owner(m, match.real_budgets, ee);
-    const counted = owned_splits_for_budget(owner, match.real_budgets, ee, [m]).some(is_countable);
+    const aliases = match.everything_else_id_set;
+    const owner = resolve_split_owner(m, match.real_budgets, ee, aliases);
+    const counted = owned_splits_for_budget(owner, match.real_budgets, ee, [m], aliases)
+      .some(is_countable);
 
     // Transfers the classifier hasn't reached yet keep the old rule (excluded) on BOTH sides: the
     // page's blanket transfer-category exclusion; no role → engine excludes. Only edge_out counts.

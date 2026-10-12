@@ -73,20 +73,36 @@ export interface SplitForOnReadMatch {
 export function resolve_split_owner(
   split: SplitForOnReadMatch,
   real_budgets: BudgetForMatch[],
-  ee_budget_id: string | null
+  ee_budget_id: string | null,
+  ee_alias_ids: ReadonlySet<string> = NO_ALIASES
 ): string {
   // 1. Manual pin wins — but ONLY while its budget still exists (a real budget or the EE).
   //    A pin to a DELETED budget is stale, so we fall through to category matching (→ EE),
   //    which re-homes the deleted budget's spending to Everything Else instead of orphaning it.
-  if (
-    split.manual_pin_budget_id &&
-    (split.manual_pin_budget_id === ee_budget_id ||
-      real_budgets.some((b) => b.id === split.manual_pin_budget_id))
-  ) {
-    return split.manual_pin_budget_id;
-  }
+  const pinned = pin_owner(split, real_budgets, ee_budget_id, ee_alias_ids);
+  if (pinned) return pinned;
   // 2/3. Category match → else Everything-Else (both from the shared matcher).
   return match_budget(split, split.txn_date_ms, real_budgets, ee_budget_id).budget_id;
+}
+
+const NO_ALIASES: ReadonlySet<string> = new Set();
+
+/**
+ * The budget a live manual pin puts the split in, else null. A pin to ANY lens's Everything Else
+ * means "Everything Else" (the user picked it in whichever view they were in) — it lands in
+ * `ee_budget_id`, exactly as the engine stores it (each lens's own Everything Else).
+ */
+function pin_owner(
+  split: SplitForOnReadMatch,
+  real_budgets: BudgetForMatch[],
+  ee_budget_id: string | null,
+  ee_alias_ids: ReadonlySet<string>
+): string | null {
+  const pin = split.manual_pin_budget_id;
+  if (!pin) return null;
+  if (pin === ee_budget_id) return pin;
+  if (ee_alias_ids.has(pin)) return ee_budget_id ?? pin;
+  return real_budgets.some((b) => b.id === pin) ? pin : null;
 }
 
 /**
@@ -100,17 +116,18 @@ export function owned_splits_for_budget(
   target_budget_id: string,
   real_budgets: BudgetForMatch[],
   ee_budget_id: string | null,
-  splits: SplitForOnReadMatch[]
+  splits: SplitForOnReadMatch[],
+  ee_alias_ids: ReadonlySet<string> = NO_ALIASES
 ): SplitForSpend[] {
   const out: SplitForSpend[] = [];
   for (const s of splits) {
-    if (resolve_split_owner(s, real_budgets, ee_budget_id) !== target_budget_id) {
+    if (resolve_split_owner(s, real_budgets, ee_budget_id, ee_alias_ids) !== target_budget_id) {
       continue;
     }
     // A manual budget pin is the user's explicit word (canon A4, engine B2): the split counts in
     // the pinned budget even when it's a transfer or an income-category credit — exactly as the
     // assignment engine stores it.
-    const pinned = s.manual_pin_budget_id === target_budget_id;
+    const pinned = pin_owner(s, real_budgets, ee_budget_id, ee_alias_ids) === target_budget_id;
     out.push({
       budget_id: target_budget_id,
       amount: s.amount,

@@ -18,6 +18,7 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
+import { create_job } from "../../infrastructure/job_queue";
 import {
   create_span,
   log_operation_start,
@@ -77,7 +78,19 @@ export interface AssignTransactionsBatchInput {
   extra_fields_by_id?: Map<string, Record<string, unknown>>;
   dry_run?: boolean;
   on_result?: (r: BatchTxnResult) => void;
+  /** A conflicted transaction is re-read and retried; a caller that transformed its preloaded
+   *  docs in memory applies the same transform to the fresh read here (it may add to
+   *  `force_write_ids` / `extra_fields_by_id`). */
+  prepare_fresh?: (doc: {
+    id: string;
+    data: Record<string, unknown>;
+    update_time?: Timestamp;
+  }) => { id: string; data: Record<string, unknown>; update_time?: Timestamp };
 }
+
+/** Rounds of re-read + retry for transactions whose write lost a race; what still conflicts
+ *  after that gets its own batch job (never left un-assigned). */
+const CONFLICT_RETRY_ROUNDS = 2;
 
 /** One transaction's outcome (reported to `on_result`). */
 export interface BatchTxnResult {
@@ -200,9 +213,10 @@ export async function assign_transactions_batch_orchestrator(
     let conflicts = 0; // skipped: the doc changed after we read it
     const not_found = input.transaction_ids.length - txn_docs.length;
 
+    /** Returns false when the write lost a race (the doc changed after it was read). */
     const assign_one = async (
       txn: { id: string; data: Record<string, unknown> }
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       const resolved = await resolve_assignment_context(
         ctx,
         input.user_id,
@@ -213,7 +227,7 @@ export async function assign_transactions_batch_orchestrator(
         preloaded_source_periods
       );
       if (!resolved) {
-        return;
+        return true;
       }
 
       const result = compute_transaction_assignment(
@@ -226,7 +240,9 @@ export async function assign_transactions_batch_orchestrator(
         merge_assignment_onto_raw_splits(resolved, result, now);
       const forced = input.force_write_ids?.has(txn.id) === true;
       const write = result.changed || name_changed || forced;
-      if (input.on_result) {
+      // Reported once the outcome is final (a conflicted write is reported by its retry).
+      const report = () => {
+        if (!input.on_result) return;
         const before_by_split = new Map(
           resolved.splits_input.map((s) => [s.split_id, s.monthly_budget_id ?? s.budget_id])
         );
@@ -242,12 +258,13 @@ export async function assign_transactions_batch_orchestrator(
               after: s.monthly_budget_id,
             })),
         });
-      }
+      };
 
       // Skip-if-unchanged: nothing to write (single-item semantics). A dry run never writes.
       if (!write || input.dry_run) {
+        report();
         processed++;
-        return;
+        return true;
       }
 
       const applied = await transaction_repo.apply_split_assignments(
@@ -264,9 +281,9 @@ export async function assign_transactions_batch_orchestrator(
       );
       if (!applied) {
         conflicts++;
-        processed++;
-        return;
+        return false;
       }
+      report();
       /* eslint-disable @typescript-eslint/naming-convention */
       written.push({
         doc_id: resolved.transaction_doc_id,
@@ -285,13 +302,38 @@ export async function assign_transactions_batch_orchestrator(
       if (result.changed || forced) {
         changed++;
       }
+      return true;
     };
 
-    // Process in bounded-concurrency windows.
+    // Process in bounded-concurrency windows. A write that lost a race (a status tap, a sync
+    // landed after our read) is re-read and retried — a stamped spend-only edit never runs the
+    // engine itself, so skipping it would leave the transaction on its old assignment.
+    let lost: string[] = [];
     try {
-      for (let i = 0; i < txn_docs.length; i += CONCURRENCY) {
-        const window = txn_docs.slice(i, i + CONCURRENCY);
-        await Promise.all(window.map((t) => assign_one(t)));
+      let todo: Array<{ id: string; data: Record<string, unknown>; update_time?: Timestamp }> =
+        txn_docs;
+      for (let round = 0; ; round++) {
+        lost = [];
+        for (let i = 0; i < todo.length; i += CONCURRENCY) {
+          const window = todo.slice(i, i + CONCURRENCY);
+          const ok = await Promise.all(window.map((t) => assign_one(t)));
+          ok.forEach((applied, k) => {
+            if (!applied) lost.push(window[k].id);
+          });
+        }
+        if (!lost.length || round >= CONFLICT_RETRY_ROUNDS) break;
+        const fresh = await transaction_repo.get_raw_by_ids(ctx, lost);
+        todo = input.prepare_fresh ? fresh.map(input.prepare_fresh) : fresh;
+        processed += lost.length - fresh.length; // gone / deactivated since
+      }
+      if (lost.length) {
+        // Still racing after the retries: its own batch job (fresh read, own retries).
+        processed += lost.length;
+        await create_job(
+          "assign_transactions_batch",
+          { user_id: input.user_id, transaction_ids: lost },
+          { trace_id: ctx.trace_id, delay_seconds: 30 }
+        );
       }
     } finally {
       // ONE follow-up for the whole batch (the trigger skips these stamped writes). In `finally`

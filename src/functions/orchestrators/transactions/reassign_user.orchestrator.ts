@@ -19,11 +19,12 @@
  *     periods, one derive bump) — the engine's writes are stamped `assignRunId` so the
  *     transaction trigger doesn't fan out per write.
  *
- * Single-flight per (user, scope, dry-run) WITHOUT dropping requests: a request while one is queued
- * merges into it; a request while one is RUNNING is queued delayed (re-checked when due), so a
- * change made mid-run is never lost. The run id is fixed at enqueue, so a retried job RESUMES its
- * run from the cursor. Runs execute only on the immediate job trigger (a full 9-minute budget):
- * the 5-minute sweep hands a due job back to it instead of running it.
+ * Single-flight WITHOUT dropping requests: a request while one with its key is queued merges into
+ * it; a request while ANY real run for the user is RUNNING is queued delayed (re-checked when due),
+ * so a change made mid-run is never lost and two runs never write the same user in parallel.
+ * A run that keeps throwing is marked "failed" after a few invocations (never retries forever).
+ * The run id is fixed at enqueue, so a retried job RESUMES its run from the cursor. Runs execute
+ * only on the immediate job trigger (a full 9-minute budget): the 5-minute sweep hands a due job back to it instead of running it.
  *
  * @module orchestrators/transactions/reassign_user
  */
@@ -101,6 +102,8 @@ const MATCH_MARGIN_MS = 90 * 24 * 60 * 60 * 1000;
 /** Bill / income candidates are loaded for this much date range at a time. */
 const CANDIDATE_CHUNK_MS = 270 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_TXNS = 25_000;
+/** Invocations of one run that may throw before the run is marked "failed". */
+const MAX_RUN_FAILURES = 3;
 const MAX_SAMPLES = 50;
 
 /** The job type + its single-flight dedup key. */
@@ -126,7 +129,7 @@ export async function enqueue_reassign_user(
   delay_seconds?: number
 ): Promise<boolean> {
   const key = reassign_dedup_key(input.user_id, input.scope, input.dry_run === true);
-  const running = await reassign_run_repo.has_running(key, "", STALE_RUN_MS);
+  const running = await blocking_run_exists(input.user_id, key, input.dry_run === true, "");
   const job = await coalesce_job(
     REASSIGN_JOB,
     // The run id is fixed now, so a retried first job resumes the same run.
@@ -137,6 +140,24 @@ export async function enqueue_reassign_user(
     }
   );
   return job !== null;
+}
+
+/**
+ * Does a run block this one from starting? Real runs are single-flight PER USER (whatever their
+ * scope): a running run uses the budgets / categories it loaded when its invocation began, so a
+ * second real run for the same user in parallel could finish first and then be overwritten with
+ * the older view. Serialized, the later run always walks after the earlier one. A dry run (audit,
+ * writes nothing) only waits for another dry run with its key.
+ */
+async function blocking_run_exists(
+  user_id: string,
+  dedup_key: string,
+  dry_run: boolean,
+  except_run_id: string
+): Promise<boolean> {
+  return dry_run
+    ? reassign_run_repo.has_running(dedup_key, except_run_id, STALE_RUN_MS)
+    : reassign_run_repo.has_running_real_for_user(user_id, except_run_id, STALE_RUN_MS);
 }
 
 /** A continuation of a run (its own key — never merges with a NEW request). */
@@ -184,7 +205,10 @@ export async function reassign_user_orchestrator(
     return { run_id: run.run_id, status: run.status, scanned: run.scanned, changed: run.changed };
   }
   // Single-flight: a NEW run waits while another run with its key is running (it re-checks).
-  if (!existing && (await reassign_run_repo.has_running(run.dedup_key, run.run_id, STALE_RUN_MS))) {
+  const blocked =
+    !existing &&
+    (await blocking_run_exists(run.user_id, run.dedup_key, run.dry_run, run.run_id));
+  if (blocked) {
     await create_job(
       REASSIGN_JOB,
       { ...input, run_id: run.run_id },
@@ -231,10 +255,13 @@ export async function reassign_user_orchestrator(
         ? page.docs.filter((d) => account_filter.has(d.data.accountId as string))
         : page.docs;
 
-      // 3-0b in memory: old overrides → user picks, legacy fields cleared.
+      // 3-0b in memory: old overrides → user picks, legacy fields cleared. The same transform
+      // runs on a conflicted transaction's fresh re-read (the batch's retry).
       const force_write_ids = new Set<string>();
       const extra_fields_by_id = new Map<string, Record<string, unknown>>();
-      const prepared = docs.map((d) => {
+      let picks = 0; // carried by the last `prepare` call
+      const prepare = <T extends { id: string; data: Record<string, unknown> }>(d: T): T => {
+        picks = 0;
         const b = backfill_legacy_split_categories(
           (d.data.splits as Array<Record<string, unknown>>) ?? [],
           catalog
@@ -243,8 +270,13 @@ export async function reassign_user_orchestrator(
         if (!b.changed && Object.keys(txn_clear).length === 0) return d;
         force_write_ids.add(d.id);
         if (Object.keys(txn_clear).length) extra_fields_by_id.set(d.id, txn_clear);
-        run.picks_carried += b.picks_carried;
+        picks = b.picks_carried;
         return { ...d, data: { ...d.data, ...txn_clear, splits: b.splits } };
+      };
+      const prepared = docs.map((d) => {
+        const p = prepare(d);
+        run.picks_carried += picks; // counted on the first read only, not on a retry's re-read
+        return p;
       });
 
       if (prepared.length > 0) {
@@ -271,6 +303,7 @@ export async function reassign_user_orchestrator(
           extra_fields_by_id,
           dry_run: run.dry_run,
           run_id: run.run_id,
+          prepare_fresh: prepare,
           collect_into: written,
           on_result: (r) => {
             if (!r.write) return;
@@ -357,11 +390,33 @@ export async function reassign_user_orchestrator(
     return { run_id: run.run_id, status: run.status, scanned: run.scanned, changed: run.changed };
   } catch (error) {
     // The run stays "running" with its last saved cursor; the job's retry (same run id) resumes.
+    // Failures are counted on the RUN (a retry can come back as a fresh job — the sweep hands
+    // re-assign jobs to the trigger — so the job's own retry count can't bound it): after
+    // MAX_RUN_FAILURES the run is "failed", stops blocking its user's other runs, and ends.
     log_operation_error(
       span,
       error instanceof Error ? error : new Error(String(error)),
       { user_id: input.user_id, error_code: "REASSIGN_USER_FAILED" }
     );
+    const saved = await reassign_run_repo.get(run.run_id).catch(() => null);
+    if (saved && saved.status === "running") {
+      saved.failures = (saved.failures ?? 0) + 1;
+      saved.last_error = error instanceof Error ? error.message : String(error);
+      if (saved.failures >= MAX_RUN_FAILURES) {
+        saved.status = "failed";
+        await reassign_run_repo.save(saved);
+        console.error(
+          `[${ctx.trace_id}] reassign_user ${run.run_id}: failed ${saved.failures}x — giving up`
+        );
+        return {
+          run_id: run.run_id,
+          status: "failed",
+          scanned: saved.scanned,
+          changed: saved.changed,
+        };
+      }
+      await reassign_run_repo.save(saved);
+    }
     throw error;
   }
 }

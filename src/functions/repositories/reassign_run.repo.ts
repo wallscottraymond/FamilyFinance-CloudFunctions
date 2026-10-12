@@ -45,7 +45,7 @@ export interface ReassignRun {
   reason: ReassignReason;
   dry_run: boolean;
   scope: ReassignScope;
-  status: "running" | "done" | "capped" | "stopped";
+  status: "running" | "done" | "capped" | "stopped" | "failed";
   /** Resume point: the last processed (date, doc id). */
   cursor: { date_ms: number; doc_id: string } | null;
   scanned: number;
@@ -63,6 +63,9 @@ export interface ReassignRun {
   /** All pages walked; only the follow-up pass is left (it may get its own job). */
   walk_done: boolean;
   invocations: number;
+  /** Invocations that threw (the run is "failed" after a few). */
+  failures?: number;
+  last_error?: string;
   started_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -95,6 +98,27 @@ export const reassign_run_repo = {
     return snap.docs.some(
       (d) =>
         d.id !== except_run_id &&
+        ((d.get("updated_at") as Timestamp | undefined)?.toMillis() ?? 0) > fresh_after
+    );
+  },
+
+  /** Is any REAL (not dry-run) run of this user RUNNING right now (fresh, not `except_run_id`)? */
+  async has_running_real_for_user(
+    user_id: string,
+    except_run_id: string,
+    stale_ms: number
+  ): Promise<boolean> {
+    const snap = await getFirestore()
+      .collection(RUNS)
+      .where("user_id", "==", user_id)
+      .where("status", "==", "running")
+      .limit(10)
+      .get();
+    const fresh_after = Date.now() - stale_ms;
+    return snap.docs.some(
+      (d) =>
+        d.id !== except_run_id &&
+        d.get("dry_run") !== true &&
         ((d.get("updated_at") as Timestamp | undefined)?.toMillis() ?? 0) > fresh_after
     );
   },

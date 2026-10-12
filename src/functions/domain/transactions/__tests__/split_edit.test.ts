@@ -27,8 +27,13 @@ describe("build_split_edit", () => {
     });
   });
 
-  it("a status / amount edit is NOT assignment-relevant (no engine run)", () => {
-    expect(run([{ ...stored, spendStatus: "refund", amount: 30 }]).assignment_relevant).toBe(false);
+  it("a status / note edit is NOT assignment-relevant (no engine run)", () => {
+    expect(run([{ ...stored, spendStatus: "refund" }]).assignment_relevant).toBe(false);
+    expect(run([{ ...stored, amount: "40.00" }]).assignment_relevant).toBe(false); // same amount
+  });
+
+  it("an amount edit IS (the bill / income matcher scores on the split amount)", () => {
+    expect(run([{ ...stored, amount: 30 }]).assignment_relevant).toBe(true);
   });
 
   it("a category pick, a budget pin, a bill pin or a split add IS", () => {

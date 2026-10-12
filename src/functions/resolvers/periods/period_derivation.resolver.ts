@@ -751,6 +751,7 @@ export function shape_period_derivation_deps(
     real_budgets,
     monthly_ee_id,
     any_ee_id,
+    ee_alias_ids: match.everything_else_id_set,
     splits_for_match,
     recurring,
     goals,

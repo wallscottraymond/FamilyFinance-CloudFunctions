@@ -3,12 +3,14 @@
  * (canon O2, Transaction-Integrity-Review 3g) and read-consciously.
  *
  *   1. build the edit in memory (domain/transactions/split_edit: merge onto the stored splits,
- *      the one category edit rule, totals);
+ *      the one category edit rule, totals); re-categorized out of transfers → role "none";
  *   2. if the edit touches anything the engine decides on (split set, category, budget / bill
  *      pins), the engine assigns the transaction IN MEMORY (we hold it — no re-read);
- *      a status / amount / note edit skips that (it only moves spend);
- *   3. write ONCE, stamped (`on_transaction_written` skips it), and bump the derive version
- *      RIGHT AFTER the write (so a crash later can't leave the period stale);
+ *      a status / note edit skips that (it only moves spend);
+ *   3. write ONCE, stamped (`on_transaction_written` skips it), only if the doc is unchanged since
+ *      it was read (else re-read + rebuild the edit on the newer doc — a sync or the re-assign
+ *      engine is never overwritten with stale fields); bump the derive version RIGHT AFTER the
+ *      write (so a crash later can't leave the period stale);
  *   4. follow-up: an assignment edit runs the one follow-up pass (reconcile, recompute, transfer
  *      re-check only when a category moved); a spend-only edit enqueues the coalesced recompute
  *      (repeated status taps merge into one).
@@ -24,6 +26,8 @@ import { transaction_repo } from "../../repositories/transaction.repo";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import { build_split_edit } from "../../domain/transactions/split_edit.service";
+import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
+import { txn_effective_category } from "../../resolvers/shared/on_read_matching";
 import { create_in_memory_assigner } from "./assign_in_memory";
 import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
 import {
@@ -34,7 +38,8 @@ import {
 export interface UpdateTransactionSplitsInput {
   user_id: string;
   transaction_id: string;
-  /** The stored transaction (already read + ownership-checked by the entry). */
+  /** The stored transaction (already read + ownership-checked by the entry). The orchestrator
+   *  re-reads it with its update time for the conditional write. */
   txn: Record<string, unknown>;
   splits: Array<Record<string, unknown>>;
   user_notes?: string;
@@ -46,10 +51,35 @@ export async function update_transaction_splits_orchestrator(
   ctx: TraceContext,
   input: UpdateTransactionSplitsInput
 ): Promise<Record<string, unknown>> {
-  const { txn, transaction_id } = input;
-  const owner_id = (txn.userId as string) || input.user_id;
-  const now = Timestamp.now();
+  const { transaction_id } = input;
+  const owner_id = (input.txn.userId as string) || input.user_id;
   const catalog = await load_category_catalog(ctx);
+
+  for (let attempt = 1; ; attempt++) {
+    const [fresh] = await transaction_repo.get_raw_by_ids(ctx, [transaction_id]);
+    if (!fresh) throw new Error(`Transaction ${transaction_id} no longer exists`);
+    const result = await apply_edit(ctx, input, owner_id, catalog, fresh.data, fresh.update_time);
+    if (result) return result;
+    if (attempt >= MAX_ATTEMPTS) {
+      throw new Error(`Transaction ${transaction_id} kept changing; edit not saved — try again`);
+    }
+  }
+}
+
+/** Write attempts when a newer write keeps landing between our read and write. */
+const MAX_ATTEMPTS = 3;
+
+/** One attempt: build, assign, conditional write, follow-up. null = lost the race (re-read). */
+async function apply_edit(
+  ctx: TraceContext,
+  input: UpdateTransactionSplitsInput,
+  owner_id: string,
+  catalog: Awaited<ReturnType<typeof load_category_catalog>>,
+  txn: Record<string, unknown>,
+  update_time: Timestamp | undefined
+): Promise<Record<string, unknown> | null> {
+  const { transaction_id } = input;
+  const now = Timestamp.now();
 
   const edit = build_split_edit(
     input.splits,
@@ -69,6 +99,18 @@ export async function update_transaction_splits_orchestrator(
     ...(input.is_hidden !== undefined ? { isHidden: input.is_hidden } : {}),
     ...(input.is_recurring !== undefined ? { isRecurring: input.is_recurring } : {}),
   };
+  // A transaction the user re-categorized OUT of transfers is no longer a transfer: clear its
+  // stored role in this same write (the classifier's "none"), so neither the engine nor the app
+  // trusts a stale matched-pair role — the classifier's forced pass only revisits recent days.
+  // Same effective-category rule as the pairing (first split).
+  if (
+    edit.category_changed &&
+    typeof txn.transferRole === "string" &&
+    txn.transferRole !== "none" &&
+    !is_transfer_category(txn_effective_category({ ...txn, splits: edit.splits }, catalog))
+  ) {
+    update.transferRole = "none";
+  }
   /* eslint-enable @typescript-eslint/naming-convention */
 
   const txn_date_ms = (txn.transactionDate as Timestamp | undefined)?.toMillis?.();
@@ -99,7 +141,17 @@ export async function update_transaction_splits_orchestrator(
     update.lastWriteSource = "split_edit";
   }
 
-  await transaction_repo.update_raw(ctx, transaction_id, update);
+  if (update_time) {
+    const written = await transaction_repo.update_raw_if_unchanged(
+      ctx,
+      transaction_id,
+      update,
+      update_time
+    );
+    if (!written) return null; // a newer write landed — re-read and rebuild
+  } else {
+    await transaction_repo.update_raw(ctx, transaction_id, update);
+  }
   // Right after the write: the period page shows the edit even if anything below fails.
   await bump_derive_version(owner_id).catch(() => {});
 

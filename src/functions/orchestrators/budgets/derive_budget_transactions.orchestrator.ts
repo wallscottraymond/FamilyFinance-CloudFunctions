@@ -31,7 +31,6 @@ import {
   put_cached_result,
   DERIVED_CACHE_TTL_MS,
 } from "../../repositories/derived_result_cache.repo";
-import { is_income_category } from "../../domain/budgets/budget_spend.service";
 import {
   resolve_derive_scope,
   load_pairing_extra_txns,
@@ -44,7 +43,7 @@ import {
   account_in_scope,
   transaction_in_scope,
 } from "../../domain/periods/derive_scope.service";
-import { resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
+import { owned_splits_for_budget } from "../../domain/budgets/budget_spend_match.service";
 import {
   budget_to_match_input,
   build_match_budgets,
@@ -119,10 +118,10 @@ export async function derive_budget_transactions_orchestrator(
   const budgets = await budget_repo.get_by_user_id(ctx, scope.budget_owner_key);
   // THE budget set (domain/budgets/match_budgets) — same as the period page and the engine.
   const catalog = await load_category_catalog(ctx);
-  const match = build_match_budgets(budgets.map(budget_to_match_input));
-  const real_budgets: BudgetForMatch[] = match.real_budgets;
+  const budget_match = build_match_budgets(budgets.map(budget_to_match_input));
+  const real_budgets: BudgetForMatch[] = budget_match.real_budgets;
   const target_is_ee = budgets.some((b) => b.id === budget_id && b.is_system_everything_else);
-  const ee_id = target_is_ee ? budget_id : match.primary_everything_else_id;
+  const ee_id = target_is_ee ? budget_id : budget_match.primary_everything_else_id;
 
   // 2. Load the window's transactions (+ a small buffer for transfer pairing). All members'
   //    transactions are kept server-side for cross-view pairing (D12); the view's are filtered.
@@ -224,15 +223,26 @@ export async function derive_budget_transactions_orchestrator(
       }, catalog);
       if (is_edge && crossing.out_ids.has(id)) match.is_edge_out = true;
 
-      if (resolve_split_owner(match, real_budgets, ee_id) !== budget_id) continue;
+      // Ownership + counting from the period page's own calls (owned_splits_for_budget →
+      // is_countable's flags), so the list agrees with the page: a manually pinned transfer /
+      // income-category split counts; an unpaired transfer-category split doesn't.
+      const [owned] = owned_splits_for_budget(
+        budget_id,
+        real_budgets,
+        ee_id,
+        [match],
+        budget_match.everything_else_id_set
+      );
+      if (!owned) continue;
 
-      // Derive the display status (transfers/income → ignored; else the stored status).
+      // Display status: why it doesn't count (transfer / income / the user's ignore), else the
+      // stored status.
       let spend_status: DerivedSpendStatus = match.spend_status;
       let ignored_reason: IgnoredReason = null;
-      if (txn_is_internal_transfer) {
+      if (owned.is_transfer || owned.is_transfer_category) {
         spend_status = "ignored";
         ignored_reason = "transfer";
-      } else if (is_income_category(match.semantic_code)) {
+      } else if (owned.is_income_category) {
         spend_status = "ignored";
         ignored_reason = "income";
       } else if (match.spend_status === "ignored") {

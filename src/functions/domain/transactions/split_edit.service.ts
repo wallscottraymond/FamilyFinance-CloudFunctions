@@ -8,7 +8,7 @@
  *     build's bare categoryId; Plaid codes immutable; `internal*` null).
  *   - Totals + the refund / ignored summaries are recomputed from the final splits.
  *   - `assignment_relevant`: did anything the assignment engine decides on change (split set,
- *     category, budget / bill pins)? A status / amount / note edit doesn't — it only moves spend.
+ *     category, amount, budget / bill pins)? A status / note edit doesn't — it only moves spend.
  *   - `category_changed`: a category moved (it can form or break a matched transfer pair).
  *
  * @module domain/transactions/split_edit
@@ -37,10 +37,12 @@ const id_of = (s: Raw): string => ((s.splitId as string) || (s.id as string) || 
 const category_key = (s: Raw) =>
   `${s.categorySource ?? ""}|${s.firstCategoryId ?? ""}|${s.secondCategoryId ?? ""}`;
 
-/** What the engine decides on, per split (besides the transaction's own date / account). */
+/** What the engine decides on, per split (besides the transaction's own date / account). The
+ *  amount is in it: the bill / income matcher scores on the split's amount. */
 const assignment_key = (s: Raw) =>
   [
     category_key(s),
+    Math.abs(Number(s.amount) || 0).toFixed(2),
     s.budgetAssignmentSource ?? "category",
     s.budgetAssignmentSource === "manual" ? s.budgetId ?? "" : "",
     s.outflowAssignmentSource ?? "auto",

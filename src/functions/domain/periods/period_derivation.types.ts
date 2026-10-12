@@ -60,6 +60,8 @@ export interface PeriodDerivationDeps {
   real_budgets: BudgetForMatch[];
   monthly_ee_id: string | null;
   any_ee_id: string | null;
+  /** Every Everything Else id (any lens) — a pin to one means "Everything Else". */
+  ee_alias_ids?: ReadonlySet<string>;
   splits_for_match: SplitForOnReadMatch[];
   recurring: RecurringForDerivation[];
   /** Active income-drawing goals' planned set-aside (for the EE leftover). */

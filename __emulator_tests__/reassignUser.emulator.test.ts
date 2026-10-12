@@ -211,7 +211,7 @@ describe('reassign_user_orchestrator (emulator)', () => {
     }
   });
 
-  it("never overwrites a write that landed after the engine's read (precondition)", async () => {
+  it("never overwrites a write that landed after the engine's read; re-reads and assigns on top of it", async () => {
     const u = await seedUser(5);
     const id = `ra_race_${RUN}`;
     await seedTxn(id, u.userId, '2026-05-03', split(SHOP_CODE, u.ee.m));
@@ -224,7 +224,51 @@ describe('reassign_user_orchestrator (emulator)', () => {
     const after = await txn(id);
     expect(after.userNotes).toBe('edited');
     expect(after.splits[0].spendStatus).toBe('ignored'); // the edit survived
-    expect(after.splits[0].monthlyBudgetId).toBe(u.ee.m); // the stale write was skipped
+    // The stale write was refused; the retry re-read the edited doc and assigned it (a stamped
+    // spend-only edit never runs the engine itself, so a skip would leave it on the old budget).
+    expect(after.splits[0].monthlyBudgetId).toBe(u.shop);
+  });
+
+  it('real runs are single-flight PER USER: a different-scope request waits for the running one', async () => {
+    const u = `ra_pu_${RUN}`;
+    await db.collection('_reassign_runs').doc(`ra_pu_run_${RUN}`).set({
+      run_id: `ra_pu_run_${RUN}`, user_id: u, dry_run: false, status: 'running',
+      dedup_key: `reassign_user:${u}:|1000|`, updated_at: Timestamp.now(),
+    });
+    // A different scope (other key) is still delayed until the running run is done.
+    expect(await enqueue_reassign_user({ user_id: u, scope: { from_ms: 5000 } }, 't')).toBe(true);
+    const jobs = (await db.collection('_jobs').where('job_type', '==', 'reassign_user').get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.user_id === u);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].scheduled_for.toMillis()).toBeGreaterThan(Date.now() + 60_000);
+    // A dry run (audit) isn't blocked by a real run.
+    expect(await enqueue_reassign_user({ user_id: u, dry_run: true }, 't')).toBe(true);
+    const dry = (await db.collection('_jobs').where('job_type', '==', 'reassign_user').get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.user_id === u && j.payload?.dry_run === true);
+    expect((dry[0].scheduled_for?.toMillis?.() ?? 0)).toBeLessThan(Date.now() + 60_000);
+  });
+
+  it('a run that keeps throwing is marked failed after 3 invocations (never retries forever)', async () => {
+    const u = await seedUser(7);
+    const run_id = `ra_fail_${RUN}`;
+    const spy = jest.spyOn(transaction_repo, 'get_page_by_date').mockRejectedValue(new Error('boom'));
+    try {
+      for (let i = 1; i <= 2; i++) {
+        await expect(reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id })).rejects.toThrow('boom');
+        const r = (await db.collection('_reassign_runs').doc(run_id).get()).data()!;
+        expect([r.status, r.failures]).toEqual(['running', i]);
+      }
+      const third = await reassign_user_orchestrator(ctx(), { user_id: u.userId, run_id });
+      expect(third.status).toBe('failed');
+      expect((await db.collection('_reassign_runs').doc(run_id).get()).data()!.status).toBe('failed');
+      // A failed run no longer blocks the user's next request.
+      expect(await enqueue_reassign_user({ user_id: u.userId, scope: { from_ms: 1 } }, 't')).toBe(true);
+      const next = (await db.collection('_jobs').where('job_type', '==', 'reassign_user').get()).docs
+        .map((d) => d.data()).filter((j) => j.payload?.user_id === u.userId);
+      expect(next.some((j) => (j.scheduled_for?.toMillis?.() ?? 0) < Date.now() + 60_000)).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('a request while a run is RUNNING is queued delayed, never dropped; a queued one merges', async () => {

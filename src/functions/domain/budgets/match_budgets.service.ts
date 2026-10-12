@@ -52,6 +52,8 @@ export interface MatchBudgets {
   everything_else_ids: Record<PeriodLens, string | null>;
   /** The monthly Everything Else, else any — the period page's single fallback. */
   primary_everything_else_id: string | null;
+  /** Every Everything Else id (any lens): a manual pin to one means "Everything Else". */
+  everything_else_id_set: ReadonlySet<string>;
   names: Record<string, string>;
 }
 
@@ -63,11 +65,13 @@ export function build_match_budgets(budgets: BudgetForMatchInput[]): MatchBudget
     bi_monthly: null,
   };
   const names: Record<string, string> = {};
+  const ee_set = new Set<string>();
   let any_ee: string | null = null;
   for (const b of budgets) {
     names[b.id] = b.name;
     if (b.is_everything_else) {
       any_ee = any_ee ?? b.id;
+      ee_set.add(b.id);
       if (!everything_else_ids[b.cadence]) everything_else_ids[b.cadence] = b.id;
       continue;
     }
@@ -84,6 +88,7 @@ export function build_match_budgets(budgets: BudgetForMatchInput[]): MatchBudget
     real_budgets,
     everything_else_ids,
     primary_everything_else_id: everything_else_ids.monthly ?? any_ee,
+    everything_else_id_set: ee_set,
     names,
   };
 }

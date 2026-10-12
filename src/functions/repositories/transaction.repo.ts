@@ -1443,6 +1443,23 @@ export const transaction_repo = {
     await doc_ref(doc_id).update(fields);
   },
 
+  /** `update_raw` only if the doc is unchanged since `read_update_time`; false when a newer
+   *  write landed (FAILED_PRECONDITION) — the caller re-reads and rebuilds its edit. */
+  async update_raw_if_unchanged(
+    _ctx: TraceContext,
+    doc_id: string,
+    fields: Record<string, unknown>,
+    read_update_time: Timestamp
+  ): Promise<boolean> {
+    try {
+      await doc_ref(doc_id).update(fields, { lastUpdateTime: read_update_time });
+      return true;
+    } catch (error) {
+      if ((error as { code?: number }).code === 9) return false;
+      throw error;
+    }
+  },
+
   /**
    * Store each transaction's transfer role (3d — internal / edge_out / edge_in / external), only
    * for the ones that changed. A role change is an assignment input (field guard), so the
