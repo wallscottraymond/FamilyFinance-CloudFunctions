@@ -154,16 +154,25 @@ export async function resolve_recurring_reconciliation(
       };
     });
 
-  // Period-pin support (Bill-Assignment-Two-Stage-Picker): map each sourcePeriodId to
-  // its date-range MIDPOINT. A split that pins a specific period aligns by this midpoint
-  // (across all cadences) instead of the txn date — forcing the payment into that period.
+  // Period-pin support (Bill-Assignment-Two-Stage-Picker): a split that pins a specific period
+  // pays THAT period's occurrence — it's placed on the DUE DATE of the bill's first occurrence in
+  // the pinned period (so every cadence's period containing that due date sees it paid, as the
+  // period page matches it), else the period's midpoint when nothing is due there.
   const midpoint_by_source_period = new Map<string, number>();
   for (const { data } of period_docs) {
     const sp = data.sourcePeriodId as string | undefined;
     const s = to_ms(data.periodStartDate);
     const e = to_ms(data.periodEndDate);
     if (sp && s !== null && e !== null) {
-      midpoint_by_source_period.set(sp, Math.floor((s + e) / 2));
+      const dues = ((data.occurrenceDueDates as unknown[] | undefined) ?? [])
+        .map((d) => to_ms(d))
+        .filter((ms): ms is number => ms !== null && ms >= s && ms <= e)
+        .sort((a, b) => a - b);
+      const first_due = dues[0] ?? to_ms(data.firstDueDateInPeriod);
+      midpoint_by_source_period.set(
+        sp,
+        first_due !== null && first_due >= s && first_due <= e ? first_due : Math.floor((s + e) / 2)
+      );
     }
   }
 

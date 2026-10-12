@@ -78,4 +78,37 @@ describe('manual period pin (emulator)', () => {
     expect(await paidOf(outflowId, '2026M07')).toBe(0);
   });
 });
+describe('a pinned payment in WEEKLY periods (emulator)', () => {
+  it('pays the week containing the pinned month\'s DUE DATE — not the week of the month\'s midpoint', async () => {
+    const userId = rid('u');
+    const outflowId = rid('outflow');
+    await db.collection('outflows').doc(outflowId).set({
+      id: outflowId, ownerId: userId, userId, averageAmount: 100, isActive: true, frequency: 'monthly', name: 'Phone',
+    });
+    const T = (y: number, m: number, d: number, h = 0) => Timestamp.fromMillis(Date.UTC(y, m, d, h));
+    const due = T(2026, 6, 3); // July 3
+    const docs: Array<[string, string, Timestamp, Timestamp, Timestamp[]]> = [
+      ['2026M07', 'monthly', T(2026, 6, 1), T(2026, 6, 31, 23), [due]],
+      ['2026W27', 'weekly', T(2026, 5, 28), T(2026, 6, 4, 23), [due]], // Jun 28 – Jul 4 (contains the due date)
+      ['2026W29', 'weekly', T(2026, 6, 12), T(2026, 6, 18, 23), []], //  Jul 12 – 18 (contains Jul 16, the midpoint)
+    ];
+    for (const [sp, type, start, end, dues] of docs) {
+      await db.collection('outflow_periods').doc(`${outflowId}_${sp}`).set({
+        id: `${outflowId}_${sp}`, outflowId, ownerId: userId, userId, sourcePeriodId: sp, periodType: type,
+        periodStartDate: start, periodEndDate: end, amountPerOccurrence: 100,
+        totalAmountDue: dues.length * 100, totalAmountPaid: 0, occurrenceDueDates: dues,
+        firstDueDateInPeriod: dues[0] ?? null, isActive: true,
+      });
+    }
+    await db.collection('transactions').doc(`plaid_${rid('tx')}`).set({
+      transactionId: rid('tx'), userId, ownerId: userId, isActive: true, isPending: false,
+      transactionDate: T(2026, 7, 20, 12), amount: 100, splitOutflowIds: [outflowId],
+      splits: [{ splitId: 'sp1', outflowId, amount: 100, outflowPinnedPeriodId: '2026M07', isDefault: true }],
+    });
+    await reconcile({ trace_id: rid('t'), span_id: rid('s') }, { recurring_id: outflowId, recurring_type: 'outflow' });
+    expect(await paidOf(outflowId, '2026M07')).toBeGreaterThan(0);
+    expect(await paidOf(outflowId, '2026W27')).toBeGreaterThan(0); // the due week
+    expect(await paidOf(outflowId, '2026W29')).toBe(0); // not the midpoint week
+  });
+});
 /* eslint-enable @typescript-eslint/naming-convention */

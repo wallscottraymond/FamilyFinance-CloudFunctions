@@ -263,6 +263,8 @@ export async function sync_transactions_orchestrator(
       const error_msg = error instanceof Error ? error.message : "Unknown error";
       console.error(`[${ctx.trace_id}] Error processing modified transactions:`, error_msg);
       errors.push(`Modification error: ${error_msg}`);
+      // Chunks that committed before the failure are still followed up.
+      written.push(...((error as { partial_written?: SyncWrittenDoc[] }).partial_written ?? []));
     }
   }
 
@@ -503,6 +505,8 @@ async function process_added_transactions(
       const error_msg = error instanceof Error ? error.message : "Unknown error";
       console.error(`[${ctx.trace_id}] Pipeline error:`, error_msg);
       errors.push(`Pipeline error: ${error_msg}`);
+      // Chunks that committed before the failure are still followed up.
+      written = (error as { partial_written?: SyncWrittenDoc[] }).partial_written ?? [];
     }
   }
 

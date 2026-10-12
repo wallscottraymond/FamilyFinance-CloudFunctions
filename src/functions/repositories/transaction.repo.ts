@@ -385,149 +385,159 @@ export const transaction_repo = {
     // Process in batches
     const chunks = chunk_for_batch(transactions);
 
-    for (const chunk of chunks) {
-      // ONE atomic batch per chunk: creates + CONDITIONAL updates (each update only if its doc is
-      // unchanged since this read — a user edit saved meanwhile must never be overwritten with
-      // the stale copy). A lost race fails the whole batch (nothing written); the chunk is
-      // re-read and rebuilt on the newer docs (up to 3 attempts) — so it's all-or-nothing, and
-      // the follow-up input (`written`) always matches what was committed.
-      let audits: Array<{ doc_id: string; action: "created" | "updated" }> = [];
-      for (let attempt = 1; ; attempt++) {
-        const batch = db.batch();
-        const chunk_results: typeof results = [];
-        const chunk_written: SyncWrittenDoc[] = [];
-        const chunk_audits: Array<{ doc_id: string; action: "created" | "updated" }> = [];
-        let chunk_created = 0;
-        let chunk_updated = 0;
+    try {
+      for (const chunk of chunks) {
+        // ONE atomic batch per chunk: creates + CONDITIONAL updates (each update only if its doc is
+        // unchanged since this read — a user edit saved meanwhile must never be overwritten with
+        // the stale copy). A lost race fails the whole batch (nothing written); the chunk is
+        // re-read and rebuilt on the newer docs (up to 3 attempts) — so it's all-or-nothing, and
+        // the follow-up input (`written`) always matches what was committed.
+        let audits: Array<{ doc_id: string; action: "created" | "updated" }> = [];
+        for (let attempt = 1; ; attempt++) {
+          const batch = db.batch();
+          const chunk_results: typeof results = [];
+          const chunk_written: SyncWrittenDoc[] = [];
+          const chunk_audits: Array<{ doc_id: string; action: "created" | "updated" }> = [];
+          let chunk_created = 0;
+          let chunk_updated = 0;
 
-        // Existence lookup for the WHOLE chunk in ⌈N/30⌉ batched `in` queries (matches by the
-        // `transactionId` field, so it finds both deterministic `plaid_${id}` docs AND legacy
-        // random-id docs) — instead of one indexed query PER transaction (the O(N)/sync read line).
-        const update_times = new Map<string, Timestamp>();
-        const existing_docs = await this.get_by_plaid_transaction_ids(
-          ctx,
-          user_id,
-          chunk.map((t) => t.transaction_id),
-          update_times
-        );
-        const existing_by_txn_id = new Map<
-          string,
-          { doc_id: string; created_at: Timestamp; doc: LegacyTransactionDoc }
-        >();
-        for (const d of existing_docs) {
-          existing_by_txn_id.set(d.transactionId, {
-            doc_id: d.id,
-            created_at: d.createdAt,
-            doc: d, // full doc, already read by the lookup (the merge needs no extra reads)
-          });
-        }
-
-        for (const txn of chunk) {
-          const existing = existing_by_txn_id.get(txn.transaction_id) ?? null;
-
-          if (existing) {
-            // UPDATE: merge Plaid's fresh fields onto the doc we just read (user edits kept).
-            const fresh_doc = map_to_doc({ ...txn, id: existing.doc_id }, now);
-            fresh_doc.createdAt = existing.created_at; // Preserve original creation time
-            fresh_doc.updatedAt = now;
-            const { id: _existing_id, ...existing_doc } =
-              existing.doc as unknown as Record<string, unknown>;
-            const merged = on_update
-              ? on_update(existing_doc, fresh_doc as unknown as Record<string, unknown>)
-              : (fresh_doc as unknown as Record<string, unknown>);
-            // Final shape decided BEFORE the write (e.g. the assignment engine run in memory),
-            // so the transaction is written once, finished.
-            const shaped = opts?.before_write
-              ? await opts.before_write(existing.doc_id, merged, existing_doc)
-              : merged;
-            const doc_data = { ...shaped, ...tag };
-            const read_time = update_times.get(existing.doc_id);
-            if (read_time) {
-              batch.update(doc_ref(existing.doc_id), doc_data, { lastUpdateTime: read_time });
-            } else {
-              batch.update(doc_ref(existing.doc_id), doc_data);
-            }
-            chunk_results.push({
-              plaid_transaction_id: txn.transaction_id,
-              doc_id: existing.doc_id,
-              action: "updated",
-            });
-            chunk_written.push({ doc_id: existing.doc_id, before: existing_doc, after: doc_data });
-            chunk_audits.push({ doc_id: existing.doc_id, action: "updated" });
-            chunk_updated++;
-          } else {
-            // CREATE: New transaction.
-            // DETERMINISTIC doc id derived from the Plaid transaction_id (NOT random)
-            // so concurrent syncs (the 6h fallback crons + a webhook processing the
-            // same "added" txn) collide on the SAME doc id → one idempotent `set`,
-            // never a duplicate. The pre-check above is not atomic, so a random id
-            // would let both branches create separate docs (the dup bug, 2026-08-18).
-            // `plaid_` prefix avoids Firestore's reserved `.`/`..`/`__*__` id forms;
-            // `/` (illegal in an id) is sanitized. Existing random-id docs stay found
-            // by `get_by_plaid_transaction_id`, so no migration + no split-brain.
-            //
-            // FIRST-WRITE-ONLY hook: apply the caller's pure transform (the Rules Engine) ONLY
-            // on CREATE — never on the update branch above — so rules run exactly once per
-            // transaction and can't clobber a later manual edit. The transform is pure; the
-            // repo holds no rule logic, it just invokes it at the create lifecycle point.
-            const effective = on_create ? on_create(txn) : txn;
-            const doc_id = `plaid_${effective.transaction_id.replace(/\//g, "_")}`;
-            const base = map_to_doc(
-              { ...effective, id: doc_id },
-              now
-            ) as unknown as Record<string, unknown>;
-            const shaped = opts?.before_write ? await opts.before_write(doc_id, base, null) : base;
-            const doc_data = { ...shaped, ...tag };
-
-            batch.set(doc_ref(doc_id), doc_data);
-
-            chunk_results.push({
-              plaid_transaction_id: txn.transaction_id,
-              doc_id,
-              action: "created",
-            });
-            chunk_written.push({ doc_id, before: null, after: doc_data });
-            chunk_audits.push({ doc_id, action: "created" });
-            chunk_created++;
-          }
-        }
-
-        try {
-          await batch.commit();
-        } catch (error) {
-          // FAILED_PRECONDITION (a newer write landed) / NOT_FOUND (deleted meanwhile): nothing
-          // was written — re-read and rebuild the chunk on the newer docs.
-          const code = (error as { code?: number }).code;
-          if ((code === 9 || code === 5) && attempt < 3) continue;
-          throw error;
-        }
-        results.push(...chunk_results);
-        written.push(...chunk_written);
-        audits = chunk_audits;
-        created += chunk_created;
-        updated += chunk_updated;
-        break;
-      }
-
-      // ONE audit entry per page (ids only) instead of a full-copy, fire-and-forget entry per
-      // transaction — 3,000 audit docs per first link became 6. Awaited so it isn't dropped.
-      if (audits.length > 0) {
-        await record_audit_entries_batch([
-          {
+          // Existence lookup for the WHOLE chunk in ⌈N/30⌉ batched `in` queries (matches by the
+          // `transactionId` field, so it finds both deterministic `plaid_${id}` docs AND legacy
+          // random-id docs) — instead of one indexed query PER transaction (the O(N)/sync read line).
+          const update_times = new Map<string, Timestamp>();
+          const existing_docs = await this.get_by_plaid_transaction_ids(
+            ctx,
             user_id,
-            action: "update",
-            entity_type: "transaction",
-            entity_id: `plaid_sync:${plaid_item_id}`,
-            before: null,
-            after: {
-              created: audits.filter((a) => a.action === "created").map((a) => a.doc_id),
-              updated: audits.filter((a) => a.action === "updated").map((a) => a.doc_id),
+            chunk.map((t) => t.transaction_id),
+            update_times
+          );
+          const existing_by_txn_id = new Map<
+            string,
+            { doc_id: string; created_at: Timestamp; doc: LegacyTransactionDoc }
+          >();
+          for (const d of existing_docs) {
+            existing_by_txn_id.set(d.transactionId, {
+              doc_id: d.id,
+              created_at: d.createdAt,
+              doc: d, // full doc, already read by the lookup (the merge needs no extra reads)
+            });
+          }
+
+          for (const txn of chunk) {
+            const existing = existing_by_txn_id.get(txn.transaction_id) ?? null;
+
+            if (existing) {
+              // UPDATE: merge Plaid's fresh fields onto the doc we just read (user edits kept).
+              const fresh_doc = map_to_doc({ ...txn, id: existing.doc_id }, now);
+              fresh_doc.createdAt = existing.created_at; // Preserve original creation time
+              fresh_doc.updatedAt = now;
+              const { id: _existing_id, ...existing_doc } =
+                existing.doc as unknown as Record<string, unknown>;
+              const merged = on_update
+                ? on_update(existing_doc, fresh_doc as unknown as Record<string, unknown>)
+                : (fresh_doc as unknown as Record<string, unknown>);
+              // Final shape decided BEFORE the write (e.g. the assignment engine run in memory),
+              // so the transaction is written once, finished.
+              const shaped = opts?.before_write
+                ? await opts.before_write(existing.doc_id, merged, existing_doc)
+                : merged;
+              const doc_data = { ...shaped, ...tag };
+              const read_time = update_times.get(existing.doc_id);
+              if (read_time) {
+                batch.update(doc_ref(existing.doc_id), doc_data, { lastUpdateTime: read_time });
+              } else {
+                batch.update(doc_ref(existing.doc_id), doc_data);
+              }
+              chunk_results.push({
+                plaid_transaction_id: txn.transaction_id,
+                doc_id: existing.doc_id,
+                action: "updated",
+              });
+              chunk_written.push({ doc_id: existing.doc_id, before: existing_doc, after: doc_data });
+              chunk_audits.push({ doc_id: existing.doc_id, action: "updated" });
+              chunk_updated++;
+            } else {
+              // CREATE: New transaction.
+              // DETERMINISTIC doc id derived from the Plaid transaction_id (NOT random)
+              // so concurrent syncs (the 6h fallback crons + a webhook processing the
+              // same "added" txn) collide on the SAME doc id → one idempotent `set`,
+              // never a duplicate. The pre-check above is not atomic, so a random id
+              // would let both branches create separate docs (the dup bug, 2026-08-18).
+              // `plaid_` prefix avoids Firestore's reserved `.`/`..`/`__*__` id forms;
+              // `/` (illegal in an id) is sanitized. Existing random-id docs stay found
+              // by `get_by_plaid_transaction_id`, so no migration + no split-brain.
+              //
+              // FIRST-WRITE-ONLY hook: apply the caller's pure transform (the Rules Engine) ONLY
+              // on CREATE — never on the update branch above — so rules run exactly once per
+              // transaction and can't clobber a later manual edit. The transform is pure; the
+              // repo holds no rule logic, it just invokes it at the create lifecycle point.
+              const effective = on_create ? on_create(txn) : txn;
+              const doc_id = `plaid_${effective.transaction_id.replace(/\//g, "_")}`;
+              const base = map_to_doc(
+                { ...effective, id: doc_id },
+                now
+              ) as unknown as Record<string, unknown>;
+              const shaped = opts?.before_write ? await opts.before_write(doc_id, base, null) : base;
+              const doc_data = { ...shaped, ...tag };
+
+              batch.set(doc_ref(doc_id), doc_data);
+
+              chunk_results.push({
+                plaid_transaction_id: txn.transaction_id,
+                doc_id,
+                action: "created",
+              });
+              chunk_written.push({ doc_id, before: null, after: doc_data });
+              chunk_audits.push({ doc_id, action: "created" });
+              chunk_created++;
+            }
+          }
+
+          try {
+            await batch.commit();
+          } catch (error) {
+            // FAILED_PRECONDITION (a newer write landed) / NOT_FOUND (deleted meanwhile): nothing
+            // was written — re-read and rebuild the chunk on the newer docs.
+            const code = (error as { code?: number }).code;
+            if ((code === 9 || code === 5) && attempt < 3) continue;
+            throw error;
+          }
+          results.push(...chunk_results);
+          written.push(...chunk_written);
+          audits = chunk_audits;
+          created += chunk_created;
+          updated += chunk_updated;
+          break;
+        }
+
+        // ONE audit entry per page (ids only) instead of a full-copy, fire-and-forget entry per
+        // transaction — 3,000 audit docs per first link became 6. Awaited so it isn't dropped.
+        if (audits.length > 0) {
+          await record_audit_entries_batch([
+            {
+              user_id,
+              action: "update",
+              entity_type: "transaction",
+              entity_id: `plaid_sync:${plaid_item_id}`,
+              before: null,
+              after: {
+                created: audits.filter((a) => a.action === "created").map((a) => a.doc_id),
+                updated: audits.filter((a) => a.action === "updated").map((a) => a.doc_id),
+              },
+              trace_id: ctx.trace_id,
+              metadata: { source: "api", context: { plaid_sync: true, run_id: opts?.run_id ?? null } },
             },
-            trace_id: ctx.trace_id,
-            metadata: { source: "api", context: { plaid_sync: true, run_id: opts?.run_id ?? null } },
-          },
-        ]).catch((e) => console.warn(`[${ctx.trace_id}] sync audit write failed (non-fatal):`, e));
+          ]).catch((e) => console.warn(`[${ctx.trace_id}] sync audit write failed (non-fatal):`, e));
+        }
       }
+
+    } catch (error) {
+      // Earlier chunks DID commit: hand their writes to the caller so their follow-ups still run
+      // (the failed chunk wrote nothing — it's re-delivered by the next sync).
+      if (error && typeof error === "object") {
+        (error as { partial_written?: SyncWrittenDoc[] }).partial_written = written;
+      }
+      throw error;
     }
 
     console.log(

@@ -277,5 +277,39 @@ describe("a bill payment PINNED to a period pays THAT period on the page (as rec
     // …and the occurrence is NOT marked paid (stored reconcile needs a paid amount above zero).
     expect(g.reduce((t: number, x: { count_paid: number }) => t + x.count_paid, 0)).toBe(0);
   });
+
+  it("WEEKLY view: a payment pinned to October pays the week the October bill is DUE (as stored)", async () => {
+    // The week Sep 28 – Oct 4, 2031 as a weekly source period (the household seeds monthly only).
+    await db.collection("source_periods").doc("2031W40").set({
+      periodId: "2031W40", type: "weekly", year: 2031,
+      startDate: ts("2031-09-28T00:00:00Z"), endDate: ts("2031-10-04T23:59:59.999Z"),
+    });
+    await db.collection("outflows").doc(id("phone")).set({
+      id: id("phone"), ownerId: ALEX, userId: ALEX, createdBy: ALEX, updatedBy: ALEX,
+      isActive: true, isHidden: false, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      plaidItemId: `item_${ALEX}`, accountId: `p_${id("chk_a")}`, lastAmount: 30, averageAmount: 30,
+      currency: "USD", description: "phone", merchantName: "phone", payerName: "phone", userCustomName: null,
+      frequency: "monthly", firstDate: ts("2031-01-01T00:00:00Z"), lastDate: ts("2031-09-01T00:00:00Z"),
+      predictedNextDate: ts("2031-10-01T00:00:00Z"), plaidPrimaryCategory: "RENT_AND_UTILITIES",
+      plaidDetailedCategory: "RENT_AND_UTILITIES_TELEPHONE", internalPrimaryCategory: null,
+      internalDetailedCategory: null, transactionIds: [], source: "plaid", streamId: id("phone"),
+    });
+    await txn("phone_pay", ALEX, id("chk_a"), 30, "2031-10-03T12:00:00Z", "RENT_AND_UTILITIES_TELEPHONE");
+    await db.collection("transactions").doc(id("phone_pay")).update({
+      splits: [{
+        splitId: "p1", amount: 30, plaidPrimaryCategory: "RENT_AND_UTILITIES",
+        plaidDetailedCategory: "RENT_AND_UTILITIES_TELEPHONE", budgetId: "unassigned",
+        outflowId: id("phone"), outflowAssignmentSource: "manual", outflowPinnedPeriodId: "2031M10", inflowId: null,
+      }],
+      splitOutflowIds: [id("phone")],
+    });
+    const wk = await derive_period_orchestrator(t(), ALEX, {
+      view_cadence: "weekly", window_start_ms: Date.UTC(2031, 8, 28), window_end_ms: Date.UTC(2031, 9, 4, 23, 59, 59, 999),
+      force: true, scope: { kind: "me" },
+    });
+    const paid = (wk.bills.find((b) => b.recurring_id === id("phone"))?.groups ?? [])
+      .reduce((tt: number, g: { total_paid: number }) => tt + g.total_paid, 0);
+    expect(paid).toBe(30);
+  });
 });
 
