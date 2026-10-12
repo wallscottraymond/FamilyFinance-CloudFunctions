@@ -12,9 +12,14 @@ import { Transaction, TransactionSplit } from "../../../../types";
 import { getDocument, updateDocument } from "../../../../utils/firestore";
 import { bump_derive_version } from "../../../repositories/derive_version.repo";
 import * as admin from "firebase-admin";
-import { create_trace_context } from "../../../observability";
+import { create_trace_context, generate_id } from "../../../observability";
 import { load_category_catalog } from "../../../resolvers/shared/category_catalog.resolver";
 import { resolve_split_category_edit } from "../../../domain/transactions/split_category_edit.service";
+import { create_in_memory_assigner } from "../../../orchestrators/transactions/assign_in_memory";
+import {
+  follow_ups_from_written,
+  run_sync_follow_ups,
+} from "../../../orchestrators/plaid/sync_follow_ups";
 
 interface UpdateTransactionSplitsRequest {
   transactionId: string;
@@ -152,7 +157,32 @@ export const updateTransactionSplits = onCall<
       (s: any) => deriveStatus(s) === "ignored"
     );
 
-    console.log(`[updateTransactionSplits] Splits assigned - budgetIds: ${updateData.splits.map((s: any) => s.budgetId).join(', ')}`);
+    // Edits apply IMMEDIATELY (canon O2, Transaction-Integrity-Review 3g): the engine assigns the
+    // edited transaction IN MEMORY (we already hold it — no re-read), the doc is written ONCE with
+    // its final assignment, stamped so `on_transaction_written` skips it, then ONE follow-up
+    // (reconcile touched bills, recompute touched budget periods, one derive bump). Before: the
+    // write queued a 15-s debounced re-assign that waited for the 5-minute sweep.
+    const owner_id = (txn.userId as string) || userId;
+    const tctx = create_trace_context(false);
+    const txn_date_ms = (txn.transactionDate as admin.firestore.Timestamp | undefined)?.toMillis?.();
+    const run_id = generate_id();
+    let assigned_ok = false;
+    if (txn_date_ms !== undefined) {
+      try {
+        const assign = await create_in_memory_assigner(tctx, owner_id, txn_date_ms, txn_date_ms);
+        const assigned = await assign(transactionId, { ...txn, ...updateData });
+        updateData.splits = assigned.splits;
+        updateData.splitBudgetIds = assigned.splitBudgetIds;
+        updateData.splitOutflowIds = assigned.splitOutflowIds;
+        updateData.splitInflowIds = assigned.splitInflowIds;
+        updateData.assignRunId = run_id;
+        updateData.lastWriteSource = "split_edit";
+        assigned_ok = true;
+      } catch (error) {
+        // Never lose the user's edit: write it unassigned-in-memory; the trigger re-assigns it.
+        console.error(`[updateTransactionSplits] in-memory assignment failed; trigger will assign:`, error);
+      }
+    }
 
     // Update transaction in Firestore (using Admin SDK - bypasses security rules)
     const updatedTransaction = await updateDocument<Transaction>(
@@ -161,17 +191,26 @@ export const updateTransactionSplits = onCall<
       updateData as any
     );
 
-    console.log(`[updateTransactionSplits] Transaction ${transactionId} updated successfully`);
+    console.log(`[updateTransactionSplits] Transaction ${transactionId} updated (assigned=${assigned_ok})`);
 
-    // Invalidate the derived-period cache (TR-2 — the transactions trigger no longer bumps).
-    // This is the live mobile split editor (spendStatus cycling, category/refund edits), so
-    // it MUST bump or the period would keep the pre-edit numbers until the ~10-min cache TTL.
-    // Awaited+swallowed so the version commits before the app re-derives.
-    await bump_derive_version(userId).catch(() => {});
-
-    // Budget spend is owned by the Transaction Assignment Engine: the
-    // `on_transaction_written` trigger enqueues `assign_transaction`, which
-    // fans out `recompute_budget_spent` jobs. No inline increment here.
+    if (assigned_ok) {
+      // ONE follow-up for this write (it bumps the derive version once).
+      await run_sync_follow_ups(
+        tctx,
+        owner_id,
+        {
+          ...follow_ups_from_written([
+            { doc_id: transactionId, before: txn, after: { ...txn, ...updateData } },
+          ]),
+          // A split edit never changes amounts / dates / accounts of the transaction, so it
+          // can't form or break a matched transfer pair — skip the transfer re-scan (reads).
+          transfers_changed: false,
+        }
+      ).catch((error) => console.error("[updateTransactionSplits] follow-up failed:", error));
+    } else {
+      // Invalidate the derived-period cache so the period shows the edit right away.
+      await bump_derive_version(owner_id).catch(() => {});
+    }
 
     return {
       success: true,
