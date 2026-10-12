@@ -117,8 +117,6 @@ export interface CreateBudgetDependencies {
   group_ids: string[];
   /** Number of budgets the user already owns (for the 50-budget limit) */
   existing_budget_count: number;
-  /** Map of requested category_id → current owner budget_id (null = unassigned) */
-  category_owners: Record<string, string | null>;
   /** The user's "Everything Else" budget ID, if one exists */
   everything_else_budget_id: string | null;
   /** The view's budgets (same owner key) — who owns what, per view (canon A3). */

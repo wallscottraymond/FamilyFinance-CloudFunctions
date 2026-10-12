@@ -28,13 +28,7 @@ export {
   compute_reallocated_periods,
 } from "./period_generation.service";
 
-export {
-  CategoryTransfer,
-  CategoryTransferPlan,
-  compute_create_transfer_plan,
-  compute_update_transfer_plan,
-  compute_delete_transfer_plan,
-} from "./category_ownership.service";
+export { plan_view_claims } from "./category_ownership.service";
 
 export { compute_create_budget } from "./create_budget.service";
 export { compute_update_budget } from "./update_budget.service";

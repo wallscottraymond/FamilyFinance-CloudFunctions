@@ -456,50 +456,6 @@ export const budget_repo = {
   },
 
   /**
-   * Atomically adds category IDs to a budget's categoryIds array.
-   * Idempotent: adding an existing category is a no-op.
-   */
-  async add_category_ids(
-    ctx: TraceContext,
-    id: string,
-    category_ids: string[],
-    user_id: string
-  ): Promise<WriteResult> {
-    if (category_ids.length === 0) {
-      return create_write_result("budget", id, "merge", { id }, { id });
-    }
-    // Read-modify-REPLACE: recompute the deduped categoryIds array and set it,
-    // never a blind FieldValue.arrayUnion. Atomic within this one budget aggregate.
-    await getFirestore().runTransaction(async (tx) => {
-      const snap = await tx.get(doc_ref(id));
-      const current = (snap.data()?.categoryIds as string[] | undefined) ?? [];
-      const next = [...new Set([...current, ...category_ids])];
-      /* eslint-disable @typescript-eslint/naming-convention */
-      tx.update(doc_ref(id), { categoryIds: next, updatedAt: Timestamp.now() });
-      /* eslint-enable @typescript-eslint/naming-convention */
-    });
-
-    record_audit_entry_async({
-      user_id,
-      action: "update",
-      entity_type: "budget",
-      entity_id: id,
-      before: null,
-      after: { added_category_ids: category_ids } as Record<string, unknown>,
-      trace_id: ctx.trace_id,
-      metadata: { source: "api", context: { category_transfer: "add" } },
-    });
-
-    return create_write_result(
-      "budget",
-      id,
-      "merge",
-      { category_ids: "before" },
-      { added: category_ids }
-    );
-  },
-
-  /**
    * Replaces a budget's `tags` with the given (deduped) set. Top-level array so it is directly
    * queryable via array-contains (budget tags, Tag System). Owner check happens in the caller.
    */

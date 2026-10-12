@@ -69,22 +69,6 @@ export async function resolve_create_budget_dependencies(
     ee_budgets[0] ??
     null;
 
-  // 3. Build the ownership map for the requested categories only.
-  const category_owners: Record<string, string | null> = {};
-  for (const category_id of input.category_ids) {
-    category_owners[category_id] = null;
-  }
-  for (const budget of budgets) {
-    if (budget.is_system_everything_else) {
-      continue;
-    }
-    for (const category_id of budget.category_ids) {
-      if (category_id in category_owners) {
-        category_owners[category_id] = budget.id;
-      }
-    }
-  }
-
   // 4. The view's ownership (canon A3: per view — `user_id` here is the view's owner key).
   const ownership = await resolve_view_ownership(ctx, budgets, input.category_ids);
 
@@ -94,7 +78,6 @@ export async function resolve_create_budget_dependencies(
     currency,
     group_ids,
     existing_budget_count,
-    category_owners,
     everything_else_budget_id: everything_else?.id ?? null,
     ...ownership,
   };

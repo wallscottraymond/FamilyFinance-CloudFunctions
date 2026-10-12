@@ -13,11 +13,6 @@ import {
   compute_reallocated_periods,
   compute_budget_periods,
 } from "../period_generation.service";
-import {
-  compute_create_transfer_plan,
-  compute_update_transfer_plan,
-  compute_delete_transfer_plan,
-} from "../category_ownership.service";
 import { compute_create_budget } from "../create_budget.service";
 import { compute_update_budget } from "../update_budget.service";
 import { compute_delete_budget } from "../delete_budget.service";
@@ -317,45 +312,6 @@ describe("compute_reallocated_periods", () => {
   });
 });
 
-describe("category_ownership.service", () => {
-  it("claims all requested categories on create", () => {
-    const result = compute_create_transfer_plan(
-      ["a", "b"],
-      { a: "everything_else", b: null },
-      "budget_new"
-    );
-    expect(result.entity?.claims).toHaveLength(2);
-    expect(result.entity?.releases).toHaveLength(0);
-    expect(result.entity?.claims[0]).toEqual({
-      category_id: "a",
-      from_budget_id: "everything_else",
-      to_budget_id: "budget_new",
-    });
-  });
-
-  it("computes added/removed diff on update", () => {
-    const result = compute_update_transfer_plan(
-      ["a", "b"],
-      ["b", "c"],
-      { c: "everything_else" },
-      "budget_1",
-      "everything_else"
-    );
-    expect(result.entity?.claims.map((c) => c.category_id)).toEqual(["c"]);
-    expect(result.entity?.releases.map((r) => r.category_id)).toEqual(["a"]);
-  });
-
-  it("releases all owned categories on delete", () => {
-    const result = compute_delete_transfer_plan(
-      ["a", "b"],
-      "budget_1",
-      "everything_else"
-    );
-    expect(result.entity?.releases).toHaveLength(2);
-    expect(result.entity?.releases[0].to_budget_id).toBe("everything_else");
-  });
-});
-
 describe("compute_create_budget", () => {
   it("creates a valid budget with remaining = amount", () => {
     const result = compute_create_budget({
@@ -366,7 +322,6 @@ describe("compute_create_budget", () => {
         currency: "USD",
         group_ids: [],
         existing_budget_count: 3,
-        category_owners: { cat_food: "everything_else" },
         everything_else_budget_id: "everything_else",
         view_budgets: [],
         first_by_category: {},
@@ -387,7 +342,6 @@ describe("compute_create_budget", () => {
         currency: "USD",
         group_ids: [],
         existing_budget_count: 50,
-        category_owners: {},
         everything_else_budget_id: null,
         view_budgets: [],
         first_by_category: {},
@@ -406,7 +360,6 @@ describe("compute_create_budget", () => {
         currency: "USD",
         group_ids: [],
         existing_budget_count: 0,
-        category_owners: {},
         everything_else_budget_id: null,
         view_budgets: [],
         first_by_category: {},

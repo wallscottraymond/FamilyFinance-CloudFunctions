@@ -16,7 +16,6 @@ import * as path from 'path';
 const PIPELINE_FILES = [
   'domain/budgets/budget_spend.service.ts',
   'resolvers/budgets/budget_spend.resolver.ts',
-  'resolvers/budgets/budget_rehome.resolver.ts',
   'repositories/budget_period.repo.ts',
   'orchestrators/budgets/recompute_budget_spent.orchestrator.ts',
   'orchestrators/transactions/merge_assignment.ts',

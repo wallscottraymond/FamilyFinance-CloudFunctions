@@ -141,11 +141,8 @@ export async function resolve_shared_assignment_context(
   // The `categories` collection as the one category function needs it (canon M7).
   const category_catalog = build_category_catalog(category_docs);
   // Real budgets (+ the Everything Else id PER LENS for the structural fallback).
-  const { real_budgets, budget_names, everything_else_budget_ids } = build_view_budgets(
-    budgets,
-    category_catalog
-  );
-  const group_views_by_account = await resolve_group_views(ctx, user_id, category_catalog);
+  const { real_budgets, budget_names, everything_else_budget_ids } = build_view_budgets(budgets);
+  const group_views_by_account = await resolve_group_views(ctx, user_id);
 
   // Which VIEW each bill / income belongs to (Account-Rooted-Sharing): a group's when its account
   // is shared with one, else Me (null). A transaction links only to bills in ITS view — the
@@ -174,8 +171,7 @@ export async function resolve_shared_assignment_context(
  * A budget's period maps to exactly one lens; the three EE budgets are keyed by their own lens.
  */
 function build_view_budgets(
-  budgets: Awaited<ReturnType<typeof budget_repo.get_by_user_id>>,
-  _catalog: CategoryCatalog
+  budgets: Awaited<ReturnType<typeof budget_repo.get_by_user_id>>
 ): ViewBudgets {
   // THE budget set (domain/budgets/match_budgets) — the period page builds the same one, so the
   // stored budget equals the counted one (canon A11): snapped start, `budget_end_date`, every
@@ -195,8 +191,7 @@ function build_view_budgets(
  */
 async function resolve_group_views(
   ctx: TraceContext,
-  user_id: string,
-  catalog: CategoryCatalog
+  user_id: string
 ): Promise<Map<string, { from_ms: number | null; group_id: string; view: ViewBudgets }>> {
   const out = new Map<string, { from_ms: number | null; group_id: string; view: ViewBudgets }>();
   const user = await user_repo.get_by_id(ctx, user_id);
@@ -212,7 +207,7 @@ async function resolve_group_views(
   const views = new Map<string, ViewBudgets>();
   await Promise.all(
     [...new Set(placed.map((a) => a.placement!.group_id))].map(async (gid) => {
-      views.set(gid, build_view_budgets(await budget_repo.get_by_user_id(ctx, `group:${gid}`), catalog));
+      views.set(gid, build_view_budgets(await budget_repo.get_by_user_id(ctx, `group:${gid}`)));
     })
   );
   for (const a of placed) {
