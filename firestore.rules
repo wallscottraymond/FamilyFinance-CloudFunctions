@@ -465,9 +465,9 @@ service cloud.firestore {
                      isGroupViewMember(resource.data.userId) ||
                      (resource.data.familyId != null && inSameFamily(resource.data.familyId));
 
-      // Only parents/admins can create budgets with valid data
-      allow create: if canManage() &&
-                       isValidBudgetData();
+      // Budgets are created only through the `create_budget` callable (per-view ownership,
+      // claims, period generation — canon A3; Transaction-Integrity-Review 3-S).
+      allow create: if false;
 
       // Only budget creator or family admin can update with valid data
       // Group-based access: Check groupIds array
@@ -1208,7 +1208,9 @@ service cloud.firestore {
       let isEverythingElse = isSystemEverythingElseBudget(resource_data);
       let allowedFields = isEverythingElse
         ? ['name', 'updatedAt']
-        : ['name', 'description', 'amount', 'categoryIds', 'alertThreshold',
+        // categoryIds change only through `update_budget` (per-view ownership, >= 1 category,
+        // claims + re-home — canon A3/A3b); never a direct client write (3-S).
+        : ['name', 'description', 'amount', 'alertThreshold',
            'isActive', 'updatedAt', 'activePeriodRange', 'lastExtended',
            'periodsGeneratedUntil', 'canExtendPeriods', 'needsScheduledExtension'];
 
@@ -1226,15 +1228,11 @@ service cloud.firestore {
       let resource_data = resource.data;
       let changedFields = data.diff(resource_data).affectedKeys();
 
-      // User-modifiable fields for transactions with embedded splits
-      let allowedFields = [
-        'userNotes', 'isHidden', 'isRecurring', 'splits', 'isSplit',
-        'totalAllocated', 'unallocated', 'affectedBudgets', 'affectedBudgetPeriods',
-        'primaryBudgetId', 'primaryBudgetPeriodId', 'updatedAt', 'lastSyncedAt',
-        'tags', 'category', 'userCategory', 'notes', 'metadata',
-        // Additional fields that might need updating
-        'hasIgnoredSplits', 'hasRefundSplits', 'hasTaxDeductibleSplits'
-      ];
+      // The ONLY fields a client writes directly (Transaction-Integrity-Review 3-S): notes and
+      // visibility. Splits, categories, budgets and their derived summaries go through the
+      // `updateTransactionSplits` callable, which runs the one category function + the
+      // assignment engine — a direct client write would bypass both (canon M2/M7, A1).
+      let allowedFields = ['userNotes', 'notes', 'isHidden', 'updatedAt'];
 
       // Only check that changed fields are in allowed list
       // Skip timestamp comparison for now (potential comparison issue)
@@ -1364,6 +1362,26 @@ service cloud.firestore {
     match /purge_status/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow write: if false;
+    }
+
+    // Server-only engine state (Transaction-Integrity-Review 3-R / 3c / first-link lease):
+    // re-assign runs, migration reports + undo snapshots, item-sync leases, the kill switch.
+    // Written and read only by Cloud Functions (admin SDK). Explicit for clarity — the catch-all
+    // below would deny them too.
+    match /_reassign_runs/{runId} {
+      allow read, write: if false;
+    }
+    match /_migration_reports/{runId} {
+      allow read, write: if false;
+    }
+    match /_migration_snapshots/{runId} {
+      allow read, write: if false;
+    }
+    match /_item_sync_leases/{itemId} {
+      allow read, write: if false;
+    }
+    match /_config/{docId} {
+      allow read, write: if false;
     }
 
     // Deny all other requests
