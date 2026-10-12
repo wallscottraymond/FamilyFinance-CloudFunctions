@@ -178,6 +178,27 @@ describe('budget rollover chain (emulator)', () => {
     expect(p2.remaining).toBe(60); // 100 - 40 (rollover stripped)
   });
 
+  it('USER SETTING: rollover turned off in Budget Settings (preferences.financial) is honoured', async () => {
+    const b = 'usersetting';
+    // No per-budget rolloverEnabled — the user's default decides. The app saves it under
+    // preferences.financial; an older financialSettings copy saying "on" must not win.
+    await seedBudget(b, { enabled: true });
+    await db.collection('budgets').doc(b).update({ rolloverEnabled: admin.firestore.FieldValue.delete() });
+    await db.collection('users').doc(`u_${b}`).set({
+      preferences: { financial: { budgetRolloverEnabled: false } },
+      financialSettings: { budgetRolloverEnabled: true },
+    });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 20, startIso: '2026-01-01T00:00:00Z', endIso: '2026-01-31T23:59:59Z' });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 40, rolledOver: 80, startIso: '2026-02-01T00:00:00Z', endIso: '2026-02-28T23:59:59Z' });
+
+    const res = await recalculateRolloverChain(db, b);
+    expect(res.success).toBe(true);
+
+    const p2 = await getPeriod(`${b}_2`);
+    expect(p2.rolledOverAmount).toBe(0);
+    expect(p2.remaining).toBe(60);
+  });
+
   it('DAILY ENTRY: recalculateRolloverForCurrentPeriods finds the current period and computes its chain', async () => {
     const b = 'daily';
     await seedBudget(b, { enabled: true, strategy: 'immediate' });

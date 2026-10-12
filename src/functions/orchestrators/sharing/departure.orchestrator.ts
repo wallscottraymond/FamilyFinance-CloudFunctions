@@ -31,7 +31,7 @@ import {
 import { account_repo } from "../../repositories/account.repo";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
 import { bump_owner_versions } from "./versions";
-import { reassign_accounts } from "./view_reassign";
+import { reassign_accounts, refresh_group_transfer_roles } from "./view_reassign";
 
 export interface DepartureResult {
   groups_left: number;
@@ -76,6 +76,7 @@ export async function release_user_from_sharing(
       accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
     );
     await reassign_accounts(ctx, accounts.filter((a) => released.includes(a.id)));
+    await refresh_group_transfer_roles(ctx, g.id, [user_id]);
     await request_repo.save_many(ctx, cancel_requests(requests_released(pending, leaving), now_ms));
     await return_moved_in_budgets(ctx, g.id, leaving, user_id);
     if (closed) result.groups_closed++;

@@ -15,6 +15,10 @@
  */
 
 import {
+  RemovalInterval,
+  is_payment_suppressed,
+} from "../../domain/recurring/recurring_suppression.service";
+import {
   compute_countable_split_net,
   CountableSplitInput,
 } from "../../domain/recurring/period_reconciliation.service";
@@ -37,7 +41,11 @@ import {
   MonthlyPeriodForDerivation,
 } from "../../domain/budgets/budget_view.service";
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
-import { is_transfer_category, split_spend_status } from "../../domain/budgets/budget_spend.service";
+import {
+  is_transfer_category,
+  split_spend_status,
+  splits_as_counted,
+} from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers_from_txns,
   txn_effective_category,
@@ -430,9 +438,11 @@ export function shape_period_derivation_deps(
       continue;
     }
     const list = monthly_by_budget.get(p.budget_id) ?? [];
+    // "This Period Only" (a per-period amount the user set) replaces the budget's amount here.
+    const allocated = p.modified_amount ?? p.allocated_amount;
     list.push({
-      allocated_amount: p.allocated_amount,
-      effective_amount: p.effective_amount,
+      allocated_amount: allocated,
+      effective_amount: allocated + p.rolled_over_amount,
       start_ms: p.start_date.toMillis(),
       end_ms: p.end_date.toMillis(),
     });
@@ -530,6 +540,8 @@ export function shape_period_derivation_deps(
   const recurring: RecurringForDerivation[] = [];
   const payments_by_id = new Map<string, ActualPayment[]>();
   // Included bills' Plaid `transactionIds` → map built AFTER the loop (conflict-safe).
+  // Bill / income id → its remove / pause spans (only items that have any).
+  const removal_by_id = new Map<string, RemovalInterval[]>();
   // Lets a bill's payments be attributed DETERMINISTICALLY from Plaid's own stream, not
   // only the sparse `split.outflowId` link — the fix for "paid bills read unpaid".
   const outflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
@@ -558,6 +570,7 @@ export function shape_period_derivation_deps(
       removal_intervals: o.removal_intervals,
       ...owner_of(o.user_id),
     });
+    if (o.removal_intervals?.length) removal_by_id.set(o.id, o.removal_intervals);
     payments_by_id.set(o.id, []);
     outflow_stream_items.push({ id: o.id, transaction_ids: o.transaction_ids ?? [] });
   }
@@ -594,6 +607,7 @@ export function shape_period_derivation_deps(
       removal_intervals: i.removal_intervals,
       ...owner_of(i.user_id),
     });
+    if (i.removal_intervals?.length) removal_by_id.set(i.id, i.removal_intervals);
     payments_by_id.set(i.id, []);
     inflow_stream_items.push({ id: i.id, transaction_ids: i.transaction_ids ?? [] });
   }
@@ -602,6 +616,14 @@ export function shape_period_derivation_deps(
   // TWO streams is EXCLUDED (no arbitrary guess — see build_stream_membership_map).
   const outflow_tx_to_id = build_stream_membership_map(outflow_stream_items);
   const inflow_tx_to_id = build_stream_membership_map(inflow_stream_items);
+  // The bills / income removed or paused for a payment's month (usually none).
+  const released_at = (txn_date_ms: number): Set<string> => {
+    const ids = new Set<string>();
+    for (const [rid, intervals] of removal_by_id) {
+      if (is_payment_suppressed(intervals, txn_date_ms)) ids.add(rid);
+    }
+    return ids;
+  };
 
   // 4. ONE pass over the window's transactions → split-match inputs + per-item payments.
   const splits_for_match: SplitForOnReadMatch[] = [];
@@ -644,23 +666,31 @@ export function shape_period_derivation_deps(
     // Is this transaction part of a Plaid income stream? (Plaid id → inflow.) Per SPLIT, a
     // budget pin takes that split off it (canon A4) — see `is_split_on_stream` below.
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
+    // A bill / income removed or paused for this payment's month isn't paid by it: the money
+    // counts as ordinary spending / money in (the engine stores the same — is_payment_suppressed).
+    const released = released_at(txn_date_ms);
+    const live = (rid: string | undefined): string | undefined =>
+      rid && !released.has(rid) ? rid : undefined;
     const linked_inflow_id =
-      plaid_txn_id && !is_edge ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
+      plaid_txn_id && !is_edge ? live(inflow_tx_to_id.get(plaid_txn_id)) : undefined;
     // A split linked to a bill / income that lives in ANOTHER view (its account isn't in this
     // one) isn't this view's bill payment: drop the link so the money counts here as ordinary
     // spending / money in, instead of vanishing (Account-Rooted-Sharing). No-op for Me with
     // nothing shared. Edge money drops every link.
+    // A hidden transaction counts nowhere (each split reads as Ignored).
     const raw = is_edge
-      ? without_recurring_links((data.splits as Array<Record<string, unknown>>) ?? [])
+      ? without_recurring_links(splits_as_counted(data))
       : without_out_of_view_links(
-        (data.splits as Array<Record<string, unknown>>) ?? [],
-        out_of_view_recurring_ids
+        splits_as_counted(data),
+        released.size
+          ? new Set([...out_of_view_recurring_ids, ...released])
+          : out_of_view_recurring_ids
       );
     // Plaid bill stream membership. Per SPLIT, a manual "remove from bill" or a budget pin takes
     // that split off it: it's neither a bill payment nor excluded from budget spend as a
     // recurring member — the transaction's other splits stay on the bill.
     const linked_outflow_id =
-      plaid_txn_id && !is_edge ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
+      plaid_txn_id && !is_edge ? live(outflow_tx_to_id.get(plaid_txn_id)) : undefined;
     const on_outflow_stream = (sp: unknown) =>
       !!linked_outflow_id && is_split_on_stream(sp, "outflow");
     const on_inflow_stream = (sp: unknown) =>
@@ -779,7 +809,7 @@ export function shape_period_derivation_deps(
   for (const { id, data } of view_pool) {
     if (counted_ids.has(id) || crossing.ids.has(id)) continue;
     const pinned_splits = without_out_of_view_links(
-      (data.splits as Array<Record<string, unknown>>) ?? [],
+      splits_as_counted(data),
       out_of_view_recurring_ids
     ).filter((sp) => sp.outflowId && sp.outflowPinnedPeriodId);
     const by_link = new Map<string, Array<Record<string, unknown>>>();

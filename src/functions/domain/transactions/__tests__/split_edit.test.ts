@@ -74,6 +74,19 @@ describe("build_split_edit", () => {
     expect(pinned.splits[0]).toMatchObject({ outflowId: null, outflowAssignmentSource: "manual" });
   });
 
+  it("\"None\" on a pinned split (budgetUnpin) REMOVES the pin; a stale echo never does", () => {
+    const was_pinned = { splits: [{ ...stored, budgetAssignmentSource: "manual", budgetId: "b_x" }] };
+    const unpinned = build_split_edit(
+      [{ ...stored, budgetAssignmentSource: "manual", budgetId: "b_x", budgetUnpin: true }],
+      was_pinned, catalog, "u", "NOW", (i) => `n_${i}`
+    );
+    expect(unpinned.splits[0].budgetAssignmentSource).toBe("category");
+    expect(unpinned.splits[0]).not.toHaveProperty("budgetUnpin"); // an instruction, never stored
+    expect(unpinned.assignment_relevant).toBe(true); // the engine re-decides
+    // budgetUnpin on a split that isn't pinned changes nothing
+    expect(run([{ ...stored, budgetUnpin: true }]).splits[0].budgetAssignmentSource).toBe("category");
+  });
+
   it("category_changed only when a category moved", () => {
     expect(run([{ ...stored, spendStatus: "ignored" }]).category_changed).toBe(false);
     expect(run([{ ...stored, categorySource: "user", firstCategoryId: "shopping" }]).category_changed).toBe(true);

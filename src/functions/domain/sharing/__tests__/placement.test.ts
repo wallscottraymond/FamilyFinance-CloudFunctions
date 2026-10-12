@@ -17,6 +17,8 @@ import { build_group, accept_join } from "../group.service";
 import { Group } from "../../../types/sharing.types";
 
 const NOW = 1_800_000_000_000;
+/** "From today on" without the app's date: the start of the UTC day 12h before NOW. */
+const DAY = 1_799_884_800_000;
 
 const acct = (over: Partial<PlaceableAccount> = {}): PlaceableAccount => ({
   id: "jc-a",
@@ -58,13 +60,13 @@ describe("share an account (P1, D25)", () => {
       type: "share_account",
       target_id: "jc-a",
       target_label: "Joint Checking ••1234",
-      shared_from_ms: NOW,
+      shared_from_ms: DAY,
     });
   });
   it("T-AP-02 group of one (Mom) → shared at once", () => {
     const plan = plan_share_account(input({ group: group(["alex"]) })).entity!;
     expect(plan.placement).toEqual({
-      group_id: "g1", shared_from_ms: NOW, shared_by: "alex", shared_at_ms: NOW,
+      group_id: "g1", shared_from_ms: DAY, shared_by: "alex", shared_at_ms: NOW,
     });
     expect(plan.requests).toEqual([]);
   });
@@ -102,8 +104,13 @@ describe("accepting a share (PD5) and unsharing", () => {
   it("first accept → placement from the request", () => {
     const p = placement_on_accept(req(), acct(), group(["alex", "sam", "riley"]), NOW + 5);
     expect(p.entity).toEqual({
-      group_id: "g1", shared_from_ms: NOW, shared_by: "alex", shared_at_ms: NOW + 5,
+      group_id: "g1", shared_from_ms: DAY, shared_by: "alex", shared_at_ms: NOW + 5,
     });
+  });
+  it("\"From today on\" with the app's local date shares from the START of that day", () => {
+    const local_today = Date.UTC(2027, 0, 15); // the user's local date as a UTC midnight
+    const plan = plan_share_account(input({ share_from_ms: local_today }));
+    expect(plan.entity!.requests[0].shared_from_ms).toBe(local_today);
   });
   it("second accept is a no-op success; changed account / group → refused", () => {
     const g = group(["alex", "sam", "riley"]);

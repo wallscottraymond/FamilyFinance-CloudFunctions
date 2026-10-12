@@ -22,10 +22,21 @@ import {
 } from "../../orchestrators/sharing/placement.orchestrator";
 import { success_response, error_response, FunctionResponse } from "../../types";
 
+/** The local date → its UTC-midnight ms (how transaction dates are stored); only a date within
+ *  ±2 days of now is accepted (else the server's own day is used). */
+function share_from_ms(date?: string): number | null {
+  if (!date) return null;
+  const [y, m, d] = date.split("-").map(Number);
+  const ms = Date.UTC(y, m - 1, d);
+  return Math.abs(ms - Date.now()) <= 2 * 86_400_000 ? ms : null;
+}
+
 const schema = z.object({
   account_id: z.string().trim().min(1).max(128),
   group_id: z.string().trim().min(1).max(128),
   include_history: z.boolean().default(false),
+  /** "From today on": the user's LOCAL date (YYYY-MM-DD) — share from the start of that day. */
+  share_from_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -66,6 +77,7 @@ export const share_account = onCall(
           account_id: validation.data.account_id,
           group_id: validation.data.group_id,
           include_history: validation.data.include_history,
+          share_from_ms: share_from_ms(validation.data.share_from_date),
         },
         user_id,
         idempotency_key: `share_account:${trace.trace_id}`,

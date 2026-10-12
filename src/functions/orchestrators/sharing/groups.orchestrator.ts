@@ -54,7 +54,7 @@ import { DomainResult } from "../../types";
 import { ensure_group_everything_else } from "./group_everything_else";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
 import { bump_owner_versions } from "./versions";
-import { reassign_accounts } from "./view_reassign";
+import { reassign_accounts, refresh_group_transfer_roles } from "./view_reassign";
 
 export interface SharingWriteResult {
   success: boolean;
@@ -207,6 +207,7 @@ export async function respond_to_request_orchestrator(
       );
       await bump_owner_versions([answer.from_user_id]);
       await reassign_accounts(ctx, [{ id: deps.account!.id, user_id: answer.from_user_id }]);
+      await refresh_group_transfer_roles(ctx, placement.entity.group_id);
     }
     await request_repo.save_many(ctx, [answer, ...siblings]);
     log_operation_success(span, ctx.user_id);
@@ -283,6 +284,12 @@ export async function manage_group_orchestrator(
       group_accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
     );
     await reassign_accounts(ctx, group_accounts.filter((a) => released.includes(a.id)));
+    // The members who stay (and those who left) re-decide which transfers cross the group.
+    await refresh_group_transfer_roles(
+      ctx,
+      input.group_id,
+      result.entity.user_changes.filter((c) => c.remove).map((c) => c.user_id)
+    );
     await request_repo.save_many(
       ctx, cancel_requests(requests_released(pending, leaving), now_ms)
     );

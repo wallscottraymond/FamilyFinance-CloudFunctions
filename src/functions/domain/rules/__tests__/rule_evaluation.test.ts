@@ -96,6 +96,14 @@ describe("evaluate_rules — variables & operators", () => {
     expect(evaluate_rules(txn({ account_id: "acct_savings" }), [r]).applied_rule_ids).toEqual([]);
   });
 
+  it("an OLDER rule that stored a typed account name / mask still matches (X13)", () => {
+    const by_name = rule("n", AND({ variable: "account", operator: "contains", value: "checking" }), {});
+    const by_mask = rule("m", AND({ variable: "account", operator: "equals", value: "4321" }), {});
+    const t = txn({ account_id: "plaid_xyz", account_labels: ["Joint Checking", "4321"] });
+    expect(evaluate_rules(t, [by_name, by_mask]).applied_rule_ids).toEqual(["n", "m"]);
+    expect(evaluate_rules(txn({ account_id: "plaid_xyz", account_labels: ["Savings", "9999"] }), [by_name, by_mask]).applied_rule_ids).toEqual([]);
+  });
+
   it("amount comparisons run on the ABSOLUTE amount (negative Plaid amount matches a positive threshold)", () => {
     const gt = rule("gt", AND({ variable: "amount", operator: "gt", value: 100 }), {});
     const income = txn({ amount: -250 }); // money in

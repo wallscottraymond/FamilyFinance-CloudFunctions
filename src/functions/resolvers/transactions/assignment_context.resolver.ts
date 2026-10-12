@@ -35,6 +35,10 @@ import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
 import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
 import {
+  RemovalInterval,
+  is_payment_suppressed,
+} from "../../domain/recurring/recurring_suppression.service";
+import {
   BudgetForMatch,
   PeriodLens,
 } from "../../domain/transactions/match_budget.service";
@@ -100,6 +104,9 @@ export interface SharedAssignmentContext {
   recurring_view_by_id: Map<string, string | null>;
   /** Active, non-hidden bills — a manual pin to anything else (deleted / hidden) is stale. */
   active_outflow_ids: Set<string>;
+  /** Bill / income id → its remove / pause spans (only items that have any). A payment in a
+   *  removed / paused month is released to budgets (`is_payment_suppressed`). */
+  removal_intervals_by_id: Map<string, RemovalInterval[]>;
 }
 
 /** One view's budgets, as the engine matches against them. */
@@ -152,6 +159,10 @@ export async function resolve_shared_assignment_context(
     recurring_view_by_id.set(r.id, group_views_by_account.get(r.account_id ?? "")?.group_id ?? null);
   }
   const active_outflow_ids = new Set(outflows.filter((o) => o.is_active && !o.is_hidden).map((o) => o.id));
+  const removal_intervals_by_id = new Map<string, RemovalInterval[]>();
+  for (const r of [...outflows, ...inflows]) {
+    if (r.removal_intervals?.length) removal_intervals_by_id.set(r.id, r.removal_intervals);
+  }
 
   return {
     real_budgets,
@@ -163,6 +174,7 @@ export async function resolve_shared_assignment_context(
     group_views_by_account,
     recurring_view_by_id,
     active_outflow_ids,
+    removal_intervals_by_id,
   };
 }
 
@@ -308,9 +320,15 @@ export async function resolve_assignment_context(
   const in_group = !!placed && (placed.from_ms === null || txn_date_ms >= placed.from_ms);
   const view: ViewBudgets = in_group ? placed!.view : resolved_shared;
   const view_group_id = in_group ? placed!.group_id : null;
+  // …and a bill / income removed or paused for this payment's month isn't paid by it either: the
+  // money counts as ordinary spending / money in (the period page applies the same rule).
   const in_view = (recurring_id: string | null) =>
     !recurring_id ||
-    (resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id;
+    ((resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id &&
+      !is_payment_suppressed(
+        resolved_shared.removal_intervals_by_id?.get(recurring_id),
+        txn_date_ms
+      ));
 
   // A link to a bill / income of ANOTHER view isn't this view's bill payment — the period page
   // drops it and counts the money here as ordinary spending; the engine does the same.

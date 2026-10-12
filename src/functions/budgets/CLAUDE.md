@@ -66,7 +66,7 @@ remaining = effectiveAmount - spent
 
 ### Settings Priority
 1. Per-budget settings (`budget.rolloverEnabled`, etc.)
-2. User global settings (`user.financialSettings.budgetRolloverEnabled`)
+2. User global settings (`user.preferences.financial.budgetRolloverEnabled` — where the app saves them; legacy `user.financialSettings` as fallback)
 3. Defaults (enabled, spread, 3 periods)
 
 ## RBAC Migration Status

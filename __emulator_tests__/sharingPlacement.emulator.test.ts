@@ -171,6 +171,9 @@ describe("departures (D13, emulator)", () => {
         .map((d) => d.ref.delete()));
     };
     await clear_reassign_jobs(); // the Accepts above queued some — prove leaving queues its own
+    const old_classify = await db.collection("_jobs").where("job_type", "==", "classify_transfers").get();
+    await Promise.all(old_classify.docs.filter((d) => [ALEX, SAM].includes(d.data().payload?.user_id)).map((d) => d.ref.delete()));
+    const left_at = Date.now() - 1000;
     expect((await manage_group_orchestrator(ctx(SAM, { group_id, action: "leave" }))).success)
       .toBe(true);
     expect(await placement_of(AMEX)).toBeNull();
@@ -179,6 +182,11 @@ describe("departures (D13, emulator)", () => {
     const jobs = (await db.collection("_jobs").where("job_type", "==", "reassign_user").get()).docs
       .map((d) => d.data().payload).filter((p) => p?.user_id === SAM);
     expect(jobs.some((p) => (p.scope?.account_ids ?? []).includes(AMEX))).toBe(true);
+    // ALEX STAYS — but a transfer between Sam's and Alex's accounts may now cross the group's
+    // boundary: Alex's transfer roles are refreshed too.
+    const classify = (await db.collection("_jobs").where("job_type", "==", "classify_transfers").get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.user_id === ALEX && j.created_at.toMillis() >= left_at);
+    expect(classify.length).toBeGreaterThan(0);
   });
 
   it("delete → every account in the group goes private", async () => {

@@ -139,11 +139,15 @@ export interface CopyConflict {
   existing_budget_id: string;
   existing_name: string;
   existing_amount: number;
+  /** Partial overlap: the source's OTHER categories were copied (as `creates`); only these
+   *  overlapping ones stay with the group's existing budget. Absent = nothing copied. */
+  copied_category_ids?: string[];
 }
 
 export interface CopyPlan {
-  /** New group budgets to create: settings from `source`, the chosen amount. */
-  creates: Array<{ source: ViewBudget; amount: number }>;
+  /** New group budgets to create: settings from `source`, the chosen amount — and, for a partial
+   *  overlap, only the categories the group doesn't already budget (`category_ids`). */
+  creates: Array<{ source: ViewBudget; amount: number; category_ids?: string[] }>;
   /** Skipped: the group already has it ("Add mine" in the app). */
   conflicts: CopyConflict[];
 }
@@ -159,7 +163,8 @@ export function plan_copy_budgets(
   actor_id: string,
   items: CopyItem[],
   group_budgets: ViewBudget[],
-  first_of: FirstOf = identity
+  first_of: FirstOf = identity,
+  allow_partial = true
 ): DomainResult<CopyPlan> {
   if (!is_member(group, actor_id)) return validation_failed(["You're not in this group"]);
   const errors: string[] = [];
@@ -182,12 +187,32 @@ export function plan_copy_budgets(
     }
     const clash = find_clash(b, planned, first_of);
     if (clash) {
+      // Only SOME categories overlap (and no name clash): copy the rest — each category still
+      // has one budget in the group (X16). A same-name clash, or nothing left, copies nothing.
+      const owned = new Set(
+        planned
+          .filter((o) => o.id !== b.id && !o.is_everything_else)
+          .flatMap((o) => o.category_ids.map(first_of))
+      );
+      const name_clash = planned.some(
+        (o) =>
+          o.id !== b.id &&
+          !o.is_everything_else &&
+          normalize_name(o.name) === normalize_name(b.name)
+      );
+      const free = b.category_ids.filter((c) => !owned.has(first_of(c)));
+      const partial = allow_partial && !name_clash && free.length > 0;
       conflicts.push({
         source_budget_id: b.id,
         existing_budget_id: clash.id,
         existing_name: clash.name,
         existing_amount: clash.amount,
+        ...(partial ? { copied_category_ids: free } : {}),
       });
+      if (partial) {
+        creates.push({ source: b, amount: item.amount, category_ids: free });
+        planned.push({ ...b, id: `planned:${b.id}`, category_ids: free });
+      }
       continue;
     }
     creates.push({ source: b, amount: item.amount });

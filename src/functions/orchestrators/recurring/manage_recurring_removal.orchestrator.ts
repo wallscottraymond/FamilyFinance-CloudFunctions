@@ -35,6 +35,8 @@ import {
   RemovalInterval,
   RemovalState,
 } from "../../domain/recurring/recurring_suppression.service";
+import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
+import { RecurringRemovalContext } from "../../resolvers/recurring/recurring_removal.resolver";
 
 /** The write surface a removal-manageable recurring repo must expose. */
 export interface RemovalManageableRepo extends RemovalReadableRepo {
@@ -80,6 +82,29 @@ function month_start_utc(now_ms: number): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
 }
 
+/**
+ * The item's payments in the months whose suppression changed are released to budgets (or taken
+ * back): re-assign that account's transactions from `from_ms` (undefined = all history), so the
+ * stored budget spend / links follow — the period page applies the same rule on read.
+ */
+async function reassign_released_payments(
+  ctx: TraceContext,
+  context: RecurringRemovalContext,
+  from_ms: number | undefined
+): Promise<void> {
+  await enqueue_reassign_user(
+    {
+      user_id: context.owner_id,
+      reason: "recurring_removal",
+      scope: {
+        ...(context.account_id ? { account_ids: [context.account_id] } : {}),
+        ...(from_ms !== undefined && from_ms > 0 ? { from_ms } : {}),
+      },
+    },
+    ctx.trace_id
+  ).catch((error) => console.error(`[${ctx.trace_id}] recurring re-assign enqueue failed:`, error));
+}
+
 /** `removedByUser` denorm = the item has an open (indefinite) removal interval. */
 function has_open_interval(intervals: RemovalInterval[]): boolean {
   return intervals.some((i) => i.to_ms === null);
@@ -116,6 +141,7 @@ export async function manage_recurring_removal_orchestrator(
     // 3. Permanent delete is a distinct hard-delete path (no interval math).
     if (input.action === "delete") {
       await repo.hard_delete(ctx, input.id, user_id);
+      await reassign_released_payments(ctx, context, undefined); // its links go everywhere
       log_operation_success(span, user_id);
       return { id: input.id, action: "delete", deleted: true, state: null };
     }
@@ -139,6 +165,12 @@ export async function manage_recurring_removal_orchestrator(
     // list + totals — not just the derive path. Covers remove / pause / restore alike.
     await repo.set_removal_intervals(ctx, input.id, next, has_open_interval(next), user_id);
     await repo.apply_period_suppression(ctx, input.id, next, user_id);
+    // Only months from now on change — except "remove all", which reaches back to the start.
+    await reassign_released_payments(
+      ctx,
+      context,
+      input.action === "remove" && input.mode === "all" ? undefined : month_start_ms
+    );
 
     log_operation_success(span, user_id);
     return {

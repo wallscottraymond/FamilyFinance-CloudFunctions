@@ -79,7 +79,12 @@ function engine_owned_fields(split: Raw, before: Raw): Raw {
   // unpin, so anything else is an echo: keep the stored budget + source.
   const pin_now = split.budgetAssignmentSource === "manual";
   const pin_before = before.budgetAssignmentSource === "manual";
-  if (pin_now && (!pin_before || split.budgetId !== before.budgetId)) {
+  if (split.budgetUnpin === true && pin_before) {
+    // The user REMOVED the pin ("None" on a pinned split — canon A4: a pin lasts until the user
+    // removes it): back to category matching; the engine re-decides the budget.
+    out.budgetId = before.budgetId ?? null;
+    out.budgetAssignmentSource = "category";
+  } else if (pin_now && (!pin_before || split.budgetId !== before.budgetId)) {
     out.budgetId = split.budgetId;
     out.budgetAssignmentSource = "manual";
   } else {
@@ -125,9 +130,12 @@ export function build_split_edit(
     const split_id = id_of(split) || new_id(index);
     const before = stored.get(split_id);
     const category = resolve_split_category_edit(split, before, txn, catalog);
+    // The unpin flag is an instruction, not data — never stored.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { budgetUnpin: _unpin, ...fields } = split;
     return {
       ...(before ?? {}),
-      ...split,
+      ...fields,
       ...(before ? engine_owned_fields(split, before) : {}),
       splitId: split_id,
       id: split_id,

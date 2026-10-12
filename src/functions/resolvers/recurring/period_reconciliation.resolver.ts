@@ -19,6 +19,7 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
+import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
 import {
   is_edge_money,
   splits_paying_recurring,
@@ -205,7 +206,12 @@ export async function resolve_recurring_reconciliation(
   const paying = (t: { id: string; splits?: unknown[] }) =>
     is_edge_money((t as { transferRole?: unknown }).transferRole)
       ? []
-      : splits_paying_recurring(t.splits ?? [], kind, input.recurring_id, stream_ids.has(t.id));
+      : splits_paying_recurring(
+        splits_as_counted(t),
+        kind,
+        input.recurring_id,
+        stream_ids.has(t.id)
+      );
   const txns = [...link_txns, ...stream_txns].filter((t) => {
     const key = t.id;
     if (!key || seen.has(key)) return false;

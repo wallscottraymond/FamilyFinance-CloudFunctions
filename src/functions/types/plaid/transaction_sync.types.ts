@@ -130,6 +130,8 @@ export interface TransactionSyncDependencies {
 
   /** Set of active (non-hidden) account IDs for filtering transactions */
   active_account_ids: Set<string>;
+  /** Plaid account id → its name / official name / mask (for a rule's Account condition). */
+  account_labels?: Map<string, string[]>;
   /** Every account of the item we have a doc for (active + hidden). An account id outside this
    *  set is not saved yet — its transactions must not be dropped. */
   known_account_ids: Set<string>;

@@ -38,6 +38,8 @@ interface LegacyBudgetPeriodDoc {
   periodStart: Timestamp;
   periodEnd: Timestamp;
   allocatedAmount: number;
+  modifiedAmount?: number | null;
+  isModified?: boolean;
   rolledOverAmount?: number;
   spent?: number;
   remaining?: number;
@@ -79,6 +81,8 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
     period_id: doc.periodId,
     period_type: (doc.periodType as BudgetPeriodEntity["period_type"]) ?? "monthly",
     allocated_amount: allocated,
+    modified_amount:
+      doc.isModified === true && typeof doc.modifiedAmount === "number" ? doc.modifiedAmount : null,
     rolled_over_amount: rolled_over,
     effective_amount: allocated + rolled_over,
     spent,

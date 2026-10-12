@@ -125,10 +125,17 @@ export async function resolve_transaction_sync_dependencies(
 
   const active_account_ids = new Set<string>();
   const known_account_ids = new Set<string>();
+  const account_labels = new Map<string, string[]>();
   for (const doc of accounts_snapshot.docs) {
     const a = doc.data();
     const id = (a.accountId as string) || doc.id;
     known_account_ids.add(id);
+    account_labels.set(
+      id,
+      [a.name, a.accountName, a.officialName, a.mask].filter(
+        (x): x is string => typeof x === "string" && x.trim() !== ""
+      )
+    );
     if (a.isActive !== false) active_account_ids.add(id);
   }
 
@@ -155,6 +162,7 @@ export async function resolve_transaction_sync_dependencies(
     },
     pending_transactions,
     active_account_ids,
+    account_labels,
     known_account_ids,
   };
 }

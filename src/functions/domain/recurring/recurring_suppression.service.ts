@@ -130,3 +130,19 @@ export function apply_pause(
 export function apply_restore(intervals: RemovalInterval[], now_ms: number): RemovalInterval[] {
   return close_active_at(intervals, now_ms);
 }
+
+/**
+ * Does a payment dated `txn_date_ms` fall in a period where the item is removed / paused? Snaps
+ * to the payment's (UTC) MONTH — the home period, as the stored periods are suppressed — so every
+ * payment in a removed month is released together. A released payment pays nothing and counts as
+ * ordinary spending / money in instead (the engine and the period page apply the same rule).
+ */
+export function is_payment_suppressed(
+  intervals: RemovalInterval[] | undefined,
+  txn_date_ms: number
+): boolean {
+  if (!intervals || intervals.length === 0) return false;
+  const d = new Date(txn_date_ms);
+  const month_end_ms = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) - 1;
+  return is_suppressed_in_period(intervals, month_end_ms);
+}

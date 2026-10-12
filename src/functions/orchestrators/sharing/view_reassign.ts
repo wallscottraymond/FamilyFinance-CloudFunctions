@@ -14,12 +14,35 @@ import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrato
 import { resolve_group_accounts } from "../../resolvers/sharing/sharing.resolver";
 import { group_id_of_key } from "../../domain/sharing/budget_view.service";
 import { account_repo } from "../../repositories/account.repo";
+import { group_repo } from "../../repositories/sharing/group.repo";
 import { coalesce_job } from "../../infrastructure/job_queue";
 import { CLASSIFY_TRANSFERS_JOB } from "../plaid/classify_internal_transfers.orchestrator";
 
 /** A budget counts from the start of the period its start falls in (budget-start period snap), so
  *  a re-home reaches back one period before the earliest start. */
 export const REHOME_BACK_MS = 31 * 24 * 60 * 60 * 1000;
+
+/**
+ * A view change (share / accept / unshare / leave / remove / delete) changes which transfers cross
+ * the group's boundary for EVERY member — not only the account's owner: a transfer between two
+ * members' accounts can turn from "own accounts" into "leaving the view" (or back). Re-decide every
+ * member's transfer roles (coalesced, one per member per burst), plus anyone who just left.
+ */
+export async function refresh_group_transfer_roles(
+  ctx: TraceContext,
+  group_id: string | null | undefined,
+  extra_user_ids: string[] = []
+): Promise<void> {
+  const group = group_id ? await group_repo.get(ctx, group_id).catch(() => null) : null;
+  const members = new Set([...(group?.member_ids ?? []), ...extra_user_ids]);
+  for (const user_id of members) {
+    await coalesce_job(
+      CLASSIFY_TRANSFERS_JOB,
+      { deduplication_key: `classify:${user_id}`, user_id },
+      { delay_seconds: 0, trace_id: ctx.trace_id }
+    ).catch(() => {});
+  }
+}
 
 /** Re-assign these accounts' transactions (grouped per owner, scoped to the accounts). */
 export async function reassign_accounts(

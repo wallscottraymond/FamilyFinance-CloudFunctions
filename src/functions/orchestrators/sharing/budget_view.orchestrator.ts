@@ -165,7 +165,8 @@ export async function copy_budgets_to_group_orchestrator(
       amount: i.amount,
     })),
     group_budgets,
-    await first_of_fn(ctx)
+    await first_of_fn(ctx),
+    !remove_from_me // a move keeps the whole budget — it can't move half its categories
   );
   if (plan.validation_errors?.length || !plan.entity) {
     return { success: false, errors: plan.validation_errors };
@@ -173,7 +174,7 @@ export async function copy_budgets_to_group_orchestrator(
 
   // 3. REPOSITORY
   const created: string[] = [];
-  for (const { source, amount } of plan.entity.creates) {
+  for (const { source, amount, category_ids } of plan.entity.creates) {
     if (remove_from_me) {
       // A move keeps the budget's id, amount and history (the chosen amount only
       // applies to copies; the app shows the current amount when moving).
@@ -186,7 +187,7 @@ export async function copy_budgets_to_group_orchestrator(
       name: original.name,
       description: original.description,
       amount,
-      category_ids: original.category_ids,
+      category_ids: category_ids ?? original.category_ids,
       period: original.period,
       budget_type: original.budget_type,
       start_date: original.start_date.toDate().toISOString(),

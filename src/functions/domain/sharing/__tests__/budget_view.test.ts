@@ -92,6 +92,22 @@ describe("copy (D32)", () => {
     expect(plan.creates).toHaveLength(1);
     expect(plan.conflicts).toHaveLength(1);
   });
+  it("X16 partial overlap: the categories the group doesn't budget are copied; the rest stay a conflict", () => {
+    const food = b({ id: "food", name: "Food", category_ids: ["groceries", "coffee"] });
+    const sams_groc = b({ id: "sg", owner_key: KEY, name: "Groceries", category_ids: ["groceries"], amount: 300 });
+    const plan = plan_copy_budgets(walls, "alex", [{ budget: food, amount: 200 }], [sams_groc]).entity!;
+    expect(plan.creates.map((c) => [c.source.id, c.category_ids])).toEqual([["food", ["coffee"]]]);
+    expect(plan.conflicts[0]).toMatchObject({ existing_budget_id: "sg", copied_category_ids: ["coffee"] });
+  });
+  it("X16 a same-NAME clash, nothing left, or a MOVE copies nothing", () => {
+    const groc = b({ id: "g2", name: "Groceries", category_ids: ["groceries", "coffee"] });
+    const sams = b({ id: "sg", owner_key: KEY, name: "Groceries", category_ids: ["groceries"] });
+    expect(plan_copy_budgets(walls, "alex", [{ budget: groc, amount: 1 }], [sams]).entity!.creates).toEqual([]);
+    const food = b({ id: "food", name: "Food", category_ids: ["groceries", "coffee"] });
+    expect(plan_copy_budgets(walls, "alex", [{ budget: food, amount: 1 }], [sams], undefined, false).entity!.creates).toEqual([]);
+    const only = b({ id: "only", name: "Food", category_ids: ["groceries"] });
+    expect(plan_copy_budgets(walls, "alex", [{ budget: only, amount: 1 }], [sams]).entity!.creates).toEqual([]);
+  });
 });
 
 describe("leaving returns moved-in budgets (D13)", () => {

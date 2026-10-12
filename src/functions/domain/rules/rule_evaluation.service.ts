@@ -115,7 +115,10 @@ export function evaluate_condition(
   case "category":
     return match_string(effective_category(txn), c);
   case "account":
-    return match_string(txn.account_id, c);
+    return (
+      match_string(txn.account_id, c) ||
+      (txn.account_labels ?? []).some((label) => match_string(label, c))
+    );
   case "amount":
     // Compare on the ABSOLUTE amount (users think in magnitudes, not Plaid's sign convention).
     return match_amount(Math.abs(txn.amount), c);

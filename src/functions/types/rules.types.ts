@@ -120,6 +120,9 @@ export interface RuleEvaluableTransaction {
   amount: number;
   transaction_date: Date;
   account_id: string;
+  /** The account's name / official name / mask — an older rule stored a typed account name
+   *  (the app now stores the picked account's id), so the Account condition matches either. */
+  account_labels?: string[];
   plaid_primary_category: string;
   internal_primary_category: string | null;
   /** The transaction's FIRST category slug (canon M7 — what the category condition compares;

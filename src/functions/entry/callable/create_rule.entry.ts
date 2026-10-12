@@ -44,7 +44,10 @@ export const create_rule = onCall(
       throw new HttpsError("invalid-argument", errors.join("; "));
     }
 
-    const count = await rules_repo.count_rules(ctx, user_id);
+    // The Rule Book is tiny (≤ MAX_RULES_PER_USER) — one list read gives the count AND the
+    // bottom priority.
+    const existing = await rules_repo.list_rules(ctx, user_id);
+    const count = existing.length;
     if (count >= MAX_RULES_PER_USER) {
       throw new HttpsError(
         "resource-exhausted",
@@ -52,8 +55,11 @@ export const create_rule = onCall(
       );
     }
 
-    // Default new rules to the bottom of the Rule Book (highest priority number = evaluated last).
-    const priority = input.priority ?? (count + 1) * 10;
+    // Default new rules to the bottom of the Rule Book (highest priority number = evaluated last):
+    // BELOW the current last rule — a count-based number collided after a delete, and two rules
+    // with the same priority can't be reordered (swapping equal numbers changes nothing).
+    const bottom = existing.reduce((m, r) => Math.max(m, r.priority), 0);
+    const priority = input.priority ?? bottom + 10;
     const rule_id = await rules_repo.create_rule(ctx, user_id, {
       name: input.name,
       conditions,

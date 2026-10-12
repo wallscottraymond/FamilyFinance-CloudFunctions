@@ -158,6 +158,39 @@ export async function hard_delete_by_fields_union(
 }
 
 /**
+ * Hard-delete every doc in `collection` whose id starts with `prefix` (the per-user derive caches
+ * key their docs `${user_id}__…`). Paged by document id; returns the count enqueued.
+ */
+export async function hard_delete_by_id_prefix(
+  collection: string,
+  prefix: string,
+  writer: BulkWriter,
+  on_batch?: OnBatch
+): Promise<number> {
+  const db = getFirestore();
+  let total = 0;
+  let last: string = prefix;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const snap = await db
+      .collection(collection)
+      .where(FieldPath.documentId(), ">", last)
+      .where(FieldPath.documentId(), "<", `${prefix}\uf8ff`)
+      .orderBy(FieldPath.documentId())
+      .limit(READ_PAGE)
+      .select()
+      .get();
+    if (snap.empty) break;
+    for (const doc of snap.docs) void writer.delete(doc.ref);
+    total += snap.size;
+    if (on_batch) await on_batch(snap.size);
+    last = snap.docs[snap.docs.length - 1].id;
+    if (snap.size < READ_PAGE) break;
+  }
+  return total;
+}
+
+/**
  * Hard-delete every doc in `collection` whose `parent_field` is one of
  * `parent_ids` (the "subcollection" pattern — these are top-level collections
  * keyed by a parent id). Iterates parent ids; each is its own batched sweep.

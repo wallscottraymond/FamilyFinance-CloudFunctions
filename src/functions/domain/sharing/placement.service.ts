@@ -51,6 +51,9 @@ export interface SharePlanInput {
   caller_id: string;
   group: Group | null;
   include_history: boolean;
+  /** "From today on": the start of the user's LOCAL today as a UTC date (Plaid dates are UTC
+   *  midnights) — from the app. Absent (older app): the start of the UTC day 12h ago. */
+  share_from_ms?: number | null;
   /** Active accounts already shared with the group (any owner). */
   group_accounts: PlaceableAccount[];
   /** Pending share requests for this account (to avoid duplicates). */
@@ -98,7 +101,13 @@ export function plan_share_account(input: SharePlanInput): DomainResult<SharePla
     return validation_failed(["This account is already waiting for someone to accept"]);
   }
 
-  const shared_from_ms = input.include_history ? null : now_ms;
+  // From the START of the day (transactions are dated by day): a purchase made earlier today
+  // counts in the group too. The app sends the user's local date; an older app gets the start of
+  // the UTC day 12 hours ago (the right day across the Americas / Europe, never later than today).
+  const day_start = (ms: number): number => ms - (((ms % 86_400_000) + 86_400_000) % 86_400_000);
+  const shared_from_ms = input.include_history
+    ? null
+    : input.share_from_ms ?? day_start(now_ms - 12 * 3_600_000);
   const others = group!.member_ids.filter((uid) => uid !== caller_id);
   if (others.length === 0) {
     return success({

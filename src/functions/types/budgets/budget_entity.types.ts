@@ -153,6 +153,11 @@ export interface BudgetPeriodEntity {
   period_type: PeriodInstanceCadence;
 
   allocated_amount: number;
+  /**
+   * "This Period Only" amount (`modifiedAmount` while `isModified`), else null. READ-ONLY: the
+   * period page shows it in place of `allocated_amount`; writers never copy it back.
+   */
+  modified_amount?: number | null;
   rolled_over_amount: number;
   effective_amount: number;
   spent: number;

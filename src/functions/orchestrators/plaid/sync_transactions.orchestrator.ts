@@ -32,7 +32,11 @@ import {
 } from "../../types/plaid";
 import { rules_repo } from "../../repositories/rules.repo";
 import { evaluate_rules } from "../../domain/rules/rule_evaluation.service";
-import { apply_rule_intents, only_known_categories } from "../../domain/rules/rule_application.service";
+import {
+  apply_rule_intents,
+  only_known_categories,
+  with_income_category,
+} from "../../domain/rules/rule_application.service";
 import { resolve_transaction_sync_dependencies } from "../../resolvers/plaid";
 import {
   identify_pending_migrations,
@@ -196,14 +200,22 @@ export async function sync_transactions_orchestrator(
   // A rule's category condition compares the transaction's FIRST category (canon M7) — from the
   // ONE category function over the module-cached catalog.
   const catalog = active_rules.length > 0 ? await load_category_catalog(ctx) : null;
+  // "Mark as income" → the income category (Plaid's "other income" → our first category).
+  const income_slug = catalog
+    ? resolve_split_category(
+      { plaid_detailed: "INCOME_OTHER_INCOME", merchant_name: null, name: null },
+      catalog
+    ).first_category_id ?? null
+    : null;
   const on_create =
     active_rules.length > 0 && catalog
       ? (t: TransactionForPersistence): TransactionForPersistence =>
         apply_rule_intents(
           t,
-          only_known_categories(evaluate_rules(
+          only_known_categories(with_income_category(evaluate_rules(
             {
               ...t,
+              account_labels: deps.account_labels?.get(t.account_id) ?? [],
               first_category_id: resolve_split_category(
                 {
                   plaid_detailed: t.plaid_detailed_category || null,
@@ -214,7 +226,7 @@ export async function sync_transactions_orchestrator(
               ).first_category_id,
             },
             active_rules
-          ), (slug) => slug in catalog.plaid_by_first)
+          ), income_slug), (slug) => slug in catalog.plaid_by_first)
         )
       : undefined;
 

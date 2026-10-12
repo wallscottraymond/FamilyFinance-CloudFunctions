@@ -39,6 +39,7 @@ export type ReassignReason =
   | "category_collection" // a Plaid code moved to another first (O1)
   | "budget_categories" // a budget's categories changed (A3b)
   | "view_change" // an account's view changed (share / unshare / leave / restore — H6)
+  | "recurring_removal" // a bill / income was removed, paused, restored or deleted (X9)
   | "manual";
 
 export interface ReassignScope {

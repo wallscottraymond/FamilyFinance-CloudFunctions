@@ -30,7 +30,7 @@ import { PersonView } from "../../types/sharing.types";
 import { account_repo } from "../../repositories/account.repo";
 import { request_repo } from "../../repositories/sharing";
 import { bump_owner_versions } from "./versions";
-import { reassign_accounts } from "./view_reassign";
+import { reassign_accounts, refresh_group_transfer_roles } from "./view_reassign";
 
 export interface ShareAccountResult {
   success: boolean;
@@ -43,7 +43,13 @@ export interface ShareAccountResult {
 
 /** Shares an account with a group. */
 export async function share_account_orchestrator(
-  ctx: OrchestratorContext<{ account_id: string; group_id: string; include_history: boolean }>
+  ctx: OrchestratorContext<{
+    account_id: string;
+    group_id: string;
+    include_history: boolean;
+    /** "From today on": the user's local today, as a UTC-midnight ms (app ≥ this build). */
+    share_from_ms?: number | null;
+  }>
 ): Promise<ShareAccountResult> {
   const span = create_span(ctx, "orchestrator", "share_account");
   log_operation_start(span, ctx.user_id);
@@ -60,6 +66,7 @@ export async function share_account_orchestrator(
     caller_id: ctx.user_id,
     group: deps.group,
     include_history: ctx.input.include_history,
+    share_from_ms: ctx.input.share_from_ms ?? null,
     group_accounts: deps.group_accounts,
     pending_for_account: deps.pending_for_account,
     sent_today: deps.sent_today,
@@ -82,6 +89,7 @@ export async function share_account_orchestrator(
     );
     await bump_owner_versions([ctx.user_id]);
     await reassign_accounts(ctx, [{ id: ctx.input.account_id, user_id: ctx.user_id }]);
+    await refresh_group_transfer_roles(ctx, plan.entity.placement.group_id);
   }
   await request_repo.save_many(ctx, plan.entity.requests);
 
@@ -113,6 +121,7 @@ export async function unshare_account_orchestrator(
     await account_repo.set_placement(ctx, ctx.input.account_id, null, ctx.user_id);
     await bump_owner_versions([ctx.user_id]);
     await reassign_accounts(ctx, [{ id: ctx.input.account_id, user_id: ctx.user_id }]);
+    await refresh_group_transfer_roles(ctx, account?.placement?.group_id);
   }
   await request_repo.save_many(ctx, cancelled);
 

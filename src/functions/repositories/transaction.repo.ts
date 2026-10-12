@@ -715,19 +715,24 @@ export const transaction_repo = {
     detach = false
   ): Promise<WriteResult> {
     const ref = doc_ref(doc_id);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      throw new NotFoundError("transaction", doc_id);
-    }
-    const before = snap.data() as LegacyTransactionDoc & {
-      splits?: Array<Record<string, unknown>>;
-    };
-    if (before.ownerId !== user_id && (before as { userId?: string }).userId !== user_id) {
-      throw new PermissionDeniedError("assign_split_to_outflow", doc_id);
-    }
-    const splits = (before.splits ?? []).map((s) =>
-      s.splitId === split_id
-        ? {
+    // Read + write in ONE Firestore transaction: a concurrent edit (a status tap, a sync) is never
+    // overwritten with a stale copy of the splits (Firestore retries on contention).
+    const { before, update_data } = await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw new NotFoundError("transaction", doc_id);
+      }
+      const before = snap.data() as LegacyTransactionDoc & {
+        splits?: Array<Record<string, unknown>>;
+      };
+      const owner = (before as unknown as Record<string, unknown>).userId;
+      if (before.ownerId !== user_id && owner !== user_id) {
+        throw new PermissionDeniedError("assign_split_to_outflow", doc_id);
+      }
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const splits = (before.splits ?? []).map((s) =>
+        s.splitId === split_id
+          ? {
             ...s,
             outflowId: outflow_id,
             // Pin manually so a future sync/engine pass preserves it; clearing (null)
@@ -740,23 +745,26 @@ export const transaction_repo = {
             inflowId: null, // a bill payment is not also an income match
             ...(clear_budget ? { budgetId: "", budgetName: "" } : {}),
           }
-        : s
-    );
-    if (!splits.some((s) => s.splitId === split_id)) {
-      throw new NotFoundError("transaction_split", split_id);
-    }
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    const splitOutflowIds = Array.from(
-      new Set(
-        splits
-          .map((s) => s.outflowId as string | undefined)
-          .filter((id): id is string => !!id)
-      )
-    );
-    const now = Timestamp.now();
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    const update_data = { splits, splitOutflowIds, updatedAt: now, updatedBy: user_id };
-    await ref.update(update_data);
+          : s
+      );
+      /* eslint-enable @typescript-eslint/naming-convention */
+      if (!splits.some((s) => s.splitId === split_id)) {
+        throw new NotFoundError("transaction_split", split_id);
+      }
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      const splitOutflowIds = Array.from(
+        new Set(
+          splits
+            .map((s) => s.outflowId as string | undefined)
+            .filter((id): id is string => !!id)
+        )
+      );
+      const now = Timestamp.now();
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      const update_data = { splits, splitOutflowIds, updatedAt: now, updatedBy: user_id };
+      tx.update(ref, update_data);
+      return { before, update_data };
+    });
 
     record_audit_entry_async({
       user_id,
@@ -1613,18 +1621,24 @@ export const transaction_repo = {
     tag_ids: string[]
   ): Promise<void> {
     /* eslint-disable @typescript-eslint/naming-convention */
-    const splits = Array.isArray(splits_raw)
-      ? (splits_raw as Array<Record<string, unknown>>)
-      : [];
-    for (const s of splits) {
-      if (split_id === null || s.splitId === split_id) {
-        s.tags = tag_ids;
+    void splits_raw; // the caller's copy may be stale — the splits are re-read in the transaction
+    const ref = doc_ref(doc_id);
+    // Read + write in ONE Firestore transaction (a concurrent edit is never overwritten).
+    await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundError("transaction", doc_id);
+      const raw = (snap.data() as Record<string, unknown>).splits;
+      const splits = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
+      for (const s of splits) {
+        if (split_id === null || s.splitId === split_id) {
+          s.tags = tag_ids;
+        }
       }
-    }
-    const tagIds = Array.from(
-      new Set(splits.flatMap((s) => (Array.isArray(s.tags) ? (s.tags as string[]) : [])))
-    );
-    await doc_ref(doc_id).update({ splits, tagIds, updatedAt: Timestamp.now() });
+      const tagIds = Array.from(
+        new Set(splits.flatMap((s) => (Array.isArray(s.tags) ? (s.tags as string[]) : [])))
+      );
+      tx.update(ref, { splits, tagIds, updatedAt: Timestamp.now() });
+    });
     /* eslint-enable @typescript-eslint/naming-convention */
   },
 
@@ -1645,33 +1659,31 @@ export const transaction_repo = {
       .where("userId", "==", user_id)
       .where("tagIds", "array-contains", tag_id)
       .get();
-    let batch = db.batch();
-    let pending = 0;
+    // Each transaction is stripped in its OWN Firestore transaction (re-read + write), so a
+    // concurrent edit to it is never overwritten with this query's stale copy. Bounded concurrency.
     let count = 0;
-    for (const doc of snapshot.docs) {
-      const data = doc.data() as Record<string, unknown>;
-      const splits = Array.isArray(data.splits)
-        ? (data.splits as Array<Record<string, unknown>>)
-        : [];
-      for (const s of splits) {
-        if (Array.isArray(s.tags)) {
-          s.tags = (s.tags as string[]).filter((t) => t !== tag_id);
+    const strip_one = async (ref: FirebaseFirestore.DocumentReference): Promise<boolean> =>
+      db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return false;
+        const data = snap.data() as Record<string, unknown>;
+        const splits = Array.isArray(data.splits)
+          ? (data.splits as Array<Record<string, unknown>>)
+          : [];
+        for (const s of splits) {
+          if (Array.isArray(s.tags)) {
+            s.tags = (s.tags as string[]).filter((t) => t !== tag_id);
+          }
         }
-      }
-      const tagIds = Array.from(
-        new Set(splits.flatMap((s) => (Array.isArray(s.tags) ? (s.tags as string[]) : [])))
-      );
-      batch.update(doc.ref, { splits, tagIds, updatedAt: Timestamp.now() });
-      pending++;
-      count++;
-      if (pending === 450) {
-        await batch.commit();
-        batch = db.batch();
-        pending = 0;
-      }
-    }
-    if (pending > 0) {
-      await batch.commit();
+        const tagIds = Array.from(
+          new Set(splits.flatMap((s) => (Array.isArray(s.tags) ? (s.tags as string[]) : [])))
+        );
+        tx.update(ref, { splits, tagIds, updatedAt: Timestamp.now() });
+        return true;
+      });
+    for (let i = 0; i < snapshot.docs.length; i += 20) {
+      const done = await Promise.all(snapshot.docs.slice(i, i + 20).map((d) => strip_one(d.ref)));
+      count += done.filter(Boolean).length;
     }
     return count;
     /* eslint-enable @typescript-eslint/naming-convention */

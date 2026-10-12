@@ -23,6 +23,7 @@ export interface RemovalReadableRepo {
     id: string;
     user_id: string;
     group_ids: string[];
+    account_id?: string | null;
     removal_intervals: RemovalInterval[];
   } | null>;
 }
@@ -31,6 +32,8 @@ export interface RecurringRemovalContext {
   id: string;
   owner_id: string;
   group_ids: string[];
+  /** The account its payments come from (scopes the re-assign); null for a manual item. */
+  account_id: string | null;
   removal_intervals: RemovalInterval[];
 }
 
@@ -48,6 +51,7 @@ export async function resolve_recurring_removal_context(
     id: item.id,
     owner_id: item.user_id,
     group_ids: item.group_ids,
+    account_id: item.account_id ?? null,
     removal_intervals: item.removal_intervals,
   };
 }

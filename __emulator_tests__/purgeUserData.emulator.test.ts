@@ -80,6 +80,28 @@ async function seedExtras(userId: string, itemDocId: string): Promise<void> {
     id: `wh_${userId}`, plaidItemId: itemDocId, webhookType: "TRANSACTIONS", createdAt: now,
   });
   await batch.commit();
+  await seedUserMade(userId);
+}
+
+/** What the user made / the app keeps for them beyond the account graph (Transaction-Integrity X17). */
+const USER_MADE = ["goals", "tags", "rules", "account_balance_snapshots"] as const;
+const CACHES = ["derived_period_cache", "derived_budget_txn_cache", "derived_recurring_view_cache"] as const;
+const STATE_DOCS = [
+  "user_data_versions", "_transfer_classification_state", "_assignment_watermarks", "_recurring_reconcile_watermarks",
+] as const;
+async function seedUserMade(userId: string): Promise<void> {
+  const batch = db.batch();
+  for (const c of USER_MADE) batch.set(db.collection(c).doc(`${c}_${userId}`), { userId, ownerId: userId });
+  for (const c of CACHES) batch.set(db.collection(c).doc(`${userId}__monthly__1__2`), { version: 1 });
+  for (const c of STATE_DOCS) batch.set(db.collection(c).doc(userId), { version: 1 });
+  await batch.commit();
+}
+async function userMadeLeft(userId: string): Promise<number> {
+  let n = 0;
+  for (const c of USER_MADE) n += await countWhere(c, "userId", userId);
+  for (const c of [...CACHES]) n += (await db.collection(c).doc(`${userId}__monthly__1__2`).get()).exists ? 1 : 0;
+  for (const c of STATE_DOCS) n += (await db.collection(c).doc(userId).get()).exists ? 1 : 0;
+  return n;
 }
 
 describe("purge_user_data_orchestrator — full erase", () => {
@@ -118,6 +140,8 @@ describe("purge_user_data_orchestrator — full erase", () => {
     expect(await countWhere("user_summaries", "userId", seed.userId)).toBe(0);
     expect(await countWhere("plaid_webhooks", "plaidItemId", seed.itemDocId)).toBe(0);
     expect((await db.collection("users").doc(seed.userId).get()).exists).toBe(false);
+    // Goals, tags, rules, balance history, caches and per-user state are gone too.
+    expect(await userMadeLeft(seed.userId)).toBe(0);
 
     const status = (await db.collection("purge_status").doc(seed.userId).get()).data();
     expect(status?.state).toBe("done");
@@ -126,6 +150,8 @@ describe("purge_user_data_orchestrator — full erase", () => {
   it("does NOT touch a second user's data (isolation)", async () => {
     const victim = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
     const bystander = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 4 });
+    await seedUserMade(victim.userId);
+    await seedUserMade(bystander.userId);
 
     await purge_user_data_orchestrator(ctx(), {
       user_id: victim.userId, initiated_by: victim.userId, trace_id: "t_iso",
@@ -134,6 +160,8 @@ describe("purge_user_data_orchestrator — full erase", () => {
     expect(await countWhere("transactions", "userId", victim.userId)).toBe(0);
     expect(await countWhere("transactions", "userId", bystander.userId)).toBe(4);
     expect(await countWhere("accounts", "userId", bystander.userId)).toBe(1);
+    expect(await userMadeLeft(victim.userId)).toBe(0);
+    expect(await userMadeLeft(bystander.userId)).toBe(USER_MADE.length + CACHES.length + STATE_DOCS.length);
   });
 
   it("BLOCKS when the user owns a group with other members (no data deleted)", async () => {

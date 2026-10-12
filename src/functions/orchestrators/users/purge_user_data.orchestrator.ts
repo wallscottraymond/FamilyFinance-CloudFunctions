@@ -44,6 +44,7 @@ import {
   find_owned_shared_groups,
   delete_owned_solo_groups,
   hard_delete_doc,
+  hard_delete_by_id_prefix,
   make_bulk_writer,
 } from "../../repositories/purge.repo";
 import { widget_token_repo } from "../../repositories/widget_token.repo";
@@ -269,6 +270,30 @@ export async function purge_user_data_orchestrator(
       "user_summaries",
       await hard_delete_by_fields_union("user_summaries", ["ownerId", "userId"], user_id, writer, on_batch)
     );
+    // Everything else the user made or the app keeps for them: goals, tags, rules, balance
+    // history, and the derive caches (doc ids `${user_id}__…`).
+    await step("Deleting goals, tags, rules and history…");
+    for (const [collection, fields] of [
+      ["goals", ["ownerId", "userId"]],
+      ["tags", ["userId"]],
+      ["rules", ["userId"]],
+      ["account_balance_snapshots", ["userId"]],
+    ] as const) {
+      await record(
+        collection,
+        await hard_delete_by_fields_union(collection, [...fields], user_id, writer, on_batch)
+      );
+    }
+    for (const collection of [
+      "derived_period_cache",
+      "derived_budget_txn_cache",
+      "derived_recurring_view_cache",
+    ]) {
+      await record(
+        collection,
+        await hard_delete_by_id_prefix(collection, `${user_id}__`, writer, on_batch)
+      );
+    }
 
     // Finalize all enqueued BulkWriter deletes before removing the profile/login,
     // so the data is actually gone (not just enqueued) when we finish.
@@ -330,7 +355,16 @@ export async function purge_user_data_orchestrator(
       console.warn(`[${ctx.trace_id}] purge: widget token delete failed: ${err.message}`)
     );
 
-    // 10. Remove the profile doc LAST (after logout + auth removal).
+    // 10. Remove the profile doc LAST (after logout + auth removal) — with the per-user state docs
+    //     (keyed by the user id): data version, transfer / assignment / reconcile watermarks.
+    for (const collection of [
+      "user_data_versions",
+      "_transfer_classification_state",
+      "_assignment_watermarks",
+      "_recurring_reconcile_watermarks",
+    ]) {
+      await hard_delete_doc(collection, user_id).catch(() => {});
+    }
     await hard_delete_doc("users", user_id);
 
     // Final touch: flag if the Firebase Auth removal couldn't complete.

@@ -20,6 +20,7 @@ import {
   SplitForSpend,
   is_income_category,
   split_spend_status,
+  splits_as_counted,
 } from "../../domain/budgets/budget_spend.service";
 import {
   detect_internal_transfers_from_txns,
@@ -109,7 +110,7 @@ export async function resolve_spend_splits(
     const txn_is_internal_transfer =
       role !== undefined ? role === "internal" : internal_ids.has(id);
     const txn_is_income = d.type === "income";
-    const splits = (d.splits as Array<Record<string, unknown>>) ?? [];
+    const splits = splits_as_counted(d); // a hidden transaction counts nowhere
     for (const s of splits) {
       const spend = stored_split_for_spend(s, d, budget_id, cadence, catalog, {
         txn_date_ms,

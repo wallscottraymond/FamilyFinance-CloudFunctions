@@ -236,3 +236,20 @@ describe("only_known_categories (canon C1)", () => {
     expect(r.split!.map((s) => s.category)).toEqual(["groceries", undefined]);
   });
 });
+
+import { with_income_category } from "../rule_application.service";
+
+describe("with_income_category — 'Mark as income' makes it income, not a refund (X13)", () => {
+  it("sets the income category when the rule sets none", () => {
+    const r = with_income_category({ applied_rule_ids: ["r"], mark_income: true }, "other_income");
+    expect(r.assign_category).toBe("other_income");
+    const out = apply_rule_intents(txn({ amount: -250 }), r);
+    expect(out.type).toBe("income");
+    expect(out.splits.every((s) => s.category_source === "user" && s.first_category_id === "other_income")).toBe(true);
+  });
+  it("a rule's own category wins; no mark_income → unchanged", () => {
+    expect(with_income_category({ applied_rule_ids: ["r"], mark_income: true, assign_category: "paycheck" }, "other_income").assign_category).toBe("paycheck");
+    const none = { applied_rule_ids: ["r"] };
+    expect(with_income_category(none, "other_income")).toBe(none);
+  });
+});

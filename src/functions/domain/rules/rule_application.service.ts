@@ -54,6 +54,20 @@ export function only_known_categories(
   };
 }
 
+/**
+ * "Mark as income" makes the money INCOME, not just a credit: with no category of its own from the
+ * rule, it takes the income category (`income_slug` — the first category Plaid's "other income"
+ * maps to), so every reader counts it as money in (a credit-typed spending category would read as
+ * a refund). PURE.
+ */
+export function with_income_category(
+  intents: RuleActionIntents,
+  income_slug: string | null
+): RuleActionIntents {
+  if (!intents.mark_income || intents.assign_category !== undefined || !income_slug) return intents;
+  return { ...intents, assign_category: income_slug };
+}
+
 /** Apply the supported field-set intents to a transaction (pure; returns a new object). */
 export function apply_rule_intents(
   txn: TransactionForPersistence,
