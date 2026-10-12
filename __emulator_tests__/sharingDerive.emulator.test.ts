@@ -49,6 +49,9 @@ import { derive_budget_transactions_orchestrator } from "../src/functions/orches
 import { derive_budget_view_orchestrator } from "../src/functions/orchestrators/budgets/derive_budget_view.orchestrator";
 import { createEverythingElseBudget } from "../src/functions/budgets/utils/createEverythingElseBudget";
 import { invalidate_category_cache } from "../src/functions/repositories/category.repo";
+import { resolve_transfer_roles } from "../src/functions/resolvers/transactions/transfer_roles.resolver";
+import { load_category_catalog } from "../src/functions/resolvers/shared/category_catalog.resolver";
+import { assign_transaction_orchestrator } from "../src/functions/orchestrators/transactions/assign_transaction.orchestrator";
 import { account_repo } from "../src/functions/repositories/account.repo";
 import { bump_derive_version } from "../src/functions/repositories/derive_version.repo";
 import { PermissionDeniedError } from "../src/functions/types";
@@ -198,6 +201,24 @@ describe("scoped numbers — two-person household (emulator)", () => {
     const m = await oct(SAM);
     expect(ee(m)).toBe(1430);
     expect(other_income(m)).toBe(3000);
+  });
+
+  it("3d transfer roles match the period page; the engine stores an edge_out leg where the page counts it", async () => {
+    const roles = await resolve_transfer_roles(t(), ALEX, OCT.start, OCT.end, await load_category_catalog(t()));
+    expect(roles.get(id("a_out"))).toBe("edge_out"); // CHK-A → JC: leaves Alex's Me (EE 2,418 above)
+    expect(roles.get(id("a_in"))).toBe("edge_in"); // arrives in the group → other income
+    expect(roles.get(id("s_in"))).toBe("edge_in");
+    expect(roles.has(id("coffee"))).toBe(false); // not a transfer
+    const sam = await resolve_transfer_roles(t(), SAM, OCT.start, OCT.end, await load_category_catalog(t()));
+    expect(sam.get(id("s_out"))).toBe("edge_out");
+
+    // Engine: with the role stored, the contribution leg lands in Alex's Me Everything Else.
+    await db.collection("transactions").doc(id("a_out")).update({ transferRole: "edge_out" });
+    await assign_transaction_orchestrator(t(), { user_id: ALEX, transaction_id: id("a_out") });
+    const split = (await db.collection("transactions").doc(id("a_out")).get()).data()!.splits[0];
+    const ee_m = (await db.collection("budgets").where("userId", "==", ALEX)
+      .where("isSystemEverythingElse", "==", true).where("period", "==", "monthly").get()).docs[0].id;
+    expect(split.monthlyBudgetId).toBe(ee_m);
   });
 
   it("conservation: every dollar counted exactly once across the three views", async () => {

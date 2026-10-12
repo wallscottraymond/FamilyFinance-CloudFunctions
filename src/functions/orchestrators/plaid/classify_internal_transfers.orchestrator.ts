@@ -29,6 +29,7 @@ import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
+import { resolve_transfer_roles } from "../../resolvers/transactions/transfer_roles.resolver";
 import {
   get_transfer_classification_state,
   set_transfer_classification_state,
@@ -42,7 +43,7 @@ const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
 /** Max age of a skipped (unchanged-fingerprint) result before a full re-run is forced. */
 const FULL_RECLASSIFY_MS = 24 * 60 * 60 * 1000;
 /** Bump when the classification logic changes, to invalidate every stored fingerprint. */
-const CLASSIFIER_VERSION = 1;
+const CLASSIFIER_VERSION = 2; // v2: also stores transfer roles (3d)
 
 interface ClassifiableRecord {
   id: string;
@@ -170,6 +171,22 @@ export async function classify_internal_transfers_orchestrator(
     inflow_period_repo.set_hidden_by_inflow_ids(ctx, inf.hide, true),
     inflow_period_repo.set_hidden_by_inflow_ids(ctx, inf.unhide, false),
   ]);
+
+  // 3b. Transfer roles on the user's own transfer transactions (3d) — decided exactly as the
+  //     period page decides them; only changed roles are written (an assignment input, so the
+  //     debounced assignment batch re-homes an edge_out contribution into Everything Else).
+  const catalog = await load_category_catalog(ctx);
+  const roles = await resolve_transfer_roles(
+    ctx,
+    user_id,
+    now_ms - PAIRING_WINDOW_MS,
+    now_ms,
+    catalog,
+    txns
+  );
+  const stored = new Map(txns.map((t) => [t.id, t.data.transferRole as string | undefined]));
+  const changed = new Map([...roles].filter(([id, role]) => stored.get(id) !== role));
+  if (changed.size > 0) await transaction_repo.set_transfer_roles(ctx, changed);
 
   // 4. Remember what we classified (hashing the flags as they are NOW, after the writes),
   //    so the next run with unchanged inputs skips. Only reached if every write succeeded.

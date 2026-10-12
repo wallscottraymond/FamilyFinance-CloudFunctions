@@ -1419,6 +1419,25 @@ export const transaction_repo = {
   },
 
   /**
+   * Store each transaction's transfer role (3d — internal / edge_out / edge_in / external), only
+   * for the ones that changed. A role change is an assignment input (field guard), so the
+   * debounced per-user assignment batch re-assigns exactly those.
+   */
+  async set_transfer_roles(_ctx: TraceContext, roles: Map<string, string>): Promise<number> {
+    const db = getFirestore();
+    const entries = [...roles.entries()];
+    for (let i = 0; i < entries.length; i += 450) {
+      const batch = db.batch();
+      for (const [id, role] of entries.slice(i, i + 450)) {
+        /* eslint-disable-next-line @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), { transferRole: role, updatedAt: Timestamp.now() });
+      }
+      await batch.commit();
+    }
+    return entries.length;
+  },
+
+  /**
    * One page of a user's transactions in DATE order (then doc id), starting after `cursor` —
    * the bounded re-assign engine's walk (3-R): each page's dates are contiguous, so its
    * recurring-candidate preload stays narrow. Inactive docs are dropped after the read (they still

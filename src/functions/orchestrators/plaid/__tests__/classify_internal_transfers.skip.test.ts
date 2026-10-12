@@ -24,6 +24,10 @@ jest.mock("../../../repositories", () => ({
 jest.mock("../../../repositories/category.repo", () => ({
   category_repo: { get_active_cached: jest.fn(async () => []) },
 }));
+// Transfer roles (3d) are covered by their own tests; here: none change.
+jest.mock("../../../resolvers/transactions/transfer_roles.resolver", () => ({
+  resolve_transfer_roles: jest.fn(async () => new Map()),
+}));
 jest.mock("../../../repositories/transaction.repo", () => ({
   transaction_repo: { get_active_in_date_range: scan },
 }));

@@ -82,6 +82,9 @@ export interface AssignmentContext {
   /** True for income transactions. Income NEVER auto-assigns to a budget (B1) —
    *  it stays unassigned unless the user manually pins it. */
   txn_is_income: boolean;
+  /** The transaction's stored transfer role (3d, canon A7) — "edge_out" money leaving the view
+   *  is spending (as on the period page); absent = not yet classified. */
+  txn_transfer_role?: string | null;
   /** All real budgets across every cadence; the engine filters per lens. */
   real_budgets: BudgetForMatch[];
   /** The Everything Else budget id PER LENS (null for a lens with no EE budget). */
@@ -206,9 +209,12 @@ export function compute_transaction_assignment(
     const category_source = keep_stored ? "user" : category.category_source;
 
     // A Plaid account-transfer split (TRANSFER_IN/OUT) is money moving between accounts, not
-    // spending — it never auto-assigns to a budget (mirrors the income B1 rule). A user pick of
-    // a non-transfer category makes it spending.
-    const is_transfer = is_transfer_category(category.semantic_code);
+    // spending — it never auto-assigns to a budget (mirrors the income B1 rule), EXCEPT money
+    // leaving the view (an "edge_out" transfer, 3d): the period page counts that as spending, so
+    // it's assigned by category like any purchase. A user pick of a non-transfer category makes
+    // it spending.
+    const is_transfer =
+      is_transfer_category(category.semantic_code) && context.txn_transfer_role !== "edge_out";
 
     let monthly_id: string;
     let weekly_id: string;

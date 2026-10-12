@@ -385,6 +385,7 @@ export async function resolve_assignment_context(
     txn_merchant_name,
     txn_name: (data.name as string | null) ?? null,
     txn_is_income: txn_type === "income",
+    txn_transfer_role: (data.transferRole as string | null | undefined) ?? null,
     real_budgets,
     everything_else_budget_ids,
     category_catalog: resolved_shared.category_catalog,

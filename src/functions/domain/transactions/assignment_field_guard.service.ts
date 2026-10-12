@@ -24,6 +24,7 @@ const TXN_RELEVANT_FIELDS = [
   "merchantName", // feeds category matching
   "name", // feeds category matching
   "accountId", // decides the view (Me / a group) whose budgets own the splits
+  "transferRole", // 3d: an edge_out transfer is spending; other transfers stay out of budgets
 ] as const;
 
 /** Per-split fields that affect assignment/spend. */
