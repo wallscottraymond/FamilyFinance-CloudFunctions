@@ -54,18 +54,9 @@ export async function process_budget_updated_orchestrator(
     await budget_repo.remove_category_ids(ctx, source_budget_id, category_ids, payload.user_id);
   }
 
-  // 2. Releases: return removed categories to Everything Else.
-  if (
-    payload.released_category_ids.length > 0 &&
-    payload.everything_else_budget_id
-  ) {
-    await budget_repo.add_category_ids(
-      ctx,
-      payload.everything_else_budget_id,
-      payload.released_category_ids,
-      payload.user_id
-    );
-  }
+  // 2. Releases: a removed category simply has no owner in this view any more → its
+  //    transactions fall to Everything Else structurally (EE stores no list — 3c-prep). The
+  //    re-home below moves them.
 
   // 3. Re-allocate periods if the amount changed.
   if (payload.regenerate_periods) {

@@ -15,7 +15,8 @@ import {
   log_operation_start,
   log_operation_success,
 } from "../../observability";
-import { budget_repo } from "../../repositories/budget.repo";
+import { group_id_of_key } from "../../domain/sharing/budget_view.service";
+import { reassign_view } from "../sharing/view_reassign";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { create_job } from "../../infrastructure/job_queue";
@@ -59,7 +60,12 @@ export async function process_budget_deleted_orchestrator(
   //    splitBudgetIds` read line). Assign them in ONE batch (shared context + candidates resolved
   //    once) instead of N per-transaction jobs.
   const affected = payload.affected_transaction_ids ?? [];
-  if (affected.length > 0) {
+  // A GROUP budget's splits live on its members' transactions (userId = the member, never the
+  // "group:<id>" owner key), so the resolver's lookup finds none: re-assign the group view's
+  // transactions through the bounded engine instead (H6 — budget delete is a view change).
+  if (group_id_of_key(payload.user_id)) {
+    await reassign_view(ctx, payload.user_id);
+  } else if (affected.length > 0) {
     await create_job(
       "assign_transactions_batch",
       { user_id: payload.user_id, transaction_ids: affected },
@@ -71,18 +77,8 @@ export async function process_budget_deleted_orchestrator(
       `transactions off deleted budget ${payload.budget_id} (batch)`
   );
 
-  // 3. Release the deleted budget's categories back to Everything Else.
-  if (
-    payload.release_category_ids.length > 0 &&
-    payload.everything_else_budget_id
-  ) {
-    await budget_repo.add_category_ids(
-      ctx,
-      payload.everything_else_budget_id,
-      payload.release_category_ids,
-      payload.user_id
-    );
-  }
+  // 3. The deleted budget's categories have no owner any more → Everything Else catches them
+  //    structurally (EE stores no list — Transaction-Integrity-Review 3c-prep).
 
   // 3b. Transfer the deleted budget's pending spread-rollover debt to Everything
   //     Else (mode chosen by the user; captured pre-delete in the resolver). The

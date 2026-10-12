@@ -432,20 +432,21 @@ describe('Budget CRUD Cascades (emulator)', () => {
 
       // periods deleted
       expect((await periodsFor(budgetId)).length).toBe(0);
-      // Split reassignment is now async via the engine: the cascade enqueues an
-      // assign_transaction job (which lands the split on EE / the correct budget).
-      // Under --only firestore the job isn't executed, so assert it was enqueued.
+      // Split reassignment runs through the engine: ONE assign_transactions_batch job over the
+      // resolver's affected ids (not one job per transaction). Under --only firestore the job
+      // isn't executed, so assert it was enqueued.
       const assignJobs = await db
         .collection('_jobs')
-        .where('job_type', '==', 'assign_transaction')
+        .where('job_type', '==', 'assign_transactions_batch')
         .get();
-      const enqueued = assignJobs.docs.some(
-        (d) => (d.data().payload as { transaction_id?: string })?.transaction_id === txnId
+      const enqueued = assignJobs.docs.some((d) =>
+        ((d.data().payload as { transaction_ids?: string[] })?.transaction_ids ?? []).includes(txnId)
       );
       expect(enqueued).toBe(true);
-      // category released to EE
+      // Everything Else stores no list (3c-prep): a released category just has no owner — EE
+      // catches it structurally, and its list isn't grown.
       const ee = (await db.collection('budgets').doc(eeId).get()).data();
-      expect(ee?.categoryIds).toEqual(expect.arrayContaining(['existing_cat', 'released_cat']));
+      expect(ee?.categoryIds).toEqual(['existing_cat']);
     });
   });
 });

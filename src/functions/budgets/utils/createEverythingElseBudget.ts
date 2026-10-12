@@ -17,7 +17,6 @@
 import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { Budget } from '../../../types';
 import { buildAccessControl } from '../../../utils/documentStructure';
-import { getActiveCategories } from './categoryOwnership';
 import { create_job } from '../../infrastructure/job_queue';
 import { generate_id } from '../../observability';
 import {
@@ -104,9 +103,9 @@ export async function createEverythingElseBudget(
     throw error;
   }
 
-  // Fetch all active categories ONCE - each EE owns ALL categories by default.
-  const allCategories = await getActiveCategories();
-  const allCategoryIds = allCategories.map(c => c.id);
+  // Everything Else stores NO category list (Transaction-Integrity-Review 3c-prep): it is the
+  // structural fallback for whatever no real budget in its view owns — never matched by a list.
+  const allCategoryIds: string[] = [];
 
   // Provision one EE budget per lens (create-or-reuse). Returns the MONTHLY id for
   // backward compatibility ("the everything else budget" = the monthly lens).
@@ -164,7 +163,7 @@ async function createOneEEBudget(
     name,
     amount: 0, // Always zero - calculated from spending
     currency: userCurrency,
-    categoryIds: allCategoryIds, // Owns ALL categories by default
+    categoryIds: allCategoryIds, // empty — the fallback owns "everything else", not a list
     period: period as any, // prime tracking cadence for this lens
     startDate: now,
     endDate: now, // Legacy field for compatibility

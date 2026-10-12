@@ -79,6 +79,7 @@ export { set_budget_tags } from "./set_budget_tags.entry";
 export {
   backfill_transaction_assignments,
 } from "./backfill_transaction_assignments.entry";
+export { migrate_budget_categories } from "./migrate_budget_categories.entry";
 export {
   backfill_recurring_reconciliation,
 } from "./backfill_recurring_reconciliation.entry";

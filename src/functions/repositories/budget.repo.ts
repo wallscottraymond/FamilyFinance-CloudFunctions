@@ -382,6 +382,37 @@ export const budget_repo = {
    * Atomically removes category IDs from a budget's categoryIds array.
    * Idempotent: removing an absent category is a no-op.
    */
+  /**
+   * Replace a budget's categoryIds only if they still equal `expected` (the one-time A2
+   * migration — a budget edited since the reviewed dry run is skipped, never clobbered).
+   * @returns false when the budget changed meanwhile.
+   */
+  async replace_category_ids_if_unchanged(
+    _ctx: TraceContext,
+    id: string,
+    expected: string[],
+    next: string[]
+  ): Promise<boolean> {
+    return getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(doc_ref(id));
+      const current = (snap.data()?.categoryIds as string[] | undefined) ?? [];
+      if (current.length !== expected.length || current.some((c, i) => c !== expected[i])) {
+        return false;
+      }
+      /* eslint-disable-next-line @typescript-eslint/naming-convention */
+      tx.update(doc_ref(id), { categoryIds: next, updatedAt: Timestamp.now() });
+      return true;
+    });
+  },
+
+  /** Every active budget (all users + group views) — the one-time A2 migration's input. */
+  async get_all_active(_ctx: TraceContext): Promise<BudgetEntity[]> {
+    const snap = await getFirestore().collection(COLLECTION).where("isActive", "==", true).get();
+    return snap.docs.map((doc) =>
+      map_to_entity({ ...(doc.data() as LegacyBudgetDoc), id: doc.id })
+    );
+  },
+
   async remove_category_ids(
     ctx: TraceContext,
     id: string,
