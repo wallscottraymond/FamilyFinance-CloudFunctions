@@ -21,6 +21,10 @@ import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
 import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
 import {
+  RemovalInterval,
+  is_payment_suppressed,
+} from "../../domain/recurring/recurring_suppression.service";
+import {
   is_edge_money,
   splits_paying_recurring,
 } from "../../domain/recurring/stream_membership";
@@ -218,8 +222,13 @@ export async function resolve_recurring_reconciliation(
     seen.add(key);
     return paying(t).length > 0;
   });
+  // A payment in a month the bill / income is removed / paused for pays nothing — it counts as
+  // ordinary spending / money in (X9; the engine and the period page apply the same rule).
+  const removal_intervals = (recurring as { removal_intervals?: RemovalInterval[] })
+    .removal_intervals;
   for (const txn of txns) {
     if (txn.isActive === false) continue;
+    if (is_payment_suppressed(removal_intervals, to_ms(txn.transactionDate) ?? 0)) continue;
     // Honor a manual PERIOD PIN for THIS outflow: align by the pinned period's midpoint
     // (forces placement into that period) instead of the transaction date.
     let date_ms = to_ms(txn.transactionDate) ?? 0;

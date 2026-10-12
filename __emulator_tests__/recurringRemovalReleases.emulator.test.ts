@@ -22,6 +22,8 @@ import { derive_period_orchestrator } from '../src/functions/orchestrators/perio
 import { assign_transaction_orchestrator } from '../src/functions/orchestrators/transactions/assign_transaction.orchestrator';
 import { reassign_user_orchestrator } from '../src/functions/orchestrators/transactions/reassign_user.orchestrator';
 import { manage_recurring_removal_orchestrator } from '../src/functions/orchestrators/recurring/manage_recurring_removal.orchestrator';
+import { resolve_recurring_reconciliation } from '../src/functions/resolvers/recurring/period_reconciliation.resolver';
+import { transaction_repo } from '../src/functions/repositories/transaction.repo';
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const U = `rr_u_${RUN}`;
@@ -121,6 +123,11 @@ describe('a removed bill\'s payments count in budgets (emulator)', () => {
     expect(s.monthlyBudgetId).toBe(ENT);
   });
 
+  it('stored reconcile counts no payment in a removed month (agrees with the page)', async () => {
+    const r = await resolve_recurring_reconciliation(t(), { recurring_id: BILL, recurring_type: 'outflow' } as never);
+    expect(r.splits.map((x) => x.transaction_id)).not.toContain(PAY);
+  });
+
   it('Restore: the payment pays the bill again (page and stored)', async () => {
     await manage({ id: BILL, action: 'restore' });
     // Restore is forward-only from this month — the 2031 payment is after it, so it's live again.
@@ -129,5 +136,22 @@ describe('a removed bill\'s payments count in budgets (emulator)', () => {
     expect(p.paid).toBe(15);
     await reassign_user_orchestrator(t(), { user_id: U, reason: 'recurring_removal' });
     expect((await split()).outflowId).toBe(BILL);
+    const r = await resolve_recurring_reconciliation(t(), { recurring_id: BILL, recurring_type: 'outflow' } as never);
+    expect(r.splits.map((x) => x.transaction_id)).toContain(PAY);
+  });
+
+  it('a MANUAL bill pin survives Remove → Restore (parked, not lost)', async () => {
+    // The user pins the payment to the bill by hand (assign-to-bill).
+    await transaction_repo.pin_split_to_outflow(t(), PAY, 's1', BILL, U, false, null);
+    expect(await split()).toMatchObject({ outflowId: BILL, outflowAssignmentSource: 'manual' });
+    await manage({ id: BILL, action: 'remove', mode: 'all' });
+    await reassign_user_orchestrator(t(), { user_id: U, reason: 'recurring_removal' });
+    expect(await split()).toMatchObject({ outflowId: null, suspendedOutflowPinId: BILL });
+    expect((await page()).spent).toBe(15); // counts as spending while removed
+    await manage({ id: BILL, action: 'restore' });
+    await reassign_user_orchestrator(t(), { user_id: U, reason: 'recurring_removal' });
+    expect(await split()).toMatchObject({
+      outflowId: BILL, outflowAssignmentSource: 'manual', suspendedOutflowPinId: null,
+    });
   });
 });

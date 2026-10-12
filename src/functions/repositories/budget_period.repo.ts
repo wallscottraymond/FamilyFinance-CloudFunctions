@@ -40,6 +40,8 @@ interface LegacyBudgetPeriodDoc {
   allocatedAmount: number;
   modifiedAmount?: number | null;
   isModified?: boolean;
+  isPrime?: boolean;
+  modifiedAmountSyncedFrom?: string;
   rolledOverAmount?: number;
   spent?: number;
   remaining?: number;
@@ -72,6 +74,19 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
   const allocated = doc.allocatedAmount ?? 0;
   const rolled_over = doc.rolledOverAmount ?? 0;
   const spent = doc.spent ?? 0;
+  // Only the user's DIRECT "This Period Only" amount on the budget's own (prime) period — not a
+  // copy `syncModifiedAmountToOverlappingPeriods` pasted, unprorated, onto overlapping periods of
+  // other types (a week's $150 would otherwise become a whole month's allocation).
+  const modified =
+    doc.isModified === true &&
+    typeof doc.modifiedAmount === "number" &&
+    doc.isPrime !== false &&
+    !doc.modifiedAmountSyncedFrom
+      ? doc.modifiedAmount
+      : null;
+  // What this period actually has to spend (READ-ONLY — writers store `allocatedAmount` from
+  // `allocated_amount`, never this).
+  const effective = (modified ?? allocated) + rolled_over;
   return {
     id: doc.id,
     budget_id: doc.budgetId,
@@ -81,12 +96,11 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
     period_id: doc.periodId,
     period_type: (doc.periodType as BudgetPeriodEntity["period_type"]) ?? "monthly",
     allocated_amount: allocated,
-    modified_amount:
-      doc.isModified === true && typeof doc.modifiedAmount === "number" ? doc.modifiedAmount : null,
+    modified_amount: modified,
     rolled_over_amount: rolled_over,
-    effective_amount: allocated + rolled_over,
+    effective_amount: effective,
     spent,
-    remaining: allocated + rolled_over - spent,
+    remaining: effective - spent,
     daily_rate: doc.dailyRate ?? 0,
     start_date: doc.periodStart,
     end_date: doc.periodEnd,

@@ -439,10 +439,9 @@ export function shape_period_derivation_deps(
     }
     const list = monthly_by_budget.get(p.budget_id) ?? [];
     // "This Period Only" (a per-period amount the user set) replaces the budget's amount here.
-    const allocated = p.modified_amount ?? p.allocated_amount;
     list.push({
-      allocated_amount: allocated,
-      effective_amount: allocated + p.rolled_over_amount,
+      allocated_amount: p.modified_amount ?? p.allocated_amount,
+      effective_amount: p.effective_amount,
       start_ms: p.start_date.toMillis(),
       end_ms: p.end_date.toMillis(),
     });
@@ -808,9 +807,13 @@ export function shape_period_derivation_deps(
   const counted_ids = new Set(txns.map((t) => t.id));
   for (const { id, data } of view_pool) {
     if (counted_ids.has(id) || crossing.ids.has(id)) continue;
+    // Released bills (removed / paused for this payment's month) are dropped here too.
+    const pool_released = released_at((data.transactionDate as Timestamp).toMillis());
     const pinned_splits = without_out_of_view_links(
       splits_as_counted(data),
-      out_of_view_recurring_ids
+      pool_released.size
+        ? new Set([...out_of_view_recurring_ids, ...pool_released])
+        : out_of_view_recurring_ids
     ).filter((sp) => sp.outflowId && sp.outflowPinnedPeriodId);
     const by_link = new Map<string, Array<Record<string, unknown>>>();
     for (const sp of pinned_splits) {
@@ -842,6 +845,8 @@ export function shape_period_derivation_deps(
   if (inflow_tx_to_id.size > 0) {
     const history_by_inflow = new Map<string, DepositForSlot[]>();
     for (const d of raw.inflow_history_docs) {
+      // A hidden deposit counts nowhere — not in the estimate either.
+      if ((d as unknown as Record<string, unknown>).isHidden === true) continue;
       const inflow_id = inflow_tx_to_id.get(d.transactionId as string);
       if (!inflow_id) continue;
       const splits = (d.splits as Array<{ amount?: number }>) ?? [];

@@ -16,6 +16,12 @@ if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59
 const db = admin.firestore();
 
 import { derive_period_orchestrator } from '../src/functions/orchestrators/periods/derive_period.orchestrator';
+import { updateBudgetPeriodAmount } from '../src/functions/budgets/api/periods/updateBudgetPeriodAmount';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const edit_amount = (data: unknown): Promise<any> => (updateBudgetPeriodAmount as any).run({
+  data, auth: { uid: U, token: { uid: U } }, rawRequest: {},
+});
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const U = `tp_u_${RUN}`;
@@ -40,7 +46,7 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
       periodId: '2031M07', type: 'monthly', startDate: ts('2031-07-01T00:00:00Z'),
       endDate: ts('2031-07-31T23:59:59.999Z'), year: 2031,
     });
-    await db.collection('users').doc(U).set({ email: 'x@x.com' });
+    await db.collection('users').doc(U).set({ email: 'x@x.com', isActive: true, role: 'editor' });
     await db.collection('budgets').doc(B).set({
       id: B, userId: U, createdBy: U, groupIds: [], isActive: true,
       access: { ownerId: U, createdBy: U, groupIds: [], isPrivate: true },
@@ -49,7 +55,7 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
       isOngoing: true, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     });
     await db.collection('budget_periods').doc(P).set({
-      id: P, budgetId: B, userId: U, groupIds: [], periodId: '2031M07', periodType: 'monthly',
+      id: P, budgetId: B, userId: U, groupIds: [], periodId: '2031M07', sourcePeriodId: '2031M07', periodType: 'monthly',
       periodStart: ts('2031-07-01T00:00:00Z'), periodEnd: ts('2031-07-31T23:59:59.999Z'),
       allocatedAmount: 400, rolledOverAmount: 0, spent: 0, remaining: 400, isActive: true,
     });
@@ -66,6 +72,32 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
   it('Reset to Original (isModified false) → back to the budget amount', async () => {
     await db.collection('budget_periods').doc(P).update({ isModified: false });
     expect(await page_allocated()).toBe(400);
+  });
+  it('a WEEK\'s amount synced onto the month (non-prime copy) never becomes the month\'s allocation', async () => {
+    // syncModifiedAmountToOverlappingPeriods pastes a week's "This Period Only" amount, unprorated,
+    // onto overlapping periods of other types — the page must ignore that copy.
+    await db.collection('budget_periods').doc(P).update({
+      modifiedAmount: 150, isModified: true, modifiedAmountSyncedFrom: `${B}_2031W30`,
+    });
+    expect(await page_allocated()).toBe(400);
+    await db.collection('budget_periods').doc(P).update({ isPrime: false, modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete() });
+    expect(await page_allocated()).toBe(400);
+  });
+  it('This Period Only from a WEEK of a monthly budget adds the same $ change to the month (never the week\'s figure)', async () => {
+    await db.collection('budget_periods').doc(P).set({
+      modifiedAmount: admin.firestore.FieldValue.delete(), isModified: false, isPrime: true,
+      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+    const W = `${B}_2031W28`;
+    await db.collection('budget_periods').doc(W).set({
+      id: W, budgetId: B, userId: U, groupIds: [], periodId: '2031W28', sourcePeriodId: '2031W28', periodType: 'weekly',
+      periodStart: ts('2031-07-06T00:00:00Z'), periodEnd: ts('2031-07-12T23:59:59.999Z'),
+      allocatedAmount: 90.32, spent: 0, isActive: true, isPrime: false, primePeriodIds: [P],
+    });
+    await edit_amount({ budgetPeriodId: W, newAmount: 140.32, cascadeScope: 'this_period' });
+    const month = (await db.collection('budget_periods').doc(P).get()).data()!;
+    expect(month.modifiedAmount).toBe(450); // 400 + (140.32 − 90.32), not 140.32
+    expect(await page_allocated()).toBe(450);
   });
 });
 /* eslint-enable @typescript-eslint/naming-convention */

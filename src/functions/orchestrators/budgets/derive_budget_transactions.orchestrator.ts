@@ -17,6 +17,7 @@
  * @module orchestrators/budgets/derive_budget_transactions
  */
 
+import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { fire_and_forget } from "../../observability";
@@ -199,7 +200,8 @@ export async function derive_budget_transactions_orchestrator(
     if (date_ms < start_ms || date_ms > end_ms) continue;
     const is_pending = data.isPending === true;
     const txn_is_internal_transfer = internal_ids.has(id);
-    const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
+    // A hidden transaction counts nowhere — its lines read as Ignored, as the budget's total.
+    const raw = splits_as_counted(data);
     const name =
       (data.merchantName as string) ||
       (data.name as string) ||

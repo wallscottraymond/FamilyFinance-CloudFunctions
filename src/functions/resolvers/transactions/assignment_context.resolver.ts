@@ -322,13 +322,12 @@ export async function resolve_assignment_context(
   const view_group_id = in_group ? placed!.group_id : null;
   // …and a bill / income removed or paused for this payment's month isn't paid by it either: the
   // money counts as ordinary spending / money in (the period page applies the same rule).
-  const in_view = (recurring_id: string | null) =>
-    !recurring_id ||
-    ((resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id &&
-      !is_payment_suppressed(
-        resolved_shared.removal_intervals_by_id?.get(recurring_id),
-        txn_date_ms
-      ));
+  const of_view = (recurring_id: string): boolean =>
+    (resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id;
+  const released = (recurring_id: string): boolean =>
+    is_payment_suppressed(resolved_shared.removal_intervals_by_id?.get(recurring_id), txn_date_ms);
+  const in_view = (recurring_id: string | null): boolean =>
+    !recurring_id || (of_view(recurring_id) && !released(recurring_id));
 
   // A link to a bill / income of ANOTHER view isn't this view's bill payment — the period page
   // drops it and counts the money here as ordinary spending; the engine does the same.
@@ -345,6 +344,10 @@ export async function resolve_assignment_context(
   // falls back to auto — canon A5).
   const active_outflow_ids = new Set(
     [...resolved_shared.active_outflow_ids].filter((id) => in_view(id))
+  );
+  // …and a pin to a bill removed / paused for this month is PARKED, not dropped (Restore).
+  const suppressed_outflow_ids = new Set(
+    [...resolved_shared.active_outflow_ids].filter((id) => of_view(id) && released(id))
   );
   const { real_budgets, budget_names, everything_else_budget_ids } = view;
 
@@ -369,6 +372,7 @@ export async function resolve_assignment_context(
       outflow_id: (s.outflowId as string | null) ?? null,
       // Manual bill-pin source — preserved so a user's bill assignment survives re-sync.
       outflow_source: (s.outflowAssignmentSource as "auto" | "manual") ?? "auto",
+      suspended_outflow_pin: (s.suspendedOutflowPinId as string | null | undefined) ?? null,
       inflow_id: (s.inflowId as string | null) ?? null,
       monthly_period_id: (s.monthlyPeriodId as string | null) ?? null,
       weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,
@@ -393,6 +397,7 @@ export async function resolve_assignment_context(
     source_periods,
     recurring_by_split,
     active_outflow_ids,
+    suppressed_outflow_ids,
   };
 
   log_operation_success(span, user_id);

@@ -10,6 +10,11 @@
  * @module orchestrators/recurring/derive_recurring_transactions
  */
 
+import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
+import {
+  compute_countable_split_net,
+  CountableSplitInput,
+} from "../../domain/recurring/period_reconciliation.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
@@ -60,14 +65,21 @@ export async function derive_recurring_transactions_orchestrator(
       splits: is_edge_money((data as { transferRole?: unknown }).transferRole)
         ? []
         : splits_paying_recurring(
-          ((data as { splits?: unknown[] }).splits ?? []) as Array<Record<string, unknown>>,
+          // A hidden transaction counts nowhere (its splits read as Ignored).
+          splits_as_counted(data as unknown as Record<string, unknown>),
           kind,
           recurring_id,
           true
         ),
     }))
-    .filter(({ splits }) => splits.length > 0)
-    .map(({ data, splits }) => {
+    // Its NET countable amount, as the period page and reconcile count it (Ignored adds nothing,
+    // Refund subtracts); a payment that nets to nothing isn't listed.
+    .map((row) => ({
+      ...row,
+      net: compute_countable_split_net(row.splits as CountableSplitInput[], "").amount,
+    }))
+    .filter(({ splits, net }) => splits.length > 0 && net > 0)
+    .map(({ data, net }) => {
       const d = data as unknown as Record<string, unknown>;
       const date_ms = (d.transactionDate as Timestamp).toMillis();
       return {
@@ -78,7 +90,7 @@ export async function derive_recurring_transactions_orchestrator(
           (d.name as string) ||
           (d.description as string) ||
           "Transaction",
-        amount: splits.reduce((s, sp) => s + Math.abs((sp.amount as number) ?? 0), 0),
+        amount: net,
         is_pending: d.isPending === true,
         in_period: date_ms >= window_start_ms && date_ms <= window_end_ms,
       };

@@ -205,6 +205,10 @@ export const updateBudgetPeriodAmount = onCall<
     // If editing a non-prime period, we need to edit the underlying prime
     let targetPrimePeriodId = budgetPeriodId;
     let targetPrimePeriod = period;
+    // The amount written to the PRIME period. Editing a non-prime (e.g. a week of a monthly
+    // budget) applies the same DOLLAR CHANGE to its month — never the week's raw figure, which
+    // would set the whole month to one week's amount.
+    let primeAmount = newAmount;
 
     if (period.isPrime === false && period.primePeriodIds && period.primePeriodIds.length > 0) {
       // This is a non-prime period - find the primary prime it references
@@ -237,8 +241,14 @@ export const updateBudgetPeriodAmount = onCall<
       console.log(`[updateBudgetPeriodAmount] Non-prime adjustment: $${currentNonPrimeAmount} → $${newAmount} (ratio: ${ratio.toFixed(4)})`);
       console.log(`[updateBudgetPeriodAmount] Prime adjustment: $${currentPrimeAmount} → $${adjustedPrimeAmount.toFixed(2)}`);
 
-      // Note: We'll use the directly entered amount for now
-      // The user expectation is that the prime will be updated proportionally
+      primeAmount = Math.max(
+        0,
+        Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
+      );
+      console.log(
+        `[updateBudgetPeriodAmount] Prime gets the same $ change: $${currentPrimeAmount} → ` +
+        `$${primeAmount} (ratio ${ratio.toFixed(4)} would give ${adjustedPrimeAmount.toFixed(2)})`
+      );
     }
 
     // ========================================================================
@@ -252,7 +262,7 @@ export const updateBudgetPeriodAmount = onCall<
       periodsUpdated = await updateThisPeriodOnly(
         db,
         targetPrimePeriod,
-        newAmount,
+        primeAmount,
         period.budgetId
       );
     } else {
@@ -261,7 +271,7 @@ export const updateBudgetPeriodAmount = onCall<
         db,
         budget,
         targetPrimePeriod,
-        newAmount
+        primeAmount
       );
       periodsUpdated = result.periodsUpdated;
       budgetUpdated = result.budgetUpdated;
@@ -324,6 +334,9 @@ async function updateThisPeriodOnly(
       dailyRate: newDailyRate,
       remaining: newRemaining,
       isPrime: true, // Ensure isPrime is set for consistency
+      // Set directly by the user (a copy synced from another period carries this field; the
+      // period page shows only a direct amount).
+      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
       lastModifiedAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     });

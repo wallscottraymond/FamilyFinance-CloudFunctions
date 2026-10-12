@@ -94,7 +94,8 @@ export async function resolve_budget_view_deps(
         p.start_date.toMillis() <= span_end_ms
     )
     .map((p) => ({
-      allocated_amount: p.allocated_amount,
+      // "This Period Only" (a per-period amount the user set) replaces the budget's amount.
+      allocated_amount: p.modified_amount ?? p.allocated_amount,
       effective_amount: p.effective_amount,
       start_ms: p.start_date.toMillis(),
       end_ms: p.end_date.toMillis(),

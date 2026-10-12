@@ -743,6 +743,7 @@ export const transaction_repo = {
             // overriding date-based alignment. Cleared when the bill pin is cleared.
             outflowPinnedPeriodId: outflow_id ? outflow_period_id : null,
             inflowId: null, // a bill payment is not also an income match
+            suspendedOutflowPinId: null, // the user's new choice replaces a parked pin
             ...(clear_budget ? { budgetId: "", budgetName: "" } : {}),
           }
           : s

@@ -55,6 +55,9 @@ export interface SplitForAssignment {
    *  that the engine PRESERVES (doesn't re-derive) while that outflow still exists —
    *  survives Plaid re-sync. Defaults to `"auto"` (engine derives from recurring match). */
   outflow_source?: "auto" | "manual";
+  /** A manual bill pin PARKED while its bill is removed / paused for this payment's month (the
+   *  money counts as spending meanwhile); restored when the bill is live again (X9). */
+  suspended_outflow_pin?: string | null;
   inflow_id: string | null;
   monthly_period_id: string | null;
   weekly_period_id: string | null;
@@ -98,6 +101,9 @@ export interface AssignmentContext {
   /** Active outflow (bill) ids — validates a manual outflow pin so a stale pin (bill
    *  deleted) falls back to auto-derivation. Omitted → pins are trusted as-is. */
   active_outflow_ids?: Set<string>;
+  /** Bills (in this view) removed / paused for this transaction's month: a manual pin to one is
+   *  PARKED (`suspended_outflow_pin`), not dropped, so Restore brings it back. */
+  suppressed_outflow_ids?: Set<string>;
 }
 
 /** The computed assignment for one split (the engine-owned fields only). */
@@ -114,6 +120,8 @@ export interface AssignedSplit {
   outflow_id: string | null;
   /** "manual" = a user-pinned bill assignment the engine preserves; else "auto". */
   outflow_source: "auto" | "manual";
+  /** A parked manual bill pin (see `SplitForAssignment.suspended_outflow_pin`), else null. */
+  suspended_outflow_pin: string | null;
   inflow_id: string | null;
   monthly_period_id: string | null;
   weekly_period_id: string | null;
@@ -307,15 +315,33 @@ export function compute_transaction_assignment(
     // auto-derivation (and a manual-budget detach's null), and is PRESERVED across
     // re-syncs — as long as the pinned outflow still exists (else fall back to auto).
     let outflow_source: "auto" | "manual" = "auto";
-    if (
-      split.outflow_source === "manual" &&
-      split.outflow_id &&
-      (!context.active_outflow_ids || context.active_outflow_ids.has(split.outflow_id))
-    ) {
-      outflow_id = split.outflow_id;
+    let suspended_outflow_pin: string | null = null;
+    const suppressed = context.suppressed_outflow_ids;
+    const is_live = (id: string): boolean =>
+      !context.active_outflow_ids || context.active_outflow_ids.has(id);
+    // A pin parked while its bill was removed / paused comes back once the bill is live again for
+    // this month — unless the user has since pinned the split to a BUDGET (that pin wins, A4).
+    const parked = split.suspended_outflow_pin ?? null;
+    let pin_id = split.outflow_id;
+    let pin_source = split.outflow_source;
+    if (parked && pin_source !== "manual" && source !== "manual") {
+      if (is_live(parked)) {
+        pin_id = parked;
+        pin_source = "manual";
+      } else if (suppressed?.has(parked)) {
+        suspended_outflow_pin = parked; // still removed / paused here — keep it parked
+      }
+    }
+    if (pin_source === "manual" && pin_id && suppressed?.has(pin_id)) {
+      // Pinned to a bill removed / paused for this month: the payment counts as spending, and the
+      // pin is parked (not lost) for when the bill is restored.
+      suspended_outflow_pin = pin_id;
+      outflow_id = null;
+    } else if (pin_source === "manual" && pin_id && is_live(pin_id)) {
+      outflow_id = pin_id;
       outflow_source = "manual";
       recurring_reason = "outflow";
-    } else if (split.outflow_source === "manual" && !split.outflow_id) {
+    } else if (pin_source === "manual" && !pin_id) {
       // Manual DETACH ("remove from bill"): the user said this split pays NO bill. Durable —
       // beats the recurring matcher / Plaid stream membership, which would otherwise re-link it.
       outflow_id = null;
@@ -361,6 +387,7 @@ export function compute_transaction_assignment(
       budget_id: monthly_id, // legacy alias
       outflow_id,
       outflow_source,
+      suspended_outflow_pin,
       inflow_id,
       monthly_period_id: periods.monthly_period_id,
       weekly_period_id: periods.weekly_period_id,
@@ -403,6 +430,7 @@ function split_assignment_changed(
     before.budget_assignment_source !== after.budget_assignment_source ||
     before.outflow_id !== after.outflow_id ||
     (before.outflow_source ?? "auto") !== after.outflow_source ||
+    (before.suspended_outflow_pin ?? null) !== after.suspended_outflow_pin ||
     before.inflow_id !== after.inflow_id ||
     before.monthly_period_id !== after.monthly_period_id ||
     before.weekly_period_id !== after.weekly_period_id ||

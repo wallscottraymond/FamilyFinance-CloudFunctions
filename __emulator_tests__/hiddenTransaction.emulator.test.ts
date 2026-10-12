@@ -20,6 +20,7 @@ import { invalidate_category_cache } from '../src/functions/repositories/categor
 import { derive_period_orchestrator } from '../src/functions/orchestrators/periods/derive_period.orchestrator';
 import { resolve_spend_splits } from '../src/functions/resolvers/budgets/budget_spend.resolver';
 import { compute_budget_spent } from '../src/functions/domain/budgets/budget_spend.service';
+import { derive_budget_transactions_orchestrator } from '../src/functions/orchestrators/budgets/derive_budget_transactions.orchestrator';
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const U = `hd_u_${RUN}`;
@@ -102,6 +103,10 @@ describe('a hidden transaction counts nowhere (emulator)', () => {
     expect(await page_spent()).toBe(60);
     expect(await stored_spent()).toBe(60);
     expect((await doc(HIDE)).splits[0].spendStatus).toBe('refund'); // the user's choice is kept
+    // The budget's transaction list shows it as Ignored too (never "Counted" while excluded).
+    const list = await derive_budget_transactions_orchestrator(t(), U, GRO, JUN.start, JUN.end, true);
+    const row = list.find((r) => r.transaction_id === HIDE);
+    expect(row?.spend_status).toBe('ignored');
   });
 
   it('Unhide: it counts again, with the user\'s own status', async () => {

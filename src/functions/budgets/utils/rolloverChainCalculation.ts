@@ -93,9 +93,12 @@ export async function recalculateRolloverChain(
         if (userDoc.exists) {
           const userData = userDoc.data();
           // The app saves the rollover defaults under `preferences.financial` (Budget Settings);
-          // `financialSettings` is the older location — read it only when there's nothing newer.
+          // `financialSettings` is the older location — a key there counts only when the newer
+          // location doesn't set it.
+          const legacy = userData?.financialSettings;
+          const current = userData?.preferences?.financial;
           userFinancialSettings =
-            userData?.preferences?.financial ?? userData?.financialSettings;
+            legacy || current ? { ...(legacy ?? {}), ...(current ?? {}) } : undefined;
         }
       }
     } catch (e) {

@@ -91,6 +91,8 @@ export function merge_assignment_onto_raw_splits(
       // Manual bill-pin source — preserved so the engine keeps a user's bill
       // assignment across re-syncs (mirrors budgetAssignmentSource).
       outflowAssignmentSource: a.outflow_source,
+      // A manual bill pin parked while its bill is removed / paused for this month (X9).
+      suspendedOutflowPinId: a.suspended_outflow_pin,
       inflowId: a.inflow_id,
       monthlyPeriodId: a.monthly_period_id,
       weeklyPeriodId: a.weekly_period_id,
