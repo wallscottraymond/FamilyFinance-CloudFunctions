@@ -24,6 +24,7 @@ import { reassign_user_orchestrator } from '../src/functions/orchestrators/trans
 import { manage_recurring_removal_orchestrator } from '../src/functions/orchestrators/recurring/manage_recurring_removal.orchestrator';
 import { resolve_recurring_reconciliation } from '../src/functions/resolvers/recurring/period_reconciliation.resolver';
 import { transaction_repo } from '../src/functions/repositories/transaction.repo';
+import { derive_recurring_transactions_orchestrator } from '../src/functions/orchestrators/recurring/derive_recurring_transactions.orchestrator';
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const U = `rr_u_${RUN}`;
@@ -126,6 +127,9 @@ describe('a removed bill\'s payments count in budgets (emulator)', () => {
   it('stored reconcile counts no payment in a removed month (agrees with the page)', async () => {
     const r = await resolve_recurring_reconciliation(t(), { recurring_id: BILL, recurring_type: 'outflow' } as never);
     expect(r.splits.map((x) => x.transaction_id)).not.toContain(PAY);
+    // …and the bill's transaction list doesn't show it as a payment either.
+    const list = await derive_recurring_transactions_orchestrator(t(), U, BILL, 'outflow', AUG.start, AUG.end);
+    expect(list.map((x) => x.transaction_id)).not.toContain(`p_${PAY}`);
   });
 
   it('Restore: the payment pays the bill again (page and stored)', async () => {

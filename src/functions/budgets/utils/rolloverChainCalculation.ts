@@ -11,6 +11,7 @@
  * - Respects per-budget and global rollover settings
  */
 
+import { period_allocation } from "../../domain/budgets/period_override.service";
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
@@ -201,7 +202,7 @@ export async function recalculateRolloverChain(
 
         if (needsUpdate) {
           // Calculate new remaining with rollover
-          const allocated = currentPeriod.modifiedAmount ?? currentPeriod.allocatedAmount;
+          const allocated = period_allocation(currentPeriod);
           const spent = currentPeriod.spent ?? 0;
           const newRemaining = Math.round((allocated + rolloverResult.rolledOverAmount - spent) * 100) / 100;
 
@@ -293,7 +294,7 @@ async function clearRolloverAmounts(
 
     // Only update if there's rollover data to clear
     if (period.rolledOverAmount !== undefined && period.rolledOverAmount !== 0) {
-      const allocated = period.modifiedAmount ?? period.allocatedAmount;
+      const allocated = period_allocation(period);
       const spent = period.spent ?? 0;
 
       batch.update(doc.ref, {

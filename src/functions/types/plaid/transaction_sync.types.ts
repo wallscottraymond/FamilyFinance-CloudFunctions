@@ -186,6 +186,8 @@ export interface TransactionSplitForMigration {
   budget_assignment_source?: "category" | "manual";
   outflow_assignment_source?: "auto" | "manual";
   outflow_pinned_period_id?: string | null;
+  /** A manual bill pin parked while its bill is removed / paused for that month (X9). */
+  suspended_outflow_pin_id?: string | null;
   category_source?: "plaid" | "user";
   overall_category_id?: string | null;
   first_category_id?: string | null;
@@ -309,6 +311,8 @@ export interface TransactionSplitForPersistence {
   /** Manual bill pin (+ pinned period) and user category override — carried pending → posted. */
   outflow_assignment_source?: "auto" | "manual";
   outflow_pinned_period_id?: string | null;
+  /** A manual bill pin parked while its bill is removed / paused for that month (X9). */
+  suspended_outflow_pin_id?: string | null;
   category_source?: "plaid" | "user";
   overall_category_id?: string | null;
   first_category_id?: string | null;

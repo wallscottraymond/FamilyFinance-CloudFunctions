@@ -11,6 +11,10 @@
  * @module repositories/budget_period
  */
 
+import {
+  direct_period_override,
+  period_allocation,
+} from "../domain/budgets/period_override.service";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   TraceContext,
@@ -42,6 +46,8 @@ interface LegacyBudgetPeriodDoc {
   isModified?: boolean;
   isPrime?: boolean;
   modifiedAmountSyncedFrom?: string;
+  modifiedAmountSyncedAt?: Timestamp;
+  lastModifiedAt?: Timestamp;
   rolledOverAmount?: number;
   spent?: number;
   remaining?: number;
@@ -74,16 +80,9 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
   const allocated = doc.allocatedAmount ?? 0;
   const rolled_over = doc.rolledOverAmount ?? 0;
   const spent = doc.spent ?? 0;
-  // Only the user's DIRECT "This Period Only" amount on the budget's own (prime) period — not a
-  // copy `syncModifiedAmountToOverlappingPeriods` pasted, unprorated, onto overlapping periods of
-  // other types (a week's $150 would otherwise become a whole month's allocation).
-  const modified =
-    doc.isModified === true &&
-    typeof doc.modifiedAmount === "number" &&
-    doc.isPrime !== false &&
-    !doc.modifiedAmountSyncedFrom
-      ? doc.modifiedAmount
-      : null;
+  // THE "This Period Only" rule (direct, own period, not a synced copy):
+  // domain/budgets/period_override.
+  const modified = direct_period_override(doc);
   // What this period actually has to spend (READ-ONLY — writers store `allocatedAmount` from
   // `allocated_amount`, never this).
   const effective = (modified ?? allocated) + rolled_over;
@@ -654,7 +653,7 @@ export const budget_period_repo = {
         const p = periods[i];
         const d = p.data;
         const new_rolled = round2((d.rolledOverAmount ?? 0) - share);
-        const allocated = d.modifiedAmount ?? d.allocatedAmount ?? 0;
+        const allocated = period_allocation(d);
         const remaining = round2(allocated + new_rolled - (d.spent ?? 0));
         /* eslint-disable @typescript-eslint/naming-convention */
         batch.update(db.collection(COLLECTION).doc(p.id), {

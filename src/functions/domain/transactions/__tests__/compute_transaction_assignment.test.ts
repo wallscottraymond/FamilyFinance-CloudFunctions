@@ -548,3 +548,46 @@ describe("compute_transaction_assignment", () => {
     );
   });
 });
+
+describe("parked bill pins (X9) and edge money", () => {
+  it("a manual pin to a bill removed / paused this month is PARKED, not lost", () => {
+    const r = compute_transaction_assignment(
+      [split({ outflow_id: "bill", outflow_source: "manual" })],
+      ctx({ active_outflow_ids: new Set(), suppressed_outflow_ids: new Set(["bill"]) })
+    );
+    expect(r.splits[0]).toMatchObject({ outflow_id: null, outflow_source: "auto", suspended_outflow_pin: "bill" });
+  });
+  it("a parked pin comes back when the bill is live again", () => {
+    const r = compute_transaction_assignment(
+      [split({ outflow_id: null, outflow_source: "auto", suspended_outflow_pin: "bill" })],
+      ctx({ active_outflow_ids: new Set(["bill"]), suppressed_outflow_ids: new Set() })
+    );
+    expect(r.splits[0]).toMatchObject({ outflow_id: "bill", outflow_source: "manual", suspended_outflow_pin: null });
+  });
+  it("a budget pin made meanwhile wins over the parked pin", () => {
+    const r = compute_transaction_assignment(
+      [split({ budget_id: "b_groceries", budget_assignment_source: "manual", suspended_outflow_pin: "bill" })],
+      ctx({ active_outflow_ids: new Set(["bill"]), suppressed_outflow_ids: new Set() })
+    );
+    expect(r.splits[0]).toMatchObject({ outflow_id: null, suspended_outflow_pin: null });
+  });
+  it("a parked pin to a DELETED bill is dropped", () => {
+    const r = compute_transaction_assignment(
+      [split({ suspended_outflow_pin: "gone" })],
+      ctx({ active_outflow_ids: new Set(), suppressed_outflow_ids: new Set() })
+    );
+    expect(r.splits[0].suspended_outflow_pin).toBeNull();
+  });
+  it("edge money parks a manual bill pin and keeps a detach", () => {
+    const pin = compute_transaction_assignment(
+      [split({ outflow_id: "bill", outflow_source: "manual" })],
+      ctx({ txn_transfer_role: "edge_out", active_outflow_ids: new Set(["bill"]) })
+    );
+    expect(pin.splits[0]).toMatchObject({ outflow_id: null, outflow_source: "auto", suspended_outflow_pin: "bill" });
+    const detach = compute_transaction_assignment(
+      [split({ outflow_id: null, outflow_source: "manual" })],
+      ctx({ txn_transfer_role: "edge_in", active_outflow_ids: new Set(["bill"]) })
+    );
+    expect(detach.splits[0]).toMatchObject({ outflow_id: null, outflow_source: "manual" });
+  });
+});

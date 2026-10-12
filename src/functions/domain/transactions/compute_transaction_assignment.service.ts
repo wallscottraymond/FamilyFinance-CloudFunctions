@@ -351,13 +351,16 @@ export function compute_transaction_assignment(
 
     // Edge money (3d: a transfer crossing the view — edge_out / edge_in) is never a bill payment
     // or a paycheck: the period page drops every recurring link on it (stream membership, split
-    // links, manual pins) and counts it as spending / money in. Store no link either, with an
-    // AUTO source (manual + no bill would read as a "remove from bill" detach).
+    // links, manual pins) and counts it as spending / money in. Store no link either. The user's
+    // own bill choices survive a later sharing change: a manual bill pin is PARKED (as for a
+    // removed bill), and a "remove from bill" detach stays (it already means "no bill").
     if (context.txn_transfer_role === "edge_out" || context.txn_transfer_role === "edge_in") {
+      if (outflow_source === "manual" && outflow_id) suspended_outflow_pin = outflow_id;
+      const keep_detach = outflow_source === "manual" && !outflow_id;
       outflow_id = null;
       inflow_id = null;
-      outflow_source = "auto";
-      recurring_reason = "none";
+      outflow_source = keep_detach ? "manual" : "auto";
+      recurring_reason = keep_detach ? "manual_detached" : "none";
     }
 
     // Missing-EE error: any lens unassigned for a NON-income, NON-transfer split

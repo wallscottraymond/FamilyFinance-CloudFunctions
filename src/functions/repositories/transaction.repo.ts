@@ -137,6 +137,11 @@ function pending_manual_choices(s: Record<string, unknown>): Partial<Transaction
     out.outflow_assignment_source = "manual";
     out.outflow_pinned_period_id = (s.outflowPinnedPeriodId as string | null | undefined) ?? null;
   }
+  // A manual bill pin parked while its bill is removed / paused — carried, so Restore finds it.
+  if (typeof s.suspendedOutflowPinId === "string" && s.suspendedOutflowPinId) {
+    out.suspended_outflow_pin_id = s.suspendedOutflowPinId;
+    out.outflow_pinned_period_id = (s.outflowPinnedPeriodId as string | null | undefined) ?? null;
+  }
   if (s.categorySource === "user") {
     out.category_source = "user";
     out.overall_category_id = (s.overallCategoryId as string | null | undefined) ?? null;
@@ -294,6 +299,14 @@ function map_split_to_doc(
         outflowPinnedPeriodId: split.outflow_pinned_period_id ?? null,
       }
       : {}),
+    /* eslint-disable @typescript-eslint/naming-convention */
+    ...(split.suspended_outflow_pin_id
+      ? {
+        suspendedOutflowPinId: split.suspended_outflow_pin_id,
+        outflowPinnedPeriodId: split.outflow_pinned_period_id ?? null,
+      }
+      : {}),
+    /* eslint-enable @typescript-eslint/naming-convention */
     ...(split.category_source === "user"
       ? {
         categorySource: "user",

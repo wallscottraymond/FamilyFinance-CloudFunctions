@@ -11,6 +11,7 @@
  * - Extreme overspend can result in negative remaining amounts
  */
 
+import { period_allocation } from "../../domain/budgets/period_override.service";
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   Budget,
@@ -101,7 +102,9 @@ export function calculateRolloverForPeriod(
   }
 
   // Calculate previous period's surplus/deficit
-  const previousAllocated = previousPeriod.modifiedAmount ?? previousPeriod.allocatedAmount;
+  // "This Period Only" counts only when set directly on the budget's own period (not a synced
+  // copy).
+  const previousAllocated = period_allocation(previousPeriod);
   const previousSpent = previousPeriod.spent ?? 0;
   const previousRollover = previousPeriod.rolledOverAmount ?? 0;
 
@@ -170,7 +173,7 @@ export function calculateRolloverForPeriod(
  * @returns Effective remaining amount
  */
 export function calculateEffectiveRemaining(period: BudgetPeriodDocument): number {
-  const allocated = period.modifiedAmount ?? period.allocatedAmount;
+  const allocated = period_allocation(period);
   const rollover = period.rolledOverAmount ?? 0;
   const spent = period.spent ?? 0;
 

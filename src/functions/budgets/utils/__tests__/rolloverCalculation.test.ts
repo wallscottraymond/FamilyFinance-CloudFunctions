@@ -364,12 +364,24 @@ describe('calculateRolloverForPeriod', () => {
   });
 
   describe('modified amounts', () => {
+    test('ignores a synced copy of another period type\'s override (X10)', () => {
+      const result = calculateRolloverForPeriod(
+        createMockPeriod(),
+        createMockPeriod({
+          id: 'prev-period', allocatedAmount: 500, spent: 500,
+          modifiedAmount: 150, isModified: true, modifiedAmountSyncedFrom: 'week',
+        } as never),
+        enabledSettings
+      );
+      expect(result.rolledOverAmount).toBe(0); // 500 − 500, not 150 − 500
+    });
     test('should use modifiedAmount when present', () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
         id: 'prev-period',
         allocatedAmount: 500,
-        modifiedAmount: 600, // User increased budget
+        modifiedAmount: 600, // User increased budget ("This Period Only" sets both fields)
+        isModified: true,
         spent: 500,
       });
 
@@ -472,6 +484,7 @@ describe('calculateEffectiveRemaining', () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       modifiedAmount: 600,
+      isModified: true,
       rolledOverAmount: 50,
       spent: 400,
     });

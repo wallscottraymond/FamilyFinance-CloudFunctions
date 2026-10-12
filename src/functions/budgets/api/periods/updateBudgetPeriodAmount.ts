@@ -205,10 +205,12 @@ export const updateBudgetPeriodAmount = onCall<
     // If editing a non-prime period, we need to edit the underlying prime
     let targetPrimePeriodId = budgetPeriodId;
     let targetPrimePeriod = period;
-    // The amount written to the PRIME period. Editing a non-prime (e.g. a week of a monthly
-    // budget) applies the same DOLLAR CHANGE to its month — never the week's raw figure, which
-    // would set the whole month to one week's amount.
+    // The amounts written to the PRIME period when the user edits a NON-prime one (e.g. a week of
+    // a monthly budget) — never the week's raw figure, which would set a whole month to one week:
+    //  - "This Period Only": the same DOLLAR change lands on the month (the week's extra money);
+    //  - "All Periods Forward": the same RATIO (the budget's rate changes, at its own cadence).
     let primeAmount = newAmount;
+    let forwardPrimeAmount = newAmount;
 
     if (period.isPrime === false && period.primePeriodIds && period.primePeriodIds.length > 0) {
       // This is a non-prime period - find the primary prime it references
@@ -235,7 +237,7 @@ export const updateBudgetPeriodAmount = onCall<
         : targetPrimePeriod.allocatedAmount;
 
       // Calculate the ratio and apply to prime
-      const ratio = currentPrimeAmount > 0 ? newAmount / currentNonPrimeAmount : 1;
+      const ratio = currentNonPrimeAmount > 0 ? newAmount / currentNonPrimeAmount : 1;
       const adjustedPrimeAmount = currentPrimeAmount * ratio;
 
       console.log(`[updateBudgetPeriodAmount] Non-prime adjustment: $${currentNonPrimeAmount} → $${newAmount} (ratio: ${ratio.toFixed(4)})`);
@@ -245,6 +247,8 @@ export const updateBudgetPeriodAmount = onCall<
         0,
         Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
       );
+      forwardPrimeAmount =
+        currentNonPrimeAmount > 0 ? Math.round(adjustedPrimeAmount * 100) / 100 : primeAmount;
       console.log(
         `[updateBudgetPeriodAmount] Prime gets the same $ change: $${currentPrimeAmount} → ` +
         `$${primeAmount} (ratio ${ratio.toFixed(4)} would give ${adjustedPrimeAmount.toFixed(2)})`
@@ -271,7 +275,7 @@ export const updateBudgetPeriodAmount = onCall<
         db,
         budget,
         targetPrimePeriod,
-        primeAmount
+        forwardPrimeAmount
       );
       periodsUpdated = result.periodsUpdated;
       budgetUpdated = result.budgetUpdated;

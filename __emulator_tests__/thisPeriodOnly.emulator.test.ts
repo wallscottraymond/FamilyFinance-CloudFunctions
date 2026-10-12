@@ -99,5 +99,17 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
     expect(month.modifiedAmount).toBe(450); // 400 + (140.32 − 90.32), not 140.32
     expect(await page_allocated()).toBe(450);
   });
+  it('All Periods Forward from a WEEK of a monthly budget scales the budget by the same RATIO', async () => {
+    const W = `${B}_2031W28`;
+    await db.collection('budgets').doc(B).update({ amount: 400 });
+    await db.collection('budget_periods').doc(P).update({
+      isModified: false, modifiedAmount: admin.firestore.FieldValue.delete(), allocatedAmount: 400,
+    });
+    await db.collection('budget_periods').doc(W).update({ allocatedAmount: 90.32 });
+    // Week 90.32 → 135.48 (×1.5): the monthly budget becomes 400 × 1.5 = 600, not 400 + 45.16.
+    await edit_amount({ budgetPeriodId: W, newAmount: 135.48, cascadeScope: 'all_forward' });
+    const budget = (await db.collection('budgets').doc(B).get()).data()!;
+    expect(budget.amount).toBeCloseTo(600, 0);
+  });
 });
 /* eslint-enable @typescript-eslint/naming-convention */

@@ -10,6 +10,7 @@
  * @module orchestrators/recurring/derive_recurring_transactions
  */
 
+import { is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
 import { splits_as_counted } from "../../domain/budgets/budget_spend.service";
 import {
   compute_countable_split_net,
@@ -57,6 +58,16 @@ export async function derive_recurring_transactions_orchestrator(
   // 3. Map + flag in-period.
   const rows: DerivedRecurringTransaction[] = txns
     .filter((data) => (data as { isActive?: boolean }).isActive !== false)
+    // A payment in a month this bill / income is removed / paused for pays nothing (X9 — as the
+    // period page, the engine and reconcile).
+    .filter(
+      (data) =>
+        !is_payment_suppressed(
+          record.removal_intervals,
+          ((data as unknown as Record<string, Timestamp | undefined>).transactionDate
+            ?.toMillis?.() ?? 0)
+        )
+    )
     // Per SPLIT (the period page's rule): the splits paying this recurring — a "remove from bill"
     // or a budget pin takes only THAT split off; no paying split → not one of its payments.
     .map((data) => ({

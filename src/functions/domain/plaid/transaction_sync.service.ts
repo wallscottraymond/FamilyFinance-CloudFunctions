@@ -296,6 +296,12 @@ export function merge_pending_to_posted(
             outflow_pinned_period_id: pending_split.outflow_pinned_period_id ?? null,
           }
           : {}),
+        ...(pending_split.suspended_outflow_pin_id
+          ? {
+            suspended_outflow_pin_id: pending_split.suspended_outflow_pin_id,
+            outflow_pinned_period_id: pending_split.outflow_pinned_period_id ?? null,
+          }
+          : {}),
         ...(pending_split.category_source === "user"
           ? {
             category_source: "user" as const,

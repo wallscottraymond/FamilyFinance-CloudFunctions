@@ -83,3 +83,13 @@ describe("merge_pending_to_posted — split flags", () => {
     expect(out.splits[0]).toMatchObject({ is_ignored: false, is_refund: false, is_tax_deductible: false });
   });
 });
+
+describe("merge_pending_to_posted — parked bill pin (X9)", () => {
+  it("carries a bill pin parked while its bill is removed / paused", () => {
+    const out = merge_pending_to_posted(
+      posted,
+      migration([pendingSplit({ suspended_outflow_pin_id: "bill_1", outflow_pinned_period_id: "2026M06" })])
+    );
+    expect(out.splits[0]).toMatchObject({ suspended_outflow_pin_id: "bill_1", outflow_pinned_period_id: "2026M06" });
+  });
+});
