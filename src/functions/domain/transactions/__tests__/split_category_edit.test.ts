@@ -160,6 +160,18 @@ describe("legacy_override_first", () => {
   });
 });
 
+describe("an unreadable stored pick (retired slug)", () => {
+  const retired = { ...stored, categorySource: "user", firstCategoryId: "retired_slug" };
+  it("is kept on an unrelated edit (e.g. a status tap re-sends the split)", () => {
+    const r = resolve_split_category_edit({ ...retired, spendStatus: "ignored" }, retired, txn, catalog);
+    expect(r).toMatchObject({ categorySource: "user", firstCategoryId: "retired_slug" });
+  });
+  it('"use auto" still resets it to Plaid', () => {
+    const r = resolve_split_category_edit({ ...retired, categorySource: "plaid" }, retired, txn, catalog);
+    expect(r).toMatchObject({ categorySource: "plaid", firstCategoryId: "groceries" });
+  });
+});
+
 describe("legacy_override_first — a 'user' source with no usable slug", () => {
   it("reads the legacy field (an old reclassify that only wrote internal*)", () => {
     expect(

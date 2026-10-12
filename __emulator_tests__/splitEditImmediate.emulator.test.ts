@@ -97,4 +97,17 @@ describe('updateTransactionSplits applies the edit immediately (emulator)', () =
       categorySource: 'user', firstCategoryId: `se_eating_${RUN}`, monthlyBudgetId: EAT,
     });
   });
+
+  it('a status tap from an OLD build that omits fields keeps them; spend-only, stamped', async () => {
+    const s0 = (await split()).splits[0];
+    // An old build re-sends the split without the category / per-lens fields.
+    await call({ transactionId: TXN, splits: [{ splitId: 's1', id: 's1', amount: 40, isDefault: true, spendStatus: 'ignored' }] });
+    const doc = await split();
+    expect(doc.assignRunId).toBeTruthy(); // the trigger skips it; spend recompute is queued
+    expect(doc.splits[0]).toMatchObject({
+      spendStatus: 'ignored', firstCategoryId: s0.firstCategoryId, categorySource: s0.categorySource,
+      monthlyBudgetId: s0.monthlyBudgetId, plaidDetailedCategory: `SE_GRO_${RUN}`,
+    });
+    expect(doc.hasIgnoredSplits).toBe(true);
+  });
 });

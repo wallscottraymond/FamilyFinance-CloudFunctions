@@ -82,6 +82,24 @@ export function legacy_override_first(split: Raw, catalog: CategoryCatalog): str
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */
+/** A stored user pick the collection no longer knows: kept exactly as stored (as the engine
+ *  keeps it — compute_transaction_assignment `keep_stored`); "use auto" still resets it. */
+function kept_as_stored(
+  existing: Raw,
+  plaid: { primary: string | null; detailed: string | null }
+): SplitCategoryFields {
+  return {
+    plaidPrimaryCategory: plaid.primary,
+    plaidDetailedCategory: plaid.detailed,
+    categorySource: "user",
+    firstCategoryId: str(existing.firstCategoryId),
+    overallCategoryId: str(existing.overallCategoryId),
+    secondCategoryId: str(existing.secondCategoryId),
+    internalPrimaryCategory: null,
+    internalDetailedCategory: null,
+  };
+}
+
 function user_pick(
   first: string,
   second: string | null,
@@ -163,11 +181,13 @@ export function resolve_split_category_edit(
     str(existing?.secondCategoryId) && catalog.slugs_by_plaid[existing?.secondCategoryId as string]
       ? (existing?.secondCategoryId as string)
       : null;
-  const current: SplitCategoryFields =
-    stored_first
-      ? user_pick(stored_first, stored_second, plaid, catalog)
-      : existing && legacy_override_first(existing, catalog)
-        ? user_pick(legacy_override_first(existing, catalog) as string, null, plaid, catalog)
+  const legacy_first = existing ? legacy_override_first(existing, catalog) : null;
+  const current: SplitCategoryFields = stored_first
+    ? user_pick(stored_first, stored_second, plaid, catalog)
+    : legacy_first
+      ? user_pick(legacy_first, null, plaid, catalog)
+      : existing?.categorySource === "user"
+        ? kept_as_stored(existing, plaid) // a pick we can't read (retired slug) is never dropped
         : from_plaid(plaid, catalog);
 
   // 1. Explicit pick from the app.

@@ -1434,6 +1434,15 @@ export const transaction_repo = {
       .filter((t) => t.data.isActive !== false);
   },
 
+  /** Raw partial update of one transaction (fields already in Firestore shape). */
+  async update_raw(
+    _ctx: TraceContext,
+    doc_id: string,
+    fields: Record<string, unknown>
+  ): Promise<void> {
+    await doc_ref(doc_id).update(fields);
+  },
+
   /**
    * Store each transaction's transfer role (3d — internal / edge_out / edge_in / external), only
    * for the ones that changed. A role change is an assignment input (field guard), so the
