@@ -20,6 +20,7 @@ import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
 import { is_txn_detached_from_outflow } from "../../domain/recurring/stream_membership";
+import { fingerprint_stored } from "../../domain/recurring/reconciliation_fingerprint";
 
 export type RecurringType = "outflow" | "inflow";
 
@@ -36,6 +37,8 @@ export interface ResolvedReconciliationPeriod {
   is_variable_amount: boolean;
   /** "monthly" | "weekly" | "bi_monthly" — periods of all types overlap in time. */
   period_type: string;
+  /** Fingerprint of the stored reconciliation (null = never reconciled) — unchanged → no write. */
+  stored_fingerprint: string | null;
 }
 
 /** A linked split, sign-normalized, with its date for alignment. */
@@ -144,6 +147,7 @@ export async function resolve_recurring_reconciliation(
         occurrence_due_dates_ms: due_dates_ms,
         is_variable_amount,
         period_type: String(data.periodType ?? ""),
+        stored_fingerprint: fingerprint_stored(data.reconciliation),
       };
     });
 

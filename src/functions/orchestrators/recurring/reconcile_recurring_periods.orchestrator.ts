@@ -10,6 +10,7 @@
  * @module orchestrators/recurring/reconcile_recurring_periods
  */
 
+import { fingerprint_result } from "../../domain/recurring/reconciliation_fingerprint";
 import { TraceContext, create_performance_metrics } from "../../types";
 import {
   create_span,
@@ -124,11 +125,14 @@ export async function reconcile_recurring_periods_orchestrator(
       )
     );
 
-    // 4. Write (repo skips nothing — resolver already loaded active-only).
+    // 4. Write only the periods whose result CHANGED (was: every active period, every time —
+    //    hundreds of rewrites per stream per reconcile).
+    const stored = new Map(resolved.periods.map((p) => [p.period_id, p.stored_fingerprint]));
+    const changed = results.filter((r) => stored.get(r.period_id) !== fingerprint_result(r));
     const writes =
       input.recurring_type === "outflow"
-        ? await outflow_period_repo.update_reconciliation(ctx, results)
-        : await inflow_period_repo.update_reconciliation(ctx, results);
+        ? await outflow_period_repo.update_reconciliation(ctx, changed)
+        : await inflow_period_repo.update_reconciliation(ctx, changed);
     perf.writes += writes.length;
 
     log_operation_success(span, input.user_id);
