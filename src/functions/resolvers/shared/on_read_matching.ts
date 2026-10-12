@@ -25,6 +25,7 @@ import {
   resolve_split_category,
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
+import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 
 /** Transaction-level context a split inherits (computed once per transaction). */
 export interface TxnMatchContext {
@@ -56,15 +57,11 @@ export function map_raw_split_to_on_read_match(
   // The ONE category function (canon M7) — the same call the assignment engine makes, so the
   // period page and the stored fields can't disagree. Legacy `internal*` fields are not read.
   const category = resolve_split_category(
-    {
-      plaid_detailed: (raw_split.plaidDetailedCategory as string | null) ?? null,
-      category_source: (raw_split.categorySource as "plaid" | "user" | undefined) ?? "plaid",
-      first_category_id: (raw_split.firstCategoryId as string | null) ?? null,
-      overall_category_id: (raw_split.overallCategoryId as string | null) ?? null,
-      second_category_id: (raw_split.secondCategoryId as string | null) ?? null,
-      merchant_name: ctx.merchant_name ?? null,
-      name: ctx.name ?? null,
-    },
+    split_category_input_from_raw(
+      raw_split,
+      { merchantName: ctx.merchant_name ?? null, name: ctx.name ?? null },
+      catalog
+    ),
     catalog
   );
   return {
@@ -103,19 +100,8 @@ export function txn_effective_category(
   catalog: CategoryCatalog
 ): string {
   const first = ((data.splits as Array<Record<string, unknown>>) ?? [])[0] ?? {};
-  const plaid = (first.plaidDetailedCategory as string | null) ?? "";
-  return resolve_split_category(
-    {
-      plaid_detailed: plaid || null,
-      category_source: (first.categorySource as "plaid" | "user" | undefined) ?? "plaid",
-      first_category_id: (first.firstCategoryId as string | null) ?? null,
-      overall_category_id: (first.overallCategoryId as string | null) ?? null,
-      second_category_id: (first.secondCategoryId as string | null) ?? null,
-      merchant_name: (data.merchantName as string | null) ?? null,
-      name: (data.name as string | null) ?? null,
-    },
-    catalog
-  ).semantic_code;
+  return resolve_split_category(split_category_input_from_raw(first, data, catalog), catalog)
+    .semantic_code;
 }
 
 /**

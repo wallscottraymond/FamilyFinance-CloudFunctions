@@ -452,6 +452,16 @@ describe("compute_transaction_assignment", () => {
     expect(s.category_source).toBe("user");
   });
 
+  it("never demotes a stored user pick it can't read (no slug) — keeps it, matches by Plaid", () => {
+    const s = compute_transaction_assignment(
+      [split({ category_source: "user", first_category_id: null, second_category_id: null })],
+      ctx()
+    ).splits[0];
+    expect(s.category_source).toBe("user");
+    expect(s.first_category_id).toBeNull();
+    expect(s.budget_id).toBe("b_groceries"); // FOOD_AND_DRINK still matches meanwhile
+  });
+
   it("a SECOND-level override retargets budget matching to the chosen detailed", () => {
     // A budget keyed by the specific detailed the user picked (not the split's
     // original FOOD_AND_DRINK) claims the split via the override's second_category_id.

@@ -18,7 +18,11 @@
  * @module domain/transactions/split_category_edit
  */
 
-import { CategoryCatalog, resolve_split_category } from "./split_category.service";
+import {
+  CategoryCatalog,
+  resolve_split_category,
+  SplitCategoryInput,
+} from "./split_category.service";
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export interface SplitCategoryFields {
@@ -57,7 +61,15 @@ function legacy_first_of(id: string | null, catalog: CategoryCatalog): string | 
  * one-time backfill so an edit before the backfill keeps the user's old pick.
  */
 export function legacy_override_first(split: Raw, catalog: CategoryCatalog): string | null {
-  if (split.categorySource === "user") return null;
+  // A real pick in the canonical fields wins; a "user" source with no usable slug (an old
+  // reclassify that only wrote internal*) is read from the legacy field.
+  if (
+    split.categorySource === "user" &&
+    (first_of(str(split.firstCategoryId), catalog) ||
+      (str(split.secondCategoryId) && catalog.slugs_by_plaid[split.secondCategoryId as string]))
+  ) {
+    return null;
+  }
   const first =
     legacy_first_of(str(split.internalDetailedCategory), catalog) ??
     legacy_first_of(str(split.internalPrimaryCategory), catalog);
@@ -188,4 +200,29 @@ export function resolve_split_category_edit(
 
   // 3. Unchanged.
   return current;
+}
+
+/**
+ * THE raw-split → category-function input mapper (one for every reader: engine, derive, spend,
+ * transfer pairing, audit). Reads the canonical fields; an old reclassify that lives only in the
+ * legacy `internal*` fields is read as the user's pick (`legacy_override_first`), so the engine
+ * and the period page agree even before the one-time backfill rewrites the doc.
+ */
+export function split_category_input_from_raw(
+  split: Raw,
+  txn: Raw,
+  catalog: CategoryCatalog
+): SplitCategoryInput {
+  const legacy_first = legacy_override_first(split, catalog);
+  return {
+    plaid_detailed: str(split.plaidDetailedCategory),
+    category_source: legacy_first
+      ? "user"
+      : ((split.categorySource as "plaid" | "user" | undefined) ?? "plaid"),
+    first_category_id: legacy_first ?? str(split.firstCategoryId),
+    overall_category_id: legacy_first ? null : str(split.overallCategoryId),
+    second_category_id: legacy_first ? null : str(split.secondCategoryId),
+    merchant_name: str(txn.merchantName),
+    name: str(txn.name),
+  };
 }

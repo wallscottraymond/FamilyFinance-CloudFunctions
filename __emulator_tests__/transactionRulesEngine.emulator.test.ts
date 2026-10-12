@@ -114,7 +114,7 @@ describe('Transaction Rules Engine — ingest wiring (emulator)', () => {
       userId, isActive: true, priority: 100, name: 'Anthropic → Software',
       conditions: { op: 'AND', conditions: [{ variable: 'merchant', operator: 'contains', value: 'anthropic' }] },
       actions: {
-        assign_budget_id: 'budget_abc', assign_category: 'Software',
+        assign_budget_id: 'budget_abc', assign_category: 'software',
         ignore: true, mark_income: true, require_review: true,
       },
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
@@ -130,12 +130,14 @@ describe('Transaction Rules Engine — ingest wiring (emulator)', () => {
     const doc = (await db.collection('transactions').doc(`plaid_${txnId}`).get()).data();
     expect(doc).toBeDefined();
     expect(doc!.type).toBe('income'); // mark_income
-    expect(doc!.internalPrimaryCategory).toBe('Software'); // assign_category
+    // assign_category = the user's own first-slug pick (canon M5), never a legacy display name
+    expect(doc!.splits[0].categorySource).toBe('user');
+    expect(doc!.splits[0].firstCategoryId).toBe('software');
     expect(doc!.needsReview).toBe(true); // require_review
     expect(doc!.splits[0].budgetId).toBe('budget_abc'); // assign_budget_id
     expect(doc!.splits[0].budgetAssignmentSource).toBe('manual'); // durable pin the engine preserves
     expect(doc!.splits[0].isIgnored).toBe(true); // ignore
-    expect(doc!.splits[0].internalPrimaryCategory).toBe('Software');
+    expect(doc!.splits[0].internalPrimaryCategory ?? null).toBeNull();
     expect(doc!.splits[0].rules).toContain(ruleId); // tracked in split.rules[]
   });
 

@@ -36,6 +36,7 @@ import {
 } from "../../domain/transactions/match_budget.service";
 import { budget_cadence_to_instance } from "../../domain/budgets";
 import { CategoryRule } from "../../domain/transactions/match_category.service";
+import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 import {
   build_category_catalog,
   budget_first_ids,
@@ -349,31 +350,37 @@ export async function resolve_assignment_context(
   const { real_budgets, budget_names, everything_else_budget_ids } = view;
 
   // The engine's inputs for the ONE category function (canon M7): the immutable Plaid code +
-  // the user's pick (`categorySource: "user"` + slugs). Legacy `internal*` fields aren't read.
-  const splits_input: SplitForAssignment[] = raw_splits.map((s) => ({
-    split_id: s.splitId as string,
-    budget_id: (s.budgetId as string) ?? "unassigned",
-    budget_assignment_source:
-      (s.budgetAssignmentSource as "category" | "manual") ?? "category",
-    // Prior per-lens assignments (for the touched-set + skip-if-unchanged). Fall
-    // back to the legacy monthly `budgetId` for pre-migration docs.
-    monthly_budget_id: (s.monthlyBudgetId as string | undefined) ?? undefined,
-    weekly_budget_id: (s.weeklyBudgetId as string | undefined) ?? undefined,
-    bi_weekly_budget_id: (s.biWeeklyBudgetId as string | undefined) ?? undefined,
-    plaid_match_category: (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE",
-    outflow_id: (s.outflowId as string | null) ?? null,
-    // Manual bill-pin source — preserved so a user's bill assignment survives re-sync.
-    outflow_source: (s.outflowAssignmentSource as "auto" | "manual") ?? "auto",
-    inflow_id: (s.inflowId as string | null) ?? null,
-    monthly_period_id: (s.monthlyPeriodId as string | null) ?? null,
-    weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,
-    bi_weekly_period_id: (s.biWeeklyPeriodId as string | null) ?? null,
-    // App-category classification: prior slugs + source (preserved when "user").
-    overall_category_id: (s.overallCategoryId as string | null) ?? null,
-    first_category_id: (s.firstCategoryId as string | null) ?? null,
-    second_category_id: (s.secondCategoryId as string | null) ?? null,
-    category_source: (s.categorySource as "plaid" | "user") ?? "plaid",
-  }));
+  // the user's pick (`categorySource: "user"` + slugs).
+  const catalog = resolved_shared.category_catalog;
+  const splits_input: SplitForAssignment[] = raw_splits.map((s) => {
+    // The category inputs come from THE raw-split mapper every reader uses (an old reclassify in
+    // the legacy fields reads as the user's pick, as the backfill will store it).
+    const cat = split_category_input_from_raw(s, data, catalog);
+    return {
+      split_id: s.splitId as string,
+      budget_id: (s.budgetId as string) ?? "unassigned",
+      budget_assignment_source:
+        (s.budgetAssignmentSource as "category" | "manual") ?? "category",
+      // Prior per-lens assignments (for the touched-set + skip-if-unchanged). Fall
+      // back to the legacy monthly `budgetId` for pre-migration docs.
+      monthly_budget_id: (s.monthlyBudgetId as string | undefined) ?? undefined,
+      weekly_budget_id: (s.weeklyBudgetId as string | undefined) ?? undefined,
+      bi_weekly_budget_id: (s.biWeeklyBudgetId as string | undefined) ?? undefined,
+      plaid_match_category: (s.plaidDetailedCategory as string) ?? "OTHER_EXPENSE",
+      outflow_id: (s.outflowId as string | null) ?? null,
+      // Manual bill-pin source — preserved so a user's bill assignment survives re-sync.
+      outflow_source: (s.outflowAssignmentSource as "auto" | "manual") ?? "auto",
+      inflow_id: (s.inflowId as string | null) ?? null,
+      monthly_period_id: (s.monthlyPeriodId as string | null) ?? null,
+      weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,
+      bi_weekly_period_id: (s.biWeeklyPeriodId as string | null) ?? null,
+      // App-category classification: prior slugs + source (preserved when "user").
+      overall_category_id: cat.overall_category_id ?? null,
+      first_category_id: cat.first_category_id ?? null,
+      second_category_id: cat.second_category_id ?? null,
+      category_source: cat.category_source ?? "plaid",
+    };
+  });
 
   const context: AssignmentContext = {
     txn_date_ms,

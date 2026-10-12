@@ -191,10 +191,19 @@ export function compute_transaction_assignment(
       },
       context.category_catalog
     );
-    const overall_category_id = category.overall_category_id;
-    const first_category_id = category.first_category_id;
-    const second_category_id = category.second_category_id;
-    const category_source = category.category_source;
+    // A stored user pick the function can't read (no slug at all) is never demoted to Plaid —
+    // its fields are kept as stored; matching falls back to Plaid's category meanwhile.
+    const keep_stored = split.category_source === "user" && category.category_source !== "user";
+    const overall_category_id = keep_stored
+      ? split.overall_category_id ?? null
+      : category.overall_category_id;
+    const first_category_id = keep_stored
+      ? split.first_category_id ?? null
+      : category.first_category_id;
+    const second_category_id = keep_stored
+      ? split.second_category_id ?? null
+      : category.second_category_id;
+    const category_source = keep_stored ? "user" : category.category_source;
 
     // A Plaid account-transfer split (TRANSFER_IN/OUT) is money moving between accounts, not
     // spending — it never auto-assigns to a budget (mirrors the income B1 rule). A user pick of

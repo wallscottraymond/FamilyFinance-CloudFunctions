@@ -22,6 +22,7 @@ import {
 import { detect_internal_transfers_from_txns } from "../shared/on_read_matching";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
 import { resolve_split_category } from "../../domain/transactions/split_category.service";
+import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 
 /** Active transactions in a window (what `transaction_repo.get_active_in_date_range` returns). */
@@ -106,15 +107,7 @@ export async function resolve_spend_splits(
       // The category's meaning from the ONE category function (a user pick away from income
       // makes it spending).
       const effective_category = resolve_split_category(
-        {
-          plaid_detailed: (s.plaidDetailedCategory as string | null) ?? null,
-          category_source: (s.categorySource as "plaid" | "user" | undefined) ?? "plaid",
-          first_category_id: (s.firstCategoryId as string | null) ?? null,
-          overall_category_id: (s.overallCategoryId as string | null) ?? null,
-          second_category_id: (s.secondCategoryId as string | null) ?? null,
-          merchant_name: (d.merchantName as string | null) ?? null,
-          name: (d.name as string | null) ?? null,
-        },
+        split_category_input_from_raw(s, d, catalog),
         catalog
       ).semantic_code;
       out.push({

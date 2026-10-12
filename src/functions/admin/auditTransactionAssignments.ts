@@ -31,6 +31,7 @@ import {
   budget_first_ids,
   resolve_split_category,
 } from "../domain/transactions/split_category.service";
+import { split_category_input_from_raw } from "../domain/transactions/split_category_edit.service";
 import { create_job } from "../infrastructure/job_queue";
 import { generate_id } from "../observability";
 
@@ -135,15 +136,7 @@ export const auditTransactionAssignments = onRequest(
 
         // The split's category, from the same function the engine uses.
         const category = resolve_split_category(
-          {
-            plaid_detailed: plaidCat,
-            category_source: (s.categorySource as "plaid" | "user" | undefined) ?? "plaid",
-            first_category_id: (s.firstCategoryId as string | null) ?? null,
-            overall_category_id: (s.overallCategoryId as string | null) ?? null,
-            second_category_id: (s.secondCategoryId as string | null) ?? null,
-            merchant_name: merchant,
-            name,
-          },
+          split_category_input_from_raw(s, d, catalog),
           catalog
         );
         const resolvedCat = category.semantic_code;

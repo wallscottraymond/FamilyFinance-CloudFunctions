@@ -28,6 +28,8 @@ const backfill_input_schema = z.object({
   user_id: z.string().min(1).optional(),
   /** Backfill every user (admin only). */
   all_users: z.boolean().optional(),
+  /** Report only (a `_reassign_runs` doc per user) — no transaction is written. */
+  dry_run: z.boolean().optional(),
 });
 
 export const backfill_transaction_assignments = onCall(
@@ -49,7 +51,7 @@ export const backfill_transaction_assignments = onCall(
         validation.error.issues.map((e) => e.message).join("; ")
       );
     }
-    const { user_id, all_users } = validation.data;
+    const { user_id, all_users, dry_run } = validation.data;
 
     // 3. AUTHORIZATION: cross-user / all-users requires admin.
     const targets_other_user = !!user_id && user_id !== caller_uid;
@@ -66,18 +68,21 @@ export const backfill_transaction_assignments = onCall(
     // 5. ENQUEUE the coordinator job (no inline work).
     //    all_users → payload with no user_id (orchestrator fans out all users);
     //    otherwise → a single user (the target or the caller).
-    const payload = all_users ? {} : { user_id: user_id ?? caller_uid };
+    const payload = all_users
+      ? { dry_run: dry_run === true }
+      : { user_id: user_id ?? caller_uid, dry_run: dry_run === true };
     const scope = all_users
       ? "all_users"
       : (payload as { user_id: string }).user_id;
 
     console.log(
-      `[${trace_id}] backfill_transaction_assignments: caller=${caller_uid}, scope=${scope}`
+      `[${trace_id}] backfill_transaction_assignments: caller=${caller_uid}, scope=${scope}, ` +
+        `dry_run=${dry_run === true}`
     );
 
     await create_job("backfill_assignments", payload, { trace_id });
 
     // 6. RESPONSE
-    return { success: true, enqueued: true, scope, trace_id };
+    return { success: true, enqueued: true, scope, dry_run: dry_run === true, trace_id };
   }
 );

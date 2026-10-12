@@ -6,6 +6,7 @@ import { build_category_catalog } from "../split_category.service";
 import {
   legacy_override_first,
   resolve_split_category_edit,
+  split_category_input_from_raw,
 } from "../split_category_edit.service";
 
 const catalog = build_category_catalog([
@@ -156,5 +157,45 @@ describe("legacy_override_first", () => {
     expect(
       legacy_override_first({ ...stored, categorySource: "user", internalDetailedCategory: "shopping" }, catalog)
     ).toBeNull();
+  });
+});
+
+describe("legacy_override_first — a 'user' source with no usable slug", () => {
+  it("reads the legacy field (an old reclassify that only wrote internal*)", () => {
+    expect(
+      legacy_override_first(
+        { ...stored, categorySource: "user", firstCategoryId: null, internalDetailedCategory: "shopping" },
+        catalog
+      )
+    ).toBe("shopping");
+  });
+});
+
+describe("split_category_input_from_raw — THE raw-split mapper", () => {
+  it("reads canonical fields + the transaction's merchant / name", () => {
+    expect(
+      split_category_input_from_raw(
+        { ...stored, categorySource: "user", firstCategoryId: "shopping" },
+        { merchantName: "Mous", name: "MOUS INC" },
+        catalog
+      )
+    ).toEqual({
+      plaid_detailed: "FOOD_AND_DRINK_GROCERIES",
+      category_source: "user",
+      first_category_id: "shopping",
+      overall_category_id: "food_and_drink",
+      second_category_id: null,
+      merchant_name: "Mous",
+      name: "MOUS INC",
+    });
+  });
+
+  it("an old override in the legacy field reads as the user's pick (engine == derive)", () => {
+    const r = split_category_input_from_raw(
+      { ...stored, internalDetailedCategory: "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE" },
+      {},
+      catalog
+    );
+    expect(r).toMatchObject({ category_source: "user", first_category_id: "shopping" });
   });
 });
