@@ -115,8 +115,14 @@ export async function resolve_transfer_roles(
     out
   );
 
-  // Each group the user shares an account with: that account's transactions count there.
-  if (me.exclude_account_ids.size > 0) {
+  // Each group the user shares an account with: that account's transactions count there. Read
+  // the group's members only when the user HAS transfers on those accounts in the window (reads).
+  const shared_transfer = mine.some(
+    (t) =>
+      me.exclude_account_ids.has((t.data.accountId as string) ?? "") &&
+      is_transfer_category(txn_effective_category(t.data, catalog))
+  );
+  if (shared_transfer) {
     for (const g of await group_repo.get_for_user(ctx, user_id)) {
       const scope = await resolve_derive_scope(ctx, user_id, { kind: "group", group_id: g.id });
       const members = (
