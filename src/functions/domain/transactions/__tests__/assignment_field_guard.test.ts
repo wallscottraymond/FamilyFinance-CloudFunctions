@@ -76,6 +76,32 @@ describe("is_assignment_relevant_change", () => {
     expect(is_assignment_relevant_change(txn(), txn({ splits: [{ ...txn().splits[0], isIgnored: true }] }))).toBe(true);
   });
 
+  it("a user pick (slug / source) and a bill-pin source are relevant (canon M7)", () => {
+    const s0 = txn().splits[0];
+    for (const change of [
+      { firstCategoryId: "shopping" },
+      { overallCategoryId: "shopping" },
+      { secondCategoryId: "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE" },
+      { categorySource: "user" },
+      { outflowAssignmentSource: "manual" },
+      { spendStatus: "ignored" },
+    ]) {
+      expect(is_assignment_relevant_change(txn(), txn({ splits: [{ ...s0, ...change }] }))).toBe(true);
+    }
+  });
+
+  it("a moved account (view change) is relevant", () => {
+    expect(is_assignment_relevant_change(txn({ accountId: "a" }), txn({ accountId: "b" }))).toBe(true);
+  });
+
+  it("legacy internal* fields are NOT relevant (nothing reads them — canon M2)", () => {
+    const s0 = txn().splits[0];
+    const after = txn({
+      splits: [{ ...s0, internalPrimaryCategory: "Shopping", internalDetailedCategory: "shopping" }],
+    });
+    expect(is_assignment_relevant_change(txn(), after)).toBe(false);
+  });
+
   it("split add/remove is relevant", () => {
     const after = txn({ splits: [txn().splits[0], { ...txn().splits[0], splitId: "s2" }] });
     expect(is_assignment_relevant_change(txn(), after)).toBe(true);
@@ -99,6 +125,11 @@ describe("is_assignment_relevant_change", () => {
 describe("is_spend_relevant_change", () => {
   it("a spendStatus change (counted → refund) IS spend-relevant", () => {
     const after = txn({ splits: [{ ...txn().splits[0], spendStatus: "refund" }] });
+    expect(is_spend_relevant_change(txn(), after)).toBe(true);
+  });
+
+  it("an isRefund toggle IS spend-relevant", () => {
+    const after = txn({ splits: [{ ...txn().splits[0], isRefund: true }] });
     expect(is_spend_relevant_change(txn(), after)).toBe(true);
   });
 

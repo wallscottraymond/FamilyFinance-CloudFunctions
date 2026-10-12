@@ -78,11 +78,29 @@ const intents = (over: Partial<RuleActionIntents> = {}): RuleActionIntents => ({
 });
 
 describe("apply_rule_intents", () => {
-  it("assign_category sets internal_primary_category on the txn AND every split", () => {
+  it("assign_category is the user's own pick on every split (first slug — canon M5)", () => {
     const t = txn({ splits: [split({ split_id: "a" }), split({ split_id: "b" })] });
-    const out = apply_rule_intents(t, intents({ assign_category: "Coffee", applied_rule_ids: ["r"] }));
-    expect(out.internal_primary_category).toBe("Coffee");
-    expect(out.splits.map((s) => s.internal_primary_category)).toEqual(["Coffee", "Coffee"]);
+    const out = apply_rule_intents(t, intents({ assign_category: "eating_out", applied_rule_ids: ["r"] }));
+    for (const s of out.splits) {
+      expect(s.category_source).toBe("user");
+      expect(s.first_category_id).toBe("eating_out");
+      expect(s.second_category_id).toBeNull();
+      expect(s.internal_primary_category).toBeNull(); // legacy field never written
+    }
+    expect(out.internal_primary_category).toBeNull();
+  });
+
+  it("a split spec's category is a pick on that split; the remainder takes the rule's", () => {
+    const out = apply_rule_intents(
+      txn(),
+      intents({
+        assign_category: "shopping",
+        split: [{ percent: 50, category: "groceries" }],
+        applied_rule_ids: ["r"],
+      })
+    );
+    expect(out.splits.map((s) => s.first_category_id)).toEqual(["groceries", "shopping"]);
+    expect(out.splits.every((s) => s.category_source === "user")).toBe(true);
   });
 
   it("ignore sets is_ignored on every split", () => {

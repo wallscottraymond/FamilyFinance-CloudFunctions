@@ -61,12 +61,6 @@ export const PLAID_OWNED_SPLIT_FIELDS = [
   "paymentDate",
 ] as const;
 
-/** Per-split fields that hold the category, kept only when the user overrode it. */
-const SPLIT_INTERNAL_CATEGORY_FIELDS = [
-  "internalPrimaryCategory",
-  "internalDetailedCategory",
-] as const;
-
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
@@ -125,11 +119,9 @@ export function merge_modified_into_existing(existing: Doc, fresh: Doc): Doc {
     existing.description !== existing.name;
   out.description = renamed ? existing.description : fresh.description ?? existing.description;
 
-  // Top-level internal categories: keep the existing ones (the user's / engine's), fill if empty.
-  out.internalPrimaryCategory =
-    existing.internalPrimaryCategory ?? fresh.internalPrimaryCategory ?? null;
-  out.internalDetailedCategory =
-    existing.internalDetailedCategory ?? fresh.internalDetailedCategory ?? null;
+  // The legacy `internal*` fields are vestigial (canon M2): nothing reads them and nothing new
+  // is written — the existing values ride along untouched until the one-time backfill turns a
+  // real old override into a user pick (`categorySource: "user"`), which then always wins.
 
   // Splits: keep the user's splits; refresh Plaid-owned split fields from the fresh primary split.
   const plaid_split = fresh_splits[0] ?? {};
@@ -137,11 +129,6 @@ export function merge_modified_into_existing(existing: Doc, fresh: Doc): Doc {
     const next: Split = { ...sp };
     for (const f of PLAID_OWNED_SPLIT_FIELDS) {
       if (f in plaid_split) next[f] = plaid_split[f];
-    }
-    if (sp.categorySource !== "user") {
-      for (const f of SPLIT_INTERNAL_CATEGORY_FIELDS) {
-        if (f in plaid_split) next[f] = plaid_split[f];
-      }
     }
     if ("updatedAt" in fresh) next.updatedAt = fresh.updatedAt;
     return next;

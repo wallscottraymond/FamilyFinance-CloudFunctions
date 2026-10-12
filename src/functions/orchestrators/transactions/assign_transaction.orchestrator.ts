@@ -37,6 +37,7 @@ import {
 import { merge_assignment_onto_raw_splits } from "./merge_assignment";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
+import { generate_id } from "../../observability/tracer";
 
 /** Input: assign all splits of one transaction. */
 export interface AssignTransactionInput {
@@ -139,7 +140,10 @@ export async function assign_transaction_orchestrator(
       updated_splits,
       split_budget_ids,
       split_outflow_ids,
-      split_inflow_ids
+      split_inflow_ids,
+      // Stamped (canon R2): this orchestrator runs its own follow-ups below, so the trigger
+      // must not re-enter on the engine's own write.
+      generate_id()
     );
 
     // Invalidate the derive cache for this write (TR-2 — the trigger no longer bumps).

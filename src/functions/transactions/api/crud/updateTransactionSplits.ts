@@ -12,6 +12,9 @@ import { Transaction, TransactionSplit } from "../../../../types";
 import { getDocument, updateDocument } from "../../../../utils/firestore";
 import { bump_derive_version } from "../../../repositories/derive_version.repo";
 import * as admin from "firebase-admin";
+import { create_trace_context } from "../../../observability";
+import { load_category_catalog } from "../../../resolvers/shared/category_catalog.resolver";
+import { resolve_split_category_edit } from "../../../domain/transactions/split_category_edit.service";
 
 interface UpdateTransactionSplitsRequest {
   transactionId: string;
@@ -101,53 +104,29 @@ export const updateTransactionSplits = onCall<
     updateData.totalAllocated = totalAllocated;
 
     // Budget assignment is owned by the Transaction Assignment Engine:
-    // `on_transaction_written` re-runs the engine after this write, which matches
-    // each split to a budget on its DETAILED category (the `internalDetailedCategory`
-    // normalized below). So we do NOT pre-assign budgets here — we only normalize
-    // the splits (ids, category inheritance, the categoryId→internalDetailedCategory
-    // translation) so the engine's category match re-homes correctly. (Inline
-    // matcher removed 2026-07-27.)
-
-    // Ensure all splits have required fields
+    // `on_transaction_written` re-runs the engine after this write. Here we only normalize the
+    // splits (ids, timestamps) and decide each split's CATEGORY fields with the one rule set
+    // (domain/transactions/split_category_edit — canon M1/M2/M3): the app's pick (or an old
+    // build's bare `categoryId`) becomes `categorySource: "user"` + `firstCategoryId`; the Plaid
+    // codes stay immutable; the legacy `internal*` override is never written.
     const txn: any = existingTransaction;
+    const catalog = await load_category_catalog(create_trace_context(false));
+    const storedById = new Map<string, Record<string, unknown>>();
+    for (const s of (txn.splits ?? []) as Array<Record<string, unknown>>) {
+      const id = (s.splitId as string) || (s.id as string);
+      if (id) storedById.set(id, s);
+    }
     updateData.splits = updateData.splits.map((split: any, index: number) => {
       const now = admin.firestore.Timestamp.now();
       const splitId = split.splitId || split.id || `split_${Date.now()}_${index}`;
-
-      // The split-edit UI sends the user's chosen category as `categoryId`
-      // (the detailed Plaid enum, e.g. FOOD_AND_DRINK_GROCERIES) but does NOT
-      // write the `internalDetailedCategory` field the assignment engine matches
-      // on. Treat an explicit categoryId as the internalDetailedCategory
-      // override so editing a split's category actually re-homes it.
-      const chosenCategory =
-        typeof split.categoryId === "string" &&
-        split.categoryId.trim() !== "" &&
-        split.categoryId.toLowerCase() !== "other"
-          ? split.categoryId
-          : null;
+      const category = resolve_split_category_edit(split, storedById.get(splitId), txn, catalog);
 
       return {
         ...split,
         // Ensure ID exists (support both splitId and id field names)
         splitId: splitId,
         id: splitId,
-        // Inherit the category from the parent transaction when a (manually
-        // added) split doesn't carry one — the assignment engine matches a
-        // budget on the split's DETAILED category, so a category-less split
-        // would otherwise fall to "Everything Else".
-        plaidPrimaryCategory:
-          split.plaidPrimaryCategory ?? txn.plaidPrimaryCategory ?? null,
-        plaidDetailedCategory:
-          split.plaidDetailedCategory ?? txn.plaidDetailedCategory ?? null,
-        internalPrimaryCategory:
-          split.internalPrimaryCategory ?? txn.internalPrimaryCategory ?? null,
-        // Chosen category (UI categoryId) wins → re-homes on edit; else keep the
-        // split's existing override, else inherit the parent transaction's.
-        internalDetailedCategory:
-          chosenCategory ??
-          split.internalDetailedCategory ??
-          txn.internalDetailedCategory ??
-          null,
+        ...category,
         // Ensure timestamps
         createdAt: split.createdAt || now,
         updatedAt: now,

@@ -67,7 +67,7 @@ describe('process_transaction_written', () => {
       before: doc({ syncRunId: 'run1' }),
       after: doc({
         syncRunId: 'run1',
-        splits: [{ splitId: 'sp', budgetId: 'b1', outflowId: 'o1', amount: 10, internalDetailedCategory: 'X' }],
+        splits: [{ splitId: 'sp', budgetId: 'b1', outflowId: 'o1', amount: 10, categorySource: 'user', firstCategoryId: 'shopping' }],
       }),
       event_id: 'e',
     });

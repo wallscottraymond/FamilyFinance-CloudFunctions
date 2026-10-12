@@ -348,12 +348,8 @@ export async function resolve_assignment_context(
       : resolved_shared;
   const { real_budgets, budget_names, everything_else_budget_ids } = view;
 
-  // The engine matches budgets on the DETAILED Plaid category: category doc ids
-  // ARE the detailed enums, budgets store them in `categoryIds`, and splits
-  // carry the same enum in `plaidDetailedCategory`. We feed that detailed enum
-  // into the engine's `*_match_category` fields (the matching vocabulary).
-  // `internalDetailedCategory` is the user override; falls back to the Plaid
-  // detailed enum.
+  // The engine's inputs for the ONE category function (canon M7): the immutable Plaid code +
+  // the user's pick (`categorySource: "user"` + slugs). Legacy `internal*` fields aren't read.
   const splits_input: SplitForAssignment[] = raw_splits.map((s) => ({
     split_id: s.splitId as string,
     budget_id: (s.budgetId as string) ?? "unassigned",

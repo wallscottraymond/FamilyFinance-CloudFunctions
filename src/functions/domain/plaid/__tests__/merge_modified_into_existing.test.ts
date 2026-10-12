@@ -225,8 +225,13 @@ describe("merge_modified_into_existing — Plaid-owned fields are REFRESHED", ()
     }
   });
 
-  it("an untouched split takes Plaid's new category mapping", () => {
-    expect(split(merged(), "s-default").internalDetailedCategory).toBe("FOOD_AND_DRINK_COFFEE");
+  it("an untouched split takes Plaid's new code (its category follows Plaid — canon M4)", () => {
+    expect(split(merged(), "s-default").plaidDetailedCategory).toBe("FOOD_AND_DRINK_FAST_FOOD");
+  });
+
+  it("legacy internal* fields are never written from Plaid's payload (canon M2)", () => {
+    // Vestigial: left as stored for the one-time backfill; nothing reads them.
+    expect(split(merged(), "s-default").internalDetailedCategory).toBe("FOOD_AND_DRINK_FAST_FOOD");
   });
 
   it("takes Plaid's description when the user never renamed it", () => {

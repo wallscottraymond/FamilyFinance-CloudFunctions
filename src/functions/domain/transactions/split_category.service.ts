@@ -31,6 +31,9 @@ export interface CategoryCatalog {
   plaid_by_first: Record<string, string>;
   /** first slug → its overall slug. */
   overall_by_first: Record<string, string | null>;
+  /** lower-cased `first_category` display name → first slug (only to read legacy data that
+   *  stored a display name; never used to write). */
+  first_by_name: Record<string, string>;
 }
 
 /** A category doc as the collection stores it (id = Plaid detailed code). */
@@ -43,6 +46,7 @@ export function build_category_catalog(docs: CategoryDocForCatalog[]): CategoryC
   const slugs_by_plaid: CategoryCatalog["slugs_by_plaid"] = {};
   const plaid_by_first: Record<string, string> = {};
   const overall_by_first: Record<string, string | null> = {};
+  const first_by_name: Record<string, string> = {};
   const rules: CategoryRule[] = [];
   // Deterministic: first doc (by id) under a first wins as its representative code.
   for (const { id, data } of [...docs].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -52,6 +56,10 @@ export function build_category_catalog(docs: CategoryDocForCatalog[]): CategoryC
     if (first) {
       if (!(first in plaid_by_first)) plaid_by_first[first] = id;
       if (!(first in overall_by_first)) overall_by_first[first] = overall;
+      const name = data.first_category;
+      if (typeof name === "string" && name.trim() && !(name.trim().toLowerCase() in first_by_name)) {
+        first_by_name[name.trim().toLowerCase()] = first;
+      }
     }
     rules.push({
       category: id,
@@ -59,7 +67,7 @@ export function build_category_catalog(docs: CategoryDocForCatalog[]): CategoryC
       keywords: (data.keywords as string[]) ?? [],
     });
   }
-  return { slugs_by_plaid, rules, plaid_by_first, overall_by_first };
+  return { slugs_by_plaid, rules, plaid_by_first, overall_by_first, first_by_name };
 }
 
 /** What resolution reads from a split + its transaction. */

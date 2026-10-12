@@ -23,6 +23,7 @@ const TXN_RELEVANT_FIELDS = [
   "isActive",
   "merchantName", // feeds category matching
   "name", // feeds category matching
+  "accountId", // decides the view (Me / a group) whose budgets own the splits
 ] as const;
 
 /** Per-split fields that affect assignment/spend. */
@@ -30,15 +31,19 @@ const SPLIT_RELEVANT_FIELDS = [
   "amount",
   "budgetId",
   "budgetAssignmentSource",
-  "internalPrimaryCategory",
+  // The ONE category function's inputs (canon M7): Plaid's code + the user's pick. The
+  // legacy internal* fields are not read by anything, so they don't trigger assignment.
   "plaidPrimaryCategory",
-  // The engine matches budgets on the DETAILED category, so a change to these
-  // (e.g. a user re-categorization) must re-trigger assignment.
-  "internalDetailedCategory",
   "plaidDetailedCategory",
+  "categorySource",
+  "firstCategoryId",
+  "overallCategoryId",
+  "secondCategoryId",
   "outflowId",
+  "outflowAssignmentSource",
   "inflowId",
   "isIgnored",
+  "spendStatus",
 ] as const;
 
 type Doc = Record<string, unknown> | null | undefined;
@@ -97,7 +102,7 @@ const SPEND_TXN_FIELDS = [
 /** Per-split fields that affect computed SPEND (not assignment). `spendStatus`
  *  covers ignore + refund (counted↔refund doesn't move `isIgnored`, so it must be
  *  projected here or a refund toggle wouldn't trigger a recompute). */
-const SPEND_SPLIT_FIELDS = ["amount", "isIgnored", "spendStatus", "budgetId"] as const;
+const SPEND_SPLIT_FIELDS = ["amount", "isIgnored", "isRefund", "spendStatus", "budgetId"] as const;
 
 /** Projection of the spend-affecting split fields, keyed + sorted by splitId. */
 function project_spend_splits(doc: Record<string, unknown>): string {

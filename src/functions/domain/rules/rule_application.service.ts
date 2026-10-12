@@ -8,7 +8,9 @@
  * SCOPE: field-set actions applied in memory before the write —
  *   - `assign_budget_id` → pins `budget_id` + `budget_assignment_source = "manual"` on every split
  *     (the durable pin the engine preserves; rule provenance stays in `rules[]`).
- *   - `assign_category`  → sets `internal_primary_category` on the txn + every split.
+ *   - `assign_category`  → the user's own pick on every split (canon M5): `first_category_id` =
+ *                          the rule's first slug, `category_source = "user"` (Plaid never
+ *                          overrides it; the engine fills the overall slug from the collection).
  *   - `ignore`           → `is_ignored = true` on every split.
  *   - `mark_refund`      → `is_refund = true` on every split.
  *   - `mark_income`      → txn `type = "income"`.
@@ -51,29 +53,38 @@ export function apply_rule_intents(
   if (!applies) return txn;
 
   const type = intents.mark_income ? "income" : txn.type;
-  const internal_primary_category =
-    intents.assign_category ?? txn.internal_primary_category;
 
   // `split` REPLACES the splits array; otherwise the field-set effects map onto existing splits.
   const splits = has_split
-    ? materialize_splits(txn, intents, internal_primary_category)
-    : txn.splits.map((s) => apply_to_split(s, intents, internal_primary_category));
+    ? materialize_splits(txn, intents)
+    : txn.splits.map((s) => apply_to_split(s, intents));
 
   return {
     ...txn,
     type,
-    internal_primary_category,
     splits,
     ...(intents.require_review ? { needs_review: true } : {}),
     ...(intents.require_note ? { needs_note: true } : {}),
   };
 }
 
+/** A rule's category as the user's own pick (canon M5) — empty when the rule sets none. */
+function category_pick(
+  first_slug: string | undefined
+): Partial<TransactionSplitForPersistence> {
+  if (first_slug === undefined || first_slug.trim() === "") return {};
+  return {
+    category_source: "user",
+    first_category_id: first_slug.trim(),
+    overall_category_id: null,
+    second_category_id: null,
+  };
+}
+
 /** Apply the split-level effects (category / ignore / refund / rule-id tracking). */
 function apply_to_split(
   split: TransactionSplitForPersistence,
-  intents: RuleActionIntents,
-  internal_primary_category: string | null
+  intents: RuleActionIntents
 ): TransactionSplitForPersistence {
   return {
     ...split,
@@ -84,10 +95,7 @@ function apply_to_split(
         budget_assignment_source: "manual" as const,
       }
       : {}),
-    internal_primary_category:
-      intents.assign_category !== undefined
-        ? internal_primary_category
-        : split.internal_primary_category,
+    ...category_pick(intents.assign_category),
     is_ignored: intents.ignore ? true : split.is_ignored,
     is_refund: intents.mark_refund ? true : split.is_refund,
     tags: union(split.tags, intents.add_tag ?? []),
@@ -108,8 +116,7 @@ function round2(n: number): number {
  */
 function materialize_splits(
   txn: TransactionForPersistence,
-  intents: RuleActionIntents,
-  internal_primary_category: string | null
+  intents: RuleActionIntents
 ): TransactionSplitForPersistence[] {
   const base = txn.splits[0];
   const total = round2(txn.splits.reduce((sum, s) => sum + s.amount, 0));
@@ -123,7 +130,7 @@ function materialize_splits(
     allocated = round2(allocated + portion);
     out.push(
       make_split(
-        base, `${base.split_id}_r${i}`, portion, spec, intents, internal_primary_category, false
+        base, `${base.split_id}_r${i}`, portion, spec, intents, false
       )
     );
   });
@@ -132,7 +139,7 @@ function materialize_splits(
   if (Math.abs(remainder) >= 0.01) {
     out.push(
       make_split(
-        base, `${base.split_id}_rem`, remainder, {}, intents, internal_primary_category, true
+        base, `${base.split_id}_rem`, remainder, {}, intents, true
       )
     );
   }
@@ -146,7 +153,6 @@ function make_split(
   amount: number,
   spec: { budget_id?: string; category?: string },
   intents: RuleActionIntents,
-  internal_primary_category: string | null,
   is_remainder: boolean
 ): TransactionSplitForPersistence {
   return {
@@ -157,8 +163,7 @@ function make_split(
     ...(spec.budget_id !== undefined
       ? { budget_id: spec.budget_id, budget_assignment_source: "manual" as const }
       : { budget_id: "unassigned", budget_assignment_source: undefined }),
-    internal_primary_category:
-      spec.category ?? internal_primary_category ?? base.internal_primary_category,
+    ...category_pick(spec.category ?? intents.assign_category),
     is_ignored: intents.ignore ? true : base.is_ignored,
     is_refund: intents.mark_refund ? true : base.is_refund,
     tags: union(base.tags, intents.add_tag ?? []),
