@@ -625,14 +625,6 @@ export function shape_period_derivation_deps(
     return period_range.get(pin.outflowPinnedPeriodId as string) ?? null;
   };
   const mid = (r: { start_ms: number; end_ms: number }) => Math.floor((r.start_ms + r.end_ms) / 2);
-  // The part of a pinned period this derive's span covers (null = none). A monthly pin seen in a
-  // weekly view settles the occurrence due in that week (if the pinned month's occurrence falls
-  // there) — the same occurrence stored reconcile places it on (its due date).
-  const pinned_in_span = (r: { start_ms: number; end_ms: number }) => {
-    const start_ms = Math.max(r.start_ms, span_start_ms);
-    const end_ms = Math.min(r.end_ms, span_end_ms);
-    return start_ms <= end_ms ? { start_ms, end_ms } : null;
-  };
   // A payment whose NET is nothing (all its splits Ignored) or negative (a refund) isn't recorded
   // as a payment — stored reconcile only counts a paid amount above zero, so the page must not
   // mark an occurrence paid / received with it.
@@ -729,16 +721,18 @@ export function shape_period_derivation_deps(
       compute_countable_split_net(xs as CountableSplitInput[], id);
     for (const [link, linked] of linked_by_id) {
       const pinned = pinned_period(linked, link);
-      // Pinned to another period (loaded or not): it pays THAT period, not one here.
-      const window = pinned ? pinned_in_span(pinned) : undefined;
-      if (pinned === null || window === null) continue;
+      // Pinned to a period this derive didn't load: it pays THAT period, never one here.
+      if (pinned === null) continue;
       const n = net(linked);
+      // A pinned payment carries its FULL pinned period; the period view places it on that
+      // period's first due occurrence (stored reconcile's rule) and counts it only in the span
+      // containing that due date (domain/periods/period_view `resolve_pinned_payments`).
       push_payment(link, {
         transaction_id: id,
         split_id: n.split_id,
-        date_ms: window ? mid(window) : txn_date_ms,
+        date_ms: pinned ? mid(pinned) : txn_date_ms,
         amount: n.amount,
-        ...(window ? { pinned_window: window } : {}),
+        ...(pinned ? { pinned_window: pinned } : {}),
       });
     }
     // Deterministic Plaid income reconciliation: this txn belongs to an inflow
@@ -795,14 +789,13 @@ export function shape_period_derivation_deps(
     }
     for (const [link, linked] of by_link) {
       const pinned = pinned_period(linked, link);
-      const window = pinned ? pinned_in_span(pinned) : null;
-      if (!window) continue;
+      if (!pinned) continue;
       const n = compute_countable_split_net(linked as CountableSplitInput[], id);
       push_payment(link, {
-        pinned_window: window,
+        pinned_window: pinned, // the period view keeps it only in the span of its due occurrence
         transaction_id: id,
         split_id: n.split_id,
-        date_ms: mid(window),
+        date_ms: mid(pinned),
         amount: n.amount,
       });
     }

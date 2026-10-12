@@ -311,5 +311,40 @@ describe("a bill payment PINNED to a period pays THAT period on the page (as rec
       .reduce((tt: number, g: { total_paid: number }) => tt + g.total_paid, 0);
     expect(paid).toBe(30);
   });
+
+  it("a WEEKLY bill pinned to a month pays only that month's FIRST occurrence — once, in one week (as stored)", async () => {
+    await db.collection("source_periods").doc("2031W41").set({
+      periodId: "2031W41", type: "weekly", year: 2031,
+      startDate: ts("2031-10-05T00:00:00Z"), endDate: ts("2031-10-11T23:59:59.999Z"),
+    });
+    await db.collection("outflows").doc(id("class")).set({
+      id: id("class"), ownerId: ALEX, userId: ALEX, createdBy: ALEX, updatedBy: ALEX,
+      isActive: true, isHidden: false, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+      plaidItemId: `item_${ALEX}`, accountId: `p_${id("chk_a")}`, lastAmount: 20, averageAmount: 20,
+      currency: "USD", description: "class", merchantName: "class", payerName: "class", userCustomName: null,
+      frequency: "weekly", firstDate: ts("2031-01-03T00:00:00Z"), lastDate: ts("2031-09-26T00:00:00Z"),
+      predictedNextDate: ts("2031-10-03T00:00:00Z"), plaidPrimaryCategory: "PERSONAL_CARE",
+      plaidDetailedCategory: "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS", internalPrimaryCategory: null,
+      internalDetailedCategory: null, transactionIds: [], source: "plaid", streamId: id("class"),
+    });
+    await txn("class_pay", ALEX, id("chk_a"), 20, "2031-10-03T12:00:00Z", "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS");
+    await db.collection("transactions").doc(id("class_pay")).update({
+      splits: [{
+        splitId: "c1", amount: 20, plaidPrimaryCategory: "PERSONAL_CARE",
+        plaidDetailedCategory: "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS", budgetId: "unassigned",
+        outflowId: id("class"), outflowAssignmentSource: "manual", outflowPinnedPeriodId: "2031M10", inflowId: null,
+      }],
+      splitOutflowIds: [id("class")],
+    });
+    const paid_count = (r: Awaited<ReturnType<typeof oct>>) =>
+      (r.bills.find((b) => b.recurring_id === id("class"))?.groups ?? [])
+        .reduce((tt: number, g: { count_paid: number }) => tt + g.count_paid, 0);
+    const week = (start: number, end: number) => derive_period_orchestrator(t(), ALEX, {
+      view_cadence: "weekly", window_start_ms: start, window_end_ms: end, force: true, scope: { kind: "me" },
+    });
+    expect(paid_count(await week(Date.UTC(2031, 8, 28), Date.UTC(2031, 9, 4, 23, 59, 59, 999)))).toBe(1); // Oct 3 week
+    expect(paid_count(await week(Date.UTC(2031, 9, 5), Date.UTC(2031, 9, 11, 23, 59, 59, 999)))).toBe(0); // next week: NOT paid
+    expect(paid_count(await oct(ALEX, { kind: "me" }))).toBe(1); // October: exactly one occurrence paid
+  });
 });
 

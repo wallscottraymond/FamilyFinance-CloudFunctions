@@ -21,6 +21,7 @@ import {
   EELeftoverBucketInputs,
 } from "../budgets/everything_else_leftover.service";
 import { generate_expected_occurrences_in_window } from "../outflows/outflow_period.service";
+import type { ActualPayment } from "../recurring/reconcile_occurrences.service";
 import { estimate_slot_amounts } from "../recurring/income_slot_amounts";
 import {
   reconcile_occurrences,
@@ -152,7 +153,10 @@ export function compute_period_view(
           deps.span_start_ms,
           deps.span_end_ms
         )
-        : reconcile_occurrences(expected, r.payments);
+        : reconcile_occurrences(
+          expected,
+          resolve_pinned_payments(r.payments, r.schedule, deps.span_start_ms, deps.span_end_ms)
+        );
     const groups = place_occurrences(reconciled, deps.placement_buckets);
     // Suppress groups whose period is removed/paused for this item (per-period snap).
     const visible_groups = groups.filter((g) => {
@@ -245,3 +249,36 @@ export function compute_period_view(
 
   return { view_cadence, budgets, bills, income };
 }
+
+/**
+ * A bill payment the user PINNED to a period pays THAT period's FIRST due occurrence (from the
+ * bill's schedule) — exactly the occurrence stored reconcile places it on (its due date), in every
+ * period type. Here it settles only that occurrence, and only in the span containing its due date
+ * (so a weekly bill pinned to a month pays one week, and a range derive counts it once). A pinned
+ * period with no occurrence: placed at its midpoint (matches nothing). Unpinned payments pass
+ * through unchanged. PURE.
+ */
+export function resolve_pinned_payments(
+  payments: ActualPayment[],
+  schedule: Parameters<typeof generate_expected_occurrences_in_window>[0],
+  span_start_ms: number,
+  span_end_ms: number
+): ActualPayment[] {
+  const out: ActualPayment[] = [];
+  for (const p of payments) {
+    if (!p.pinned_window) {
+      out.push(p);
+      continue;
+    }
+    const { start_ms, end_ms } = p.pinned_window;
+    const first = generate_expected_occurrences_in_window(schedule, start_ms, end_ms)
+      .map((g) => g.due_date_ms)
+      .filter((ms) => ms >= start_ms && ms <= end_ms)
+      .sort((a, b) => a - b)[0];
+    const due = first ?? Math.floor((start_ms + end_ms) / 2);
+    if (due < span_start_ms || due > span_end_ms) continue; // pays another span's occurrence
+    out.push({ ...p, date_ms: due, pinned_window: { start_ms: due, end_ms: due } });
+  }
+  return out;
+}
+
