@@ -41,7 +41,6 @@ import {
 } from "../shared/on_read_matching";
 import {
   BudgetForMatch,
-  PeriodLens,
 } from "../../domain/transactions/match_budget.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { find_crossing_transfers } from "../../domain/periods/edge_transfers.service";
@@ -59,14 +58,14 @@ import {
   transaction_in_scope,
 } from "../../domain/periods/derive_scope.service";
 import { resolve_derive_scope, load_pairing_extra_txns } from "./derive_scope.resolver";
+import {
+  budget_to_match_input,
+  build_match_budgets,
+} from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
 import {
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
-
-function to_cadence(period: string): PeriodLens {
-  return period === "weekly" ? "weekly" : period === "bi_monthly" ? "bi_monthly" : "monthly";
-}
 
 /**
  * A budget's amount expressed as a MONTHLY-equivalent, given its home cadence —
@@ -429,41 +428,21 @@ export function shape_period_derivation_deps(
     monthly_by_budget.set(p.budget_id, list);
   }
 
-  const real_budgets: BudgetForMatch[] = [];
+  // THE budget set (domain/budgets/match_budgets — the same one the assignment engine stores
+  // from): a budget is active from the start of its own-cadence period containing its start date
+  // (it owns that period's earlier purchases) through `budget_end_date`.
+  const match = build_match_budgets(budget_entities.map(budget_to_match_input));
+  const real_budgets: BudgetForMatch[] = match.real_budgets;
+  const monthly_ee_id: string | null = match.everything_else_ids.monthly;
+  const any_ee_id: string | null = match.primary_everything_else_id;
+  const active_by_id = new Map(real_budgets.map((b) => [b.id, b]));
   const budgets: BudgetForDerivation[] = [];
-  let monthly_ee_id: string | null = null;
-  let any_ee_id: string | null = null;
   for (const b of budget_entities) {
     const is_ee = b.is_system_everything_else === true;
-    // A budget's allocation covers its WHOLE period, so its SPEND must too — and it must NOT
-    // appear in periods before it existed. Snap the effective start DOWN to the start of the
-    // (own-cadence) period that contains start_date: a budget created mid-period owns that
-    // period's earlier transactions (else `is_within_budget_range` strands pre-creation spend in
-    // Everything Else) AND periods entirely before it are omitted downstream. Only the FIRST
-    // period is affected — later ones already fall in range; a start predating the fetched window
-    // keeps its raw value (already below it). EE is always active, so it never filters out.
-    const raw_budget_start_ms = b.start_date.toMillis();
-    const home_period_start_ms = overlapping.find(
-      (p) =>
-        p.period_type === to_cadence(b.period) &&
-        raw_budget_start_ms >= p.start_date.toMillis() &&
-        raw_budget_start_ms <= p.end_date.toMillis()
-    )?.start_date.toMillis();
-    const active_start_ms = is_ee ? 0 : home_period_start_ms ?? raw_budget_start_ms;
-    const active_end_ms = b.is_ongoing ? null : b.end_date.toMillis();
-    if (is_ee) {
-      any_ee_id = any_ee_id ?? b.id;
-      if (b.period === "monthly") monthly_ee_id = b.id;
-    } else {
-      real_budgets.push({
-        id: b.id,
-        category_ids: b.category_ids,
-        start_ms: active_start_ms,
-        end_ms: active_end_ms,
-        is_ongoing: b.is_ongoing,
-        cadence: to_cadence(b.period),
-      });
-    }
+    // EE is always active; a real budget's active range comes from the shared builder.
+    const active = active_by_id.get(b.id);
+    const active_start_ms = is_ee || !active ? 0 : active.start_ms;
+    const active_end_ms = is_ee || !active ? null : active.end_ms;
     // Prefer the materialized monthly periods (they carry per-period edits +
     // rollover). If none exist yet (a brand-new budget), SYNTHESIZE them from
     // the budget's `amount` so the limit shows instantly — no wait for the

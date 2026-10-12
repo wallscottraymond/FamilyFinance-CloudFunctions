@@ -12,6 +12,10 @@
  * @module resolvers/transactions/assignment_context
  */
 
+import {
+  budget_to_match_input,
+  build_match_budgets,
+} from "../../domain/budgets/match_budgets.service";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import {
@@ -34,7 +38,6 @@ import {
   BudgetForMatch,
   PeriodLens,
 } from "../../domain/transactions/match_budget.service";
-import { budget_cadence_to_instance } from "../../domain/budgets";
 import { CategoryRule } from "../../domain/transactions/match_category.service";
 import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 import {
@@ -186,39 +189,17 @@ export async function resolve_shared_assignment_context(
  */
 function build_view_budgets(
   budgets: Awaited<ReturnType<typeof budget_repo.get_by_user_id>>,
-  catalog: CategoryCatalog
+  _catalog: CategoryCatalog
 ): ViewBudgets {
-  const real_budgets: BudgetForMatch[] = [];
-  const budget_names: Record<string, string> = {};
-  const everything_else_budget_ids: Record<PeriodLens, string | null> = {
-    monthly: null,
-    weekly: null,
-    bi_monthly: null,
+  // THE budget set (domain/budgets/match_budgets) — the period page builds the same one, so the
+  // stored budget equals the counted one (canon A11): snapped start, `budget_end_date`, every
+  // cadence owning its categories in every lens, one Everything Else per lens.
+  const match = build_match_budgets(budgets.map(budget_to_match_input));
+  return {
+    real_budgets: match.real_budgets,
+    budget_names: match.names,
+    everything_else_budget_ids: match.everything_else_ids,
   };
-  for (const b of budgets) {
-    budget_names[b.id] = b.name;
-    const cadence = budget_cadence_to_instance(b.period);
-    if (b.is_system_everything_else) {
-      // The EE budget's `period` IS its lens (new EE budgets set period = lens;
-      // the legacy single EE has period 'monthly').
-      if (!everything_else_budget_ids[cadence]) {
-        everything_else_budget_ids[cadence] = b.id;
-      }
-      continue;
-    }
-    const end_ts = b.budget_end_date ?? b.end_date;
-    real_budgets.push({
-      id: b.id,
-      category_ids: b.category_ids,
-      start_ms: b.start_date.toMillis(),
-      end_ms: b.is_ongoing ? null : end_ts.toMillis(),
-      is_ongoing: b.is_ongoing,
-      cadence,
-      // Firsts it covers (slugs + legacy Plaid codes) — so a user pick matches a budget that
-      // still stores codes (until the slug migration).
-    });
-  }
-  return { real_budgets, budget_names, everything_else_budget_ids };
 }
 
 /**

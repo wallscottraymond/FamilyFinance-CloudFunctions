@@ -27,7 +27,7 @@ import {
 
 /** The three period lenses, in a stable order. */
 export const PERIOD_LENSES: PeriodLens[] = ["monthly", "weekly", "bi_monthly"];
-import { is_transfer_category } from "./category_semantics.service";
+import { is_income_category, is_transfer_category } from "./category_semantics.service";
 import { resolve_split_category, CategoryCatalog } from "./split_category.service";
 import {
   match_source_periods,
@@ -215,6 +215,11 @@ export function compute_transaction_assignment(
     // it spending.
     const is_transfer =
       is_transfer_category(category.semantic_code) && context.txn_transfer_role !== "edge_out";
+    // Income stays out of budgets (B1) — decided by the CATEGORY, as the period page decides it:
+    // an income-category split never counts (either direction), while a CREDIT in a spending
+    // category is a refund / return the page nets against that category's budget — so it's
+    // assigned by category like the purchase it reverses (canon A8, A11).
+    const is_income = is_income_category(category.semantic_code);
 
     let monthly_id: string;
     let weekly_id: string;
@@ -256,11 +261,11 @@ export function compute_transaction_assignment(
       inflow_id = recurring.inflow_id;
       recurring_reason = outflow_id ? "outflow" : inflow_id ? "inflow" : "none";
 
-      // 3. Budget PER LENS: each cadence is matched INDEPENDENTLY against the real
-      //    budgets of THAT cadence, else that lens's Everything Else fallback.
-      //    EXCEPT income (B1) and transfers: unassigned in every lens. Any
-      //    recurring inflow/outflow match above still applies for tracking.
-      if (context.txn_is_income || is_transfer) {
+      // 3. Budget PER LENS: a budget of ANY cadence owns its categories in every lens (as the
+      //    period page counts it — domain/budgets/match_budgets), else that lens's Everything
+      //    Else. EXCEPT income (B1) and transfers: unassigned in every lens. Any recurring
+      //    inflow/outflow match above still applies for tracking.
+      if (is_income || is_transfer) {
         monthly_id = weekly_id = bi_weekly_id = UNASSIGNED_BUDGET_ID;
         budget_reason = is_transfer ? "transfer_excluded" : "income_excluded";
       } else {
@@ -271,7 +276,7 @@ export function compute_transaction_assignment(
           per_lens[lens] = match_budget(
             split_cat,
             context.txn_date_ms,
-            context.real_budgets.filter((b) => b.cadence === lens),
+            context.real_budgets,
             context.everything_else_budget_ids[lens]
           );
         }
@@ -308,7 +313,7 @@ export function compute_transaction_assignment(
     // (income/transfers being unassigned in every lens is intentional, not the
     // missing-EE error).
     if (
-      !context.txn_is_income &&
+      !is_income &&
       !is_transfer &&
       (monthly_id === UNASSIGNED_BUDGET_ID ||
         weekly_id === UNASSIGNED_BUDGET_ID ||

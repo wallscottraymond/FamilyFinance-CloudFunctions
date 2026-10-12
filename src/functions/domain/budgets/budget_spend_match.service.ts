@@ -107,15 +107,20 @@ export function owned_splits_for_budget(
     if (resolve_split_owner(s, real_budgets, ee_budget_id) !== target_budget_id) {
       continue;
     }
+    // A manual budget pin is the user's explicit word (canon A4, engine B2): the split counts in
+    // the pinned budget even when it's a transfer or an income-category credit — exactly as the
+    // assignment engine stores it.
+    const pinned = s.manual_pin_budget_id === target_budget_id;
     out.push({
       budget_id: target_budget_id,
       amount: s.amount,
       txn_date_ms: s.txn_date_ms,
       is_pending: s.is_pending,
-      is_transfer: s.is_transfer,
+      is_transfer: pinned ? false : s.is_transfer,
       is_income: s.is_income,
-      is_income_category: is_income_category(s.semantic_code),
-      is_transfer_category: !s.is_edge_out && is_transfer_category(s.semantic_code),
+      is_income_category: !pinned && is_income_category(s.semantic_code),
+      is_transfer_category:
+        !pinned && !s.is_edge_out && is_transfer_category(s.semantic_code),
       spend_status: s.spend_status,
       outflow_id: s.outflow_id,
       inflow_id: s.inflow_id,

@@ -18,6 +18,7 @@ const CATEGORY_DOCS: CategoryDocForCatalog[] = [
   { id: "FOOD_AND_DRINK", data: { overallCategoryId: "food_and_drink", firstCategoryId: "eating_out" } },
   { id: "SHOPPING_ELECTRONICS", data: { overallCategoryId: "shopping", firstCategoryId: "electronics" } },
   { id: "OTHER_EXPENSE", data: { overallCategoryId: "other", firstCategoryId: "other" } },
+  { id: "INCOME_WAGES", data: { overallCategoryId: "income", firstCategoryId: "paycheck" } },
 ];
 
 const JUN_15 = Date.UTC(2026, 5, 15);
@@ -136,7 +137,7 @@ describe("compute_transaction_assignment", () => {
     expect(r.splits[0].reason.budget).toBe("everything_else_fallback");
   });
 
-  it("PER-LENS: a WEEKLY budget claims only the weekly lens; monthly+biweekly fall to their own EE", () => {
+  it("a WEEKLY budget owns its category in EVERY lens (as the period page counts it — A11)", () => {
     const weeklyGroceries: BudgetForMatch = {
       id: "b_weekly_groceries",
       category_ids: ["eating_out"],
@@ -153,10 +154,10 @@ describe("compute_transaction_assignment", () => {
       })
     );
     const s = r.splits[0];
-    expect(s.weekly_budget_id).toBe("b_weekly_groceries"); // weekly lens claimed
-    expect(s.monthly_budget_id).toBe("ee_m"); // no monthly grocery → monthly EE
-    expect(s.bi_weekly_budget_id).toBe("ee_b"); // no biweekly grocery → biweekly EE
-    expect(s.budget_id).toBe("ee_m"); // legacy alias = monthly lens
+    expect(s.weekly_budget_id).toBe("b_weekly_groceries");
+    expect(s.monthly_budget_id).toBe("b_weekly_groceries");
+    expect(s.bi_weekly_budget_id).toBe("b_weekly_groceries");
+    expect(s.budget_id).toBe("b_weekly_groceries"); // legacy alias = monthly lens
     expect(r.any_unassigned).toBe(false);
   });
 
@@ -182,7 +183,7 @@ describe("compute_transaction_assignment", () => {
 
   it("PER-LENS income: unassigned in all three lenses, no missing-EE error (B1)", () => {
     const r = compute_transaction_assignment(
-      [split({ plaid_match_category: "FOOD_AND_DRINK" })],
+      [split({ plaid_match_category: "INCOME_WAGES" })],
       ctx({ txn_is_income: true })
     );
     const s = r.splits[0];
@@ -194,13 +195,21 @@ describe("compute_transaction_assignment", () => {
 
   it("income is NEVER auto-assigned to a budget — stays unassigned, no missing-EE error (B1)", () => {
     const r = compute_transaction_assignment(
-      // Category WOULD match b_groceries, but income must not be budgeted.
-      [split({ plaid_match_category: "FOOD_AND_DRINK" })],
+      [split({ plaid_match_category: "INCOME_WAGES" })],
       ctx({ txn_is_income: true })
     );
     expect(r.splits[0].budget_id).toBe("unassigned");
     expect(r.splits[0].reason.budget).toBe("income_excluded");
     expect(r.any_unassigned).toBe(false); // intentional, not the missing-EE error
+  });
+
+  it("a REFUND (a credit in a spending category) is assigned by category — the page nets it there", () => {
+    const r = compute_transaction_assignment(
+      [split({ plaid_match_category: "FOOD_AND_DRINK" })],
+      ctx({ txn_is_income: true })
+    );
+    expect(r.splits[0].budget_id).toBe("b_groceries");
+    expect(r.splits[0].reason.budget).toBe("category+date");
   });
 
   it("a Plaid transfer is NEVER auto-assigned to a budget — stays unassigned, no missing-EE error", () => {
@@ -235,7 +244,7 @@ describe("compute_transaction_assignment", () => {
 
   it("income still matches a recurring inflow while skipping budget (income tracking intact)", () => {
     const r = compute_transaction_assignment(
-      [split({ split_id: "s1" })],
+      [split({ split_id: "s1", plaid_match_category: "INCOME_WAGES" })],
       ctx({
         txn_is_income: true,
         recurring_by_split: { s1: { outflow_id: null, inflow_id: "i_salary" } },
@@ -413,8 +422,8 @@ describe("compute_transaction_assignment", () => {
     const settled = split({
       budget_id: "b_groceries",
       monthly_budget_id: "b_groceries",
-      weekly_budget_id: EE,
-      bi_weekly_budget_id: EE,
+      weekly_budget_id: "b_groceries", // a budget owns its category in every lens
+      bi_weekly_budget_id: "b_groceries",
       monthly_period_id: "2026M06",
       weekly_period_id: "2026W24",
       bi_weekly_period_id: null,

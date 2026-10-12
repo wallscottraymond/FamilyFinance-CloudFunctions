@@ -45,8 +45,12 @@ import {
   transaction_in_scope,
 } from "../../domain/periods/derive_scope.service";
 import { resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
+import {
+  budget_to_match_input,
+  build_match_budgets,
+} from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
-import { BudgetForMatch, PeriodLens } from "../../domain/transactions/match_budget.service";
+import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
 import {
   detect_internal_transfers_from_txns,
   txn_effective_category,
@@ -71,10 +75,6 @@ export interface DerivedBudgetTransaction {
   is_pending: boolean;
   spend_status: DerivedSpendStatus;
   ignored_reason: IgnoredReason;
-}
-
-function to_cadence(period: string): PeriodLens {
-  return period === "weekly" ? "weekly" : period === "bi_monthly" ? "bi_monthly" : "monthly";
 }
 
 export async function derive_budget_transactions_orchestrator(
@@ -117,28 +117,12 @@ export async function derive_budget_transactions_orchestrator(
 
   // 1. Budgets → real budgets (category ownership) + the EE id + is-target-EE.
   const budgets = await budget_repo.get_by_user_id(ctx, scope.budget_owner_key);
-  const real_budgets: BudgetForMatch[] = [];
-  let monthly_ee_id: string | null = null;
-  let any_ee_id: string | null = null;
-  let target_is_ee = false;
+  // THE budget set (domain/budgets/match_budgets) — same as the period page and the engine.
   const catalog = await load_category_catalog(ctx);
-  for (const b of budgets) {
-    if (b.is_system_everything_else) {
-      any_ee_id = any_ee_id ?? b.id;
-      if (b.period === "monthly") monthly_ee_id = b.id;
-      if (b.id === budget_id) target_is_ee = true;
-    } else {
-      real_budgets.push({
-        id: b.id,
-        category_ids: b.category_ids,
-        start_ms: b.start_date.toMillis(),
-        end_ms: b.is_ongoing ? null : b.end_date.toMillis(),
-        is_ongoing: b.is_ongoing,
-        cadence: to_cadence(b.period),
-      });
-    }
-  }
-  const ee_id = target_is_ee ? budget_id : monthly_ee_id ?? any_ee_id;
+  const match = build_match_budgets(budgets.map(budget_to_match_input));
+  const real_budgets: BudgetForMatch[] = match.real_budgets;
+  const target_is_ee = budgets.some((b) => b.id === budget_id && b.is_system_everything_else);
+  const ee_id = target_is_ee ? budget_id : match.primary_everything_else_id;
 
   // 2. Load the window's transactions (+ a small buffer for transfer pairing). All members'
   //    transactions are kept server-side for cross-view pairing (D12); the view's are filtered.
