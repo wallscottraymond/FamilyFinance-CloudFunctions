@@ -19,6 +19,8 @@
  * @module orchestrators/plaid/sync_transactions
  */
 
+import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
+import { resolve_split_category } from "../../domain/transactions/split_category.service";
 import { OrchestratorContext } from "../../types";
 import { create_child_span } from "../../observability";
 import {
@@ -192,10 +194,29 @@ export async function sync_transactions_orchestrator(
 
   // Load the user's active rules ONCE per sync (first-write-only transform on new docs).
   const active_rules = await rules_repo.get_active_rules(create_child_span(ctx), ctx.user_id);
+  // A rule's category condition compares the transaction's FIRST category (canon M7) — from the
+  // ONE category function over the module-cached catalog.
+  const catalog = active_rules.length > 0 ? await load_category_catalog(ctx) : null;
   const on_create =
-    active_rules.length > 0
+    active_rules.length > 0 && catalog
       ? (t: TransactionForPersistence): TransactionForPersistence =>
-        apply_rule_intents(t, evaluate_rules(t, active_rules))
+        apply_rule_intents(
+          t,
+          evaluate_rules(
+            {
+              ...t,
+              first_category_id: resolve_split_category(
+                {
+                  plaid_detailed: t.plaid_detailed_category || null,
+                  merchant_name: t.merchant_name,
+                  name: t.name,
+                },
+                catalog
+              ).first_category_id,
+            },
+            active_rules
+          )
+        )
       : undefined;
 
   // 3. ASSIGN IN MEMORY, WRITE ONCE. The engine's shared context (budgets, categories, the

@@ -81,10 +81,12 @@ describe("evaluate_rules — variables & operators", () => {
     expect(evaluate_rules(txn(), [miss]).applied_rule_ids).toEqual([]);
   });
 
-  it("category equals uses internal category when set, else plaid", () => {
+  it("category compares the transaction's FIRST category slug (what the Rule Book stores)", () => {
     const r = rule("r", AND({ variable: "category", operator: "equals", value: "groceries" }), {});
-    expect(evaluate_rules(txn({ internal_primary_category: "Groceries" }), [r]).applied_rule_ids).toEqual(["r"]);
-    expect(evaluate_rules(txn({ internal_primary_category: null, plaid_primary_category: "GROCERIES" }), [r]).applied_rule_ids).toEqual(["r"]);
+    expect(evaluate_rules(txn({ first_category_id: "groceries" }), [r]).applied_rule_ids).toEqual(["r"]);
+    // Plaid's primary code or a legacy display name never matches a slug condition.
+    expect(evaluate_rules(txn({ plaid_primary_category: "GROCERIES" }), [r]).applied_rule_ids).toEqual([]);
+    expect(evaluate_rules(txn({ internal_primary_category: "Groceries" }), [r]).applied_rule_ids).toEqual([]);
     expect(evaluate_rules(txn(), [r]).applied_rule_ids).toEqual([]); // FOOD_AND_DRINK
   });
 

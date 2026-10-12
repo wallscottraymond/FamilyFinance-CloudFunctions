@@ -140,9 +140,10 @@ function match_tag(tags: string[], c: RuleCondition): boolean {
   }
 }
 
-/** The category rules test: the user-set category if present, else the Plaid-derived one. */
+/** The category a rule tests: the transaction's first-category slug (canon M7) — the same unit
+ *  the Rule Book's category picker stores. */
 function effective_category(txn: RuleEvaluableTransaction): string {
-  return txn.internal_primary_category ?? txn.plaid_primary_category ?? "";
+  return txn.first_category_id ?? "";
 }
 
 /** String variables (merchant/category/account): `contains`/`equals`, case-insensitive. */

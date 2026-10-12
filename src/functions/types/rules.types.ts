@@ -122,6 +122,9 @@ export interface RuleEvaluableTransaction {
   account_id: string;
   plaid_primary_category: string;
   internal_primary_category: string | null;
+  /** The transaction's FIRST category slug (canon M7 — what the category condition compares;
+   *  the Rule Book stores first-category slugs). */
+  first_category_id?: string | null;
   /** Current tag ids (union of splits' tags). Empty for a fresh Plaid txn; the evaluator threads
    *  add_tag through this so a later rule's `has tag` sees an earlier rule's `add tag`. */
   tags?: string[];
