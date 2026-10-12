@@ -54,8 +54,8 @@ export function map_raw_split_to_on_read_match(
   ctx: TxnMatchContext,
   catalog: CategoryCatalog
 ): SplitForOnReadMatch {
-  // The ONE category function (canon M7) — the same call the assignment engine makes, so the
-  // period page and the stored fields can't disagree. Legacy `internal*` fields are not read.
+  // The ONE category function (canon M7) via THE raw-split mapper — the same calls the assignment
+  // engine makes, so the period page and the stored fields can't disagree.
   const category = resolve_split_category(
     split_category_input_from_raw(
       raw_split,
