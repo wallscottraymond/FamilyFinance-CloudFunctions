@@ -14,7 +14,10 @@ export * from "./functions/users"; // Includes auth triggers (onUserCreate, onUs
 // deployed; replaced by the new group callables. Code kept until the user OKs deleting the folders.
 export * from "./functions/transactions";
 export * from "./functions/budgets";
-export * from "./functions/categories"; // Categories management functions
+// functions/categories (getCategories / addCategory / updateCategory / toggleCategoryStatus /
+// getCategoryValidationList) retired 2026-10-12 (Transaction-Integrity-Review; unused by the app —
+// it reads the categories collection directly). The collection is edited by admins; any mapping
+// change re-assigns through on_category_written (canon O1).
 export * from "./functions/admin";
 // Legacy `functions/plaid` module removed — Plaid is now fully handled by the v2
 // 5-layer graph (entry/http/plaid_webhook, entry/callable/{create_link_token,
