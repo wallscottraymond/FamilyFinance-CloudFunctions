@@ -74,6 +74,10 @@ import {
   RecomputeBudgetRolloverInput,
 } from "../../orchestrators/budgets/recompute_budget_rollover.orchestrator";
 import {
+  reassign_user_orchestrator,
+  ReassignUserInput,
+} from "../../orchestrators/transactions/reassign_user.orchestrator";
+import {
   backfill_assignments_orchestrator,
   BackfillAssignmentsInput,
 } from "../../orchestrators/transactions/backfill_assignments.orchestrator";
@@ -201,6 +205,9 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
 
   backfill_assignments: async (ctx, payload) => {
     await backfill_assignments_orchestrator(ctx, payload as BackfillAssignmentsInput);
+  },
+  reassign_user: async (ctx, payload) => {
+    await reassign_user_orchestrator(ctx, payload as ReassignUserInput);
   },
 
   reconcile_recurring_period: async (ctx, payload) => {

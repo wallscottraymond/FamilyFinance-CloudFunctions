@@ -584,7 +584,7 @@ export async function purge_finished_jobs(options?: {
  */
 /** Build the top-level dedup key: `${job_type}::${deduplication_key}`. Encoding the type into
  *  the key preserves the previous per-type dedup semantics with a single 2-field index. */
-function build_dedup_key(job_type: string, deduplication_key: string): string {
+export function build_dedup_key(job_type: string, deduplication_key: string): string {
   return `${job_type}::${deduplication_key}`;
 }
 

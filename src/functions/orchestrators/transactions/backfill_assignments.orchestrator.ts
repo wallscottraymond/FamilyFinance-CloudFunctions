@@ -32,6 +32,7 @@ import {
   log_operation_error,
 } from "../../observability";
 import { create_job } from "../../infrastructure/job_queue";
+import { enqueue_reassign_user } from "./reassign_user.orchestrator";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import {
   build_self_provision_budget_created_payload,
@@ -45,6 +46,8 @@ import {
 /** Input: backfill one user, or (no user_id) fan out to all users. */
 export interface BackfillAssignmentsInput {
   user_id?: string;
+  /** Report what would change (a `_reassign_runs` doc) without writing any transaction. */
+  dry_run?: boolean;
 }
 
 /** Result summary (handy for logs/tests). */
@@ -57,24 +60,9 @@ export interface BackfillAssignmentsResult {
   budgets_healed?: number;
 }
 
-/**
- * Delay applied to the per-budget full recompute so it runs AFTER the assign
- * jobs and any period-generation heal have settled — recompute then reads the
- * final assigned splits + existing periods. Delayed jobs are picked up by the
- * scheduled queue worker once due.
- */
-const RECOMPUTE_DELAY_SECONDS = 180;
-
 /** Bounded-concurrency enqueue so a large work-list doesn't open thousands of
  * sockets at once. Each create_job is a single Firestore write. */
 const ENQUEUE_CHUNK = 50;
-
-/** Transactions per `assign_transactions_batch` job. Each job resolves shared
- * context once and processes its slice within the job timeout. Kept small: the
- * per-transaction context resolve is IO-heavy (~seconds under concurrent Firestore
- * contention when many batch jobs run at once), so a large slice risks blowing the
- * job timeout. The stuck-job reclaim retries any batch that still overruns. */
-const ASSIGN_BATCH_SIZE = 30;
 
 async function enqueue_chunked(
   thunks: Array<() => Promise<unknown>>
@@ -100,7 +88,7 @@ export async function backfill_assignments_orchestrator(
         user_ids.map((user_id) => (): Promise<unknown> =>
           create_job(
             "backfill_assignments",
-            { user_id },
+            { user_id, dry_run: input.dry_run === true },
             { trace_id: ctx.trace_id }
           )
         )
@@ -112,29 +100,12 @@ export async function backfill_assignments_orchestrator(
       return { mode: "fan_out_users", users_enqueued: user_ids.length };
     }
 
-    // Per-user mode: re-assign every txn, heal budgets missing periods, then
-    // full-recompute every budget's spend.
-    const { transaction_ids, budgets } = await resolve_user_backfill_targets(
-      ctx,
-      input.user_id
-    );
-
-    // 1. Re-assign every transaction's splits, in batches. Each batch job
-    //    resolves the shared context (budgets + categories) ONCE and reuses it
-    //    across its transactions — instead of one job per transaction each
-    //    re-reading budgets + the categories collection.
-    const assign_batches: string[][] = [];
-    for (let i = 0; i < transaction_ids.length; i += ASSIGN_BATCH_SIZE) {
-      assign_batches.push(transaction_ids.slice(i, i + ASSIGN_BATCH_SIZE));
-    }
-    await enqueue_chunked(
-      assign_batches.map((batch_ids) => (): Promise<unknown> =>
-        create_job(
-          "assign_transactions_batch",
-          { user_id: input.user_id, transaction_ids: batch_ids },
-          { trace_id: ctx.trace_id }
-        )
-      )
+    // Per-user mode: ONE bounded re-assign run (3-R — date-ordered pages, legacy overrides
+    // carried into user picks, written once, one follow-up), then heal budgets missing periods.
+    const { budgets } = await resolve_user_backfill_targets(ctx, input.user_id);
+    await enqueue_reassign_user(
+      { user_id: input.user_id, reason: "backfill", dry_run: input.dry_run === true },
+      ctx.trace_id
     );
 
     // 2. Heal: any budget with NO periods (the legacy Everything Else budget is
@@ -169,30 +140,12 @@ export async function backfill_assignments_orchestrator(
       budgets_healed++;
     }
 
-    // 3. Full recompute (no transaction_date_ms → all periods) per budget,
-    //    DELAYED so it runs after the assigns + heal settle.
-    await enqueue_chunked(
-      budgets.map((b) => (): Promise<unknown> =>
-        create_job(
-          "recompute_budget_spent",
-          { user_id: input.user_id, budget_ids: [b.id] },
-          { trace_id: ctx.trace_id, delay_seconds: RECOMPUTE_DELAY_SECONDS }
-        )
-      )
-    );
-
     console.log(
       `[${ctx.trace_id}] backfill_assignments: user=${input.user_id} enqueued ` +
-        `${transaction_ids.length} assign + ${budgets_healed} heal + ` +
-        `${budgets.length} recompute jobs`
+        `reassign_user (dry_run=${input.dry_run === true}) + ${budgets_healed} heal jobs`
     );
     log_operation_success(span, input.user_id);
-    return {
-      mode: "user",
-      transactions_enqueued: transaction_ids.length,
-      budgets_healed,
-      budgets_enqueued: budgets.length,
-    };
+    return { mode: "user", budgets_healed };
   } catch (error) {
     log_operation_error(
       span,

@@ -1001,10 +1001,13 @@ export const transaction_repo = {
     split_inflow_ids: string[] = [],
     /** The assignment run writing this — lets `on_transaction_written` skip the engine's own
      *  writes (the batch runs its own single follow-up instead of N re-entries). */
-    assign_run_id?: string
+    assign_run_id?: string,
+    /** Extra top-level fields written in the SAME update (e.g. the 3-0b legacy clear). */
+    extra_fields?: Record<string, unknown>
   ): Promise<void> {
     /* eslint-disable @typescript-eslint/naming-convention */
     await doc_ref(doc_id).update({
+      ...(extra_fields ?? {}),
       ...(assign_run_id ? { assignRunId: assign_run_id, lastWriteSource: "assignment" } : {}),
       splits: updated_splits,
       splitBudgetIds: split_budget_ids,
@@ -1413,6 +1416,55 @@ export const transaction_repo = {
     return snapshot.docs
       .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }))
       .filter((t) => t.data.isActive !== false);
+  },
+
+  /**
+   * One page of a user's transactions in DATE order (then doc id), starting after `cursor` —
+   * the bounded re-assign engine's walk (3-R): each page's dates are contiguous, so its
+   * recurring-candidate preload stays narrow. Inactive docs are dropped after the read (they still
+   * advance the cursor via `last`).
+   *
+   * Composite index: `transactions(userId, transactionDate)` (doc id is the implicit tiebreak).
+   */
+  async get_page_by_date(
+    _ctx: TraceContext,
+    user_id: string,
+    cursor: { date_ms: number; doc_id: string } | null,
+    limit: number,
+    scope: { from_ms?: number; to_ms?: number } = {}
+  ): Promise<{
+    docs: Array<{ id: string; data: Record<string, unknown> }>;
+    last: { date_ms: number; doc_id: string } | null;
+    exhausted: boolean;
+  }> {
+    let q = getFirestore()
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .orderBy("transactionDate", "asc")
+      .orderBy(FieldPath.documentId(), "asc");
+    if (scope.from_ms !== undefined) {
+      q = q.where("transactionDate", ">=", Timestamp.fromMillis(scope.from_ms));
+    }
+    if (scope.to_ms !== undefined) {
+      q = q.where("transactionDate", "<=", Timestamp.fromMillis(scope.to_ms));
+    }
+    if (cursor) {
+      q = q.startAfter(Timestamp.fromMillis(cursor.date_ms), cursor.doc_id);
+    }
+    const snap = await q.limit(limit).get();
+    const tail = snap.docs[snap.docs.length - 1];
+    return {
+      docs: snap.docs
+        .map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+        .filter((t) => t.data.isActive !== false),
+      last: tail
+        ? {
+          date_ms: (tail.get("transactionDate") as Timestamp).toMillis(),
+          doc_id: tail.id,
+        }
+        : cursor,
+      exhausted: snap.docs.length < limit,
+    };
   },
 
   /**

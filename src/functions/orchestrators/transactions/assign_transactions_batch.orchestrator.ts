@@ -58,6 +58,28 @@ export interface AssignTransactionsBatchInput {
   run_id?: string;
   /** Caller runs the follow-up pass: the batch appends its writes here and skips its own. */
   collect_into?: SyncWrittenDoc[];
+  /**
+   * In-process callers only (the bounded re-assign engine, 3-R):
+   *   - `preloaded_docs`: the docs, already read (skips the bulk read) — possibly transformed in
+   *     memory (3-0b), so they're written even when the engine's own fields didn't change when
+   *     listed in `force_write_ids`; `extra_fields_by_id` rides along in the same write.
+   *   - `dry_run`: compute only — no writes, no follow-ups; `on_result` still reports.
+   */
+  preloaded_docs?: Array<{ id: string; data: Record<string, unknown> }>;
+  force_write_ids?: Set<string>;
+  extra_fields_by_id?: Map<string, Record<string, unknown>>;
+  dry_run?: boolean;
+  on_result?: (r: BatchTxnResult) => void;
+}
+
+/** One transaction's outcome (reported to `on_result`). */
+export interface BatchTxnResult {
+  transaction_id: string;
+  data: Record<string, unknown>;
+  /** Would be / was written. */
+  write: boolean;
+  /** Per split: monthly budget before → after. */
+  moves: Array<{ split_id: string; before: string; after: string }>;
 }
 
 /** Result summary (handy for logs/tests). */
@@ -104,7 +126,8 @@ export async function assign_transactions_batch_orchestrator(
     // per-transaction `get_raw_by_id` inside resolve_assignment_context AND the old field-masked
     // date probe. Inactive/missing docs are skipped by the repo.
     const now_ms = Timestamp.now().toMillis();
-    const txn_docs = await transaction_repo.get_raw_by_ids(ctx, input.transaction_ids);
+    const txn_docs =
+      input.preloaded_docs ?? (await transaction_repo.get_raw_by_ids(ctx, input.transaction_ids));
     const dates_ms = txn_docs.map((t) => (t.data.transactionDate as Timestamp).toMillis());
 
     // Load recurring-match candidate periods ONCE (outflow_periods/inflow_periods), scoped to the
@@ -184,9 +207,28 @@ export async function assign_transactions_batch_orchestrator(
       const now = Timestamp.now();
       const { updated_splits, name_changed, split_budget_ids, split_outflow_ids, split_inflow_ids } =
         merge_assignment_onto_raw_splits(resolved, result, now);
+      const forced = input.force_write_ids?.has(txn.id) === true;
+      const write = result.changed || name_changed || forced;
+      if (input.on_result) {
+        const before_by_split = new Map(
+          resolved.splits_input.map((s) => [s.split_id, s.monthly_budget_id ?? s.budget_id])
+        );
+        input.on_result({
+          transaction_id: txn.id,
+          data: txn.data,
+          write,
+          moves: result.splits
+            .filter((s) => before_by_split.get(s.split_id) !== s.monthly_budget_id)
+            .map((s) => ({
+              split_id: s.split_id,
+              before: before_by_split.get(s.split_id) ?? "unassigned",
+              after: s.monthly_budget_id,
+            })),
+        });
+      }
 
-      // Skip-if-unchanged: nothing to write (matches single-item semantics).
-      if (!result.changed && !name_changed) {
+      // Skip-if-unchanged: nothing to write (single-item semantics). A dry run never writes.
+      if (!write || input.dry_run) {
         processed++;
         return;
       }
@@ -198,7 +240,8 @@ export async function assign_transactions_batch_orchestrator(
         split_budget_ids,
         split_outflow_ids,
         split_inflow_ids,
-        run_id
+        run_id,
+        input.extra_fields_by_id?.get(txn.id)
       );
       /* eslint-disable @typescript-eslint/naming-convention */
       written.push({
@@ -215,7 +258,7 @@ export async function assign_transactions_batch_orchestrator(
       /* eslint-enable @typescript-eslint/naming-convention */
       processed++;
       wrote++;
-      if (result.changed) {
+      if (result.changed || forced) {
         changed++;
       }
     };

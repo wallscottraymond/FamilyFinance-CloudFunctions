@@ -46,7 +46,8 @@ function first_of(id: string | null, catalog: CategoryCatalog): string | null {
 
 /** As `first_of`, also reading a legacy display name (old rule writes stored "Shopping"). */
 function legacy_first_of(id: string | null, catalog: CategoryCatalog): string | null {
-  return first_of(id, catalog) ?? (id ? catalog.first_by_name[id.trim().toLowerCase()] ?? null : null);
+  if (!id) return null;
+  return first_of(id, catalog) ?? catalog.first_by_name[id.trim().toLowerCase()] ?? null;
 }
 
 /**
@@ -68,6 +69,7 @@ export function legacy_override_first(split: Raw, catalog: CategoryCatalog): str
   return first !== plaid_first ? first : null;
 }
 
+/* eslint-disable @typescript-eslint/naming-convention */
 function user_pick(
   first: string,
   second: string | null,
@@ -112,6 +114,8 @@ function from_plaid(
   };
 }
 
+/* eslint-enable @typescript-eslint/naming-convention */
+
 /**
  * @param incoming - The split as the app sent it
  * @param existing - The stored split with the same id (undefined = a new split)
@@ -141,16 +145,15 @@ export function resolve_split_category_edit(
     };
 
   // The split's category as stored now (a new split: what Plaid gives it).
+  const stored_first =
+    existing?.categorySource === "user" ? first_of(str(existing.firstCategoryId), catalog) : null;
+  const stored_second =
+    str(existing?.secondCategoryId) && catalog.slugs_by_plaid[existing?.secondCategoryId as string]
+      ? (existing?.secondCategoryId as string)
+      : null;
   const current: SplitCategoryFields =
-    existing && existing.categorySource === "user" && first_of(str(existing.firstCategoryId), catalog)
-      ? user_pick(
-        first_of(str(existing.firstCategoryId), catalog) as string,
-        str(existing.secondCategoryId) && catalog.slugs_by_plaid[existing.secondCategoryId as string]
-          ? (existing.secondCategoryId as string)
-          : null,
-        plaid,
-        catalog
-      )
+    stored_first
+      ? user_pick(stored_first, stored_second, plaid, catalog)
       : existing && legacy_override_first(existing, catalog)
         ? user_pick(legacy_override_first(existing, catalog) as string, null, plaid, catalog)
         : from_plaid(plaid, catalog);
@@ -161,7 +164,9 @@ export function resolve_split_category_edit(
       str(incoming.secondCategoryId) && catalog.slugs_by_plaid[incoming.secondCategoryId as string]
         ? (incoming.secondCategoryId as string)
         : null;
-    const first = (second ? first_of(second, catalog) : null) ?? first_of(str(incoming.firstCategoryId), catalog);
+    const first =
+      (second ? first_of(second, catalog) : null) ??
+      first_of(str(incoming.firstCategoryId), catalog);
     if (first) return user_pick(first, second, plaid, catalog);
     // Unknown slug → fall through (never store a category outside the collection).
   } else if (incoming.categorySource === "plaid" && existing?.categorySource === "user") {

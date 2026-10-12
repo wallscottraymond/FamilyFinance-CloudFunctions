@@ -24,7 +24,10 @@ import { match_category, CategoryRule, DEFAULT_CATEGORY } from "./match_category
 /** The category collection, reduced to what resolution needs. Built once per batch / request. */
 export interface CategoryCatalog {
   /** Plaid detailed code (= category doc id) → its slugs. */
-  slugs_by_plaid: Record<string, { overall_category_id: string | null; first_category_id: string | null }>;
+  slugs_by_plaid: Record<
+    string,
+    { overall_category_id: string | null; first_category_id: string | null }
+  >;
   /** Merchant / keyword rules (from the collection's `merchants` / `keywords`). */
   rules: CategoryRule[];
   /** first slug → one Plaid code under it (gives a user pick its income / transfer meaning). */
@@ -57,9 +60,8 @@ export function build_category_catalog(docs: CategoryDocForCatalog[]): CategoryC
       if (!(first in plaid_by_first)) plaid_by_first[first] = id;
       if (!(first in overall_by_first)) overall_by_first[first] = overall;
       const name = data.first_category;
-      if (typeof name === "string" && name.trim() && !(name.trim().toLowerCase() in first_by_name)) {
-        first_by_name[name.trim().toLowerCase()] = first;
-      }
+      const key = typeof name === "string" ? name.trim().toLowerCase() : "";
+      if (key && !(key in first_by_name)) first_by_name[key] = first;
     }
     rules.push({
       category: id,
@@ -118,7 +120,8 @@ export function resolve_split_category(
       (first ? catalog.overall_by_first[first] ?? null : null) ??
       input.overall_category_id ??
       null;
-    const semantic = second ?? (first ? catalog.plaid_by_first[first] : undefined) ?? DEFAULT_CATEGORY;
+    const semantic =
+      second ?? (first ? catalog.plaid_by_first[first] : undefined) ?? DEFAULT_CATEGORY;
     return {
       first_category_id: first,
       overall_category_id: overall,
@@ -140,7 +143,10 @@ export function resolve_split_category(
     catalog.rules
   ).category;
   const code = catalog.slugs_by_plaid[resolved] ? resolved : DEFAULT_CATEGORY;
-  const slugs = catalog.slugs_by_plaid[code] ?? { overall_category_id: null, first_category_id: null };
+  const slugs = catalog.slugs_by_plaid[code] ?? {
+    overall_category_id: null,
+    first_category_id: null,
+  };
   return {
     first_category_id: slugs.first_category_id,
     overall_category_id: slugs.overall_category_id,
