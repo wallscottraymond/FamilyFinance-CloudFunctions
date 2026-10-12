@@ -224,18 +224,22 @@ export async function resolve_recurring_matches(
   }
 
   // 0. AUTHORITATIVE deterministic link: if this transaction is a member of a recurring
-  //    stream (its Plaid id is in the def's `transactionIds`) and the txn has a SINGLE
-  //    split, link that split directly. Plaid's own stream membership beats the fuzzy
-  //    merchant/amount scorer, which misses empty-merchant bills / stale periods (the S1
-  //    root cause). Multi-split txns fall through to per-split fuzzy matching (don't guess
-  //    which split is the bill). No stream match → fuzzy fallback below.
+  //    stream (its Plaid id is in the def's `transactionIds`), link EVERY split to it —
+  //    exactly how the period page treats a stream member (the whole transaction is the
+  //    payment, no split counts in a budget). Plaid's own stream membership beats the fuzzy
+  //    merchant/amount scorer, which misses empty-merchant bills / stale periods (the S1 root
+  //    cause). The engine then takes individual splits OFF per split — a budget pin or a
+  //    "remove from bill" detach (domain/recurring/stream_membership, canon A4) — as the page
+  //    does. No stream match → fuzzy fallback below.
   const stream_map = is_expense ? opts.outflow_tx_to_id : opts.inflow_tx_to_id;
-  if (opts.txn_plaid_id && stream_map && splits.length === 1) {
+  if (opts.txn_plaid_id && stream_map) {
     const recurring_id = stream_map.get(opts.txn_plaid_id);
     if (recurring_id) {
-      out[splits[0].split_id] = is_expense
-        ? { outflow_id: recurring_id, inflow_id: null }
-        : { outflow_id: null, inflow_id: recurring_id };
+      for (const s of splits) {
+        out[s.split_id] = is_expense
+          ? { outflow_id: recurring_id, inflow_id: null }
+          : { outflow_id: null, inflow_id: recurring_id };
+      }
       return out;
     }
   }

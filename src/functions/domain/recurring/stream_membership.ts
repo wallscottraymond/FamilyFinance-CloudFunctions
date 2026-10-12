@@ -60,7 +60,8 @@ export function is_split_detached_from_outflow(split: unknown): boolean {
   return s.budgetAssignmentSource === "manual";
 }
 
-/** True when ANY split of the transaction is off its bills. PURE. */
+/** True when ANY split of the transaction is off its bills. PURE. (Readers use the per-split
+ *  `splits_paying_recurring` / `is_split_on_stream`.) */
 export function is_txn_detached_from_outflow(
   splits: ReadonlyArray<unknown> | null | undefined
 ): boolean {
@@ -81,3 +82,34 @@ export function is_txn_detached_from_inflow(
 ): boolean {
   return (splits ?? []).some(is_split_detached_from_inflow);
 }
+
+/**
+ * The splits of a transaction that PAY recurring `recurring_id` (PURE) — THE per-split rule the
+ * period page, reconcile, the recurring transaction list and the engine share:
+ *   - splits explicitly linked to it (`outflowId` / `inflowId`), when there are any;
+ *   - else, when the transaction is in its Plaid stream (`in_stream`), every split that isn't
+ *     taken off (a "remove from bill" detach / a budget pin) and isn't linked elsewhere.
+ * Taking ONE split off never unlinks the others (a pin on part of a split bill payment leaves
+ * the rest paying the bill).
+ */
+export function splits_paying_recurring<T>(
+  splits: ReadonlyArray<T>,
+  kind: "outflow" | "inflow",
+  recurring_id: string,
+  in_stream: boolean
+): T[] {
+  const field = kind === "outflow" ? "outflowId" : "inflowId";
+  const link = (sp: T) => ((sp ?? {}) as Record<string, unknown>)[field] ?? null;
+  const linked = splits.filter((sp) => link(sp) === recurring_id);
+  if (linked.length || !in_stream) return linked;
+  const off = kind === "outflow" ? is_split_detached_from_outflow : is_split_detached_from_inflow;
+  return splits.filter((sp) => link(sp) === null && !off(sp));
+}
+
+/** Is this split ON its transaction's Plaid stream (member, not taken off)? PURE. */
+export function is_split_on_stream(split: unknown, kind: "outflow" | "inflow"): boolean {
+  return kind === "outflow"
+    ? !is_split_detached_from_outflow(split)
+    : !is_split_detached_from_inflow(split);
+}
+

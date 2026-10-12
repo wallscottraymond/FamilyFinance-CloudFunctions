@@ -47,8 +47,7 @@ import { find_crossing_transfers } from "../../domain/periods/edge_transfers.ser
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import {
   build_stream_membership_map,
-  is_txn_detached_from_inflow,
-  is_txn_detached_from_outflow,
+  is_split_on_stream,
 } from "../../domain/recurring/stream_membership";
 import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
 import { PeriodInstanceType } from "../../domain/budgets";
@@ -601,15 +600,11 @@ export function shape_period_derivation_deps(
     const txn_is_income = data.type === "income";
     // Edge money (D12, see 3b): crosses the view boundary.
     const is_edge = crossing.ids.has(id);
-    // Is this transaction part of a Plaid income stream? (Plaid id → inflow.) A budget pin
-    // takes it off (canon A4).
+    // Is this transaction part of a Plaid income stream? (Plaid id → inflow.) Per SPLIT, a
+    // budget pin takes that split off it (canon A4) — see `is_split_on_stream` below.
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
     const linked_inflow_id =
-      plaid_txn_id &&
-      !is_edge &&
-      !is_txn_detached_from_inflow(data.splits as unknown[] | undefined)
-        ? inflow_tx_to_id.get(plaid_txn_id)
-        : undefined;
+      plaid_txn_id && !is_edge ? inflow_tx_to_id.get(plaid_txn_id) : undefined;
     // A split linked to a bill / income that lives in ANOTHER view (its account isn't in this
     // one) isn't this view's bill payment: drop the link so the money counts here as ordinary
     // spending / money in, instead of vanishing (Account-Rooted-Sharing). No-op for Me with
@@ -620,12 +615,15 @@ export function shape_period_derivation_deps(
         (data.splits as Array<Record<string, unknown>>) ?? [],
         out_of_view_recurring_ids
       );
-    // A manual "remove from bill" or a budget pin beats Plaid stream membership: the txn is
-    // neither a bill payment nor excluded from budget spend as a recurring member.
+    // Plaid bill stream membership. Per SPLIT, a manual "remove from bill" or a budget pin takes
+    // that split off it: it's neither a bill payment nor excluded from budget spend as a
+    // recurring member — the transaction's other splits stay on the bill.
     const linked_outflow_id =
-      plaid_txn_id && !is_edge && !is_txn_detached_from_outflow(raw)
-        ? outflow_tx_to_id.get(plaid_txn_id)
-        : undefined;
+      plaid_txn_id && !is_edge ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
+    const on_outflow_stream = (sp: unknown) =>
+      !!linked_outflow_id && is_split_on_stream(sp, "outflow");
+    const on_inflow_stream = (sp: unknown) =>
+      !!linked_inflow_id && is_split_on_stream(sp, "inflow");
     let income_amount = 0;
     for (const s of raw) {
       const outflow_id = (s.outflowId as string | null) ?? null;
@@ -642,7 +640,7 @@ export function shape_period_derivation_deps(
           is_income: txn_is_income,
           // Txn belongs to a recurring bill/income Plaid stream → not discretionary spend,
           // so it never counts toward a budget even if its split link was never set (S5).
-          is_recurring_member: !!(linked_outflow_id || linked_inflow_id),
+          is_recurring_member: on_outflow_stream(s) || on_inflow_stream(s),
           merchant_name: (data.merchantName as string | null) ?? null,
           name: (data.name as string | null) ?? null,
         }, catalog)
@@ -666,12 +664,15 @@ export function shape_period_derivation_deps(
     }
     // Deterministic Plaid income reconciliation: this txn belongs to an inflow
     // stream → it's a received payment for that inflow (its full deposit amount).
-    if (linked_inflow_id && payments_by_id.has(linked_inflow_id)) {
+    const sum_abs = (xs: Array<Record<string, unknown>>) =>
+      xs.reduce((t, sp) => t + Math.abs((sp.amount as number) ?? 0), 0);
+    const inflow_on = raw.filter(on_inflow_stream);
+    if (linked_inflow_id && inflow_on.length && payments_by_id.has(linked_inflow_id)) {
       payments_by_id.get(linked_inflow_id)!.push({
         transaction_id: id,
         split_id: null,
         date_ms: txn_date_ms,
-        amount: income_amount,
+        amount: sum_abs(inflow_on), // the splits still on the stream (all, unless some pinned)
       });
     }
     // Deterministic Plaid BILL reconciliation (mirror of income): this txn belongs to
@@ -683,12 +684,13 @@ export function shape_period_derivation_deps(
       const any_split_outflow_linked = raw.some(
         (s) => ((s.outflowId as string | null) ?? null) !== null
       );
-      if (!any_split_outflow_linked) {
+      const outflow_on = raw.filter(on_outflow_stream);
+      if (!any_split_outflow_linked && outflow_on.length) {
         payments_by_id.get(linked_outflow_id)!.push({
           transaction_id: id,
           split_id: null,
           date_ms: txn_date_ms,
-          amount: income_amount, // sum of |split amounts| = the full txn amount
+          amount: sum_abs(outflow_on), // the splits still on the stream (all, unless some taken off)
         });
       }
     }
@@ -699,16 +701,22 @@ export function shape_period_derivation_deps(
       (data.plaidDetailedCategory as string | null) ??
       (raw[0]?.plaidDetailedCategory as string | null) ??
       "";
-    const any_split_inflow_linked = raw.some(
-      (s) => ((s.inflowId as string | null) ?? null) !== null
+    // Per split: not on an income stream, not linked to an income, and not pinned to a budget (a
+    // pinned income credit counts in that budget — canon A13 — never ALSO as income).
+    const other_income_amount = sum_abs(
+      raw.filter(
+        (sp) =>
+          !on_inflow_stream(sp) &&
+          ((sp.inflowId as string | null) ?? null) === null &&
+          sp.budgetAssignmentSource !== "manual"
+      )
     );
     if (
       txn_cat.startsWith("INCOME") &&
-      !linked_inflow_id &&
-      !any_split_inflow_linked &&
+      other_income_amount > 0 &&
       !txn_is_internal_transfer
     ) {
-      other_income_credits.push({ date_ms: txn_date_ms, amount: income_amount });
+      other_income_credits.push({ date_ms: txn_date_ms, amount: other_income_amount });
     } else if (crossing.in_ids.has(id)) {
       // D12: money moved INTO this view from a member's account outside it (e.g. a share sent
       // to the joint account) is income for this view, on the day it arrived.

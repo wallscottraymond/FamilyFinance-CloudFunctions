@@ -14,10 +14,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
-import {
-  is_txn_detached_from_inflow,
-  is_txn_detached_from_outflow,
-} from "../../domain/recurring/stream_membership";
+import { splits_paying_recurring } from "../../domain/recurring/stream_membership";
 
 export type RecurringKind = "outflow" | "inflow";
 
@@ -52,17 +49,21 @@ export async function derive_recurring_transactions_orchestrator(
   // 3. Map + flag in-period.
   const rows: DerivedRecurringTransaction[] = txns
     .filter((data) => (data as { isActive?: boolean }).isActive !== false)
-    // A manual "remove from bill" or a budget pin beats Plaid stream membership.
-    .filter((data) => {
-      const splits = (data as { splits?: unknown[] }).splits;
-      return kind === "inflow"
-        ? !is_txn_detached_from_inflow(splits)
-        : !is_txn_detached_from_outflow(splits);
-    })
-    .map((data) => {
+    // Per SPLIT (the period page's rule): the splits paying this recurring — a "remove from bill"
+    // or a budget pin takes only THAT split off; no paying split → not one of its payments.
+    .map((data) => ({
+      data,
+      splits: splits_paying_recurring(
+        ((data as { splits?: unknown[] }).splits ?? []) as Array<Record<string, unknown>>,
+        kind,
+        recurring_id,
+        true
+      ),
+    }))
+    .filter(({ splits }) => splits.length > 0)
+    .map(({ data, splits }) => {
       const d = data as unknown as Record<string, unknown>;
       const date_ms = (d.transactionDate as Timestamp).toMillis();
-      const splits = (d.splits as Array<Record<string, unknown>>) ?? [];
       return {
         transaction_id: (d.transactionId as string) ?? (d.id as string) ?? "",
         date_ms,

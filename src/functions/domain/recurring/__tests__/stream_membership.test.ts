@@ -11,6 +11,7 @@ import {
   is_txn_detached_from_outflow,
   is_split_detached_from_inflow,
   is_txn_detached_from_inflow,
+  splits_paying_recurring,
 } from "../stream_membership";
 
 describe("build_stream_membership_map", () => {
@@ -88,4 +89,17 @@ describe("manual bill detach", () => {
     })).toBe(false);
     expect(is_txn_detached_from_inflow([{ budgetAssignmentSource: "category" }])).toBe(false);
   });
+
+  it("splits_paying_recurring: per split — taking one split off never unlinks the others", () => {
+    const pinned = { splitId: "a", amount: 50, budgetAssignmentSource: "manual" };
+    const plain = { splitId: "b", amount: 100 };
+    expect(splits_paying_recurring([pinned, plain], "outflow", "bill", true)).toEqual([plain]);
+    // Explicit links win; not a stream member → only explicit links.
+    const linked = { splitId: "c", outflowId: "bill" };
+    expect(splits_paying_recurring([linked, plain], "outflow", "bill", true)).toEqual([linked]);
+    expect(splits_paying_recurring([plain], "outflow", "bill", false)).toEqual([]);
+    // A split pinned to ANOTHER bill isn't this bill's.
+    expect(splits_paying_recurring([{ outflowId: "x", outflowAssignmentSource: "manual" }], "outflow", "bill", true)).toEqual([]);
+  });
 });
+

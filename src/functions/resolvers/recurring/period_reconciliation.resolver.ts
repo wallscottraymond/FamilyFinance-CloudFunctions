@@ -19,10 +19,7 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
-import {
-  is_txn_detached_from_inflow,
-  is_txn_detached_from_outflow,
-} from "../../domain/recurring/stream_membership";
+import { splits_paying_recurring } from "../../domain/recurring/stream_membership";
 import { fingerprint_stored } from "../../domain/recurring/reconciliation_fingerprint";
 
 export type RecurringType = "outflow" | "inflow";
@@ -187,19 +184,18 @@ export async function resolve_recurring_reconciliation(
     transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, transaction_ids),
   ]);
   const seen = new Set<string>();
-  // A manual "remove from bill" or a budget pin beats the (stale-able) stream membership: drop
-  // stream-only matches the user took off. (A durable split link, source (a), still wins.)
-  const link_ids = new Set(link_txns.map((t) => t.id));
-  const kept_stream_txns = stream_txns.filter(
-    (t) =>
-      link_ids.has(t.id) ||
-      !(is_outflow ? is_txn_detached_from_outflow(t.splits) : is_txn_detached_from_inflow(t.splits))
-  );
-  const txns = [...link_txns, ...kept_stream_txns].filter((t) => {
+  // Per SPLIT (the period page's rule — `splits_paying_recurring`): the splits linked to this
+  // recurring, else (stream member) the splits not taken off by a "remove from bill" / a budget
+  // pin. A transaction with no paying split isn't a payment.
+  const kind = is_outflow ? "outflow" : "inflow";
+  const stream_ids = new Set(stream_txns.map((t) => t.id));
+  const paying = (t: { id: string; splits?: unknown[] }) =>
+    splits_paying_recurring(t.splits ?? [], kind, input.recurring_id, stream_ids.has(t.id));
+  const txns = [...link_txns, ...stream_txns].filter((t) => {
     const key = t.id;
     if (!key || seen.has(key)) return false;
     seen.add(key);
-    return true;
+    return paying(t).length > 0;
   });
   for (const txn of txns) {
     if (txn.isActive === false) continue;
@@ -219,7 +215,10 @@ export async function resolve_recurring_reconciliation(
     const is_pending = txn.isPending === true;
     // Net countable amount (ignore/refund math) — computed in the domain service
     // so the resolver stays lookup-only (P2-11).
-    const { amount, split_id } = compute_countable_split_net(txn.splits ?? [], txn.id);
+    const { amount, split_id } = compute_countable_split_net(
+      paying(txn) as Parameters<typeof compute_countable_split_net>[0],
+      txn.id
+    );
     splits.push({ transaction_id: txn.id, split_id, amount, is_pending, date_ms });
   }
 

@@ -41,10 +41,7 @@ import {
 } from "../../budgets/match_budgets.service";
 import { map_raw_split_to_on_read_match } from "../../../resolvers/shared/on_read_matching";
 import { stored_split_for_spend } from "../../../resolvers/budgets/budget_spend.resolver";
-import {
-  is_txn_detached_from_inflow,
-  is_txn_detached_from_outflow,
-} from "../../recurring/stream_membership";
+import { is_split_on_stream, splits_paying_recurring } from "../../recurring/stream_membership";
 
 const CODES: Array<[string, string]> = [
   ["FOOD_AND_DRINK_GROCERIES", "groceries"],
@@ -193,9 +190,7 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
       txn_date_ms: date, is_pending: false, is_transfer: false,
       is_income: is_income_txn, merchant_name: txn.merchantName, name: txn.name,
       // The period page's stream membership: off when detached / budget-pinned.
-      is_recurring_member: in_stream && (is_income_txn
-        ? !is_txn_detached_from_inflow([written])
-        : !is_txn_detached_from_outflow([written])),
+      is_recurring_member: in_stream && is_split_on_stream(written, is_income_txn ? "inflow" : "outflow"),
     }, catalog);
     const m = { ...m0, is_transfer: live_role === "internal", is_edge_out: live_role === "edge_out" };
     const ee = match.primary_everything_else_id;
@@ -258,3 +253,78 @@ it("a budget created mid-period owns that period's earlier purchases on BOTH sid
   ]);
   expect(match.real_budgets[0].start_ms).toBe(Date.UTC(2026, 9, 1)); // Oct 5 purchase is in range
 });
+
+it("multi-split Plaid stream members: per split, engine == page == stored spend; the bill is paid by exactly the splits still on it", () => {
+  const match = build_match_budgets([
+    budget_to_match_input({
+      id: "ent", name: "Entertainment", period: "monthly", category_ids: ["entertainment"],
+      start_date: ts(Y0), end_date: ts(Y0), is_ongoing: true,
+    }),
+    budget_to_match_input({
+      id: "ee_m", name: "EE", period: "monthly", category_ids: [], start_date: ts(Y0),
+      end_date: ts(Y0), is_ongoing: true, is_system_everything_else: true,
+    }),
+  ]);
+  const STATES = ["plain", "budget_pin", "detach", "other_bill"] as const;
+  const date = Y0 + 40 * DAY;
+  const txn = { merchantName: "Comcast", name: "Comcast" };
+  for (const a of STATES) {
+    for (const b of STATES) {
+      const raws = [a, b].map((st, k) => ({
+        splitId: `s${k}`, amount: k === 0 ? 100 : 50, plaidDetailedCategory: "ENTERTAINMENT_TV_AND_MOVIES",
+        budgetId: st === "budget_pin" ? "ent" : "unassigned",
+        budgetAssignmentSource: st === "budget_pin" ? "manual" : "category",
+        ...(st === "detach" ? { outflowAssignmentSource: "manual", outflowId: null } : {}),
+        ...(st === "other_bill" ? { outflowAssignmentSource: "manual", outflowId: "bill_x" } : {}),
+      })) as Array<Record<string, unknown>>;
+      const inputs: SplitForAssignment[] = raws.map((r) => ({
+        split_id: r.splitId as string, budget_id: r.budgetId as string,
+        budget_assignment_source: r.budgetAssignmentSource as "category" | "manual",
+        plaid_match_category: "ENTERTAINMENT_TV_AND_MOVIES",
+        outflow_id: (r.outflowId as string | null) ?? null,
+        outflow_source: r.outflowAssignmentSource as "manual" | undefined,
+        inflow_id: null, monthly_period_id: null, weekly_period_id: null, bi_weekly_period_id: null,
+      }));
+      const stored = compute_transaction_assignment(inputs, {
+        txn_date_ms: date, txn_merchant_name: txn.merchantName, txn_name: txn.name,
+        txn_is_income: false, txn_transfer_role: null,
+        real_budgets: match.real_budgets, everything_else_budget_ids: match.everything_else_ids,
+        category_catalog: catalog, source_periods: [],
+        // The resolver links EVERY split of a stream member to its bill.
+        recurring_by_split: { s0: { outflow_id: "bill", inflow_id: null }, s1: { outflow_id: "bill", inflow_id: null } },
+      }).splits;
+      const written: Array<Record<string, unknown>> = raws.map((r, k) => ({
+        ...r,
+        budgetId: stored[k].budget_id, budgetAssignmentSource: stored[k].budget_assignment_source,
+        monthlyBudgetId: stored[k].monthly_budget_id, weeklyBudgetId: stored[k].weekly_budget_id,
+        biWeeklyBudgetId: stored[k].bi_weekly_budget_id, firstCategoryId: stored[k].first_category_id,
+        categorySource: stored[k].category_source, outflowId: stored[k].outflow_id,
+        outflowAssignmentSource: stored[k].outflow_source, inflowId: stored[k].inflow_id,
+      }));
+      written.forEach((w, k) => {
+        const m = map_raw_split_to_on_read_match(w, {
+          txn_date_ms: date, is_pending: false, is_transfer: false, is_income: false,
+          merchant_name: txn.merchantName, name: txn.name,
+          is_recurring_member: is_split_on_stream(w, "outflow"), // the txn IS a stream member
+        }, catalog);
+        const owner = resolve_split_owner(m, match.real_budgets, "ee_m", match.everything_else_id_set);
+        const counted = owned_splits_for_budget(owner, match.real_budgets, "ee_m", [m],
+          match.everything_else_id_set).some(is_countable);
+        const spend = stored_split_for_spend(w, txn, stored[k].monthly_budget_id, "monthly", catalog, {
+          txn_date_ms: date, is_pending: false, is_transfer: false, is_income: false,
+        });
+        const label = [a, b, k];
+        expect([label, "page", counted]).toEqual([label, "page", spend !== null && is_countable(spend)]);
+        // A budget-pinned split counts in its budget and a "removed from bill" split as ordinary
+        // spending; a split on a bill (this one or another) counts nowhere.
+        const st = [a, b][k];
+        expect([label, "counts", counted]).toEqual([label, "counts", st === "budget_pin" || st === "detach"]);
+      });
+      // The bill is paid by exactly the splits the engine linked to it (page / reconcile rule).
+      const paying = splits_paying_recurring(written, "outflow", "bill", true).map((w) => w.splitId);
+      const linked = written.filter((w) => w.outflowId === "bill").map((w) => w.splitId);
+      expect([[a, b], paying]).toEqual([[a, b], linked]);
+    }
+  }
+});
+
