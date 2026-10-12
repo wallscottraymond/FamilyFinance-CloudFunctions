@@ -20,6 +20,7 @@ import {
   success_response,
   FunctionResponse,
   DomainError,
+  ValidationError,
   get_https_error_code,
   get_user_message,
 } from "../../types";
@@ -112,7 +113,9 @@ function handle_entry_error(
   if (error instanceof DomainError) {
     throw new HttpsError(
       get_https_error_code(error),
-      get_user_message(error.code),
+      // Validation messages are written for the user (e.g. "Shopping" would have no categories
+      // left…) — show them; other domain errors map to a generic message.
+      error instanceof ValidationError ? error.message : get_user_message(error.code),
       { trace_id: ctx.trace_id, code: error.code }
     );
   }
