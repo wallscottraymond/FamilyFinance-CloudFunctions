@@ -89,10 +89,16 @@ const MAX_SAMPLES = 50;
 /** The job type + its single-flight dedup key. */
 export const REASSIGN_JOB = "reassign_user";
 /** One run per (user, scope): a narrower / different scope queued meanwhile isn't swallowed. */
-export const reassign_dedup_key = (user_id: string, scope: ReassignScope = {}): string => {
+export const reassign_dedup_key = (
+  user_id: string,
+  scope: ReassignScope = {},
+  dry_run = false
+): string => {
   const accounts = [...(scope.account_ids ?? [])].sort().join(",");
   const sig = `${accounts}|${scope.from_ms ?? ""}|${scope.to_ms ?? ""}`;
-  return sig === "||" ? `reassign_user:${user_id}` : `reassign_user:${user_id}:${sig}`;
+  // A dry run (audit) never swallows — or is swallowed by — a real run.
+  const base = dry_run ? `reassign_user_dry:${user_id}` : `reassign_user:${user_id}`;
+  return sig === "||" ? base : `${base}:${sig}`;
 };
 
 /** Enqueue a re-assign run for a user (single-flight; returns false when one is already queued). */
@@ -103,7 +109,10 @@ export async function enqueue_reassign_user(
 ): Promise<boolean> {
   const job = await create_job_if_not_exists(
     REASSIGN_JOB,
-    { deduplication_key: reassign_dedup_key(input.user_id, input.scope), ...input },
+    {
+      deduplication_key: reassign_dedup_key(input.user_id, input.scope, input.dry_run === true),
+      ...input,
+    },
     { trace_id, delay_seconds }
   );
   return job !== null;
@@ -240,13 +249,16 @@ export async function reassign_user_orchestrator(
       await create_job(
         REASSIGN_JOB,
         {
-          deduplication_key: reassign_dedup_key(run.user_id, run.scope),
+          deduplication_key: reassign_dedup_key(run.user_id, run.scope, run.dry_run),
           user_id: run.user_id,
           run_id: run.run_id,
         },
         {
           trace_id: ctx.trace_id,
-          dedup_key: build_dedup_key(REASSIGN_JOB, reassign_dedup_key(run.user_id, run.scope)),
+          dedup_key: build_dedup_key(
+            REASSIGN_JOB,
+            reassign_dedup_key(run.user_id, run.scope, run.dry_run)
+          ),
         }
       );
       log_operation_success(span, input.user_id);

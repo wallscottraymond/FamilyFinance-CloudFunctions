@@ -80,6 +80,7 @@ export {
   backfill_transaction_assignments,
 } from "./backfill_transaction_assignments.entry";
 export { migrate_budget_categories } from "./migrate_budget_categories.entry";
+export { audit_transaction_assignments } from "./audit_transaction_assignments.entry";
 export {
   backfill_recurring_reconciliation,
 } from "./backfill_recurring_reconciliation.entry";

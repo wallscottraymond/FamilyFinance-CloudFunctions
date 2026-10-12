@@ -34,5 +34,6 @@ describe("reassign_dedup_key", () => {
     expect(reassign_dedup_key("u")).toBe("reassign_user:u");
     expect(reassign_dedup_key("u", { account_ids: ["b", "a"] })).toBe("reassign_user:u:a,b||");
     expect(reassign_dedup_key("u", { account_ids: ["a", "b"] })).toBe(reassign_dedup_key("u", { account_ids: ["b", "a"] }));
+    expect(reassign_dedup_key("u", {}, true)).toBe("reassign_user_dry:u"); // an audit never collides with a real run
   });
 });
