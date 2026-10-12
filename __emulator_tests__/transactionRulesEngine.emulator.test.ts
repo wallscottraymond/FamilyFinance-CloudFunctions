@@ -109,6 +109,11 @@ describe('Transaction Rules Engine — ingest wiring (emulator)', () => {
     const ruleId = rid('rule');
     const txnId = rid('tx');
     await seed_budget(userId, 'budget_abc', 'Software');
+    // The rule's category must be a first category the collection knows (canon C1).
+    await db.collection('categories').doc('GENERAL_SERVICES_SOFTWARE_TEST').set({
+      isActive: true, type: 'Outflow', firstCategoryId: 'software', overallCategoryId: 'services',
+      first_category: 'Software',
+    });
 
     await db.collection('rules').doc(ruleId).set({
       userId, isActive: true, priority: 100, name: 'Anthropic → Software',

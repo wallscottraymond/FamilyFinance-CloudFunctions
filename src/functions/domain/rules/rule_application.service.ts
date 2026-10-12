@@ -31,6 +31,29 @@ import {
   TransactionSplitForPersistence,
 } from "../../types/plaid/transaction_sync.types";
 
+/**
+ * Drop category intents that aren't a first category the collection knows (canon C1): a legacy /
+ * display-name value ("Coffee") would become a permanent user pick that matches no budget and
+ * that Plaid could never correct. PURE.
+ */
+export function only_known_categories(
+  intents: RuleActionIntents,
+  is_known_first: (slug: string) => boolean
+): RuleActionIntents {
+  const ok = (c: string | undefined) => c === undefined || is_known_first(c);
+  return {
+    ...intents,
+    assign_category: ok(intents.assign_category) ? intents.assign_category : undefined,
+    ...(intents.split
+      ? {
+        split: intents.split.map((spec) =>
+          ok(spec.category) ? spec : { ...spec, category: undefined }
+        ),
+      }
+      : {}),
+  };
+}
+
 /** Apply the supported field-set intents to a transaction (pure; returns a new object). */
 export function apply_rule_intents(
   txn: TransactionForPersistence,

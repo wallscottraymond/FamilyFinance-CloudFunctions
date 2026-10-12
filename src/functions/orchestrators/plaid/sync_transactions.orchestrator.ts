@@ -32,7 +32,7 @@ import {
 } from "../../types/plaid";
 import { rules_repo } from "../../repositories/rules.repo";
 import { evaluate_rules } from "../../domain/rules/rule_evaluation.service";
-import { apply_rule_intents } from "../../domain/rules/rule_application.service";
+import { apply_rule_intents, only_known_categories } from "../../domain/rules/rule_application.service";
 import { resolve_transaction_sync_dependencies } from "../../resolvers/plaid";
 import {
   identify_pending_migrations,
@@ -59,7 +59,6 @@ import { plaid_item_repo } from "../../repositories/plaid";
 
 // Import pipeline utilities (snake_case versions)
 import { format_transactions } from "../../transactions/utils/format_transactions";
-import { match_categories_to_transactions } from "../../transactions/utils/match_categories_to_transactions";
 import { match_transaction_splits_to_source_periods } from "../../transactions/utils/match_transaction_splits_to_source_periods";
 import {
   merge_modified_into_existing,
@@ -202,7 +201,7 @@ export async function sync_transactions_orchestrator(
       ? (t: TransactionForPersistence): TransactionForPersistence =>
         apply_rule_intents(
           t,
-          evaluate_rules(
+          only_known_categories(evaluate_rules(
             {
               ...t,
               first_category_id: resolve_split_category(
@@ -215,7 +214,7 @@ export async function sync_transactions_orchestrator(
               ).first_category_id,
             },
             active_rules
-          )
+          ), (slug) => slug in catalog.plaid_by_first)
         )
       : undefined;
 
@@ -440,9 +439,9 @@ async function process_added_transactions(
       );
       console.log(`[${ctx.trace_id}] Step 1/6: Formatted ${formatted.length} transactions`);
 
-      // Step 2: Match categories
-      const with_categories = await match_categories_to_transactions(formatted, ctx.user_id);
-      console.log(`[${ctx.trace_id}] Step 2/6: Matched categories`);
+      // Step 2: categories are NOT rewritten here — Plaid's codes are immutable (canon M1); the
+      // collection's merchant / keyword rules apply in the ONE category function (M7) at assign.
+      const with_categories = formatted;
 
       // Step 3: Match source periods
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
@@ -534,7 +533,7 @@ async function process_modified_transactions(
         deps.user_context.currency
       );
 
-      const with_categories = await match_categories_to_transactions(formatted, ctx.user_id);
+      const with_categories = formatted; // Plaid codes immutable (M1); rules apply in M7
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
       // Assignment runs in memory inside the upsert (see process_added_transactions).
       const final = with_periods;

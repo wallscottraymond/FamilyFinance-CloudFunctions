@@ -38,7 +38,6 @@ import {
   BudgetForMatch,
   PeriodLens,
 } from "../../domain/transactions/match_budget.service";
-import { CategoryRule } from "../../domain/transactions/match_category.service";
 import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 import {
   build_category_catalog,
@@ -77,14 +76,8 @@ export interface SharedAssignmentContext {
   budget_names: Record<string, string>;
   /** Everything Else budget id PER LENS (each period cadence has its own EE). */
   everything_else_budget_ids: Record<PeriodLens, string | null>;
-  category_rules: CategoryRule[];
   /** The ONE category function's catalog (canon M7). */
   category_catalog: CategoryCatalog;
-  /** plaidDetailed (= category doc id) → the two app-category slugs. */
-  category_slugs_by_plaid: Record<
-    string,
-    { overall_category_id: string | null; first_category_id: string | null }
-  >;
   /** Plaid stream transaction id → recurring id, from active defs' `transactionIds`.
    *  The AUTHORITATIVE bill/income link (Plaid's own recurring stream), used to
    *  deterministically set a split's `outflow_id`/`inflow_id` — the fuzzy period
@@ -99,7 +92,14 @@ export interface SharedAssignmentContext {
    * budget (e.g. "Santo Taco" → Everything Else vs "Eating Out and Snacks"). Keyed by the
    * account's doc id AND Plaid id.
    */
-  group_views_by_account: Map<string, { from_ms: number | null; view: ViewBudgets }>;
+  group_views_by_account: Map<
+    string,
+    { from_ms: number | null; group_id: string; view: ViewBudgets }
+  >;
+  /** Bill / income id → the view it belongs to (group id, or null = Me). */
+  recurring_view_by_id: Map<string, string | null>;
+  /** Active, non-hidden bills — a manual pin to anything else (deleted / hidden) is stale. */
+  active_outflow_ids: Set<string>;
 }
 
 /** One view's budgets, as the engine matches against them. */
@@ -147,39 +147,25 @@ export async function resolve_shared_assignment_context(
   );
   const group_views_by_account = await resolve_group_views(ctx, user_id, category_catalog);
 
-  // Category rules (merchants / keywords). The category DOC ID (= the detailed
-  // Plaid enum) is the match vocabulary, so a merchant/keyword upgrade yields a
-  // value that matches a budget's `categoryIds`.
-  const category_rules: CategoryRule[] = category_docs.map(({ id, data: c }) => ({
-    category: id,
-    merchants: (c.merchants as string[]) ?? [],
-    keywords: (c.keywords as string[]) ?? [],
-  }));
-
-  // App-category slug lookup: the category DOC ID is the Plaid detailed, so this
-  // maps a split's resolved Plaid detailed → its two user-facing category slugs
-  // (Simplified-Transaction-Categories). Built once per user, reused per txn.
-  const category_slugs_by_plaid: Record<
-    string,
-    { overall_category_id: string | null; first_category_id: string | null }
-  > = {};
-  for (const { id, data: c } of category_docs) {
-    category_slugs_by_plaid[id] = {
-      overall_category_id: (c.overallCategoryId as string | null) ?? null,
-      first_category_id: (c.firstCategoryId as string | null) ?? null,
-    };
+  // Which VIEW each bill / income belongs to (Account-Rooted-Sharing): a group's when its account
+  // is shared with one, else Me (null). A transaction links only to bills in ITS view — the
+  // period page drops a link to another view's bill and counts the money as ordinary spending.
+  const recurring_view_by_id = new Map<string, string | null>();
+  for (const r of [...outflows, ...inflows]) {
+    recurring_view_by_id.set(r.id, group_views_by_account.get(r.account_id ?? "")?.group_id ?? null);
   }
+  const active_outflow_ids = new Set(outflows.filter((o) => o.is_active && !o.is_hidden).map((o) => o.id));
 
   return {
     real_budgets,
     budget_names,
     everything_else_budget_ids,
-    category_rules,
-    category_slugs_by_plaid,
     category_catalog,
     outflow_tx_to_id,
     inflow_tx_to_id,
     group_views_by_account,
+    recurring_view_by_id,
+    active_outflow_ids,
   };
 }
 
@@ -211,8 +197,8 @@ async function resolve_group_views(
   ctx: TraceContext,
   user_id: string,
   catalog: CategoryCatalog
-): Promise<Map<string, { from_ms: number | null; view: ViewBudgets }>> {
-  const out = new Map<string, { from_ms: number | null; view: ViewBudgets }>();
+): Promise<Map<string, { from_ms: number | null; group_id: string; view: ViewBudgets }>> {
+  const out = new Map<string, { from_ms: number | null; group_id: string; view: ViewBudgets }>();
   const user = await user_repo.get_by_id(ctx, user_id);
   const group_ids = (user?.data.groupIds as string[] | undefined) ?? [];
   if (group_ids.length === 0) return out;
@@ -232,7 +218,11 @@ async function resolve_group_views(
   for (const a of placed) {
     const view = views.get(a.placement!.group_id);
     if (!view) continue;
-    const entry = { from_ms: a.placement!.shared_from_ms ?? null, view };
+    const entry = {
+      from_ms: a.placement!.shared_from_ms ?? null,
+      group_id: a.placement!.group_id,
+      view,
+    };
     out.set(a.id, entry);
     if (a.account_id) out.set(a.account_id, entry);
   }
@@ -317,15 +307,32 @@ export async function resolve_assignment_context(
       end_ms: p.end_date.toMillis(),
     }));
 
-  const recurring_by_split = await recurring_by_split_promise;
-
   // Which view this transaction counts in: a shared account's group (from its share-from date
   // on), else the user's own budgets.
   const placed = resolved_shared.group_views_by_account.get((data.accountId as string) ?? "");
-  const view: ViewBudgets =
-    placed && (placed.from_ms === null || txn_date_ms >= placed.from_ms)
-      ? placed.view
-      : resolved_shared;
+  const in_group = !!placed && (placed.from_ms === null || txn_date_ms >= placed.from_ms);
+  const view: ViewBudgets = in_group ? placed!.view : resolved_shared;
+  const view_group_id = in_group ? placed!.group_id : null;
+  const in_view = (recurring_id: string | null) =>
+    !recurring_id ||
+    (resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id;
+
+  // A link to a bill / income of ANOTHER view isn't this view's bill payment — the period page
+  // drops it and counts the money here as ordinary spending; the engine does the same.
+  const recurring_by_split = Object.fromEntries(
+    Object.entries(await recurring_by_split_promise).map(([split_id, m]) => [
+      split_id,
+      {
+        outflow_id: in_view(m.outflow_id) ? m.outflow_id : null,
+        inflow_id: in_view(m.inflow_id) ? m.inflow_id : null,
+      },
+    ])
+  );
+  // Manual bill pins are honoured only for live bills in this view (a stale / other-view pin
+  // falls back to auto — canon A5).
+  const active_outflow_ids = new Set(
+    [...resolved_shared.active_outflow_ids].filter((id) => in_view(id))
+  );
   const { real_budgets, budget_names, everything_else_budget_ids } = view;
 
   // The engine's inputs for the ONE category function (canon M7): the immutable Plaid code +
@@ -372,6 +379,7 @@ export async function resolve_assignment_context(
     category_catalog: resolved_shared.category_catalog,
     source_periods,
     recurring_by_split,
+    active_outflow_ids,
   };
 
   log_operation_success(span, user_id);

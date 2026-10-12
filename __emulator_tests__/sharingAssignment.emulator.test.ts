@@ -122,4 +122,26 @@ describe("stored assignment follows the view the account counts in", () => {
     expect(priv.budgetId).not.toBe(group_eating_out);
     expect(priv.budgetName).toMatch(/Everything Else/);
   }, 60000);
+
+  it("links a payment only to a bill in ITS view (a pre-share payment isn't the group bill's)", async () => {
+    // A bill on the joint account (group view) whose Plaid stream claims both payments.
+    const bill = id("rent_bill");
+    await db.collection("outflows").doc(bill).set({
+      id: bill, ownerId: ALEX, userId: ALEX, accountId: `p_${id("joint")}`, isActive: true, isHidden: false,
+      description: "Rent", merchantName: "", averageAmount: 18.5, frequency: "monthly",
+      transactionIds: [`pt_${id("shared_after")}`, `pt_${id("shared_before")}`],
+      plaidPrimaryCategory: "RENT_AND_UTILITIES", plaidDetailedCategory: "RENT_AND_UTILITIES_RENT",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+    await assign_transactions_batch_orchestrator(t(), {
+      user_id: ALEX,
+      transaction_ids: [id("shared_after"), id("shared_before")],
+    });
+    const split = async (k: string) => (await db.collection("transactions").doc(id(k)).get()).data()!.splits[0];
+    expect((await split("shared_after")).outflowId).toBe(bill); // group view: the group's bill
+    // Before the share-from date the payment counts in Me, where that bill doesn't live — the
+    // period page counts it as spending, so it isn't stored as a bill payment either.
+    expect((await split("shared_before")).outflowId ?? null).toBeNull();
+    await db.collection("outflows").doc(bill).delete();
+  }, 60000);
 });

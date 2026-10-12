@@ -219,3 +219,20 @@ describe("apply_rule_intents", () => {
     expect(out.splits.every((s) => s.tags.includes("x"))).toBe(true);
   });
 });
+
+import { only_known_categories } from "../rule_application.service";
+
+describe("only_known_categories (canon C1)", () => {
+  const known = (s: string) => ["eating_out", "groceries"].includes(s);
+  it("keeps a known first slug, drops an unknown / display-name value", () => {
+    expect(only_known_categories({ applied_rule_ids: ["r"], assign_category: "eating_out" }, known).assign_category).toBe("eating_out");
+    expect(only_known_categories({ applied_rule_ids: ["r"], assign_category: "Coffee" }, known).assign_category).toBeUndefined();
+  });
+  it("cleans split specs the same way", () => {
+    const r = only_known_categories(
+      { applied_rule_ids: ["r"], split: [{ percent: 50, category: "groceries" }, { percent: 50, category: "Nope" }] },
+      known
+    );
+    expect(r.split!.map((s) => s.category)).toEqual(["groceries", undefined]);
+  });
+});
