@@ -58,16 +58,21 @@ function normalize_name(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-/** The first budget in `others` that clashes (same name or a shared category). */
-function find_clash(b: ViewBudget, others: ViewBudget[]): ViewBudget | null {
-  const cats = new Set(b.category_ids);
+/** Maps a stored category id (slug or legacy Plaid code) to the first category it means. */
+export type FirstOf = (category_id: string) => string;
+const identity: FirstOf = (c) => c;
+
+/** The first budget in `others` that clashes (same name or a shared FIRST category — a legacy
+ *  code and its slug are the same category, canon A3). */
+function find_clash(b: ViewBudget, others: ViewBudget[], first_of: FirstOf): ViewBudget | null {
+  const cats = new Set(b.category_ids.map(first_of));
   return (
     others.find(
       (o) =>
         o.id !== b.id &&
         !o.is_everything_else &&
         (normalize_name(o.name) === normalize_name(b.name) ||
-          o.category_ids.some((c) => cats.has(c)))
+          o.category_ids.some((c) => cats.has(first_of(c))))
     ) ?? null
   );
 }
@@ -90,7 +95,8 @@ export function plan_move_budget(
   actor_id: string,
   source_group: Group | null,
   target: MoveTarget,
-  target_view_budgets: ViewBudget[]
+  target_view_budgets: ViewBudget[],
+  first_of: FirstOf = identity
 ): DomainResult<MovePlan> {
   if (!budget) return validation_failed(["This budget isn't available"]);
   if (budget.is_everything_else) return validation_failed(["Everything Else can't be moved"]);
@@ -114,7 +120,7 @@ export function plan_move_budget(
     new_owner_key = group_view_key(target.group.id);
     brought_by = actor_id;
   }
-  const clash = find_clash(budget, target_view_budgets);
+  const clash = find_clash(budget, target_view_budgets, first_of);
   if (clash) {
     return validation_failed([
       `There's already a budget there for this (${clash.name}). Edit that one instead.`,
@@ -152,7 +158,8 @@ export function plan_copy_budgets(
   group: Group | null,
   actor_id: string,
   items: CopyItem[],
-  group_budgets: ViewBudget[]
+  group_budgets: ViewBudget[],
+  first_of: FirstOf = identity
 ): DomainResult<CopyPlan> {
   if (!is_member(group, actor_id)) return validation_failed(["You're not in this group"]);
   const errors: string[] = [];
@@ -173,7 +180,7 @@ export function plan_copy_budgets(
       errors.push(`Set an amount for ${b.name}`);
       continue;
     }
-    const clash = find_clash(b, planned);
+    const clash = find_clash(b, planned, first_of);
     if (clash) {
       conflicts.push({
         source_budget_id: b.id,

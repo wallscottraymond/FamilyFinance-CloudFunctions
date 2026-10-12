@@ -12,6 +12,7 @@
  * @module orchestrators/sharing/budget_view
  */
 
+import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import { randomUUID } from "crypto";
 import { OrchestratorContext, TraceContext } from "../../types";
 import { BudgetEntity } from "../../types/budgets/budget_entity.types";
@@ -50,6 +51,12 @@ function to_view_budget(b: BudgetEntity | null): ViewBudget | null {
     is_everything_else: b.is_system_everything_else === true,
     brought_by: b.brought_by ?? null,
   };
+}
+
+/** Stored category id → the first category it means (slugs map to themselves). */
+async function first_of_fn(ctx: TraceContext): Promise<(id: string) => string> {
+  const catalog = await load_category_catalog(ctx);
+  return (id) => catalog.slugs_by_plaid[id]?.first_category_id ?? id;
 }
 
 async function load_view_budgets(ctx: TraceContext, owner_key: string): Promise<ViewBudget[]> {
@@ -113,7 +120,8 @@ export async function move_budget_orchestrator(
     ctx.user_id,
     source_group,
     ctx.input.to_group_id ? { type: "group", group: target_group } : { type: "me" },
-    target_budgets
+    target_budgets,
+    await first_of_fn(ctx)
   );
   if (plan.validation_errors?.length || !plan.entity) {
     return { success: false, errors: plan.validation_errors };
@@ -156,7 +164,8 @@ export async function copy_budgets_to_group_orchestrator(
       budget: to_view_budget(by_id.get(i.budget_id) ?? null),
       amount: i.amount,
     })),
-    group_budgets
+    group_budgets,
+    await first_of_fn(ctx)
   );
   if (plan.validation_errors?.length || !plan.entity) {
     return { success: false, errors: plan.validation_errors };

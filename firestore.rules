@@ -425,10 +425,10 @@ service cloud.firestore {
       // Parents/Admins can create for family members
       // Cloud functions can create Plaid transactions
       // Demo users cannot create transactions
-      allow create: if isAuthenticated() &&
-                       !isDemoUser() &&
-                       (isOwner(request.resource.data.ownerId) || isOwner(request.resource.data.userId) || canManage()) &&
-                       isValidTransactionData();
+      // Transactions are created by the backend only (Plaid sync, manual-entry callables): a
+      // client create could plant splits — a manual budget pin, a user category — in someone
+      // else's budgets (userId ≠ ownerId) and bypass the engine (Transaction-Integrity-Review 3-S).
+      allow create: if false;
 
       // Users can update their own transactions (splits, notes, visibility)
       // Group members can update shared transactions

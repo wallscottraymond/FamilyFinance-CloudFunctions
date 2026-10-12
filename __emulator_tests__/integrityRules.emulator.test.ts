@@ -46,6 +46,12 @@ it("a client may still write notes / visibility directly", async () => {
   await assertSucceeds(updateDoc(doc(alex(), "transactions/t1"), { userNotes: "hi", isHidden: true }));
 });
 
+it("a client can't create a transaction (could plant splits in another user's budgets)", async () => {
+  await assertFails(setDoc(doc(alex(), "transactions/t2"), {
+    userId: "sam", ownerId: "alex", amount: 5, splits: [{ budgetAssignmentSource: "manual", budgetId: "x" }],
+  }));
+});
+
 it("a client can't write splits or category fields directly (callable only)", async () => {
   await assertFails(updateDoc(doc(alex(), "transactions/t1"), { splits: [] }));
   await assertFails(updateDoc(doc(alex(), "transactions/t1"), { category: "x" }));

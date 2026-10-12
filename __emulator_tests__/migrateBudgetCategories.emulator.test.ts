@@ -68,6 +68,13 @@ describe('migrate_budget_categories (emulator)', () => {
     expect(snap.budgets[`mb_codes_${RUN}`]).toEqual([`MB_A_${RUN}`]);
     expect(applied.applied).toBeGreaterThanOrEqual(2);
 
+    // A re-run of the same reviewed apply (e.g. after a crash) is safe: nothing left to write,
+    // the original undo snapshot is kept.
+    const again = await migrate_budget_categories_orchestrator(ctx(), { dry_run: false, reviewed_run_id: dry.run_id });
+    expect(again.applied).toBe(0);
+    expect((await db.collection('_migration_snapshots').doc(dry.run_id).get()).data()!.budgets[`mb_codes_${RUN}`])
+      .toEqual([`MB_A_${RUN}`]);
+
     // Data changed after a review → the stale review is refused.
     await db.collection('budgets').doc(`mb_ee_${RUN}`).update({ categoryIds: ['c'] });
     await expect(

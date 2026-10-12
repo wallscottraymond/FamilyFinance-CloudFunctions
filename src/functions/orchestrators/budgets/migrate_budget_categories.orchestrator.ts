@@ -12,14 +12,13 @@
  * @module orchestrators/budgets/migrate_budget_categories
  */
 
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { generate_id } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { migration_report_repo } from "../../repositories/migration_report.repo";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import {
   BudgetMigrationChange,
-  BudgetMigrationFlag,
   plan_budget_category_migration,
 } from "../../domain/budgets/budget_category_migration.service";
 import { reassign_view } from "../sharing/view_reassign";
@@ -39,14 +38,11 @@ export interface MigrateBudgetCategoriesResult {
   skipped_changed_since?: string[];
 }
 
-const REPORTS = "_migration_reports";
-const SNAPSHOTS = "_migration_snapshots";
 
 export async function migrate_budget_categories_orchestrator(
   ctx: TraceContext,
   input: MigrateBudgetCategoriesInput
 ): Promise<MigrateBudgetCategoriesResult> {
-  const db = getFirestore();
   const [budgets, catalog] = await Promise.all([
     budget_repo.get_all_active(ctx),
     load_category_catalog(ctx),
@@ -64,30 +60,43 @@ export async function migrate_budget_categories_orchestrator(
 
   if (input.dry_run) {
     const run_id = generate_id();
-    await db.collection(REPORTS).doc(run_id).set({
+    await migration_report_repo.save_report(run_id, {
       kind: "budget_categories_A2",
       dry_run: true,
       changes: plan.changes,
       flags: plan.flags,
-      created_at: Timestamp.now(),
     });
     return { run_id, dry_run: true, changes: plan.changes.length, flags: plan.flags.length };
   }
 
   // APPLY — only what the user reviewed.
   if (!input.reviewed_run_id) throw new Error("Apply needs the reviewed dry run's run_id");
-  const reviewed = (await db.collection(REPORTS).doc(input.reviewed_run_id).get()).data();
+  const reviewed = await migration_report_repo.get_report(input.reviewed_run_id);
   if (!reviewed || reviewed.dry_run !== true) throw new Error("Reviewed dry run not found");
-  const key = (c: BudgetMigrationChange[] | BudgetMigrationFlag[]) => JSON.stringify(c);
-  if (key(reviewed.changes) !== key(plan.changes)) {
+  const reviewed_changes = reviewed.changes as BudgetMigrationChange[];
+
+  // Compare as SETS of (budget, before, after) — independent of field / list order. A re-run
+  // after a crash mid-apply is fine: the budgets already applied simply aren't in the new plan.
+  const key = (c: BudgetMigrationChange) => `${c.budget_id}|${c.before.join(",")}|${c.after.join(",")}`;
+  const reviewed_keys = new Set(reviewed_changes.map(key));
+  const unreviewed = plan.changes.filter((c) => !reviewed_keys.has(key(c)));
+  if (unreviewed.length > 0) {
+    throw new Error("Budgets changed since the dry run — run a new dry run and review it");
+  }
+  // Every reviewed budget must still be as reviewed (pending) or already migrated (applied).
+  const current = new Map(budgets.map((b) => [b.id, (b.category_ids ?? []).join(",")]));
+  const drifted = reviewed_changes.filter((c) => {
+    const now = current.get(c.budget_id);
+    return now !== undefined && now !== c.before.join(",") && now !== c.after.join(",");
+  });
+  if (drifted.length > 0) {
     throw new Error("Budgets changed since the dry run — run a new dry run and review it");
   }
 
   const run_id = input.reviewed_run_id;
-  await db.collection(SNAPSHOTS).doc(run_id).set({
+  await migration_report_repo.save_snapshot_once(run_id, {
     kind: "budget_categories_A2",
-    created_at: Timestamp.now(),
-    budgets: Object.fromEntries(plan.changes.map((c) => [c.budget_id, c.before])),
+    budgets: Object.fromEntries(reviewed_changes.map((c) => [c.budget_id, c.before])),
   });
 
   let applied = 0;
@@ -101,15 +110,13 @@ export async function migrate_budget_categories_orchestrator(
       continue;
     }
     applied++;
-    if (real.has(c.budget_id)) views_to_reassign.add(c.owner_key);
   }
+  // Re-assign every view whose REAL budgets the reviewed plan changes (idempotent — a re-run
+  // after a crash covers views whose budgets were written before it).
+  for (const c of reviewed_changes) if (real.has(c.budget_id)) views_to_reassign.add(c.owner_key);
   for (const owner_key of views_to_reassign) await reassign_view(ctx, owner_key);
 
-  await db.collection(REPORTS).doc(run_id).update({
-    applied_at: Timestamp.now(),
-    applied,
-    skipped_changed_since: skipped,
-  });
+  await migration_report_repo.mark_applied(run_id, { applied, skipped_changed_since: skipped });
   return {
     run_id,
     dry_run: false,
