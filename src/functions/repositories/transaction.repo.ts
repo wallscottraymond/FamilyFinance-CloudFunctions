@@ -10,6 +10,7 @@
  * @module repositories/transaction
  */
 
+import type { TransactionSplitForMigration } from "../types/plaid";
 import { getFirestore, Timestamp, FieldPath } from "firebase-admin/firestore";
 import {
   WriteResult,
@@ -23,7 +24,7 @@ import {
   TransactionSplitForPersistence,
   PendingTransactionInfo,
 } from "../types/plaid";
-import { record_audit_entry_async } from "../audit";
+import { record_audit_entry_async, record_audit_entries_batch } from "../audit";
 import { NotFoundError, PermissionDeniedError } from "../types/errors";
 
 /**
@@ -127,6 +128,23 @@ interface LegacySplitDoc {
 // Mapping Functions
 // ============================================================================
 
+/** A pending split's MANUAL choices (only the ones the user actually made). */
+function pending_manual_choices(s: Record<string, unknown>): Partial<TransactionSplitForMigration> {
+  const out: Partial<TransactionSplitForMigration> = {};
+  if (s.budgetAssignmentSource === "manual") out.budget_assignment_source = "manual";
+  if (s.outflowAssignmentSource === "manual") {
+    out.outflow_assignment_source = "manual";
+    out.outflow_pinned_period_id = (s.outflowPinnedPeriodId as string | null | undefined) ?? null;
+  }
+  if (s.categorySource === "user") {
+    out.category_source = "user";
+    out.overall_category_id = (s.overallCategoryId as string | null | undefined) ?? null;
+    out.first_category_id = (s.firstCategoryId as string | null | undefined) ?? null;
+    out.second_category_id = (s.secondCategoryId as string | null | undefined) ?? null;
+  }
+  return out;
+}
+
 /**
  * Maps legacy Firestore document to PendingTransactionInfo.
  */
@@ -148,12 +166,32 @@ function map_to_pending_info(doc: LegacyTransactionDoc): PendingTransactionInfo 
       is_ignored: s.spendStatus ? s.spendStatus === "ignored" : !!s.isIgnored,
       is_refund: s.spendStatus ? s.spendStatus === "refund" : !!s.isRefund,
       is_tax_deductible: !!s.isTaxDeductible,
+      ...pending_manual_choices(s as unknown as Record<string, unknown>),
     })),
     internal_primary_category: doc.internalPrimaryCategory,
     internal_detailed_category: doc.internalDetailedCategory,
     description_override: doc.description !== doc.name ? doc.description : null,
     tags: doc.splits?.[0]?.tags || [],
   };
+}
+
+/** A transaction doc a sync wrote, with what it replaced (null = created). */
+export interface SyncWrittenDoc {
+  doc_id: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown>;
+}
+
+/** Options for a sync's transaction writes. */
+export interface SyncWriteOptions {
+  /** Stamped as `syncRunId` on every written doc (see `on_transaction_written`). */
+  run_id?: string;
+  /** Final shaping before the write — the sync runs the assignment engine here, in memory. */
+  before_write?: (
+    doc_id: string,
+    data: Record<string, unknown>,
+    existing: Record<string, unknown> | null
+  ) => Promise<Record<string, unknown>>;
 }
 
 /**
@@ -244,6 +282,21 @@ function map_split_to_doc(
     ...(split.budget_assignment_source
       ? { budgetAssignmentSource: split.budget_assignment_source }
       : {}),
+    // Manual bill pin + user category override (carried pending → posted). Only when set.
+    ...(split.outflow_assignment_source === "manual"
+      ? {
+        outflowAssignmentSource: "manual",
+        outflowPinnedPeriodId: split.outflow_pinned_period_id ?? null,
+      }
+      : {}),
+    ...(split.category_source === "user"
+      ? {
+        categorySource: "user",
+        overallCategoryId: split.overall_category_id ?? null,
+        firstCategoryId: split.first_category_id ?? null,
+        secondCategoryId: split.second_category_id ?? null,
+      }
+      : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -291,7 +344,8 @@ export const transaction_repo = {
     on_update?: (
       existing: Record<string, unknown>,
       fresh: Record<string, unknown>
-    ) => Record<string, unknown>
+    ) => Record<string, unknown>,
+    opts?: SyncWriteOptions
   ): Promise<{
     created: number;
     updated: number;
@@ -300,9 +354,11 @@ export const transaction_repo = {
       doc_id: string;
       action: "created" | "updated";
     }>;
+    /** Every doc written (before = the stored doc, null on create) — the sync's follow-up input. */
+    written: SyncWrittenDoc[];
   }> {
     if (transactions.length === 0) {
-      return { created: 0, updated: 0, results: [] };
+      return { created: 0, updated: 0, results: [], written: [] };
     }
 
     const db = getFirestore();
@@ -314,12 +370,19 @@ export const transaction_repo = {
       doc_id: string;
       action: "created" | "updated";
     }> = [];
+    const written: SyncWrittenDoc[] = [];
+    // Stamped on every doc this sync writes so `on_transaction_written` can tell the write came
+    // from a sync (which runs its own single follow-up pass) and skip its per-transaction fan-out.
+    const tag: Record<string, unknown> = opts?.run_id
+      ? { syncRunId: opts.run_id, lastWriteSource: "plaid_sync" }
+      : {};
 
     // Process in batches
     const chunks = chunk_for_batch(transactions);
 
     for (const chunk of chunks) {
       const batch = db.batch();
+      const audits: Array<{ doc_id: string; action: "created" | "updated" }> = [];
 
       // Existence lookup for the WHOLE chunk in ⌈N/30⌉ batched `in` queries (matches by the
       // `transactionId` field, so it finds both deterministic `plaid_${id}` docs AND legacy
@@ -351,9 +414,15 @@ export const transaction_repo = {
           fresh_doc.updatedAt = now;
           const { id: _existing_id, ...existing_doc } =
             existing.doc as unknown as Record<string, unknown>;
-          const doc_data = on_update
+          const merged = on_update
             ? on_update(existing_doc, fresh_doc as unknown as Record<string, unknown>)
             : (fresh_doc as unknown as Record<string, unknown>);
+          // Final shape decided BEFORE the write (e.g. the assignment engine run in memory), so
+          // the transaction is written once, finished.
+          const shaped = opts?.before_write
+            ? await opts.before_write(existing.doc_id, merged, existing_doc)
+            : merged;
+          const doc_data = { ...shaped, ...tag };
 
           batch.update(doc_ref(existing.doc_id), doc_data);
 
@@ -362,19 +431,9 @@ export const transaction_repo = {
             doc_id: existing.doc_id,
             action: "updated",
           });
+          written.push({ doc_id: existing.doc_id, before: existing_doc, after: doc_data });
+          audits.push({ doc_id: existing.doc_id, action: "updated" });
           updated++;
-
-          // Audit entry
-          record_audit_entry_async({
-            user_id,
-            action: "update",
-            entity_type: "transaction",
-            entity_id: existing.doc_id,
-            before: { plaid_transaction_id: txn.transaction_id },
-            after: doc_data as unknown as Record<string, unknown>,
-            trace_id: ctx.trace_id,
-            metadata: { source: "api", context: { plaid_sync: true } },
-          });
         } else {
           // CREATE: New transaction.
           // DETERMINISTIC doc id derived from the Plaid transaction_id (NOT random)
@@ -392,7 +451,9 @@ export const transaction_repo = {
           // logic, it just invokes it at the create lifecycle point.
           const effective = on_create ? on_create(txn) : txn;
           const doc_id = `plaid_${effective.transaction_id.replace(/\//g, "_")}`;
-          const doc_data = map_to_doc({ ...effective, id: doc_id }, now);
+          const base = map_to_doc({ ...effective, id: doc_id }, now) as unknown as Record<string, unknown>;
+          const shaped = opts?.before_write ? await opts.before_write(doc_id, base, null) : base;
+          const doc_data = { ...shaped, ...tag };
 
           batch.set(doc_ref(doc_id), doc_data);
 
@@ -401,30 +462,40 @@ export const transaction_repo = {
             doc_id,
             action: "created",
           });
+          written.push({ doc_id, before: null, after: doc_data });
+          audits.push({ doc_id, action: "created" });
           created++;
-
-          // Audit entry
-          record_audit_entry_async({
-            user_id,
-            action: "create",
-            entity_type: "transaction",
-            entity_id: doc_id,
-            before: null,
-            after: doc_data as unknown as Record<string, unknown>,
-            trace_id: ctx.trace_id,
-            metadata: { source: "api", context: { plaid_sync: true } },
-          });
         }
       }
 
       await batch.commit();
+
+      // ONE audit entry per page (ids only) instead of a full-copy, fire-and-forget entry per
+      // transaction — 3,000 audit docs per first link became 6. Awaited so it isn't dropped.
+      if (audits.length > 0) {
+        await record_audit_entries_batch([
+          {
+            user_id,
+            action: "update",
+            entity_type: "transaction",
+            entity_id: `plaid_sync:${plaid_item_id}`,
+            before: null,
+            after: {
+              created: audits.filter((a) => a.action === "created").map((a) => a.doc_id),
+              updated: audits.filter((a) => a.action === "updated").map((a) => a.doc_id),
+            },
+            trace_id: ctx.trace_id,
+            metadata: { source: "api", context: { plaid_sync: true, run_id: opts?.run_id ?? null } },
+          },
+        ]).catch((e) => console.warn(`[${ctx.trace_id}] sync audit write failed (non-fatal):`, e));
+      }
     }
 
     console.log(
       `[${ctx.trace_id}] upsert_from_plaid_sync: created=${created}, updated=${updated}`
     );
 
-    return { created, updated, results };
+    return { created, updated, results, written };
   },
 
   /**
@@ -444,12 +515,16 @@ export const transaction_repo = {
     }
     const db = getFirestore();
     const out: LegacyTransactionDoc[] = [];
+    // `in` takes ≤30 values; run the chunks in parallel (was serial — ~17 round trips per
+    // 500-transaction page).
+    const chunks: string[][] = [];
     for (let i = 0; i < plaid_transaction_ids.length; i += 30) {
-      const chunk = plaid_transaction_ids.slice(i, i + 30);
-      const snapshot = await db
-        .collection(COLLECTION)
-        .where("transactionId", "in", chunk)
-        .get();
+      chunks.push(plaid_transaction_ids.slice(i, i + 30));
+    }
+    const snapshots = await Promise.all(
+      chunks.map((chunk) => db.collection(COLLECTION).where("transactionId", "in", chunk).get())
+    );
+    for (const snapshot of snapshots) {
       for (const doc of snapshot.docs) {
         const data = doc.data() as LegacyTransactionDoc;
         if (data.ownerId === user_id) {
@@ -662,7 +737,8 @@ export const transaction_repo = {
     ctx: TraceContext,
     user_id: string,
     plaid_transaction_ids: string[],
-    reason: string
+    reason: string,
+    opts?: { run_id?: string; written?: SyncWrittenDoc[] }
   ): Promise<WriteResult[]> {
     if (plaid_transaction_ids.length === 0) {
       return [];
@@ -672,8 +748,9 @@ export const transaction_repo = {
     const now = Timestamp.now();
     const results: WriteResult[] = [];
 
-    // Query for all transactions by Plaid IDs
-    const chunks = chunk_for_batch(plaid_transaction_ids);
+    // Query for all transactions by Plaid IDs. `in` accepts at most 30 values — the old
+    // 500-id chunks made any page with >30 removals throw (removals silently never applied).
+    const chunks = chunk_for_batch(plaid_transaction_ids, 30);
 
     for (const chunk of chunks) {
       const snapshot = await db
@@ -690,15 +767,21 @@ export const transaction_repo = {
         const before = doc.data() as LegacyTransactionDoc;
 
         /* eslint-disable @typescript-eslint/naming-convention */
-        const update_data = {
+        const update_data: Record<string, unknown> = {
           isActive: false,
           isDeleted: true,
           deletionReason: reason,
           updatedAt: now,
+          ...(opts?.run_id ? { syncRunId: opts.run_id, lastWriteSource: "plaid_sync" } : {}),
         };
         /* eslint-enable @typescript-eslint/naming-convention */
 
         batch.update(doc.ref, update_data);
+        opts?.written?.push({
+          doc_id: doc.id,
+          before: before as unknown as Record<string, unknown>,
+          after: { ...before, ...update_data } as Record<string, unknown>,
+        });
 
         results.push(
           create_write_result("transaction", doc.id, "merge", before, {
@@ -915,10 +998,14 @@ export const transaction_repo = {
     updated_splits: Array<Record<string, unknown>>,
     split_budget_ids: string[],
     split_outflow_ids: string[] = [],
-    split_inflow_ids: string[] = []
+    split_inflow_ids: string[] = [],
+    /** The assignment run writing this — lets `on_transaction_written` skip the engine's own
+     *  writes (the batch runs its own single follow-up instead of N re-entries). */
+    assign_run_id?: string
   ): Promise<void> {
     /* eslint-disable @typescript-eslint/naming-convention */
     await doc_ref(doc_id).update({
+      ...(assign_run_id ? { assignRunId: assign_run_id, lastWriteSource: "assignment" } : {}),
       splits: updated_splits,
       splitBudgetIds: split_budget_ids,
       // Queryable durable txn↔recurring links (array-contains) — power recurring

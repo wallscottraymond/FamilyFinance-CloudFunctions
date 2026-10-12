@@ -31,7 +31,7 @@ import {
   set_assignment_watermark_ms,
 } from "../../repositories/assignment_watermark.repo";
 import { assign_transactions_batch_orchestrator } from "./assign_transactions_batch.orchestrator";
-import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import { create_job } from "../../infrastructure/job_queue";
 
 export interface AssignUserTransactionsInput {
   user_id: string;
@@ -79,10 +79,12 @@ export async function assign_user_transactions_orchestrator(
     const more = changed.length === PAGE_LIMIT;
     if (more) {
       // More changed txns than one page — continue in a follow-up run (deduped).
-      await create_job_if_not_exists(
+      // A fresh job: `create_job_if_not_exists` saw THIS running job as active and skipped, so
+      // anything past the first page (3,000) was never assigned.
+      await create_job(
         "assign_user_transactions",
         { deduplication_key: `assign_user:${input.user_id}`, user_id: input.user_id },
-        { trace_id: ctx.trace_id, delay_seconds: 5 }
+        { trace_id: ctx.trace_id }
       );
     }
 

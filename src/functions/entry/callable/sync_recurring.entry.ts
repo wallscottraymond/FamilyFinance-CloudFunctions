@@ -7,10 +7,10 @@
  * @module entry/callable/sync_recurring
  */
 
+import { sync_item_orchestrator } from "../../orchestrators/plaid/sync_item.orchestrator";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { z } from "zod";
-import { sync_recurring_orchestrator } from "../../orchestrators/plaid";
 import { generate_id } from "../../observability";
 import { check_and_record } from "../../infrastructure/rate_limiter";
 
@@ -102,16 +102,21 @@ export const sync_recurring = onCall(
 
     // 5. CALL ORCHESTRATOR (exactly one)
     try {
-      const result = await sync_recurring_orchestrator({
-        trace_id,
-        span_id,
-        input: {
-          item_id: input.itemId,
-          account_ids: input.accountIds,
-        },
-        user_id,
-        idempotency_key: `sync_recurring:${user_id}:${input.itemId}:${Date.now()}`,
-      });
+      // Through the item sync with recurring (lease + one pass).
+      const synced = await sync_item_orchestrator(
+        { trace_id, span_id },
+        { item_doc_id: input.itemId, user_id, recurring: true, reason: "callable:syncRecurring" }
+      );
+      const result = {
+        success: synced.status !== "failed",
+        inflows_synced: synced.streams_written,
+        outflows_synced: 0,
+        inflows_stale: 0,
+        outflows_stale: 0,
+        merge_suggestions: 0,
+        errors: undefined as string[] | undefined,
+        error: synced.error,
+      };
 
       // 6. MAP RESPONSE (convert snake_case to camelCase for frontend)
       return {

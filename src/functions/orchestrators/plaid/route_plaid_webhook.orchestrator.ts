@@ -11,10 +11,9 @@
  * @module orchestrators/plaid/route_plaid_webhook
  */
 
+import { enqueue_item_sync } from "./sync_item.orchestrator";
 import { TraceContext } from "../../types";
 import { webhook_balance_sync_orchestrator } from "./webhook_balance_sync.orchestrator";
-import { sync_transactions_orchestrator } from "./sync_transactions.orchestrator";
-import { sync_recurring_orchestrator } from "./sync_recurring.orchestrator";
 import { handle_item_error_orchestrator } from "./handle_item_error.orchestrator";
 import { handle_login_repaired_orchestrator } from "./handle_login_repaired.orchestrator";
 import { resolve_webhook_transaction_sync_dependencies } from "../../resolvers/plaid";
@@ -150,46 +149,36 @@ export async function route_plaid_webhook_orchestrator(
   // TRANSACTIONS webhooks
   if (webhook_type === PlaidWebhookType.TRANSACTIONS) {
     switch (webhook_code) {
-    case PlaidWebhookCode.SYNC_UPDATES_AVAILABLE:
-    case PlaidWebhookCode.DEFAULT_UPDATE:
-    case PlaidWebhookCode.INITIAL_UPDATE: {
-      // Resolve dependencies (look up item by Plaid ID)
+    case PlaidWebhookCode.SYNC_UPDATES_AVAILABLE: {
+      // Queue the item sync and return at once. The sync used to run INSIDE this 30-second
+      // webhook (a first link's full history can't finish in 30 s → killed, cursor never saved,
+      // everything re-downloaded next time). `sync_item` runs immediately in its own 9-minute
+      // job, holds the item's lease (no parallel syncs), and is coalesced per item.
       const deps = await resolve_webhook_transaction_sync_dependencies(
         { trace_id, span_id },
         plaid_item_id
       );
       if (!deps) {
-        console.warn(
-          `[${trace_id}] Could not resolve dependencies for item ${plaid_item_id}`
-        );
+        console.warn(`[${trace_id}] Could not resolve dependencies for item ${plaid_item_id}`);
         return { processed: false, message: "Item not found" };
       }
-
-      // Purge guard — don't recreate data for a user being erased.
       if (await is_user_purging(deps.plaid_item.user_id)) {
         return { processed: false, message: "User account being deleted" };
       }
-
-      const result = await sync_transactions_orchestrator({
-        trace_id,
-        span_id,
-        input: {
-          item_id: deps.plaid_item.doc_id, // Use document ID
-          user_id: deps.plaid_item.user_id,
-        },
+      await enqueue_item_sync({
+        item_doc_id: deps.plaid_item.doc_id,
         user_id: deps.plaid_item.user_id,
-        idempotency_key: `webhook:transaction_sync:${request_id || plaid_item_id}:${Date.now()}`,
+        reason: "webhook:SYNC_UPDATES_AVAILABLE",
+        trace_id,
       });
-
-      if (!result.success) {
-        console.error(`[${trace_id}] Transaction sync failed: ${result.error}`);
-        return { processed: false, message: result.error || "Sync failed" };
-      }
-      return {
-        processed: true,
-        message: `Synced: +${result.added_count} -${result.removed_count} ~${result.modified_count}`,
-      };
+      return { processed: true, message: "Item sync queued" };
     }
+
+    // Legacy (pre-/transactions/sync) codes: Plaid sends them alongside SYNC_UPDATES_AVAILABLE
+    // for the same data — syncing on each one too was a duplicate sync of the same item.
+    case PlaidWebhookCode.DEFAULT_UPDATE:
+    case PlaidWebhookCode.INITIAL_UPDATE:
+      return { processed: false, message: `Ignored legacy ${webhook_code} (SYNC_UPDATES_AVAILABLE drives syncs)` };
 
     default:
       console.log(
@@ -215,19 +204,15 @@ export async function route_plaid_webhook_orchestrator(
     if (await is_user_purging(deps.plaid_item.user_id)) {
       return { processed: false, message: "User account being deleted" };
     }
-    const result = await sync_recurring_orchestrator({
-      trace_id,
-      span_id,
-      input: { item_id: deps.plaid_item.doc_id },
+    // Bills / income changed → the item sync refreshes them first, then links transactions.
+    await enqueue_item_sync({
+      item_doc_id: deps.plaid_item.doc_id,
       user_id: deps.plaid_item.user_id,
-      idempotency_key: `webhook:recurring_sync:${request_id || plaid_item_id}:${Date.now()}`,
+      recurring: true,
+      reason: "webhook:RECURRING_TRANSACTIONS",
+      trace_id,
     });
-    return {
-      processed: result.success !== false,
-      message: result.success === false
-        ? (result.error || "Recurring sync failed")
-        : "Recurring sync complete",
-    };
+    return { processed: true, message: "Item sync (with recurring) queued" };
   }
 
   console.log(`[${trace_id}] Unhandled webhook type: ${webhook_type}`);

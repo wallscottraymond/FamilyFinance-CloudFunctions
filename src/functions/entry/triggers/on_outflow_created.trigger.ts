@@ -75,6 +75,13 @@ export const on_outflow_created = onDocumentCreated(
       return;
     }
 
+    // Created by an item sync (`sync_item`): the sync generates this stream's periods, links its
+    // transactions and reconciles it inline, then bumps the derive version once for everything —
+    // doing it here too raced the sync and repeated the work.
+    if (outflow_data.syncRunId) {
+      return;
+    }
+
     // Extract user ID (handle both naming conventions)
     const user_id = outflow_data.ownerId ?? outflow_data.userId;
 

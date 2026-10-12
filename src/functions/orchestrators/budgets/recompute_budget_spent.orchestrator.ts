@@ -40,6 +40,11 @@ export interface RecomputeBudgetSpentInput {
    * (needed because spent must be rebuilt even where no assignment changed).
    */
   transaction_date_ms?: number;
+  /**
+   * Many dates at once (a sync's follow-up pass): budget id → transaction dates. Recomputes each
+   * budget's periods containing ANY of its dates, in one job — instead of one job per day.
+   */
+  dates_ms_by_budget?: Record<string, number[]>;
 }
 
 function round2(value: number): number {
@@ -75,22 +80,23 @@ export async function recompute_budget_spent_orchestrator(
       // Date-scoped (engine fan-out) reads only the periods that could CONTAIN the txn date
       // (periodStart within 40d before it) — not the budget's whole lifetime (~138 docs) —
       // then keeps the exact containing period(s). Full mode (backfill, no date) reads all.
+      const many = input.dates_ms_by_budget?.[budget_id];
       const periods =
-        input.transaction_date_ms === undefined
+        many !== undefined || input.transaction_date_ms === undefined
           ? await budget_period_repo.get_by_budget_id(ctx, budget_id)
           : await budget_period_repo.get_by_budget_id_in_date_window(
             ctx,
             budget_id,
             input.transaction_date_ms
           );
+      const contains = (ms: number) => (p: (typeof periods)[number]) =>
+        ms >= p.start_date.toMillis() && ms <= p.end_date.toMillis();
       const affected =
-        input.transaction_date_ms === undefined
-          ? periods
-          : periods.filter(
-            (p) =>
-                input.transaction_date_ms! >= p.start_date.toMillis() &&
-                input.transaction_date_ms! <= p.end_date.toMillis()
-          );
+        many !== undefined
+          ? periods.filter((p) => many.some((ms) => contains(ms)(p)))
+          : input.transaction_date_ms === undefined
+            ? periods
+            : periods.filter(contains(input.transaction_date_ms));
       if (affected.length === 0) {
         continue;
       }

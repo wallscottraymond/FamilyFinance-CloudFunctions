@@ -10,6 +10,7 @@
  * @module repositories/inflow
  */
 
+import type { RecurringWrittenDoc } from "./recurring_doc_equality";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   WriteResult,
@@ -637,11 +638,15 @@ export const inflow_repo = {
    */
   async save_batch(
     ctx: TraceContext,
-    entities: InflowForPersistence[]
-  ): Promise<BatchWriteResult> {
+    entities: InflowForPersistence[],
+    /** Sync run writing these: stamped as `syncRunId` so the recurring triggers leave the
+     *  period generation + reconcile to the sync (it does them once, inline). */
+    run_id?: string
+  ): Promise<BatchWriteResult & { written: RecurringWrittenDoc[] }> {
     if (entities.length === 0) {
-      return { results: [], count: 0, success: true };
+      return { results: [], count: 0, success: true, written: [] };
     }
+    const written: RecurringWrittenDoc[] = [];
 
     const db = getFirestore();
     const now = Timestamp.now();
@@ -676,8 +681,18 @@ export const inflow_repo = {
           unchanged++;
           continue;
         }
-        batch.set(doc_ref(entity.id), doc_data);
+        const stamped = run_id
+          ? { ...doc_data, syncRunId: run_id, lastWriteSource: "plaid_sync" }
+          : doc_data;
+        batch.set(doc_ref(entity.id), stamped);
         writes++;
+        written.push({
+          id: entity.id,
+          kind: "inflow",
+          created: !existing,
+          before: existing_doc as unknown as Record<string, unknown> | null,
+          after: stamped as unknown as Record<string, unknown>,
+        });
 
         results.push(
           create_write_result(
@@ -713,6 +728,7 @@ export const inflow_repo = {
       results,
       count: entities.length,
       success: true,
+      written,
     };
   },
 

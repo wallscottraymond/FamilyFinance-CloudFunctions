@@ -10,10 +10,10 @@
  * @module entry/callable/sync_transactions
  */
 
+import { sync_item_orchestrator } from "../../orchestrators/plaid/sync_item.orchestrator";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { z } from "zod";
-import { sync_transactions_orchestrator } from "../../orchestrators/plaid";
 import { generate_id } from "../../observability";
 import { TRANSACTION_SYNC_RATE_LIMIT_SECONDS } from "../../types/plaid";
 import { check_and_record } from "../../infrastructure/rate_limiter";
@@ -109,17 +109,21 @@ export const sync_transactions = onCall(
 
     // 5. CALL ORCHESTRATOR (exactly one)
     try {
-      const result = await sync_transactions_orchestrator({
-        trace_id,
-        span_id,
-        input: {
-          item_id: input.itemId,
-          user_id,
-          cursor: input.cursor,
-        },
-        user_id,
-        idempotency_key: `sync_transactions:${user_id}:${input.itemId}:${Date.now()}`,
-      });
+      // Through the item sync (lease + one write per txn + one follow-up pass).
+      const synced = await sync_item_orchestrator(
+        { trace_id, span_id },
+        { item_doc_id: input.itemId, user_id, reason: "callable:syncTransactions" }
+      );
+      const result = {
+        success: synced.status !== "failed",
+        added_count: synced.added,
+        modified_count: synced.modified,
+        removed_count: synced.removed,
+        pending_migrated_count: 0,
+        has_more: false,
+        next_cursor: null,
+        error: synced.error,
+      };
 
       // 6. MAP RESPONSE (convert snake_case to camelCase for frontend)
       return {

@@ -14,8 +14,8 @@
  * @module orchestrators/plaid/refresh_plaid_data
  */
 
+import { sync_item_orchestrator } from "./sync_item.orchestrator";
 import { OrchestratorContext } from "../../types";
-import { TransactionSyncInput } from "../../types/plaid";
 import { create_child_span } from "../../observability";
 import {
   RefreshPlaidDataInput,
@@ -35,7 +35,6 @@ import {
   validate_refresh_request,
 } from "../../domain/plaid/refresh_plaid_data.service";
 import { sync_balances_orchestrator } from "./sync_balances.orchestrator";
-import { sync_transactions_orchestrator } from "./sync_transactions.orchestrator";
 
 /**
  * Orchestrates the combined balance + transaction refresh.
@@ -145,17 +144,23 @@ export async function refresh_plaid_data_orchestrator(
 
   for (const item of deps.items) {
     try {
-      const tx_ctx: OrchestratorContext<TransactionSyncInput> = {
-        ...create_child_span(ctx),
-        input: {
-          item_id: item.item_id,
-          user_id: ctx.user_id,
-        },
+      // Through the item sync (lease + one write per txn + one follow-up pass). If a sync of
+      // this item is already running, it re-runs once more — counts here are then 0.
+      const synced = await sync_item_orchestrator(create_child_span(ctx), {
+        item_doc_id: item.doc_id,
         user_id: ctx.user_id,
-        idempotency_key: `${ctx.idempotency_key}:tx:${item.item_id}`,
+        reason: "manual_refresh",
+      });
+      const tx_result = {
+        success: synced.status !== "failed",
+        added_count: synced.added,
+        modified_count: synced.modified,
+        removed_count: synced.removed,
+        pending_migrated_count: 0,
+        next_cursor: null,
+        has_more: false,
+        error: synced.error,
       };
-
-      const tx_result = await sync_transactions_orchestrator(tx_ctx);
 
       transaction_results.push(
         create_transaction_phase_result(item.item_id, tx_result)

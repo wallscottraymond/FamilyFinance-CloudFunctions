@@ -130,6 +130,9 @@ export interface TransactionSyncDependencies {
 
   /** Set of active (non-hidden) account IDs for filtering transactions */
   active_account_ids: Set<string>;
+  /** Every account of the item we have a doc for (active + hidden). An account id outside this
+   *  set is not saved yet — its transactions must not be dropped. */
+  known_account_ids: Set<string>;
 }
 
 /**
@@ -175,6 +178,16 @@ export interface TransactionSplitForMigration {
   is_ignored?: boolean;
   is_refund?: boolean;
   is_tax_deductible?: boolean;
+  /** The user's manual choices, carried pending → posted so the assignment engine keeps them
+   *  (without the "manual"/"user" markers it re-derives — a manual budget, bill or category set on a
+   *  pending transaction was lost when it posted). */
+  budget_assignment_source?: "category" | "manual";
+  outflow_assignment_source?: "auto" | "manual";
+  outflow_pinned_period_id?: string | null;
+  category_source?: "plaid" | "user";
+  overall_category_id?: string | null;
+  first_category_id?: string | null;
+  second_category_id?: string | null;
 }
 
 /**
@@ -291,6 +304,13 @@ export interface TransactionSplitForPersistence {
    * a rule's assign-budget action). Absent = engine default ("category"). */
   budget_assignment_source?: "category" | "manual";
   outflow_id: string | null;
+  /** Manual bill pin (+ pinned period) and user category override — carried pending → posted. */
+  outflow_assignment_source?: "auto" | "manual";
+  outflow_pinned_period_id?: string | null;
+  category_source?: "plaid" | "user";
+  overall_category_id?: string | null;
+  first_category_id?: string | null;
+  second_category_id?: string | null;
   monthly_period_id: string | null;
   weekly_period_id: string | null;
   bi_weekly_period_id: string | null;

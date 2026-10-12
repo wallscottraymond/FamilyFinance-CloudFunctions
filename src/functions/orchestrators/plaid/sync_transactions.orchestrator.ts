@@ -11,8 +11,10 @@
  * 7. Events: Emit transaction sync events
  * 8. Update cursor for incremental sync
  *
- * NOTE: Budget calculations are handled by existing Firestore triggers.
- * This orchestrator only syncs transactions from Plaid to Firestore.
+ * One writer, one write per transaction: every page is pulled first, the assignment engine runs
+ * in memory, each transaction is written once (stamped `syncRunId` so the per-transaction trigger
+ * skips it), and ONE follow-up pass (bill/income reconcile, budget spent, transfer check, derive
+ * bump) runs at the end — inline, not as hundreds of queued jobs.
  *
  * @module orchestrators/plaid/sync_transactions
  */
@@ -39,13 +41,19 @@ import { sync_transactions } from "../../integrations/plaid";
 import {
   merge_pending_to_posted,
   aggregate_transaction_sync_results,
-  should_continue_sync,
 } from "../../domain/plaid";
 import {
   transaction_repo,
 } from "../../repositories";
+import type { SyncWrittenDoc, SyncWriteOptions } from "../../repositories/transaction.repo";
+import { create_in_memory_assigner } from "../transactions/assign_in_memory";
+import {
+  empty_follow_ups,
+  follow_ups_from_written,
+  run_sync_follow_ups,
+  SyncFollowUps,
+} from "./sync_follow_ups";
 import { plaid_item_repo } from "../../repositories/plaid";
-import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 // Import pipeline utilities (snake_case versions)
 import { format_transactions } from "../../transactions/utils/format_transactions";
@@ -54,6 +62,29 @@ import { match_transaction_splits_to_source_periods } from "../../transactions/u
 import {
   merge_modified_into_existing,
 } from "../../domain/plaid/merge_modified_into_existing.service";
+
+export interface SyncTransactionsOptions {
+  /** Stamped on every written doc (`syncRunId`); defaults to the trace id. */
+  run_id?: string;
+  /** The caller (sync_item) runs the follow-ups once, merged with the recurring sync's. */
+  defer_follow_ups?: boolean;
+}
+
+export interface TransactionSyncResult extends TransactionSyncResponse {
+  /** Plaid's `transactions_update_status` (NOT_READY / INITIAL_UPDATE_COMPLETE / HISTORICAL_UPDATE_COMPLETE). */
+  update_status?: string;
+  /** An account in this pull isn't saved yet — nothing was written; save accounts and re-sync. */
+  needs_accounts?: boolean;
+  follow_ups: SyncFollowUps;
+}
+
+interface FetchedPages {
+  added: import("plaid").Transaction[];
+  modified: import("plaid").Transaction[];
+  removed: import("plaid").RemovedTransaction[];
+  next_cursor: string | null;
+  update_status: string;
+}
 
 /**
  * Orchestrates the transaction synchronization flow.
@@ -70,10 +101,12 @@ import {
  * @returns Sync results with counts and next cursor
  */
 export async function sync_transactions_orchestrator(
-  ctx: OrchestratorContext<TransactionSyncInput>
-): Promise<TransactionSyncResponse> {
+  ctx: OrchestratorContext<TransactionSyncInput>,
+  opts?: SyncTransactionsOptions
+): Promise<TransactionSyncResult> {
   const start_time = Date.now();
   const errors: string[] = [];
+  const run_id = opts?.run_id ?? ctx.trace_id;
 
   console.log(
     `[${ctx.trace_id}] Starting transaction sync for user ${ctx.user_id}, item ${ctx.input.item_id}`
@@ -98,205 +131,241 @@ export async function sync_transactions_orchestrator(
       next_cursor: null,
       has_more: false,
       error: "Failed to resolve dependencies - item not found or not accessible",
+      follow_ups: empty_follow_ups(),
     };
   }
 
-  // Use provided cursor or stored cursor
-  let current_cursor = ctx.input.cursor || deps.plaid_item.cursor;
-  let total_added = 0;
-  let total_modified = 0;
-  let total_removed = 0;
-  let total_migrated = 0;
-  // Any txn write ATTEMPTED this sync (added/modified for active accounts + removed), independent
-  // of the created/updated counters — those undercount real writes (re-delivered "added" docs
-  // count as `updated` and are dropped, migration-only pages net to 0, a page that throws after
-  // committing some chunks reports 0). Drives the derive-version bump below.
-  let wrote_transactions = false;
-  let has_more = true;
-  let next_cursor: string | null = null;
+  // 2. FETCH EVERY PAGE FIRST, then process (Plaid's guidance). Processing between pages widened
+  // the window for TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION while Plaid is still writing a new
+  // item's history; on that error the whole pull restarts from the starting cursor.
+  const start_cursor = ctx.input.cursor || deps.plaid_item.cursor;
+  const fetched = await fetch_all_pages(ctx, deps.plaid_item.access_token, start_cursor);
+  if ("error" in fetched) {
+    // Nothing written, cursor untouched — the next sync retries from the same place.
+    return {
+      success: false,
+      added_count: 0,
+      modified_count: 0,
+      removed_count: 0,
+      pending_migrated_count: 0,
+      next_cursor: null,
+      has_more: false,
+      error: fetched.error,
+      follow_ups: empty_follow_ups(),
+    };
+  }
 
-  // Load the user's active rules ONCE per sync invocation (not per page, not per txn) — the single
-  // read the Rules Engine adds to this path (see the project's Read-Cost Plan). Build a pure
-  // `on_create` transform applied ONLY to newly-created txns in the repo's create branch
-  // (first-write-only). Skip entirely when the user has no rules.
+  // 2b. ACCOUNTS. Transactions for accounts the user hid are skipped on purpose. An account we
+  // have no doc for YET (its write lost the race with this sync) must NOT be skipped — that used
+  // to drop its transactions for good while the cursor moved past them. Stop without writing or
+  // moving the cursor; the caller saves the accounts and syncs again.
+  const all_txns = [...fetched.added, ...fetched.modified];
+  const unknown_accounts = [
+    ...new Set(all_txns.map((t) => t.account_id).filter((id) => !deps.known_account_ids.has(id))),
+  ];
+  if (unknown_accounts.length > 0) {
+    console.warn(
+      `[${ctx.trace_id}] ${unknown_accounts.length} account(s) not saved yet — deferring the sync ` +
+      `(no writes, cursor unchanged): ${unknown_accounts.join(",")}`
+    );
+    return {
+      success: false,
+      added_count: 0,
+      modified_count: 0,
+      removed_count: 0,
+      pending_migrated_count: 0,
+      next_cursor: null,
+      has_more: false,
+      error: "accounts_not_saved",
+      needs_accounts: true,
+      update_status: fetched.update_status,
+      follow_ups: empty_follow_ups(),
+    };
+  }
+  const is_active = (t: import("plaid").Transaction) => deps.active_account_ids.has(t.account_id);
+  const active_added = fetched.added.filter(is_active);
+  const active_modified = fetched.modified.filter(is_active);
+  const skipped = all_txns.length - active_added.length - active_modified.length;
+  if (skipped > 0) {
+    console.log(`[${ctx.trace_id}] Skipped ${skipped} transactions for hidden accounts`);
+  }
+
+  // Load the user's active rules ONCE per sync (first-write-only transform on new docs).
   const active_rules = await rules_repo.get_active_rules(create_child_span(ctx), ctx.user_id);
   const on_create =
     active_rules.length > 0
       ? (t: TransactionForPersistence): TransactionForPersistence =>
         apply_rule_intents(t, evaluate_rules(t, active_rules))
       : undefined;
-  if (active_rules.length > 0) {
-    console.log(`[${ctx.trace_id}] Rules Engine: ${active_rules.length} active rule(s) loaded`);
+
+  // 3. ASSIGN IN MEMORY, WRITE ONCE. The engine's shared context (budgets, categories, the
+  // authoritative bill/income stream membership) + date-span preloads are read once; every
+  // transaction is then written with its final assignment and stamped with this run's id, so
+  // `on_transaction_written` skips it and this sync does ONE follow-up pass instead.
+  const written: SyncWrittenDoc[] = [];
+  let write_opts: SyncWriteOptions = { run_id };
+  const dated = [...active_added, ...active_modified];
+  if (dated.length > 0) {
+    const times = dated.map((t) => new Date(t.date).getTime()).filter((n) => !isNaN(n));
+    const assign = await create_in_memory_assigner(
+      create_child_span(ctx),
+      ctx.user_id,
+      Math.min(...times),
+      Math.max(...times) + 24 * 60 * 60 * 1000
+    );
+    write_opts = { run_id, before_write: (doc_id, data) => assign(doc_id, data) };
   }
 
-  // 2. PAGINATE THROUGH PLAID SYNC API
-  while (has_more && should_continue_sync(errors)) {
-    console.log(
-      `[${ctx.trace_id}] Fetching transactions page, cursor: ${current_cursor || "initial"}`
-    );
+  let total_added = 0;
+  let total_modified = 0;
+  let total_removed = 0;
+  let total_migrated = 0;
 
-    // 2a. CALL PLAID INTEGRATION
-    let plaid_response;
+  if (active_added.length > 0) {
     try {
-      plaid_response = await sync_transactions(
-        deps.plaid_item.access_token,
-        current_cursor
-      );
+      const page_result = await process_added_transactions(ctx, active_added, deps, errors, on_create, write_opts);
+      total_added += page_result.created;
+      total_migrated += page_result.migrated;
+      written.push(...page_result.written);
     } catch (error) {
       const error_msg = error instanceof Error ? error.message : "Unknown error";
-      console.error(
-        `[${ctx.trace_id}] Failed to fetch transactions from Plaid:`,
-        error_msg
+      console.error(`[${ctx.trace_id}] Error processing added transactions:`, error_msg);
+      errors.push(`Processing error: ${error_msg}`);
+    }
+  }
+
+  if (active_modified.length > 0) {
+    try {
+      const modified_result = await process_modified_transactions(ctx, active_modified, deps, write_opts);
+      total_modified += modified_result.updated;
+      written.push(...modified_result.written);
+    } catch (error) {
+      const error_msg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[${ctx.trace_id}] Error processing modified transactions:`, error_msg);
+      errors.push(`Modification error: ${error_msg}`);
+    }
+  }
+
+  if (fetched.removed.length > 0) {
+    try {
+      const removed_ids = extract_removed_transaction_ids(fetched.removed);
+      const remove_results = await transaction_repo.soft_delete_by_plaid_ids(
+        create_child_span(ctx),
+        ctx.user_id,
+        removed_ids,
+        "Removed by Plaid sync",
+        { run_id, written }
       );
-      errors.push(`Plaid API error: ${error_msg}`);
-      break;
-    }
-
-    console.log(
-      `[${ctx.trace_id}] Plaid sync response: added=${plaid_response.added.length}, ` +
-      `modified=${plaid_response.modified.length}, removed=${plaid_response.removed.length}, ` +
-      `has_more=${plaid_response.has_more}`
-    );
-
-    // 2b. FILTER OUT TRANSACTIONS FOR HIDDEN ACCOUNTS
-    // Silently discard transactions for accounts that have been hidden/removed
-    const filter_for_active_accounts = (
-      transactions: import("plaid").Transaction[]
-    ): import("plaid").Transaction[] => {
-      const filtered = transactions.filter(
-        txn => deps.active_account_ids.has(txn.account_id)
-      );
-      const discarded = transactions.length - filtered.length;
-      if (discarded > 0) {
-        console.log(
-          `[${ctx.trace_id}] Discarded ${discarded} transactions for hidden accounts`
-        );
-      }
-      return filtered;
-    };
-
-    const active_added = filter_for_active_accounts(plaid_response.added);
-    const active_modified = filter_for_active_accounts(plaid_response.modified);
-
-    if (active_added.length + active_modified.length + plaid_response.removed.length > 0) {
-      wrote_transactions = true;
-    }
-
-    // 2c. PROCESS ADDED TRANSACTIONS (only for active accounts)
-    if (active_added.length > 0) {
-      try {
-        const page_result = await process_added_transactions(
-          ctx,
-          active_added,
-          deps,
-          errors,
-          on_create
-        );
-        total_added += page_result.created;
-        total_migrated += page_result.migrated;
-      } catch (error) {
-        const error_msg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[${ctx.trace_id}] Error processing added transactions:`, error_msg);
-        errors.push(`Processing error: ${error_msg}`);
-      }
-    }
-
-    // 2d. PROCESS MODIFIED TRANSACTIONS (only for active accounts)
-    if (active_modified.length > 0) {
-      try {
-        const modified_result = await process_modified_transactions(
-          ctx,
-          active_modified,
-          deps
-        );
-        total_modified += modified_result.updated;
-      } catch (error) {
-        const error_msg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[${ctx.trace_id}] Error processing modified transactions:`, error_msg);
-        errors.push(`Modification error: ${error_msg}`);
-      }
-    }
-
-    // 2e. PROCESS REMOVED TRANSACTIONS
-    if (plaid_response.removed.length > 0) {
-      try {
-        const removed_ids = extract_removed_transaction_ids(plaid_response.removed);
-        const remove_results = await transaction_repo.soft_delete_by_plaid_ids(
-          create_child_span(ctx),
-          ctx.user_id,
-          removed_ids,
-          "Removed by Plaid sync"
-        );
-        total_removed += remove_results.length;
-        console.log(`[${ctx.trace_id}] Soft-deleted ${remove_results.length} removed transactions`);
-      } catch (error) {
-        const error_msg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[${ctx.trace_id}] Error processing removed transactions:`, error_msg);
-        errors.push(`Removal error: ${error_msg}`);
-      }
-    }
-
-    // 2f. UPDATE PAGINATION STATE
-    has_more = plaid_response.has_more;
-    next_cursor = plaid_response.next_cursor;
-    current_cursor = plaid_response.next_cursor;
-
-    // Brief delay between pages to avoid rate limiting
-    if (has_more) {
-      await new Promise(resolve => setTimeout(resolve, PLAID_SYNC_PAGE_DELAY_MS));
+      total_removed += remove_results.length;
+    } catch (error) {
+      const error_msg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[${ctx.trace_id}] Error processing removed transactions:`, error_msg);
+      errors.push(`Removal error: ${error_msg}`);
     }
   }
 
-  // 2g. INVALIDATE DERIVE CACHE ONCE for the whole sync (TR-2). Replaces the per-txn
-  // trigger bump: one bump per sync regardless of how many txns changed, so a large
-  // Plaid page no longer contends on the single `user_data_versions/{uid}` doc. Skip
-  // when Plaid delivered nothing for active accounts. Keyed on `wrote_transactions` (not the
-  // created/updated counters, which undercount) — the mobile app listens to this doc as its
-  // ONLY transaction-change signal, so a missed bump leaves the screen stale. Over-bumping
-  // costs one extra re-derive; under-bumping is a stale UI. Awaited+swallowed so it commits
-  // but never fails the sync.
-  if (wrote_transactions) {
-    await bump_derive_version(ctx.user_id).catch(() => {});
+  // 4. FOLLOW-UPS: what this sync's writes affect (before ∪ after) — budgets by date, and the
+  // bills/income whose payments changed. Run once, here or by the caller (sync_item merges them
+  // with the recurring sync's).
+  const follow_ups = follow_ups_from_written(written);
+  if (written.length > 0) {
+    if (opts?.defer_follow_ups) {
+      // Caller runs them (and bumps the derive version once).
+    } else {
+      await run_sync_follow_ups(ctx, ctx.user_id, follow_ups);
+    }
   }
 
-  // 3. UPDATE CURSOR
-  try {
-    await plaid_item_repo.update_cursor(
-      create_child_span(ctx),
-      deps.plaid_item.doc_id,
-      next_cursor
-    );
-  } catch (error) {
-    const error_msg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[${ctx.trace_id}] Failed to update cursor:`, error_msg);
-    errors.push(`Cursor update error: ${error_msg}`);
+  // 5. CURSOR — only when every page was processed cleanly; never a null cursor. On an error the
+  // cursor stays where it was so the next sync re-delivers (upserts are idempotent).
+  if (errors.length === 0 && fetched.next_cursor) {
+    try {
+      await plaid_item_repo.update_cursor(create_child_span(ctx), deps.plaid_item.doc_id, fetched.next_cursor);
+    } catch (error) {
+      const error_msg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[${ctx.trace_id}] Failed to update cursor:`, error_msg);
+      errors.push(`Cursor update error: ${error_msg}`);
+    }
   }
 
-  // 4. BUILD RESULT
   const duration_ms = Date.now() - start_time;
-
   console.log(
     `[${ctx.trace_id}] Transaction sync completed in ${duration_ms}ms: ` +
     `added=${total_added}, modified=${total_modified}, removed=${total_removed}, ` +
-    `migrated=${total_migrated}, errors=${errors.length}`
+    `migrated=${total_migrated}, status=${fetched.update_status}, errors=${errors.length}`
   );
-
-  // Check performance budget
   if (duration_ms > TRANSACTION_SYNC_BUDGET.max_time_ms) {
     console.warn(
       `[${ctx.trace_id}] Transaction sync exceeded time budget: ${duration_ms}ms > ${TRANSACTION_SYNC_BUDGET.max_time_ms}ms`
     );
   }
 
-  return aggregate_transaction_sync_results(
-    total_added,
-    total_modified,
-    total_removed,
-    total_migrated,
-    has_more,
-    next_cursor,
-    errors.length > 0 ? errors : undefined
-  );
+  return {
+    ...aggregate_transaction_sync_results(
+      total_added,
+      total_modified,
+      total_removed,
+      total_migrated,
+      false,
+      fetched.next_cursor,
+      errors.length > 0 ? errors : undefined
+    ),
+    update_status: fetched.update_status,
+    follow_ups,
+  };
+}
+
+/** Pull every page from `start_cursor`; restart (max 3×) on a mutation-during-pagination error. */
+async function fetch_all_pages(
+  ctx: OrchestratorContext<TransactionSyncInput>,
+  access_token: string,
+  start_cursor: string | null
+): Promise<FetchedPages | { error: string }> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const added: import("plaid").Transaction[] = [];
+    const modified: import("plaid").Transaction[] = [];
+    const removed: import("plaid").RemovedTransaction[] = [];
+    let cursor = start_cursor;
+    let next_cursor: string | null = null;
+    let update_status = "UNKNOWN";
+    let has_more = true;
+    let restart = false;
+    while (has_more) {
+      let page;
+      try {
+        page = await sync_transactions(access_token, cursor);
+      } catch (error) {
+        if (plaid_error_code(error) === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" && attempt < 3) {
+          console.warn(`[${ctx.trace_id}] Plaid data changed mid-pull — restarting from the start cursor`);
+          restart = true;
+          break;
+        }
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[${ctx.trace_id}] Failed to fetch transactions from Plaid:`, msg);
+        return { error: `Plaid API error: ${msg}` };
+      }
+      added.push(...page.added);
+      modified.push(...page.modified);
+      removed.push(...page.removed);
+      has_more = page.has_more;
+      next_cursor = page.next_cursor;
+      cursor = page.next_cursor;
+      update_status = String(page.transactions_update_status ?? "UNKNOWN");
+      if (has_more) await new Promise((r) => setTimeout(r, PLAID_SYNC_PAGE_DELAY_MS));
+    }
+    if (restart) continue;
+    console.log(
+      `[${ctx.trace_id}] Plaid pull: added=${added.length}, modified=${modified.length}, ` +
+      `removed=${removed.length}, status=${update_status}`
+    );
+    return { added, modified, removed, next_cursor, update_status };
+  }
+  return { error: "Plaid data kept changing during the pull" };
+}
+
+function plaid_error_code(error: unknown): string | null {
+  const data = (error as { response?: { data?: { error_code?: string } } })?.response?.data;
+  return data?.error_code ?? null;
 }
 
 /**
@@ -310,8 +379,9 @@ async function process_added_transactions(
   plaid_transactions: import("plaid").Transaction[],
   deps: NonNullable<Awaited<ReturnType<typeof resolve_transaction_sync_dependencies>>>,
   errors: string[],
-  on_create?: (txn: TransactionForPersistence) => TransactionForPersistence
-): Promise<{ created: number; migrated: number }> {
+  on_create: ((txn: TransactionForPersistence) => TransactionForPersistence) | undefined,
+  write_opts: SyncWriteOptions
+): Promise<{ created: number; migrated: number; written: SyncWrittenDoc[] }> {
   // Identify pending->posted migrations BEFORE processing
   const migrations = identify_pending_migrations(
     plaid_transactions,
@@ -333,6 +403,7 @@ async function process_added_transactions(
 
   let created = 0;
   let migrated = 0;
+  let written: SyncWrittenDoc[] = [];
 
   // Process all synced transactions through the existing pipeline (P2-13: the
   // `new_transactions` alias for `plaid_transactions` was redundant — inlined).
@@ -356,13 +427,9 @@ async function process_added_transactions(
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
       console.log(`[${ctx.trace_id}] Step 3/6: Matched source periods`);
 
-      // Step 4: (inline budget assignment removed 2026-07-27) — the Transaction
-      // Assignment Engine now owns budget assignment: it runs via
-      // on_transaction_written after upsert (single source of truth), so an inline
-      // pass here would just be overwritten. Splits are written unassigned and the
-      // engine assigns them (+ EE fallback, stale-id fixing) within ~1-3s.
-      // Step 5: (legacy outflow matcher removed 2026-06-13) — the engine also sets
-      // split.outflow_id, and the reconcile engine updates outflow-period status.
+      // Step 4: budget / bill / income assignment — the Transaction Assignment Engine runs IN
+      // MEMORY inside the upsert (`write_opts.before_write`), so each transaction is written
+      // once, already assigned (no bare write + read-back + second write).
       const final = with_periods;
 
       // Step 6a: Transform legacy format to new persistence format
@@ -397,8 +464,10 @@ async function process_added_transactions(
         deps.plaid_item.plaid_item_id,
         on_create,
         // Existing doc → keep the user's edits, refresh only Plaid's fields.
-        merge_modified_into_existing
+        merge_modified_into_existing,
+        write_opts
       );
+      written = upsert_result.written;
       console.log(`[${ctx.trace_id}] Step 6b: Upserted transactions (created=${upsert_result.created}, updated=${upsert_result.updated})`);
 
       // New creations exclude the migrated posted txns (they replace a pending, not net-new).
@@ -411,7 +480,7 @@ async function process_added_transactions(
     }
   }
 
-  return { created, migrated };
+  return { created, migrated, written };
 }
 
 
@@ -424,9 +493,11 @@ async function process_added_transactions(
 async function process_modified_transactions(
   ctx: OrchestratorContext<TransactionSyncInput>,
   plaid_transactions: import("plaid").Transaction[],
-  deps: NonNullable<Awaited<ReturnType<typeof resolve_transaction_sync_dependencies>>>
-): Promise<{ updated: number }> {
+  deps: NonNullable<Awaited<ReturnType<typeof resolve_transaction_sync_dependencies>>>,
+  write_opts: SyncWriteOptions
+): Promise<{ updated: number; written: SyncWrittenDoc[] }> {
   let updated = 0;
+  let written: SyncWrittenDoc[] = [];
 
   // For now, we run modified transactions through the same pipeline as added
   // This ensures categories, periods, and budgets are re-matched
@@ -444,9 +515,7 @@ async function process_modified_transactions(
 
       const with_categories = await match_categories_to_transactions(formatted, ctx.user_id);
       const with_periods = await match_transaction_splits_to_source_periods(with_categories);
-      // Inline budget assignment removed 2026-07-27 — the Transaction Assignment
-      // Engine assigns budgets (and outflow_id) via on_transaction_written after
-      // upsert (single source of truth); reconcile updates outflow-period status.
+      // Assignment runs in memory inside the upsert (see process_added_transactions).
       const final = with_periods;
 
       // Transform to new persistence format
@@ -464,10 +533,12 @@ async function process_modified_transactions(
         ctx.user_id,
         deps.plaid_item.plaid_item_id,
         undefined,
-        merge_modified_into_existing
+        merge_modified_into_existing,
+        write_opts
       );
 
       updated = upsert_result.updated;
+      written = upsert_result.written;
       console.log(`[${ctx.trace_id}] Updated ${upsert_result.updated} modified transactions`);
 
     } catch (error) {
@@ -477,5 +548,5 @@ async function process_modified_transactions(
     }
   }
 
-  return { updated };
+  return { updated, written };
 }

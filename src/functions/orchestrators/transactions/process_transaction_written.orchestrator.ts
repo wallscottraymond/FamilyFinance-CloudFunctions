@@ -24,7 +24,7 @@ import {
   log_operation_start,
   log_operation_success,
 } from "../../observability";
-import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import { coalesce_job } from "../../infrastructure/job_queue";
 import {
   enqueue_recompute_budget_spent,
   enqueue_reconcile_recurring,
@@ -112,6 +112,16 @@ async function enqueue_recurring_reconciles(
   }
 }
 
+/** True when THIS write set a new run id (a later user edit leaves the stored id unchanged). */
+export function written_by_run(
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+  field: "syncRunId" | "assignRunId"
+): boolean {
+  const run = after?.[field];
+  return typeof run === "string" && run.length > 0 && run !== before?.[field];
+}
+
 export async function process_transaction_written_orchestrator(
   ctx: TraceContext,
   input: ProcessTransactionWrittenInput
@@ -120,6 +130,15 @@ export async function process_transaction_written_orchestrator(
   log_operation_start(span, input.user_id);
 
   const { user_id, before, after } = input;
+
+  // A sync or an assignment batch wrote this (it stamps its run id on every write). That writer
+  // runs ONE follow-up pass for all its writes (reconcile, recompute, derive bump), so fanning out
+  // per transaction here would just repeat it — this re-entry was the ~650 recompute-per-day jobs
+  // and the second write of every transaction on a first link.
+  if (written_by_run(before, after, "syncRunId") || written_by_run(before, after, "assignRunId")) {
+    log_operation_success(span, user_id);
+    return;
+  }
 
   // DELETE: the doc is gone, so `assign_transaction` (which reads it) can't
   // discover the touched budgets. Recompute directly from the `before` snapshot
@@ -158,7 +177,9 @@ export async function process_transaction_written_orchestrator(
   // re-reading every reference collection + the outflow_periods/inflow_periods candidate scans (the
   // top Firestore read line). The batch re-assigns all txns changed since the user's watermark.
   if (assignment_relevant) {
-    await create_job_if_not_exists(
+    // Merge only into a still-PENDING batch. (`create_job_if_not_exists` also counted a RUNNING
+    // batch as "exists", so an edit landing while a batch ran was never picked up.)
+    await coalesce_job(
       "assign_user_transactions",
       {
         deduplication_key: `assign_user:${user_id}`,

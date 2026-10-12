@@ -20,6 +20,8 @@
  * @module orchestrators/recurring/reconcile_user_recurring
  */
 
+import type { SyncWrittenDoc } from "../../repositories/transaction.repo";
+import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
 import { TraceContext } from "../../types";
 import {
   create_span,
@@ -110,6 +112,8 @@ export async function reconcile_user_recurring_orchestrator(
     // collapses that to one candidate preload. The batch's per-split engine still links each
     // txn to its own matched stream, so correctness is unchanged.
     const union_plaid_ids = Array.from(new Set(dirty.flatMap((d) => d.plaid_ids)));
+    // The batch's writes are followed up below, once, merged with this pass (no re-entry).
+    const assigned: SyncWrittenDoc[] = [];
     if (union_plaid_ids.length > 0) {
       const txns = await transaction_repo.get_by_plaid_transaction_ids(
         ctx,
@@ -125,6 +129,7 @@ export async function reconcile_user_recurring_orchestrator(
           transaction_ids: doc_ids,
           candidate_outflow_ids: dirty.filter((d) => d.type === "outflow").map((d) => d.id),
           candidate_inflow_ids: dirty.filter((d) => d.type === "inflow").map((d) => d.id),
+          collect_into: assigned,
         });
       }
     }
@@ -151,6 +156,18 @@ export async function reconcile_user_recurring_orchestrator(
     };
     for (let k = 0; k < dirty.length; k += CONCURRENCY) {
       await Promise.all(dirty.slice(k, k + CONCURRENCY).map(process_one));
+    }
+
+    // Follow up the assignment writes: budgets they moved + any OTHER stream they touched (the
+    // dirty streams were just reconciled above).
+    if (assigned.length > 0) {
+      const f = follow_ups_from_written(assigned);
+      const done = new Set(dirty.map((d) => d.id));
+      await run_sync_follow_ups(ctx, input.user_id, {
+        ...f,
+        outflow_ids: f.outflow_ids.filter((id) => !done.has(id)),
+        inflow_ids: f.inflow_ids.filter((id) => !done.has(id)),
+      });
     }
 
     // Advance to the max updatedAt among the items we looked at — never past an unprocessed

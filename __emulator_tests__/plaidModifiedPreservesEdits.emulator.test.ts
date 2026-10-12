@@ -103,8 +103,21 @@ function run_sync(itemDocId: string, userId: string, plaidItemId: string) {
 }
 
 
+
+/** A real budget doc the engine can see (a manual pin is only honored while its budget exists). */
+async function seed_budget(userId: string, id: string, name = id) {
+  await db.collection('budgets').doc(id).set({
+    id, name, userId, ownerId: userId, createdBy: userId, isActive: true,
+    isSystemEverythingElse: false, period: 'monthly', amount: 100, categoryIds: [],
+    isOngoing: true, budgetType: 'recurring', groupIds: [],
+    startDate: Timestamp.fromDate(new Date('2020-01-01')),
+    endDate: Timestamp.fromDate(new Date('2099-01-01')),
+  });
+}
+
 /** An existing transaction with user edits on it (the shape the app + engine write). */
 async function seed_edited_txn(userId: string, plaidItemId: string, accountId: string, txnId: string) {
+  await seed_budget(userId, 'budget_work', 'Work');
   await db.collection('transactions').doc(`plaid_${txnId}`).set({
     id: `plaid_${txnId}`, transactionId: txnId,
     userId, ownerId: userId, groupIds: ['g1'], plaidItemId, accountId,

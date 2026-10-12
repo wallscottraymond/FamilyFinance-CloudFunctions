@@ -12,6 +12,7 @@
  * @module orchestrators/plaid/plaid_initial_sync
  */
 
+import { enqueue_item_sync } from "./sync_item.orchestrator";
 import { Timestamp } from "firebase-admin/firestore";
 import {
   OrchestratorContext,
@@ -45,18 +46,10 @@ import {
   create_success_phase_result,
   create_failure_phase_result,
 } from "../../domain/plaid";
-import { plaid_item_repo } from "../../repositories/plaid";
 import { account_repo } from "../../repositories/account.repo";
-import { create_job } from "../../infrastructure/job_queue";
 import { create_event_emitter, ACCOUNT_EVENTS, AccountCreatedPayload } from "../../events";
-import { sync_transactions_orchestrator } from "./sync_transactions.orchestrator";
 import {
-  sync_recurring_orchestrator,
-  RecurringSyncInput,
-} from "./sync_recurring.orchestrator";
-import { TransactionSyncInput } from "../../types/plaid";
-import {
-  fetch_plaid_balances,
+  fetch_plaid_accounts,
   plaid_accounts_to_data,
   safe_fetch_liabilities,
   plaid_liabilities_to_domain,
@@ -188,77 +181,26 @@ export async function plaid_initial_sync_orchestrator(
     }
 
     // =========================================================================
-    // 5. PHASE 2: Sync Transactions
+    // 5. QUEUE THE ITEM SYNC (transactions + bills/income, one writer, one pass)
     // =========================================================================
-    const transactions_phase = await execute_transactions_phase(
-      ctx,
-      deps,
-      perf
-    );
-    phases.push(transactions_phase);
-
-    // A freshly-linked Plaid item almost always returns 0 transactions at link
-    // time — Plaid's initial history pull is ASYNC and only signalled later via a
-    // SYNC_UPDATES_AVAILABLE webhook (which can be late/absent). Schedule a delayed
-    // re-sync so transactions reliably land for new items regardless of webhook
-    // timing. The `resync_transactions` handler self-retries with backoff until
-    // data arrives. Non-fatal — never block the initial sync on this.
+    // Plaid's history pull is async, so there's usually nothing to fetch yet. `sync_item` runs
+    // now (no delay → immediate job), retries every minute while Plaid reports NOT_READY, and
+    // SYNC_UPDATES_AVAILABLE / RECURRING_TRANSACTIONS webhooks queue it again — all coalesced
+    // onto one lease per item. Replaces the inline transaction + recurring phases, the
+    // `resync_transactions` chain (2–9 min sweep hops) and the step that reset the cursor.
     try {
-      await create_job(
-        "resync_transactions",
-        { item_id: ctx.input.item_doc_id, user_id: ctx.user_id, attempt: 1 },
-        { delay_seconds: 120, trace_id: ctx.trace_id }
-      );
-      console.log(
-        `[${ctx.trace_id}] Scheduled delayed transaction re-sync for item ${ctx.input.item_doc_id}`
-      );
+      await enqueue_item_sync({
+        item_doc_id: ctx.input.item_doc_id,
+        user_id: ctx.user_id,
+        recurring: true,
+        reason: "first_link",
+        trace_id: ctx.trace_id,
+      });
+      phases.push(create_success_phase_result("transactions", { created: 0, updated: 0 }, 0));
     } catch (error) {
-      console.warn(
-        `[${ctx.trace_id}] Failed to schedule delayed transaction re-sync:`,
-        error instanceof Error ? error.message : "unknown"
-      );
-    }
-
-    // Check if we should continue
-    if (!transactions_phase.success) {
-      const should_continue = should_continue_after_failure(
-        "transactions",
-        transactions_phase.error_message || ""
-      );
-
-      if (!should_continue) {
-        const end_time = Date.now();
-        const result = aggregate_sync_results(phases, start_time, end_time);
-        await fail_key(ctx, ctx.idempotency_key, transactions_phase.error_message || "Transactions phase failed");
-        return result;
-      }
-    }
-
-    // =========================================================================
-    // 6. PHASE 3: Sync Recurring
-    // =========================================================================
-    const recurring_phase = await execute_recurring_phase(
-      ctx,
-      perf
-    );
-    phases.push(recurring_phase);
-
-    // =========================================================================
-    // 7. UPDATE PLAID ITEM WITH SYNC TIMESTAMPS
-    // =========================================================================
-    try {
-      await plaid_item_repo.update_cursor(
-        ctx,
-        ctx.input.item_doc_id,
-        deps.plaid_item.cursor || "" // Keep existing cursor or set empty
-      );
-      perf.writes++;
-    } catch (error) {
-      // Non-fatal - log and continue
-      console.warn(
-        `[${ctx.trace_id}] Failed to update plaid_item sync timestamps:`,
-        error
-      );
+      const msg = error instanceof Error ? error.message : "unknown";
+      console.error(`[${ctx.trace_id}] Failed to queue the first item sync:`, msg);
+      phases.push(create_failure_phase_result("transactions", msg, 0));
     }
 
     // =========================================================================
@@ -365,7 +307,12 @@ async function execute_accounts_phase(
 
     // 1. Fetch accounts from Plaid using integration client (RAW SDK accounts),
     //    then transform to the domain shape.
-    const raw_accounts = await fetch_plaid_balances(deps.plaid_item.access_token);
+    // `/accounts/get` (balances Plaid refreshed during Link) — not `/accounts/balance/get`, a live
+    // bank round trip that often takes seconds and is billed per call. Liabilities in parallel.
+    const [raw_accounts, raw_liabilities] = await Promise.all([
+      fetch_plaid_accounts(deps.plaid_item.access_token),
+      safe_fetch_liabilities(deps.plaid_item.access_token, ctx.trace_id),
+    ]);
     const plaid_result = {
       ...raw_accounts,
       accounts: plaid_accounts_to_data(raw_accounts.accounts),
@@ -384,12 +331,8 @@ async function execute_accounts_phase(
       );
     }
 
-    // 1b. Fetch liability detail (Investments-And-Liabilities-Modeling) — never
-    //     fails the sync: cash-only items return null (no Liabilities product).
-    const raw_liabilities = await safe_fetch_liabilities(
-      deps.plaid_item.access_token,
-      ctx.trace_id
-    );
+    // 1b. Liability detail (Investments-And-Liabilities-Modeling) — fetched above in parallel;
+    //     never fails the sync: cash-only items return null (no Liabilities product).
     const liabilities = plaid_liabilities_to_domain(raw_liabilities);
 
     // 2. Upsert accounts using shared repository method
@@ -448,170 +391,7 @@ async function execute_accounts_phase(
   }
 }
 
-/**
- * Executes the transactions sync phase.
- *
- * Uses the new architecture-compliant sync_transactions_orchestrator.
- * This orchestrator uses the battle-tested 6-step transaction pipeline
- * internally while conforming to the 5-layer architecture.
- */
-async function execute_transactions_phase(
-  ctx: OrchestratorContext<InitialSyncInput>,
-  deps: Awaited<ReturnType<typeof resolve_initial_sync_dependencies>>,
-  perf: ReturnType<typeof create_performance_metrics>
-): Promise<SyncPhaseResult> {
-  const phase_start = Date.now();
 
-  try {
-    console.log(
-      `[${ctx.trace_id}] PHASE 2: Syncing transactions for item ${ctx.input.plaid_item_id}`
-    );
-
-    // Build context for the transaction sync orchestrator
-    const tx_ctx: OrchestratorContext<TransactionSyncInput> = {
-      trace_id: ctx.trace_id,
-      span_id: ctx.span_id,
-      input: {
-        item_id: ctx.input.item_doc_id, // Document ID for Firestore lookup
-        user_id: ctx.user_id,
-        cursor: deps.plaid_item.cursor || undefined, // Use existing cursor if any
-      },
-      user_id: ctx.user_id,
-      idempotency_key: `${ctx.idempotency_key}:transactions`,
-    };
-
-    // Call the new architecture-compliant transaction sync orchestrator
-    const sync_result = await sync_transactions_orchestrator(tx_ctx);
-
-    // Estimate reads/writes (rough approximation)
-    perf.reads += 5; // Plaid API + user + family + categories
-    perf.writes += sync_result.added_count + sync_result.modified_count;
-
-    if (!sync_result.success) {
-      return create_failure_phase_result(
-        "transactions",
-        sync_result.error || "Transaction sync failed",
-        Date.now() - phase_start
-      );
-    }
-
-    console.log(
-      `[${ctx.trace_id}] Synced transactions: added=${sync_result.added_count}, ` +
-      `modified=${sync_result.modified_count}, removed=${sync_result.removed_count}`
-    );
-
-    return create_success_phase_result(
-      "transactions",
-      {
-        created: sync_result.added_count,
-        updated: sync_result.modified_count,
-        removed: sync_result.removed_count,
-      },
-      Date.now() - phase_start
-    );
-
-  } catch (error) {
-    console.error(
-      `[${ctx.trace_id}] Transactions phase failed:`,
-      error
-    );
-
-    return create_failure_phase_result(
-      "transactions",
-      error instanceof Error ? error.message : "Unknown error",
-      Date.now() - phase_start
-    );
-  }
-}
-
-/**
- * Executes the recurring transactions sync phase.
- *
- * Uses the new 5-layer compliant sync_recurring_orchestrator.
- */
-async function execute_recurring_phase(
-  ctx: OrchestratorContext<InitialSyncInput>,
-  perf: ReturnType<typeof create_performance_metrics>
-): Promise<SyncPhaseResult> {
-  const phase_start = Date.now();
-
-  try {
-    console.log(
-      `[${ctx.trace_id}] PHASE 3: Syncing recurring transactions for item ${ctx.input.plaid_item_id}`
-    );
-
-    // Build context for the recurring sync orchestrator
-    const recurring_ctx: OrchestratorContext<RecurringSyncInput> = {
-      trace_id: ctx.trace_id,
-      span_id: ctx.span_id,
-      input: {
-        item_id: ctx.input.item_doc_id, // Document ID for Firestore lookup
-      },
-      user_id: ctx.user_id,
-      idempotency_key: `${ctx.idempotency_key}:recurring`,
-    };
-
-    // Call the new 5-layer compliant recurring sync orchestrator
-    const sync_result = await sync_recurring_orchestrator(recurring_ctx);
-
-    // Update performance metrics
-    // The sync_recurring_orchestrator handles multiple operations:
-    // - Plaid API call for recurring transactions
-    // - Fetch existing inflows/outflows
-    // - Persist new/updated inflows/outflows
-    // - Mark stale items
-    perf.reads += 5; // Plaid API + item + user + existing inflows/outflows
-    perf.writes += sync_result.inflows_synced + sync_result.outflows_synced +
-                   sync_result.inflows_stale + sync_result.outflows_stale;
-
-    // Check for errors
-    if (sync_result.errors && sync_result.errors.length > 0) {
-      console.warn(
-        `[${ctx.trace_id}] Recurring sync had errors:`,
-        sync_result.errors
-      );
-    }
-
-    if (!sync_result.success) {
-      return create_failure_phase_result(
-        "recurring",
-        sync_result.error || "Recurring sync failed",
-        Date.now() - phase_start
-      );
-    }
-
-    console.log(
-      `[${ctx.trace_id}] Synced recurring: inflows=${sync_result.inflows_synced}, ` +
-      `outflows=${sync_result.outflows_synced}, ` +
-      `stale_inflows=${sync_result.inflows_stale}, stale_outflows=${sync_result.outflows_stale}, ` +
-      `merge_suggestions=${sync_result.merge_suggestions}`
-    );
-
-    return create_success_phase_result(
-      "recurring",
-      {
-        // The new orchestrator reports total synced (created + updated combined)
-        // For backwards compatibility with summary, we report synced as created
-        created: sync_result.inflows_synced + sync_result.outflows_synced,
-        updated: 0, // New orchestrator doesn't separate created vs updated
-        // Note: stale items count logged above but not tracked in phase result type
-      },
-      Date.now() - phase_start
-    );
-
-  } catch (error) {
-    console.error(
-      `[${ctx.trace_id}] Recurring phase failed:`,
-      error
-    );
-
-    return create_failure_phase_result(
-      "recurring",
-      error instanceof Error ? error.message : "Unknown error",
-      Date.now() - phase_start
-    );
-  }
-}
 
 // =============================================================================
 // Helper Functions

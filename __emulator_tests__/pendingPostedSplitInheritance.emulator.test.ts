@@ -42,6 +42,23 @@ beforeAll(() => {
   ({ sync_transactions_orchestrator } = require('../src/functions/orchestrators/plaid/sync_transactions.orchestrator'));
 });
 
+
+/** A real budget doc the engine can see (a manual pin is only honored while its budget exists). */
+async function seed_budget(userId: string, id: string, name = id) {
+  await db.collection('budgets').doc(id).set({
+    id, name, userId, ownerId: userId, createdBy: userId, isActive: true,
+    isSystemEverythingElse: false, period: 'monthly', amount: 100, categoryIds: [],
+    isOngoing: true, budgetType: 'recurring', groupIds: [],
+    startDate: Timestamp.fromDate(new Date('2020-01-01')),
+    endDate: Timestamp.fromDate(new Date('2099-01-01')),
+  });
+}
+
+/** The bill the user pinned the pending payment to (a manual bill pin is honored while the bill is active). */
+async function seed_outflow(userId: string, id: string) {
+  await db.collection('outflows').doc(id).set({ id, userId, ownerId: userId, isActive: true, isHidden: false, transactionIds: [], description: 'Claude' });
+}
+
 /* eslint-disable @typescript-eslint/naming-convention */
 describe('pending→posted split inheritance (emulator)', () => {
   it('overlays the pending split (budget + outflow link) onto the posted txn and soft-deletes the pending', async () => {
@@ -62,6 +79,8 @@ describe('pending→posted split inheritance (emulator)', () => {
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     });
     await db.collection('users').doc(userId).set({ id: userId, currency: 'USD' });
+    await seed_outflow(userId, outflowId);
+    await seed_budget(userId, budgetId, 'Subscriptions');
     await db.collection('accounts').doc(accountId).set({
       id: accountId, accountId, itemId: plaidItemId, userId, ownerId: userId,
       isActive: true, isHidden: false, currentBalance: 0,
@@ -79,7 +98,8 @@ describe('pending→posted split inheritance (emulator)', () => {
         splitId: 'sp1', amount: 107.45, budgetId, budgetName: 'Subscriptions',
         outflowId, isDefault: true, isIgnored: false, isRefund: false,
         internalPrimaryCategory: null, internalDetailedCategory: null,
-        budgetAssignmentSource: 'user', tags: [],
+        // What the app writes when the user assigns the payment to a bill: a manual bill pin.
+        outflowAssignmentSource: 'manual', tags: [],
       }],
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     });
@@ -123,7 +143,9 @@ describe('pending→posted split inheritance (emulator)', () => {
     expect(posted!.isPending).toBe(false);
     expect(posted!.splits?.length).toBeGreaterThan(0);
     expect(posted!.splits[0].outflowId).toBe(outflowId); // ← inherited bill link survives
-    expect(posted!.splits[0].budgetId).toBe(budgetId);   // ← inherited budget survives
+    // …and it is still the USER's pin, so the assignment engine (which now runs before the write)
+    // keeps it instead of re-deriving it.
+    expect(posted!.splits[0].outflowAssignmentSource).toBe('manual');
 
     // The pending should be soft-deleted by the `removed` handler.
     const pending = (await db.collection('transactions').doc(`plaid_${pendingTxId}`).get()).data();
@@ -147,6 +169,8 @@ describe('pending→posted split inheritance (emulator)', () => {
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     });
     await db.collection('users').doc(userId).set({ id: userId, currency: 'USD' });
+    await seed_outflow(userId, outflowId);
+    await seed_budget(userId, budgetId, 'Subscriptions');
     await db.collection('accounts').doc(accountId).set({
       id: accountId, accountId, itemId: plaidItemId, userId, ownerId: userId,
       isActive: true, isHidden: false, currentBalance: 0,
@@ -166,7 +190,8 @@ describe('pending→posted split inheritance (emulator)', () => {
         splitId: 'sp1', amount: 107.45, budgetId, budgetName: 'Subscriptions',
         outflowId, isDefault: true, isIgnored: false, isRefund: false,
         internalPrimaryCategory: null, internalDetailedCategory: null,
-        budgetAssignmentSource: 'user', tags: [],
+        // What the app writes when the user assigns the payment to a bill: a manual bill pin.
+        outflowAssignmentSource: 'manual', tags: [],
       }],
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     });
@@ -193,7 +218,7 @@ describe('pending→posted split inheritance (emulator)', () => {
     const posted = (await db.collection('transactions').doc(`plaid_${postedTxId}`).get()).data();
     expect(posted).toBeDefined();
     expect(posted!.splits[0].outflowId).toBe(outflowId); // ← inherited across syncs
-    expect(posted!.splits[0].budgetId).toBe(budgetId);
+    expect(posted!.splits[0].outflowAssignmentSource).toBe('manual');
   });
 });
 /* eslint-enable @typescript-eslint/naming-convention */

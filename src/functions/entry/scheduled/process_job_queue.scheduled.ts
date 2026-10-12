@@ -7,6 +7,7 @@
  * @module entry/scheduled/process_job_queue
  */
 
+import { sync_item_orchestrator, SyncItemInput } from "../../orchestrators/plaid/sync_item.orchestrator";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import {
@@ -88,8 +89,6 @@ import {
   regenerate_recurring_occurrences_orchestrator,
   RegenerateRecurringOccurrencesInput,
 } from "../../orchestrators/recurring/regenerate_recurring_occurrences.orchestrator";
-import { sync_transactions_orchestrator } from "../../orchestrators/plaid/sync_transactions.orchestrator";
-import { create_job } from "../../infrastructure/job_queue";
 import {
   assign_recurring_transactions_orchestrator,
   AssignRecurringTransactionsInput,
@@ -249,24 +248,15 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   // Delayed transaction re-sync for a freshly-linked item (see on_job_created).
   // Self-retries with escalating delay until Plaid's async pull produces data.
   resync_transactions: async (ctx, payload) => {
-    const p = payload as { item_id: string; user_id: string; attempt?: number };
-    const attempt = p.attempt ?? 1;
-    const result = await sync_transactions_orchestrator({
-      trace_id: ctx.trace_id,
-      span_id: ctx.span_id,
-      input: { item_id: p.item_id, user_id: p.user_id },
-      user_id: p.user_id,
-      idempotency_key: `resync_transactions:${p.item_id}:${attempt}:${ctx.trace_id}`,
-    });
-    const got_data =
-      result.success && (result.added_count > 0 || result.modified_count > 0);
-    if (!got_data && attempt < 4) {
-      await create_job(
-        "resync_transactions",
-        { item_id: p.item_id, user_id: p.user_id, attempt: attempt + 1 },
-        { delay_seconds: 180 * attempt, trace_id: ctx.trace_id }
-      );
-    }
+    // Legacy job (pre sync_item) — any still queued just run a normal item sync.
+    const p = payload as { item_id: string; user_id: string };
+    await sync_item_orchestrator(ctx, { item_doc_id: p.item_id, user_id: p.user_id, reason: "legacy_resync" });
+  },
+
+  // THE item sync (first link, webhooks, crons, retries): one writer per item (lease), every
+  // transaction written once, one follow-up pass. See orchestrators/plaid/sync_item.
+  sync_item: async (ctx, payload) => {
+    await sync_item_orchestrator(ctx, payload as SyncItemInput);
   },
 };
 

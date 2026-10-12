@@ -49,6 +49,7 @@ import {
 import { inflow_repo, outflow_repo } from "../../repositories";
 import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
 import { classify_internal_transfers_orchestrator } from "./classify_internal_transfers.orchestrator";
+import type { RecurringWrittenDoc } from "../../repositories/recurring_doc_equality";
 
 // ============================================================================
 // Types
@@ -124,8 +125,12 @@ export const RECURRING_SYNC_BUDGET: PerformanceBudget = {
  * @returns Sync results with counts
  */
 export async function sync_recurring_orchestrator(
-  ctx: OrchestratorContext<RecurringSyncInput>
-): Promise<RecurringSyncResponse> {
+  ctx: OrchestratorContext<RecurringSyncInput>,
+  /** From `sync_item`: stamp writes with the run id and leave the transfer check to the run's
+   *  single follow-up pass (it needs the transactions in place first). */
+  opts?: { run_id?: string }
+): Promise<RecurringSyncResponse & { written: RecurringWrittenDoc[] }> {
+  const written: RecurringWrittenDoc[] = [];
   const start_time = Date.now();
   const perf = create_performance_metrics();
   const errors: string[] = [];
@@ -152,6 +157,7 @@ export async function sync_recurring_orchestrator(
       outflows_stale: 0,
       merge_suggestions: 0,
       error: "Failed to resolve dependencies - item not found or not accessible",
+      written: [],
     };
   }
   perf.reads += 5; // Estimated reads for resolver
@@ -174,6 +180,7 @@ export async function sync_recurring_orchestrator(
       outflows_stale: 0,
       merge_suggestions: 0,
       error: `Plaid API error: ${error_msg}`,
+      written: [],
     };
   }
 
@@ -262,8 +269,10 @@ export async function sync_recurring_orchestrator(
     try {
       const inflow_write_result = await inflow_repo.save_batch(
         create_child_span(ctx),
-        valid_inflows
+        valid_inflows,
+        opts?.run_id
       );
+      written.push(...inflow_write_result.written);
       inflows_synced = inflow_write_result.count;
       perf.writes += inflow_write_result.count;
     } catch (error) {
@@ -279,8 +288,10 @@ export async function sync_recurring_orchestrator(
     try {
       const outflow_write_result = await outflow_repo.save_batch(
         create_child_span(ctx),
-        valid_outflows
+        valid_outflows,
+        opts?.run_id
       );
+      written.push(...outflow_write_result.written);
       outflows_synced = outflow_write_result.count;
       perf.writes += outflow_write_result.count;
     } catch (error) {
@@ -351,7 +362,7 @@ export async function sync_recurring_orchestrator(
   // 9.5 CLASSIFY INTERNAL TRANSFERS — durably hide internal account transfers that
   // Plaid recreates on each sync (kept: external ACH bills + credit-card payments).
   // Non-fatal: a classification failure must not fail the sync.
-  try {
+  if (!opts?.run_id) try {
     const classified = await classify_internal_transfers_orchestrator(
       ctx,
       ctx.user_id,
@@ -416,7 +427,7 @@ export async function sync_recurring_orchestrator(
     `merge_suggestions=${total_merge_suggestions}, errors=${errors.length}`
   );
 
-  return response;
+  return { ...response, written };
 }
 
 // ============================================================================

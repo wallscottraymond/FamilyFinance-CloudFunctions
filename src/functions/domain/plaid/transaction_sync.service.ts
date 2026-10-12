@@ -278,6 +278,25 @@ export function merge_pending_to_posted(
         payment_date: posted_transaction.transaction_date,
         tags: pending_split.tags, // Preserve user's tags
         rules: [],
+        // The user's MANUAL choices keep their markers, so the assignment engine (which now runs
+        // before the write) preserves them instead of re-deriving.
+        ...(pending_split.budget_assignment_source === "manual"
+          ? { budget_assignment_source: "manual" as const }
+          : {}),
+        ...(pending_split.outflow_assignment_source === "manual"
+          ? {
+            outflow_assignment_source: "manual" as const,
+            outflow_pinned_period_id: pending_split.outflow_pinned_period_id ?? null,
+          }
+          : {}),
+        ...(pending_split.category_source === "user"
+          ? {
+            category_source: "user" as const,
+            overall_category_id: pending_split.overall_category_id ?? null,
+            first_category_id: pending_split.first_category_id ?? null,
+            second_category_id: pending_split.second_category_id ?? null,
+          }
+          : {}),
       };
     }
   );

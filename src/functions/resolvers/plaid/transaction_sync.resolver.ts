@@ -115,15 +115,22 @@ export async function resolve_transaction_sync_dependencies(
     item_data.plaidItemId
   );
 
-  // Step 5: Get active accounts for this item (filter out hidden accounts)
+  // Step 5: Get ALL of this item's accounts. Active ones receive transactions; inactive ones
+  // (hidden/removed by the user) are skipped on purpose. An account id in neither set is one we
+  // haven't saved YET (the first link's account write can lose the race with the first sync) —
+  // the sync must not drop those transactions (see `known_account_ids`).
   const accounts_snapshot = await db.collection("accounts")
     .where("itemId", "==", item_data.plaidItemId)
-    .where("isActive", "==", true)
     .get();
 
-  const active_account_ids = new Set<string>(
-    accounts_snapshot.docs.map(doc => doc.data().accountId || doc.id)
-  );
+  const active_account_ids = new Set<string>();
+  const known_account_ids = new Set<string>();
+  for (const doc of accounts_snapshot.docs) {
+    const a = doc.data();
+    const id = (a.accountId as string) || doc.id;
+    known_account_ids.add(id);
+    if (a.isActive !== false) active_account_ids.add(id);
+  }
 
   console.log(
     `[${ctx.trace_id}] Resolved transaction sync dependencies: ` +
@@ -148,6 +155,7 @@ export async function resolve_transaction_sync_dependencies(
     },
     pending_transactions,
     active_account_ids,
+    known_account_ids,
   };
 }
 

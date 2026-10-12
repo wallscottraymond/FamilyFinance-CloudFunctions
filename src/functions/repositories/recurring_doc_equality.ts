@@ -16,7 +16,7 @@
  */
 
 /** Fields a sync re-stamps on every write; they don't make a doc "changed". */
-const SYNC_TIMESTAMP_FIELDS = new Set(["updatedAt", "lastSyncedAt"]);
+const SYNC_TIMESTAMP_FIELDS = new Set(["updatedAt", "lastSyncedAt", "syncRunId", "lastWriteSource"]);
 
 function normalize(value: unknown): unknown {
   if (value === undefined) return undefined;
@@ -46,4 +46,13 @@ function comparable(doc: object): string {
 /** True when writing `next` over `stored` would change nothing but the sync timestamps. */
 export function is_unchanged_recurring_doc(stored: object, next: object): boolean {
   return comparable(stored) === comparable(next);
+}
+
+/** A bill / income doc a sync wrote (before = stored doc, null when created). */
+export interface RecurringWrittenDoc {
+  id: string;
+  kind: "outflow" | "inflow";
+  created: boolean;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown>;
 }

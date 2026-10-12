@@ -13,10 +13,9 @@
  * @module orchestrators/plaid/sync_all_recurring
  */
 
+import { enqueue_item_sync } from "./sync_item.orchestrator";
 import { TraceContext } from "../../types";
 import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
-import { sync_recurring_orchestrator } from "./sync_recurring.orchestrator";
-import { generate_id } from "../../observability";
 
 export interface SyncAllRecurringResult {
   items_total: number;
@@ -47,30 +46,18 @@ export async function sync_all_recurring_orchestrator(
       continue;
     }
     try {
-      const sync = await sync_recurring_orchestrator({
-        trace_id: ctx.trace_id,
-        span_id: generate_id(),
+      // Queued per item (lease + one pass) — see sync_item.
+      await enqueue_item_sync({
+        item_doc_id: item.item_doc_id,
         user_id: item.user_id,
-        idempotency_key: `scheduled_recurring:${item.plaid_item_id}:${ctx.trace_id}`,
-        input: { item_id: item.plaid_item_id, is_webhook: false },
+        recurring: true,
+        reason: "cron:sync_all_recurring",
+        trace_id: ctx.trace_id,
       });
-      if (sync.success) {
-        result.items_synced++;
-        result.outflows_synced_total += sync.outflows_synced ?? 0;
-        result.inflows_synced_total += sync.inflows_synced ?? 0;
-        result.stale_total += (sync.outflows_stale ?? 0) + (sync.inflows_stale ?? 0);
-      } else {
-        result.items_failed++;
-        console.warn(
-          `[${ctx.trace_id}] scheduled recurring sync failed for item ${item.plaid_item_id}: ${sync.error}`
-        );
-      }
+      result.items_synced++;
     } catch (error) {
       result.items_failed++;
-      console.error(
-        `[${ctx.trace_id}] scheduled recurring sync threw for item ${item.plaid_item_id}:`,
-        error
-      );
+      console.error(`[${ctx.trace_id}] failed to queue recurring sync for item ${item.plaid_item_id}:`, error);
     }
   }
 

@@ -7,11 +7,11 @@
  * removes the per-transaction re-read of budgets + the categories collection
  * that dominates a large re-assignment (e.g. the backfill migration).
  *
- * Assignment-only: it writes the engine-owned split fields but does NOT fan out
- * per-transaction `recompute_budget_spent` jobs — bulk callers (the backfill)
- * run a single authoritative full recompute per budget afterwards, so per-txn
- * scoped recomputes would be redundant. For single, trigger-driven edits use
- * `assign_transaction` (which keeps the scoped fan-out).
+ * One follow-up per batch: every write is stamped `assignRunId`, so `on_transaction_written`
+ * skips the engine's own writes (they used to re-enter it — one assignment job + one
+ * recompute-per-day job per write, ~650 jobs on a first link). The batch then runs ONE follow-up
+ * pass itself (reconcile touched bills/income, recompute touched budget periods, one derive bump),
+ * or hands its writes to a caller that merges them into its own pass (`collect_into`).
  *
  * @module orchestrators/transactions/assign_transactions_batch
  */
@@ -38,7 +38,8 @@ import {
 import { merge_assignment_onto_raw_splits } from "./merge_assignment";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
-import { bump_derive_version } from "../../repositories/derive_version.repo";
+import type { SyncWrittenDoc } from "../../repositories/transaction.repo";
+import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
 import { SourcePeriodForMatch } from "../../domain/transactions/match_source_periods.service";
 
 /** Input: assign every listed transaction for one user. */
@@ -53,6 +54,10 @@ export interface AssignTransactionsBatchInput {
    */
   candidate_outflow_ids?: string[];
   candidate_inflow_ids?: string[];
+  /** Stamped as `assignRunId` on each write (defaults to the trace id). */
+  run_id?: string;
+  /** Caller runs the follow-up pass: the batch appends its writes here and skips its own. */
+  collect_into?: SyncWrittenDoc[];
 }
 
 /** Result summary (handy for logs/tests). */
@@ -148,6 +153,8 @@ export async function assign_transactions_batch_orchestrator(
         end_ms: p.end_date.toMillis(),
       }));
 
+    const run_id = input.run_id ?? ctx.trace_id;
+    const written: SyncWrittenDoc[] = [];
     let processed = 0;
     let changed = 0;
     let wrote = 0; // any committed write (assignment or name change) — both feed derive
@@ -190,8 +197,22 @@ export async function assign_transactions_batch_orchestrator(
         updated_splits,
         split_budget_ids,
         split_outflow_ids,
-        split_inflow_ids
+        split_inflow_ids,
+        run_id
       );
+      /* eslint-disable @typescript-eslint/naming-convention */
+      written.push({
+        doc_id: resolved.transaction_doc_id,
+        before: txn.data,
+        after: {
+          ...txn.data,
+          splits: updated_splits,
+          splitBudgetIds: split_budget_ids,
+          splitOutflowIds: split_outflow_ids,
+          splitInflowIds: split_inflow_ids,
+        },
+      });
+      /* eslint-enable @typescript-eslint/naming-convention */
       processed++;
       wrote++;
       if (result.changed) {
@@ -206,13 +227,15 @@ export async function assign_transactions_batch_orchestrator(
         await Promise.all(window.map((t) => assign_one(t)));
       }
     } finally {
-      // Invalidate the derive cache ONCE for the whole batch (TR-2). The engine's split
-      // write-back used to re-fire on_transaction_written N times → N version bumps; now a
-      // single bump per batch covers all of them (only when something actually changed).
-      // In `finally`: if one item throws, the writes that already committed still invalidate
-      // (a retry would see them as unchanged and never bump).
+      // ONE follow-up for the whole batch (the trigger skips these stamped writes). In `finally`
+      // so writes that committed before a failure are still followed up (a retry would see them
+      // as unchanged and do nothing).
       if (wrote > 0) {
-        await bump_derive_version(input.user_id).catch(() => {});
+        if (input.collect_into) {
+          input.collect_into.push(...written);
+        } else {
+          await run_sync_follow_ups(ctx, input.user_id, follow_ups_from_written(written));
+        }
       }
     }
 

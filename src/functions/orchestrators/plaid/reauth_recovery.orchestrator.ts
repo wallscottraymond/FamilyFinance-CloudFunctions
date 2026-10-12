@@ -16,6 +16,7 @@
  * @module orchestrators/plaid/reauth_recovery
  */
 
+import { sync_item_orchestrator } from "./sync_item.orchestrator";
 import { Timestamp } from "firebase-admin/firestore";
 import { OrchestratorContext, TraceContext } from "../../types";
 import {
@@ -38,8 +39,6 @@ import {
 } from "../../domain/plaid/reauth_recovery.service";
 import { compute_login_repaired_update } from "../../domain/plaid/item_status_webhook.service";
 import { sync_balances_orchestrator } from "./sync_balances.orchestrator";
-import { sync_transactions_orchestrator } from "./sync_transactions.orchestrator";
-import { sync_recurring_orchestrator } from "./sync_recurring.orchestrator";
 import {
   CompleteRelinkInput,
   CompleteRelinkResponse,
@@ -155,31 +154,15 @@ export async function refresh_repaired_item(
   }
 
   try {
-    const sync = await sync_transactions_orchestrator({
-      trace_id: ctx.trace_id,
-      span_id: generate_id(),
-      input: { item_id: target.plaid_item_id, user_id: target.user_id },
-      user_id: target.user_id,
-      idempotency_key: `${key}:transactions`,
-    });
-    all_ok = all_ok && sync.success;
+    // Transactions + bills/income through the item sync (lease + one pass).
+    const synced = await sync_item_orchestrator(
+      { trace_id: ctx.trace_id, span_id: generate_id() },
+      { item_doc_id: target.item_doc_id, user_id: target.user_id, recurring: true, reason: `reauth:${key}` }
+    );
+    all_ok = all_ok && synced.status !== "failed";
   } catch (error) {
     all_ok = false;
-    console.error(`[${ctx.trace_id}] Transaction refresh failed for ${target.item_doc_id}:`, error);
-  }
-
-  try {
-    const sync = await sync_recurring_orchestrator({
-      trace_id: ctx.trace_id,
-      span_id: generate_id(),
-      input: { item_id: target.plaid_item_id, is_webhook: false },
-      user_id: target.user_id,
-      idempotency_key: `${key}:recurring`,
-    });
-    all_ok = all_ok && sync.success;
-  } catch (error) {
-    all_ok = false;
-    console.error(`[${ctx.trace_id}] Recurring refresh failed for ${target.item_doc_id}:`, error);
+    console.error(`[${ctx.trace_id}] Item refresh failed for ${target.item_doc_id}:`, error);
   }
 
   return all_ok;

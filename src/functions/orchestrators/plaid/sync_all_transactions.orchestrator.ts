@@ -11,9 +11,9 @@
  * @module orchestrators/plaid/sync_all_transactions
  */
 
+import { enqueue_item_sync } from "./sync_item.orchestrator";
 import { TraceContext } from "../../types";
 import { plaid_item_repo } from "../../repositories/plaid/plaid_item.repo";
-import { sync_transactions_orchestrator } from "./sync_transactions.orchestrator";
 import { sync_balances_orchestrator } from "./sync_balances.orchestrator";
 import { generate_id } from "../../observability";
 
@@ -49,30 +49,19 @@ export async function sync_all_transactions_orchestrator(
       continue;
     }
     try {
-      const sync = await sync_transactions_orchestrator({
-        trace_id: ctx.trace_id,
-        span_id: generate_id(),
+      // Queue the item sync (its own job + lease) instead of syncing inline here: one cron run no
+      // longer syncs every item serially inside one 9-minute function, and it can't overlap a
+      // webhook-driven sync of the same item.
+      await enqueue_item_sync({
+        item_doc_id: item.item_doc_id,
         user_id: item.user_id,
-        idempotency_key: `scheduled_sync:${item.plaid_item_id}:${ctx.trace_id}`,
-        input: { item_id: item.plaid_item_id, user_id: item.user_id },
+        reason: "cron:sync_all_transactions",
+        trace_id: ctx.trace_id,
       });
-      if (sync.success) {
-        result.items_synced++;
-        result.added_total += sync.added_count;
-        result.modified_total += sync.modified_count;
-        result.removed_total += sync.removed_count;
-      } else {
-        result.items_failed++;
-        console.warn(
-          `[${ctx.trace_id}] scheduled sync failed for item ${item.plaid_item_id}: ${sync.error}`
-        );
-      }
+      result.items_synced++;
     } catch (error) {
       result.items_failed++;
-      console.error(
-        `[${ctx.trace_id}] scheduled sync threw for item ${item.plaid_item_id}:`,
-        error
-      );
+      console.error(`[${ctx.trace_id}] failed to queue sync for item ${item.plaid_item_id}:`, error);
     }
 
     // Refresh balances independently — a transaction-sync failure above must not

@@ -102,7 +102,10 @@ function should_hide(
 export async function classify_internal_transfers_orchestrator(
   ctx: TraceContext,
   user_id: string,
-  now_ms: number
+  now_ms: number,
+  /** `force`: transfer transactions were just written — a new matched pair can exist even though
+   *  the recurring records (all the fingerprint covers) are unchanged. */
+  opts?: { force?: boolean }
 ): Promise<ClassifyInternalTransfersResult> {
   // 1. Load recurring records (+ the last run's state) — cheap; decides whether the
   //    expensive transaction scan is needed at all.
@@ -113,6 +116,7 @@ export async function classify_internal_transfers_orchestrator(
   ]);
   const current_fp = fingerprint(outflows, inflows, (_k, r) => r.is_hidden);
   if (
+    !opts?.force &&
     state &&
     state.fingerprint === current_fp &&
     now_ms - state.classified_at_ms < FULL_RECLASSIFY_MS

@@ -83,6 +83,17 @@ function plaid_txn(accountId: string, txnId: string, over: Record<string, unknow
   };
 }
 
+/** A real budget doc the engine can see (a manual pin is only honored while its budget exists). */
+async function seed_budget(userId: string, id: string, name = id) {
+  await db.collection('budgets').doc(id).set({
+    id, name, userId, ownerId: userId, createdBy: userId, isActive: true,
+    isSystemEverythingElse: false, period: 'monthly', amount: 100, categoryIds: [],
+    isOngoing: true, budgetType: 'recurring', groupIds: [],
+    startDate: Timestamp.fromDate(new Date('2020-01-01')),
+    endDate: Timestamp.fromDate(new Date('2099-01-01')),
+  });
+}
+
 function run_sync(itemDocId: string, userId: string, plaidItemId: string) {
   return sync_transactions_orchestrator({
     trace_id: rid('t'), span_id: rid('s'),
@@ -97,6 +108,7 @@ describe('Transaction Rules Engine — ingest wiring (emulator)', () => {
     const { userId, itemDocId, plaidItemId, accountId } = await seed_context();
     const ruleId = rid('rule');
     const txnId = rid('tx');
+    await seed_budget(userId, 'budget_abc', 'Software');
 
     await db.collection('rules').doc(ruleId).set({
       userId, isActive: true, priority: 100, name: 'Anthropic → Software',

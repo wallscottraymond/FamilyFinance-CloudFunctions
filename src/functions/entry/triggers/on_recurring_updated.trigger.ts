@@ -56,12 +56,20 @@ export async function handle_recurring_write(
   // Invalidate the derived-period cache on ANY recurring change — name/category/override
   // all feed derive, so bump regardless of the transactionIds/amount field-guards below
   // ([[Firestore-Read-Cost-Reduction]]). Covers deletes too (owner read from `before`).
+  // Written by an item sync: the sync reconciles the stream and bumps the derive version once
+  // for the whole run. (Amount changes below still recompute the materialized period amounts.)
+  const by_sync =
+    typeof after?.syncRunId === "string" && after.syncRunId !== before?.syncRunId;
+
   const owner =
     ((after?.userId ?? after?.ownerId) as string | undefined) ||
     ((before?.userId ?? before?.ownerId) as string | undefined);
-  if (owner) await bump_derive_version(owner).catch(() => {});
+  if (owner && !by_sync) await bump_derive_version(owner).catch(() => {});
 
   if (!after) return false; // deletion → the removal cascade handles soft-delete
+  // Creation is handled by on_*_created (periods + reconcile); reconciling here too was a second
+  // reconcile of every new stream.
+  if (!before) return false;
   const user_id =
     (after.userId as string | undefined) || (after.ownerId as string | undefined);
   if (!user_id) return false;
@@ -70,7 +78,7 @@ export async function handle_recurring_write(
   let did = false;
 
   // 1. `transactionIds` changed (Plaid recurring detection) → reconcile paid/received.
-  if (transaction_ids_changed(before, after)) {
+  if (!by_sync && transaction_ids_changed(before, after)) {
     // Coalesced (Read-Cost-Review-Round-3): a burst of stream updates → one delayed reconcile.
     await enqueue_reconcile_recurring({
       user_id,
