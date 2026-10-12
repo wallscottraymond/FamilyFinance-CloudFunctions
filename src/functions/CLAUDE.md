@@ -115,6 +115,11 @@ transaction.resolver.ts
    Pure, testable, deterministic
 ```
 
+> **Categories & transaction mapping:** the settled rules live in the Obsidian vault at
+> `Documentation/Category-And-Mapping-Canon.md` (taxonomy = the `categories` collection;
+> `first_category` is the only user-facing unit; engine assigns in memory; budgets own
+> `firstCategoryId` slugs). Follow it; change a rule only by editing that page.
+
 ### 1.2a Plaid sync + bulk writers: one writer, one write, one follow-up (2026-10-11)
 
 ```
