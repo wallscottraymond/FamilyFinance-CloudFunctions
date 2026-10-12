@@ -142,12 +142,12 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     const doc = (await db.collection('transactions').doc(txnId).get()).data()!;
     const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === 's1');
     const s2 = doc.splits.find((s: { splitId: string }) => s.splitId === 's2');
-    // PER-LENS: s1 (FOOD_AND_DRINK) is claimed by the MONTHLY groceries budget in
-    // the monthly lens only; weekly + biweekly have no grocery budget → their EE.
+    // s1 (FOOD_AND_DRINK → eating out) is owned by the groceries budget in EVERY lens — a
+    // budget of any cadence owns its categories in every view, as the period page counts it.
     expect(s1.budgetId).toBe(`groceries_${txnId}`); // legacy alias = monthly lens
     expect(s1.monthlyBudgetId).toBe(`groceries_${txnId}`);
-    expect(s1.weeklyBudgetId).toBe(`ee_w_${txnId}`);
-    expect(s1.biWeeklyBudgetId).toBe(`ee_b_${txnId}`);
+    expect(s1.weeklyBudgetId).toBe(`groceries_${txnId}`);
+    expect(s1.biWeeklyBudgetId).toBe(`groceries_${txnId}`);
     // s2 (TRAVEL, unowned) → every lens falls to that lens's EE
     expect(s2.monthlyBudgetId).toBe(`ee_m_${txnId}`);
     expect(s2.weeklyBudgetId).toBe(`ee_w_${txnId}`);

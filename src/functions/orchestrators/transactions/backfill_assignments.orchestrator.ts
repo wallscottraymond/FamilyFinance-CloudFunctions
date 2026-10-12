@@ -105,6 +105,11 @@ export async function backfill_assignments_orchestrator(
       { user_id: input.user_id, reason: "backfill", dry_run: input.dry_run === true },
       ctx.trace_id
     );
+    // A dry run writes nothing — not even the heal below (it generates periods + re-homes).
+    if (input.dry_run === true) {
+      log_operation_success(span, input.user_id);
+      return { mode: "user", budgets_healed: 0 };
+    }
 
     // 2. Heal: any budget with NO periods (the legacy Everything Else budget is
     //    created without the v2 cascade) gets its periods + summaries generated.
@@ -140,7 +145,7 @@ export async function backfill_assignments_orchestrator(
 
     console.log(
       `[${ctx.trace_id}] backfill_assignments: user=${input.user_id} enqueued ` +
-        `reassign_user (dry_run=${input.dry_run === true}) + ${budgets_healed} heal jobs`
+        `reassign_user + ${budgets_healed} heal jobs`
     );
     log_operation_success(span, input.user_id);
     return { mode: "user", budgets_healed };

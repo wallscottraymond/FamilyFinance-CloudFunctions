@@ -153,6 +153,8 @@ export interface ProcessBudgetUpdatedPayload {
   everything_else_budget_id: string | null;
   /** Re-assign the view's transactions from here (earliest start of this + source budgets). */
   rehome_from_ms?: number;
+  /** The budget's end date / ongoing flag changed (its owned date range moved). */
+  range_changed?: boolean;
   /** Regenerate budget periods (amount changed) */
   regenerate_periods: boolean;
   /** The budget name changed — propagate budgetName to current+future periods */

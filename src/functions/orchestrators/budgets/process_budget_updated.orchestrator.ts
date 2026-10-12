@@ -87,7 +87,7 @@ async function rehome_changed_categories(
 ): Promise<void> {
   const categories_changed =
     payload.added_claims.length > 0 || payload.released_category_ids.length > 0;
-  if (!categories_changed) return;
+  if (!categories_changed && !payload.range_changed) return;
   await reassign_view(
     ctx,
     payload.user_id,

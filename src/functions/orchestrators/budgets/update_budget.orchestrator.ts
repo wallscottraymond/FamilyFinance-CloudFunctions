@@ -105,7 +105,12 @@ export async function update_budget_orchestrator(
 
     // 5. Enqueue cascade (claims/releases + period reallocation + rename)
     const name_changed = entity.name !== dependencies.existing.name;
+    // An end-date / ongoing change moves which dates the budget owns → its transactions re-home.
+    const end_ms = (b: { is_ongoing: boolean; budget_end_date?: { toMillis(): number } | null }) =>
+      b.is_ongoing ? null : b.budget_end_date?.toMillis() ?? null;
+    const range_changed = end_ms(entity) !== end_ms(dependencies.existing);
     const needs_cascade =
+      range_changed ||
       added_claims.length > 0 ||
       dependencies.removed_category_ids.length > 0 ||
       dependencies.amount_changed ||
@@ -132,6 +137,7 @@ export async function update_budget_orchestrator(
         released_category_ids: dependencies.removed_category_ids,
         everything_else_budget_id: dependencies.everything_else_budget_id,
         rehome_from_ms,
+        range_changed,
         regenerate_periods: dependencies.amount_changed,
         name_changed,
       };

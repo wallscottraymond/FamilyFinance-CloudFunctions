@@ -14,8 +14,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { z } from "zod";
 import { generate_id } from "../../observability";
-import { user_repo } from "../../repositories/user.repo";
-import { enqueue_reassign_user } from "../../orchestrators/transactions/reassign_user.orchestrator";
+import { enqueue_audits } from "../../orchestrators/transactions/reassign_fanout.orchestrator";
 
 const input_schema = z.object({
   user_id: z.string().min(1).optional(),
@@ -33,13 +32,10 @@ export const audit_transaction_assignments = onCall(
       throw new HttpsError("invalid-argument", "Pass user_id or all_users: true");
     }
     const trace_id = generate_id();
-    const user_ids = parsed.data.all_users
-      ? await user_repo.get_all_ids({ trace_id, span_id: trace_id })
-      : [parsed.data.user_id as string];
-    let queued = 0;
-    for (const user_id of user_ids) {
-      if (await enqueue_reassign_user({ user_id, reason: "manual", dry_run: true }, trace_id)) queued++;
-    }
-    return { success: true, queued, users: user_ids.length, trace_id };
+    const queued = await enqueue_audits(
+      { trace_id, span_id: trace_id },
+      parsed.data.all_users ? "all" : [parsed.data.user_id as string]
+    );
+    return { success: true, queued, trace_id };
   }
 );

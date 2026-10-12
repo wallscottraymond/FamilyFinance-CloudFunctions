@@ -73,11 +73,10 @@ import {
   recompute_budget_rollover_orchestrator,
   RecomputeBudgetRolloverInput,
 } from "../../orchestrators/budgets/recompute_budget_rollover.orchestrator";
+import { category_reassign_fanout_orchestrator } from "../../orchestrators/transactions/reassign_fanout.orchestrator";
 import { classify_internal_transfers_orchestrator } from "../../orchestrators/plaid/classify_internal_transfers.orchestrator";
-import {
-  reassign_user_orchestrator,
-  ReassignUserInput,
-} from "../../orchestrators/transactions/reassign_user.orchestrator";
+import { create_job } from "../../infrastructure/job_queue";
+import { REASSIGN_JOB } from "../../orchestrators/transactions/reassign_user.orchestrator";
 import {
   backfill_assignments_orchestrator,
   BackfillAssignmentsInput,
@@ -207,12 +206,17 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   backfill_assignments: async (ctx, payload) => {
     await backfill_assignments_orchestrator(ctx, payload as BackfillAssignmentsInput);
   },
+  // A re-assign run needs the trigger's full 9-minute budget and must not hold one of the sweep's
+  // shared slots for minutes: hand the due job back to the immediate trigger path.
   reassign_user: async (ctx, payload) => {
-    await reassign_user_orchestrator(ctx, payload as ReassignUserInput);
+    await create_job(REASSIGN_JOB, payload, { trace_id: ctx.trace_id });
   },
   classify_transfers: async (ctx, payload) => {
     const { user_id } = payload as { user_id: string };
     await classify_internal_transfers_orchestrator(ctx, user_id, Date.now(), { force: true });
+  },
+  category_reassign_fanout: async (ctx) => {
+    await category_reassign_fanout_orchestrator(ctx);
   },
 
   reconcile_recurring_period: async (ctx, payload) => {

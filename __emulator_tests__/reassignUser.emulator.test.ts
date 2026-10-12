@@ -20,7 +20,13 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-import { reassign_user_orchestrator } from '../src/functions/orchestrators/transactions/reassign_user.orchestrator';
+import {
+  enqueue_reassign_user,
+  reassign_user_orchestrator,
+} from '../src/functions/orchestrators/transactions/reassign_user.orchestrator';
+import { assign_transactions_batch_orchestrator } from '../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator';
+import { transaction_repo } from '../src/functions/repositories/transaction.repo';
+import { request_category_reassign } from '../src/functions/orchestrators/transactions/reassign_fanout.orchestrator';
 import { invalidate_category_cache } from '../src/functions/repositories/category.repo';
 
 const ctx = () => ({ trace_id: `t_${Date.now()}`, span_id: `s_${Date.now()}` });
@@ -114,9 +120,9 @@ describe('reassign_user_orchestrator (emulator)', () => {
       weeklyBudgetId: u.ee.w, biWeeklyBudgetId: u.ee.b,
     }));
     await seedTxn(ok, u.userId, '2026-05-04', split(SHOP_CODE, u.shop, {
-      weeklyBudgetId: u.ee.w, biWeeklyBudgetId: u.ee.b, firstCategoryId: SHOP,
+      weeklyBudgetId: u.shop, biWeeklyBudgetId: u.shop, firstCategoryId: SHOP,
       overallCategoryId: SHOP, categorySource: 'plaid', secondCategoryId: null,
-      budgetName: u.shop, weeklyBudgetName: u.ee.w, biWeeklyBudgetName: u.ee.b,
+      budgetName: u.shop, weeklyBudgetName: u.shop, biWeeklyBudgetName: u.shop,
     }));
     await seedTxn(legacy, u.userId, '2026-05-05', split(SHOP_CODE, u.shop, {
       internalDetailedCategory: FOOD_CODE,
@@ -203,5 +209,43 @@ describe('reassign_user_orchestrator (emulator)', () => {
     for (let i = 0; i < 3; i++) {
       expect((await txn(`ra_cap_${RUN}_${i}`)).splits[0].monthlyBudgetId).toBe(u.shop);
     }
+  });
+
+  it("never overwrites a write that landed after the engine's read (precondition)", async () => {
+    const u = await seedUser(5);
+    const id = `ra_race_${RUN}`;
+    await seedTxn(id, u.userId, '2026-05-03', split(SHOP_CODE, u.ee.m));
+    const [read] = await transaction_repo.get_raw_by_ids(ctx(), [id]);
+    // A user edit lands between the engine's read and its write.
+    await db.collection('transactions').doc(id).update({ userNotes: 'edited', 'splits': [{ ...split(SHOP_CODE, u.ee.m), spendStatus: 'ignored' }] });
+    await assign_transactions_batch_orchestrator(ctx(), {
+      user_id: u.userId, transaction_ids: [id], preloaded_docs: [read],
+    });
+    const after = await txn(id);
+    expect(after.userNotes).toBe('edited');
+    expect(after.splits[0].spendStatus).toBe('ignored'); // the edit survived
+    expect(after.splits[0].monthlyBudgetId).toBe(u.ee.m); // the stale write was skipped
+  });
+
+  it('a request while a run is RUNNING is queued delayed, never dropped; a queued one merges', async () => {
+    const u = `ra_sf_${RUN}`;
+    await db.collection('_reassign_runs').doc(`ra_sf_run_${RUN}`).set({
+      run_id: `ra_sf_run_${RUN}`, user_id: u, dedup_key: `reassign_user:${u}`, status: 'running',
+      updated_at: Timestamp.now(),
+    });
+    expect(await enqueue_reassign_user({ user_id: u }, 't')).toBe(true);
+    expect(await enqueue_reassign_user({ user_id: u }, 't')).toBe(false); // merged into the queued one
+    const jobs = (await db.collection('_jobs').where('job_type', '==', 'reassign_user').get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.user_id === u);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].scheduled_for.toMillis()).toBeGreaterThan(Date.now() + 60_000); // after the run
+    expect(typeof jobs[0].payload.run_id).toBe('string'); // a retry resumes the same run
+  });
+
+  it('a burst of category edits schedules ONE fan-out', async () => {
+    await db.collection('_config').doc('category_reassign').delete();
+    const results = await Promise.all([1, 2, 3, 4, 5].map(() => request_category_reassign(ctx())));
+    expect(results.filter(Boolean)).toHaveLength(1);
+    await db.collection('_config').doc('category_reassign').delete();
   });
 });

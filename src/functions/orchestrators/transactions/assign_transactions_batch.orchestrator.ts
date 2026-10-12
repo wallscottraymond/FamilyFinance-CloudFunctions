@@ -31,6 +31,7 @@ import {
 import {
   load_recurring_candidates,
   load_recurring_candidates_scoped,
+  PreloadedRecurringCandidates,
 } from "../../resolvers/transactions/recurring_matches.resolver";
 import {
   compute_transaction_assignment,
@@ -65,7 +66,13 @@ export interface AssignTransactionsBatchInput {
    *     listed in `force_write_ids`; `extra_fields_by_id` rides along in the same write.
    *   - `dry_run`: compute only — no writes, no follow-ups; `on_result` still reports.
    */
-  preloaded_docs?: Array<{ id: string; data: Record<string, unknown> }>;
+  preloaded_docs?: Array<{ id: string; data: Record<string, unknown>; update_time?: Timestamp }>;
+  /** Reference data the caller already resolved for this user (a multi-page run loads it ONCE
+   *  per invocation, not once per page). */
+  preloaded_shared?: Awaited<ReturnType<typeof resolve_shared_assignment_context>>;
+  /** Bill / income candidate periods the caller already loaded; used when their window covers
+   *  this batch's dates ±90 days (matching filters each transaction to its own ±90 days). */
+  preloaded_candidates?: PreloadedRecurringCandidates;
   force_write_ids?: Set<string>;
   extra_fields_by_id?: Map<string, Record<string, unknown>>;
   dry_run?: boolean;
@@ -120,7 +127,8 @@ export async function assign_transactions_batch_orchestrator(
     }
 
     // Resolve the transaction-independent context ONCE for the whole batch.
-    const shared = await resolve_shared_assignment_context(ctx, input.user_id);
+    const shared =
+      input.preloaded_shared ?? (await resolve_shared_assignment_context(ctx, input.user_id));
 
     // Bulk-read the batch's txn docs ONCE (dates come along for free) — replaces the
     // per-transaction `get_raw_by_id` inside resolve_assignment_context AND the old field-masked
@@ -152,8 +160,16 @@ export async function assign_transactions_batch_orchestrator(
     const scoped =
       (input.candidate_outflow_ids?.length ?? 0) > 0 ||
       (input.candidate_inflow_ids?.length ?? 0) > 0;
+    const caller_candidates =
+      input.preloaded_candidates &&
+      input.preloaded_candidates.window_start_ms <= window_start_ms &&
+      input.preloaded_candidates.window_end_ms >= window_end_ms
+        ? input.preloaded_candidates
+        : null;
     const [preloaded_candidates, overlapping_source_periods] = await Promise.all([
-      scoped
+      caller_candidates
+        ? Promise.resolve(caller_candidates)
+        : scoped
         ? load_recurring_candidates_scoped(
           ctx,
           input.candidate_outflow_ids ?? [],
@@ -181,6 +197,7 @@ export async function assign_transactions_batch_orchestrator(
     let processed = 0;
     let changed = 0;
     let wrote = 0; // any committed write (assignment or name change) — both feed derive
+    let conflicts = 0; // skipped: the doc changed after we read it
     const not_found = input.transaction_ids.length - txn_docs.length;
 
     const assign_one = async (
@@ -233,7 +250,7 @@ export async function assign_transactions_batch_orchestrator(
         return;
       }
 
-      await transaction_repo.apply_split_assignments(
+      const applied = await transaction_repo.apply_split_assignments(
         ctx,
         resolved.transaction_doc_id,
         updated_splits,
@@ -241,8 +258,15 @@ export async function assign_transactions_batch_orchestrator(
         split_outflow_ids,
         split_inflow_ids,
         run_id,
-        input.extra_fields_by_id?.get(txn.id)
+        input.extra_fields_by_id?.get(txn.id),
+        // Never overwrite a write that landed after our read (a user's edit, a sync).
+        (txn as { update_time?: Timestamp }).update_time
       );
+      if (!applied) {
+        conflicts++;
+        processed++;
+        return;
+      }
       /* eslint-disable @typescript-eslint/naming-convention */
       written.push({
         doc_id: resolved.transaction_doc_id,
@@ -284,7 +308,7 @@ export async function assign_transactions_batch_orchestrator(
 
     console.log(
       `[${ctx.trace_id}] assign_transactions_batch: user=${input.user_id} ` +
-        `processed=${processed} changed=${changed} not_found=${not_found}`
+        `processed=${processed} changed=${changed} not_found=${not_found} conflicts=${conflicts}`
     );
     log_operation_success(span, input.user_id);
     return { processed, changed, not_found };

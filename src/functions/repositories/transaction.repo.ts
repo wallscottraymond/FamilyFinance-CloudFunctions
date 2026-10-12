@@ -960,12 +960,12 @@ export const transaction_repo = {
   async get_raw_by_ids(
     _ctx: TraceContext,
     doc_ids: string[]
-  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  ): Promise<Array<{ id: string; data: Record<string, unknown>; update_time?: Timestamp }>> {
     if (doc_ids.length === 0) {
       return [];
     }
     const db = getFirestore();
-    const out: Array<{ id: string; data: Record<string, unknown> }> = [];
+    const out: Array<{ id: string; data: Record<string, unknown>; update_time?: Timestamp }> = [];
     const CHUNK = 300; // Firestore getAll practical batch size
     for (let i = 0; i < doc_ids.length; i += CHUNK) {
       const refs = doc_ids.slice(i, i + CHUNK).map((id) => doc_ref(id));
@@ -974,7 +974,7 @@ export const transaction_repo = {
         if (!snap.exists) continue;
         const data = snap.data() as Record<string, unknown>;
         if (data.isActive === false) continue;
-        out.push({ id: snap.id, data });
+        out.push({ id: snap.id, data, update_time: snap.updateTime });
       }
     }
     return out;
@@ -1003,10 +1003,13 @@ export const transaction_repo = {
      *  writes (the batch runs its own single follow-up instead of N re-entries). */
     assign_run_id?: string,
     /** Extra top-level fields written in the SAME update (e.g. the 3-0b legacy clear). */
-    extra_fields?: Record<string, unknown>
-  ): Promise<void> {
+    extra_fields?: Record<string, unknown>,
+    /** The doc's update time when it was read: the write fails (returns false) if anything
+     *  changed it since (a user edit, a sync) — never overwrite a newer write. */
+    read_update_time?: Timestamp
+  ): Promise<boolean> {
     /* eslint-disable @typescript-eslint/naming-convention */
-    await doc_ref(doc_id).update({
+    const data = {
       ...(extra_fields ?? {}),
       ...(assign_run_id ? { assignRunId: assign_run_id, lastWriteSource: "assignment" } : {}),
       splits: updated_splits,
@@ -1016,8 +1019,21 @@ export const transaction_repo = {
       splitOutflowIds: split_outflow_ids,
       splitInflowIds: split_inflow_ids,
       updatedAt: Timestamp.now(),
-    });
+    };
     /* eslint-enable @typescript-eslint/naming-convention */
+    try {
+      if (read_update_time) {
+        await doc_ref(doc_id).update(data, { lastUpdateTime: read_update_time });
+      } else {
+        await doc_ref(doc_id).update(data);
+      }
+      return true;
+    } catch (error) {
+      // FAILED_PRECONDITION: the doc changed after we read it — its newer writer (an edit's
+      // trigger, a sync's in-memory assignment) assigns it; skipping is the safe outcome.
+      if ((error as { code?: number }).code === 9) return false;
+      throw error;
+    }
   },
 
   /**
@@ -1461,9 +1477,9 @@ export const transaction_repo = {
     user_id: string,
     cursor: { date_ms: number; doc_id: string } | null,
     limit: number,
-    scope: { from_ms?: number; to_ms?: number } = {}
+    scope: { from_ms?: number; to_ms?: number; account_ids?: string[] } = {}
   ): Promise<{
-    docs: Array<{ id: string; data: Record<string, unknown> }>;
+    docs: Array<{ id: string; data: Record<string, unknown>; update_time: Timestamp }>;
     last: { date_ms: number; doc_id: string } | null;
     exhausted: boolean;
   }> {
@@ -1472,6 +1488,11 @@ export const transaction_repo = {
       .where("userId", "==", user_id)
       .orderBy("transactionDate", "asc")
       .orderBy(FieldPath.documentId(), "asc");
+    // Account-scoped (a view change): query just those accounts — index
+    // transactions(userId, accountId, transactionDate). Up to Firestore's 30 `in` values.
+    if (scope.account_ids?.length && scope.account_ids.length <= 30) {
+      q = q.where("accountId", "in", scope.account_ids);
+    }
     if (scope.from_ms !== undefined) {
       q = q.where("transactionDate", ">=", Timestamp.fromMillis(scope.from_ms));
     }
@@ -1485,7 +1506,11 @@ export const transaction_repo = {
     const tail = snap.docs[snap.docs.length - 1];
     return {
       docs: snap.docs
-        .map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+        .map((d) => ({
+          id: d.id,
+          data: d.data() as Record<string, unknown>,
+          update_time: d.updateTime,
+        }))
         .filter((t) => t.data.isActive !== false),
       last: tail
         ? {

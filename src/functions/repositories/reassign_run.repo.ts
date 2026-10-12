@@ -58,6 +58,10 @@ export interface ReassignRun {
   samples: ReassignSample[];
   follow_ups: SyncFollowUps | null;
   max_txns: number;
+  /** Single-flight key (user + scope + dry-run): only one RUNNING run per key. */
+  dedup_key: string;
+  /** All pages walked; only the follow-up pass is left (it may get its own job). */
+  walk_done: boolean;
   invocations: number;
   started_at: Timestamp;
   updated_at: Timestamp;
@@ -74,6 +78,50 @@ export const reassign_run_repo = {
       .collection(RUNS)
       .doc(run.run_id)
       .set({ ...run, updated_at: Timestamp.now() });
+  },
+
+  /**
+   * Is another run with this key RUNNING right now? A run that hasn't saved progress for
+   * `stale_ms` is dead (its job crashed past retries) and doesn't block.
+   */
+  async has_running(dedup_key: string, except_run_id: string, stale_ms: number): Promise<boolean> {
+    const snap = await getFirestore()
+      .collection(RUNS)
+      .where("dedup_key", "==", dedup_key)
+      .where("status", "==", "running")
+      .limit(5)
+      .get();
+    const fresh_after = Date.now() - stale_ms;
+    return snap.docs.some(
+      (d) =>
+        d.id !== except_run_id &&
+        ((d.get("updated_at") as Timestamp | undefined)?.toMillis() ?? 0) > fresh_after
+    );
+  },
+
+  /**
+   * Claim the ONE pending category fan-out (atomic): true for the first caller in a burst of
+   * category edits, false while one is already pending. Released by the fan-out job when it runs.
+   */
+  async claim_category_fanout(): Promise<boolean> {
+    const ref = getFirestore().collection("_config").doc("category_reassign");
+    return getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      // A claim whose job never ran (30 min) is dead — never let it block category re-assigns.
+      const claimed_ms = (snap.get("claimed_at") as Timestamp | undefined)?.toMillis() ?? 0;
+      if (snap.exists && snap.get("pending") === true && Date.now() - claimed_ms < 30 * 60_000) {
+        return false;
+      }
+      tx.set(ref, { pending: true, claimed_at: Timestamp.now() }, { merge: true });
+      return true;
+    });
+  },
+
+  async release_category_fanout(): Promise<void> {
+    await getFirestore()
+      .collection("_config")
+      .doc("category_reassign")
+      .set({ pending: false, released_at: Timestamp.now() }, { merge: true });
   },
 
   /** Kill switch: false only when `_config/reassign.enabled === false`. One read per page. */
