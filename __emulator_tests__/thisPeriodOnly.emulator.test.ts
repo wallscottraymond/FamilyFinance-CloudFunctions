@@ -1,178 +1,356 @@
 /**
- * Emulator Integration Test — "This Period Only" shows on the period page (Transaction-Integrity
- * proof, app action U9 / decision 4c-9).
+ * Emulator Integration Test — "This Period Only" / "Reset" / "All Periods Forward" as the PERIOD
+ * PAGE shows them (Transaction-Integrity X10, app action U9 / decision 4c-9).
  *
- * `updateBudgetPeriodAmount` (This Period Only) stores the user's amount as `modifiedAmount` on
- * the monthly period (`isModified: true`); the period page must show THAT amount for the period,
- * and the budget's own amount again once the user resets it.
+ * The page (derive_period) builds every view's budget allocation from the budget's MONTHLY
+ * budget_periods only. Every assertion here reads the page, for every budget cadence
+ * {monthly, weekly, bi_monthly, quarterly} × every edited view {month, week, week straddling two
+ * months, bi-monthly half}: the edited bucket shows EXACTLY what was typed, buckets that don't
+ * overlap it are unchanged, re-editing sets (never accumulates), Reset restores, and All Periods
+ * Forward makes the edited bucket show what was typed. Budget periods come from the real generator
+ * (process_budget_created).
  *
  * Prereqs: firebase emulators:exec --only firestore "npx jest --selectProjects emulator --testPathPattern thisPeriodOnly"
  */
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
-process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
-if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || "localhost:8080";
+if (!admin.apps.length) admin.initializeApp({ projectId: "family-budget-app-cb59b" });
 const db = admin.firestore();
 
-import { derive_period_orchestrator } from '../src/functions/orchestrators/periods/derive_period.orchestrator';
-import { updateBudgetPeriodAmount } from '../src/functions/budgets/api/periods/updateBudgetPeriodAmount';
+import { derive_period_orchestrator } from "../src/functions/orchestrators/periods/derive_period.orchestrator";
+import { process_budget_created_orchestrator } from "../src/functions/orchestrators/budgets/process_budget_created.orchestrator";
+import { budget_cadence_to_instance } from "../src/functions/domain/budgets/period_generation.service";
+import { page_share } from "../src/functions/domain/budgets/period_share.service";
+import { updateBudgetPeriodAmount } from "../src/functions/budgets/api/periods/updateBudgetPeriodAmount";
+import { BudgetPeriodType } from "../src/functions/types/budgets/budget_entity.types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const edit_amount = (data: unknown): Promise<any> => (updateBudgetPeriodAmount as any).run({
-  data, auth: { uid: U, token: { uid: U } }, rawRequest: {},
-});
+jest.setTimeout(240_000);
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const U = `tp_u_${RUN}`;
-const B = `tp_b_${RUN}`;
-const P = `${B}_2031M07`;
-const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
-const t = () => ({ trace_id: `t_${Math.random()}`, span_id: 's' });
-const JUL = { start: Date.parse('2031-07-01T00:00:00Z'), end: Date.parse('2031-07-31T23:59:59.999Z') };
+const DAY = 86_400_000;
+const ts = (ms: number) => Timestamp.fromMillis(ms);
+const t = () => ({ trace_id: `t_${Math.random()}`, span_id: "s" });
+const utc = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d);
+const end_of = (day_ms: number) => day_ms + DAY - 1;
+const cents = (n: number) => Math.round(n * 100);
 
-const page_allocated = async () => {
-  const r = await derive_period_orchestrator(t(), U, {
-    view_cadence: 'monthly', window_start_ms: JUL.start, window_end_ms: JUL.end, force: true,
-  });
-  const b = r.budgets.find((x) => x.budget_id === B);
-  return (b?.periods ?? []).reduce((s, p) => s + p.allocated_amount, 0);
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const edit = (data: unknown): Promise<any> => (updateBudgetPeriodAmount as any).run({
+  data, auth: { uid: U, token: { uid: U } }, rawRequest: {},
+});
 
 /* eslint-disable @typescript-eslint/naming-convention */
-describe('"This Period Only" amount on the period page (emulator)', () => {
-  beforeAll(async () => {
-    await db.collection('source_periods').doc('2031M07').set({
-      periodId: '2031M07', type: 'monthly', startDate: ts('2031-07-01T00:00:00Z'),
-      endDate: ts('2031-07-31T23:59:59.999Z'), year: 2031,
-    });
-    await db.collection('users').doc(U).set({ email: 'x@x.com', isActive: true, role: 'editor' });
-    await db.collection('budgets').doc(B).set({
-      id: B, userId: U, createdBy: U, groupIds: [], isActive: true,
-      access: { ownerId: U, createdBy: U, groupIds: [], isPrivate: true },
-      name: 'Dining', amount: 400, currency: 'USD', categoryIds: ['eating_out'], period: 'monthly',
-      budgetType: 'recurring', startDate: ts('2031-01-01T00:00:00Z'), endDate: ts('2032-01-01T00:00:00Z'),
-      isOngoing: true, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
-    });
-    await db.collection('budget_periods').doc(P).set({
-      id: P, budgetId: B, userId: U, groupIds: [], periodId: '2031M07', sourcePeriodId: '2031M07', periodType: 'monthly',
-      periodStart: ts('2031-07-01T00:00:00Z'), periodEnd: ts('2031-07-31T23:59:59.999Z'),
-      allocatedAmount: 400, rolledOverAmount: 0, spent: 0, remaining: 400, isActive: true,
-    });
-  });
-  afterAll(async () => { await db.terminate(); });
 
-  it('without an override the page shows the budget amount', async () => {
-    expect(await page_allocated()).toBe(400);
+// ---- source periods (same shapes / ids as admin/generateSourcePeriods) ------------------------
+
+// Calendar periods this file CREATED (not ones another suite / a previous run left) — removed in
+// afterAll so the shared, global `source_periods` collection looks as it did (other suites, e.g.
+// extendBudgetPeriodsV2, generate from whatever calendar periods exist).
+const created_source_periods = new Set<string>();
+
+async function seed_source_periods(year: number, from_month: number, to_month: number) {
+  const writes: Array<Promise<unknown>> = [];
+  const put = (id: string, type: string, s: number, e: number) =>
+    writes.push((async () => {
+      const ref = db.collection("source_periods").doc(id);
+      if (!(await ref.get()).exists) created_source_periods.add(id);
+      await ref.set({ id, periodId: id, type, startDate: ts(s), endDate: ts(e), year });
+    })());
+  for (let m = from_month; m <= to_month; m++) {
+    const mm = String(m).padStart(2, "0");
+    const last = new Date(Date.UTC(year, m, 0)).getUTCDate();
+    put(`${year}M${mm}`, "monthly", utc(year, m, 1), end_of(utc(year, m, last)));
+    put(`${year}BM${mm}A`, "bi_monthly", utc(year, m, 1), end_of(utc(year, m, 15)));
+    put(`${year}BM${mm}B`, "bi_monthly", utc(year, m, 16), end_of(utc(year, m, last)));
+  }
+  // Sunday-start weeks numbered from the week containing Jan 1 — only weeks inside the year.
+  let s = utc(year, 1, 1);
+  while (new Date(s).getUTCDay() !== 0) s -= DAY;
+  const lo = utc(year, from_month, 1) - 7 * DAY;
+  const hi = utc(year, to_month + 1, 1);
+  for (let n = 1; new Date(s + 6 * DAY).getUTCFullYear() === year; n++, s += 7 * DAY) {
+    if (s >= lo && s < hi) put(`${year}W${String(n).padStart(2, "0")}`, "weekly", s, end_of(s + 6 * DAY));
+  }
+  await Promise.all(writes);
+}
+
+// ---- budgets via the real generator ------------------------------------------------------------
+
+async function create_budget(
+  id: string, period: BudgetPeriodType, amount: number, start_ms: number, gen_end_ms: number
+): Promise<void> {
+  await db.collection("budgets").doc(id).set({
+    id, userId: U, createdBy: U, groupIds: [], isActive: true,
+    access: { ownerId: U, createdBy: U, groupIds: [], isPrivate: true },
+    name: id, amount, currency: "USD", categoryIds: [`cat_${id}`], period,
+    budgetType: "recurring", startDate: ts(start_ms), isOngoing: true,
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   });
-  it('This Period Only = 250 → the page shows 250 for that period', async () => {
-    await db.collection('budget_periods').doc(P).update({ modifiedAmount: 250, isModified: true });
-    expect(await page_allocated()).toBe(250);
+  await process_budget_created_orchestrator(t(), {
+    budget_id: id, user_id: U, group_ids: [], budget_name: id, category_ids: [],
+    amount, cadence: budget_cadence_to_instance(period), start_ms, generation_end_ms: gen_end_ms,
+    is_recurring: true, claims: [], everything_else_budget_id: null,
   });
-  it('Reset to Original (isModified false) → back to the budget amount', async () => {
-    await db.collection('budget_periods').doc(P).update({ isModified: false });
-    expect(await page_allocated()).toBe(400);
-  });
-  it('a WEEK\'s amount synced onto the month (non-prime copy) never becomes the month\'s allocation', async () => {
-    // syncModifiedAmountToOverlappingPeriods pastes a week's "This Period Only" amount, unprorated,
-    // onto overlapping periods of other types — the page must ignore that copy.
-    await db.collection('budget_periods').doc(P).update({
-      modifiedAmount: 150, isModified: true, modifiedAmountSyncedFrom: `${B}_2031W30`,
+}
+
+// ---- the PAGE ----------------------------------------------------------------------------------
+
+type View = "monthly" | "weekly" | "bi_monthly";
+const VIEWS: View[] = ["monthly", "weekly", "bi_monthly"];
+interface Bucket { amount: number; start_ms: number; end_ms: number }
+type Page = Record<View, Map<string, Bucket>>;
+
+async function page(budget_id: string, lo: number, hi: number): Promise<Page> {
+  const out = {} as Page;
+  for (const view of VIEWS) {
+    const r = await derive_period_orchestrator(t(), U, {
+      view_cadence: view, window_start_ms: lo, window_end_ms: hi, force: true,
     });
-    expect(await page_allocated()).toBe(400);
-    await db.collection('budget_periods').doc(P).update({ isPrime: false, modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete() });
-    expect(await page_allocated()).toBe(400);
+    const b = r.budgets.find((x) => x.budget_id === budget_id);
+    out[view] = new Map((b?.periods ?? []).map((p) => [
+      p.period_id, { amount: p.allocated_amount, start_ms: p.start_ms, end_ms: p.end_ms },
+    ]));
+  }
+  return out;
+}
+
+const day_idx = (ms: number) => Math.floor(ms / DAY);
+const overlaps = (a: { start_ms: number; end_ms: number }, b: { start_ms: number; end_ms: number }) =>
+  day_idx(a.start_ms) <= day_idx(b.end_ms) && day_idx(b.start_ms) <= day_idx(a.end_ms);
+
+/** Every bucket of every view that does NOT overlap `edited` is unchanged (to the cent). */
+function expect_untouched_outside(before: Page, after: Page, edited: { start_ms: number; end_ms: number }) {
+  for (const view of VIEWS) {
+    for (const [pid, b] of before[view]) {
+      if (overlaps(b, edited)) continue;
+      expect([view, pid, cents(after[view].get(pid)!.amount)]).toEqual([view, pid, cents(b.amount)]);
+    }
+  }
+}
+function expect_same(before: Page, after: Page) {
+  for (const view of VIEWS) {
+    for (const [pid, b] of before[view]) {
+      expect([view, pid, cents(after[view].get(pid)!.amount)]).toEqual([view, pid, cents(b.amount)]);
+    }
+  }
+}
+const sum = (m: Map<string, Bucket>) => [...m.values()].reduce((s, b) => s + b.amount, 0);
+
+// ---- the matrix --------------------------------------------------------------------------------
+
+const Y = 2031;
+const START = utc(Y, 8, 1);
+const GEN_END = end_of(utc(Y, 12, 27));
+const WIN = { lo: utc(Y, 9, 1), hi: end_of(utc(Y, 11, 30)) };
+
+const CADENCES: Array<{ period: BudgetPeriodType; amount: number }> = [
+  { period: "monthly", amount: 400 },
+  { period: "weekly", amount: 100 },
+  { period: "bi_monthly", amount: 200 },
+  { period: "quarterly", amount: 900 },
+];
+const EDITS: Array<{ label: string; view: View; pid: string; start_ms: number; end_ms: number }> = [
+  { label: "a month", view: "monthly", pid: `${Y}M10`, start_ms: utc(Y, 10, 1), end_ms: end_of(utc(Y, 10, 31)) },
+  { label: "a week", view: "weekly", pid: `${Y}W41`, start_ms: utc(Y, 10, 5), end_ms: end_of(utc(Y, 10, 11)) },
+  { label: "a week straddling Sep/Oct", view: "weekly", pid: `${Y}W40`, start_ms: utc(Y, 9, 28), end_ms: end_of(utc(Y, 10, 4)) },
+  { label: "a bi-monthly half", view: "bi_monthly", pid: `${Y}BM10B`, start_ms: utc(Y, 10, 16), end_ms: end_of(utc(Y, 10, 31)) },
+];
+
+describe("This Period Only / Reset / All Periods Forward on the period page (emulator)", () => {
+  beforeAll(async () => {
+    await seed_source_periods(Y, 7, 12);
+    await db.collection("users").doc(U).set({ email: "x@x.com", isActive: true, role: "editor" });
   });
-  it('This Period Only from a WEEK of a monthly budget adds the same $ change to the month (never the week\'s figure)', async () => {
-    await db.collection('budget_periods').doc(P).set({
-      modifiedAmount: admin.firestore.FieldValue.delete(), isModified: false, isPrime: true,
-      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
-    }, { merge: true });
-    const W = `${B}_2031W28`;
-    await db.collection('budget_periods').doc(W).set({
-      id: W, budgetId: B, userId: U, groupIds: [], periodId: '2031W28', sourcePeriodId: '2031W28', periodType: 'weekly',
-      periodStart: ts('2031-07-06T00:00:00Z'), periodEnd: ts('2031-07-12T23:59:59.999Z'),
-      allocatedAmount: 90.32, spent: 0, isActive: true, isPrime: false, primePeriodIds: [P],
+  afterAll(async () => {
+    await Promise.all(
+      [...created_source_periods].map((id) => db.collection("source_periods").doc(id).delete())
+    );
+    await db.terminate();
+  });
+
+  for (const c of CADENCES) {
+    for (const e of EDITS) {
+      it(`${c.period} budget — This Period Only on ${e.label}: page shows exactly what was typed`, async () => {
+        const B = `tp_${c.period}_${e.pid}_${RUN}`;
+        await create_budget(B, c.period, c.amount, START, GEN_END);
+        const before = await page(B, WIN.lo, WIN.hi);
+        const was = before[e.view].get(e.pid)!.amount;
+        expect(was).toBeGreaterThan(0);
+
+        // Edit → the page shows exactly 123.45 for the edited bucket; nothing else moves.
+        await edit({ budgetPeriodId: `${B}_${e.pid}`, newAmount: 123.45, cascadeScope: "this_period" });
+        const after = await page(B, WIN.lo, WIN.hi);
+        expect(cents(after[e.view].get(e.pid)!.amount)).toBe(12345);
+        expect_untouched_outside(before, after, e);
+        expect((await db.collection("budget_periods").doc(`${B}_${e.pid}`).get()).data()!.hasPeriodAdjustment)
+          .toBe(true);
+
+        // Re-edit the same bucket → SETS (never accumulates).
+        await edit({ budgetPeriodId: `${B}_${e.pid}`, newAmount: 61.07, cascadeScope: "this_period" });
+        const again = await page(B, WIN.lo, WIN.hi);
+        expect(cents(again[e.view].get(e.pid)!.amount)).toBe(6107);
+        expect_untouched_outside(before, again, e);
+        expect(sum(again.monthly) - sum(before.monthly)).toBeCloseTo(61.07 - was, 1);
+
+        // Reset → the page is back to exactly what it was.
+        await edit({ budgetPeriodId: `${B}_${e.pid}`, reset: true });
+        expect_same(before, await page(B, WIN.lo, WIN.hi));
+        expect((await db.collection("budget_periods").doc(`${B}_${e.pid}`).get()).data()!.hasPeriodAdjustment)
+          .toBe(false);
+      });
+
+      it(`${c.period} budget — All Periods Forward on ${e.label}: page shows what was typed`, async () => {
+        const B = `afp_${c.period}_${e.pid}_${RUN}`;
+        await create_budget(B, c.period, c.amount, START, GEN_END);
+        // One-offs on the edited period and on a later one are both cleared by All Periods Forward.
+        await edit({ budgetPeriodId: `${B}_${e.pid}`, newAmount: 77.77, cascadeScope: "this_period" });
+        await edit({ budgetPeriodId: `${B}_${Y}W46`, newAmount: 5, cascadeScope: "this_period" });
+
+        await edit({ budgetPeriodId: `${B}_${e.pid}`, newAmount: 250, cascadeScope: "all_forward" });
+        const share = page_share(e.start_ms, e.end_ms, c.period);
+        const budget = (await db.collection("budgets").doc(B).get()).data()!;
+        expect(budget.amount).toBe(Math.round((250 / share) * 100) / 100);
+        const after = await page(B, WIN.lo, WIN.hi);
+        // The budget amount is stored in cents, so the edited bucket is typed ± ½¢ × its share
+        // (+ the stored monthly home's own cent rounding).
+        expect(Math.abs(after[e.view].get(e.pid)!.amount - 250)).toBeLessThanOrEqual(0.005 * share + 0.011);
+        // No one-off survives from the edited period on.
+        const periods = await db.collection("budget_periods").where("budgetId", "==", B).get();
+        for (const d of periods.docs) {
+          if (d.data().periodEnd.toMillis() < e.start_ms) continue;
+          expect([d.id, d.data().periodAdjustments ?? []]).toEqual([d.id, []]);
+          expect([d.id, d.data().hasPeriodAdjustment ?? false]).toEqual([d.id, false]);
+        }
+      });
+    }
+  }
+
+  it("a straddling week needs BOTH months' monthly docs (failed-precondition otherwise)", async () => {
+    const B = `tp_missing_${RUN}`;
+    await create_budget(B, "monthly", 400, START, GEN_END);
+    await db.collection("budget_periods").doc(`${B}_${Y}M11`).delete();
+    await expect(edit({ budgetPeriodId: `${B}_${Y}W44`, newAmount: 10, cascadeScope: "this_period" }))
+      .rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  it("a past period can't be edited", async () => {
+    const B = `tp_past_${RUN}`;
+    await create_budget(B, "monthly", 400, START, GEN_END);
+    await db.collection("budget_periods").doc(`${B}_2020M01`).set({
+      id: `${B}_2020M01`, budgetId: B, userId: U, periodId: "2020M01", periodType: "monthly",
+      periodStart: ts(utc(2020, 1, 1)), periodEnd: ts(end_of(utc(2020, 1, 31))),
+      allocatedAmount: 400, isActive: true,
     });
-    await edit_amount({ budgetPeriodId: W, newAmount: 140.32, cascadeScope: 'this_period' });
-    const month = (await db.collection('budget_periods').doc(P).get()).data()!;
-    expect(month.modifiedAmount).toBe(450); // 400 + (140.32 − 90.32), not 140.32
-    expect(await page_allocated()).toBe(450);
+    await expect(edit({ budgetPeriodId: `${B}_2020M01`, newAmount: 10, cascadeScope: "this_period" }))
+      .rejects.toMatchObject({ code: "failed-precondition" });
   });
-  it('All Periods Forward from a WEEK of a monthly budget scales the budget by the same RATIO', async () => {
-    const W = `${B}_2031W28`;
-    await db.collection('budgets').doc(B).update({ amount: 400 });
-    await db.collection('budget_periods').doc(P).update({
-      isModified: false, modifiedAmount: admin.firestore.FieldValue.delete(), allocatedAmount: 400,
+
+  it("All Periods Forward on the CURRENT month of a weekly budget re-allocates its earlier weeks too", async () => {
+    // Real "today": weeks of this month that already ended must take the new rate, or the
+    // month (spread evenly by the page) can't show what was typed.
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth() + 1;
+    if (m === 1 || m === 12) return; // year-boundary weeks are duplicated by design; skip
+    // Only this month's source periods (they're global — keep other suites' windows clean).
+    await seed_source_periods(y, m, m);
+    const B = `afp_now_${RUN}`;
+    await create_budget(B, "weekly", 100, utc(y, m, 1), end_of(utc(y, m + 1, 1) - DAY));
+    const pid = `${y}M${String(m).padStart(2, "0")}`;
+    const ms = { start_ms: utc(y, m, 1), end_ms: end_of(utc(y, m + 1, 1) - DAY) };
+    await edit({ budgetPeriodId: `${B}_${pid}`, newAmount: 500, cascadeScope: "all_forward" });
+    const share = page_share(ms.start_ms, ms.end_ms, "weekly");
+    const r = await derive_period_orchestrator(t(), U, {
+      view_cadence: "monthly", window_start_ms: ms.start_ms, window_end_ms: ms.end_ms, force: true,
     });
-    await db.collection('budget_periods').doc(W).update({ allocatedAmount: 90.32 });
-    // Week 90.32 → 135.48 (×1.5): the monthly budget becomes 400 × 1.5 = 600, not 400 + 45.16.
-    await edit_amount({ budgetPeriodId: W, newAmount: 135.48, cascadeScope: 'all_forward' });
-    const budget = (await db.collection('budgets').doc(B).get()).data()!;
-    expect(budget.amount).toBeCloseTo(600, 0);
+    const got = r.budgets.find((x) => x.budget_id === B)!.periods.find((p) => p.period_id === pid)!;
+    expect(Math.abs(got.allocated_amount - 500)).toBeLessThanOrEqual(0.005 * share + 0.011);
   });
-  it('All Periods Forward on a month that has a This Period Only override sets the NORMAL amount', async () => {
-    await db.collection('budgets').doc(B).update({ amount: 400 });
-    await db.collection('budget_periods').doc(P).update({
-      allocatedAmount: 400, modifiedAmount: 300, isModified: true, isPrime: true,
-      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
+
+  it("All Periods Forward on the CURRENT week of a weekly budget: the week shows what was typed", async () => {
+    // This month's earlier weeks already ended; the page spreads the month evenly, so they must
+    // take the new rate too.
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth() + 1;
+    if (m === 1 || m === 12) return;
+    await seed_source_periods(y, m, m);
+    const B = `afp_now_wk_${RUN}`;
+    await create_budget(B, "weekly", 100, utc(y, m, 1), end_of(utc(y, m + 1, 1) - DAY));
+    const today = Date.UTC(y, m - 1, now.getUTCDate());
+    const wk = (await db.collection("budget_periods").where("budgetId", "==", B).get()).docs
+      .map((d) => d.data())
+      .find((d) => d.periodType === "weekly" &&
+        d.periodStart.toMillis() <= today && d.periodEnd.toMillis() >= today)!;
+    await edit({ budgetPeriodId: wk.id, newAmount: 150, cascadeScope: "all_forward" });
+    expect((await db.collection("budgets").doc(B).get()).data()!.amount).toBe(150);
+    const r = await derive_period_orchestrator(t(), U, {
+      view_cadence: "weekly", window_start_ms: wk.periodStart.toMillis(),
+      window_end_ms: wk.periodEnd.toMillis(), force: true,
     });
-    await edit_amount({ budgetPeriodId: P, newAmount: 500, cascadeScope: 'all_forward' });
-    const budget = (await db.collection('budgets').doc(B).get()).data()!;
-    expect(budget.amount).toBeCloseTo(500, 2); // not 400 × 500/300 = 666.67
+    const got = r.budgets.find((x) => x.budget_id === B)!.periods.find((p) => p.period_id === wk.periodId)!;
+    expect(Math.abs(got.allocated_amount - 150)).toBeLessThanOrEqual(0.011);
   });
-  it('All Periods Forward from a WEEK whose month has an override: the week ends at what was typed', async () => {
-    const W = `${B}_2031W28`;
-    await db.collection('budgets').doc(B).update({ amount: 400 });
-    // Month $400 with a $300 "This Period Only": the week is spread from the $300 (300 × 7/31).
-    await db.collection('budget_periods').doc(P).update({
-      allocatedAmount: 400, modifiedAmount: 300, isModified: true, isPrime: true,
-      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
-    });
-    await db.collection('budget_periods').doc(W).update({ allocatedAmount: 67.74 });
-    await edit_amount({ budgetPeriodId: W, newAmount: 100, cascadeScope: 'all_forward' });
-    const budget = (await db.collection('budgets').doc(B).get()).data()!;
-    // 300 × (100 / 67.74) = 442.87 → the week shows ≈ $100, not 400 × 1.476 = $590.
-    expect(budget.amount).toBeCloseTo(442.87, 0);
-  });
-  it('All Periods Forward on a WEEKLY budget from the MONTHLY tab: the month ends at what was typed', async () => {
-    // Weekly budget; October 2031 (31 days) overlaps 5 weeks: 4 + 7 + 7 + 7 + 6 days.
-    // a $0 budget too (was a silent no-op / wrong units), and a month doc whose stored prime
-    // list is INCOMPLETE (generated at the horizon / rebuilt after a forward edit)
-    for (const [amount, partial] of [[100, false], [0, false], [100, true]] as const) {
-      const WB = `${B}_weekly_${amount}_${partial}`;
-      await db.collection('budgets').doc(WB).set({
-        id: WB, userId: U, createdBy: U, groupIds: [], isActive: true,
+
+  // ---- legacy `modifiedAmount` (pre-adjustment data) stays readable --------------------------
+
+  describe("legacy modifiedAmount on a monthly doc", () => {
+    const B = `tp_legacy_${RUN}`;
+    const P = `${B}_${Y}M07`;
+    const JUL = { lo: utc(Y, 7, 1), hi: end_of(utc(Y, 7, 31)) };
+    const july = async () => (await page(B, JUL.lo, JUL.hi)).monthly.get(`${Y}M07`)!.amount;
+    beforeAll(async () => {
+      await db.collection("budgets").doc(B).set({
+        id: B, userId: U, createdBy: U, groupIds: [], isActive: true,
         access: { ownerId: U, createdBy: U, groupIds: [], isPrivate: true },
-        name: 'Weekly', amount, currency: 'USD', categoryIds: ['groceries'], period: 'weekly',
-        budgetType: 'recurring', startDate: ts('2031-01-01T00:00:00Z'), isOngoing: true,
+        name: "Dining", amount: 400, currency: "USD", categoryIds: ["eating_out"], period: "monthly",
+        budgetType: "recurring", startDate: ts(utc(Y, 1, 1)), isOngoing: true,
         createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
       });
-      const weeks: Array<[string, string, string]> = [
-        ['2031W40', '2031-09-28', '2031-10-04'], ['2031W41', '2031-10-05', '2031-10-11'],
-        ['2031W42', '2031-10-12', '2031-10-18'], ['2031W43', '2031-10-19', '2031-10-25'],
-        ['2031W44', '2031-10-26', '2031-11-01'],
-      ];
-      for (const [pid, s0, e0] of weeks) {
-        await db.collection('budget_periods').doc(`${WB}_${pid}`).set({
-          id: `${WB}_${pid}`, budgetId: WB, userId: U, groupIds: [], periodId: pid, sourcePeriodId: pid,
-          periodType: 'weekly', periodStart: ts(`${s0}T00:00:00Z`), periodEnd: ts(`${e0}T23:59:59.999Z`),
-          allocatedAmount: amount, spent: 0, isActive: true, isPrime: true,
-          // the first October week carries a $50 "This Period Only" — must not skew the result
-          ...(pid === '2031W40' ? { modifiedAmount: 50, isModified: true } : {}),
-        });
-      }
-      const M = `${WB}_2031M10`;
-      await db.collection('budget_periods').doc(M).set({
-        id: M, budgetId: WB, userId: U, groupIds: [], periodId: '2031M10', sourcePeriodId: '2031M10',
-        periodType: 'monthly', periodStart: ts('2031-10-01T00:00:00Z'), periodEnd: ts('2031-10-31T23:59:59.999Z'),
-        allocatedAmount: Math.round(amount * 31 / 7 * 100) / 100, spent: 0, isActive: true, isPrime: false,
-        primePeriodIds: (partial ? weeks.slice(0, 1) : weeks).map(([pid]) => `${WB}_${pid}`),
+      await db.collection("budget_periods").doc(P).set({
+        id: P, budgetId: B, userId: U, groupIds: [], periodId: `${Y}M07`, sourcePeriodId: `${Y}M07`,
+        periodType: "monthly", periodStart: ts(JUL.lo), periodEnd: ts(JUL.hi),
+        allocatedAmount: 400, rolledOverAmount: 0, spent: 0, remaining: 400, isActive: true,
       });
-      await edit_amount({ budgetPeriodId: M, newAmount: 500, cascadeScope: 'all_forward' });
-      const budget = (await db.collection('budgets').doc(WB).get()).data()!;
-      expect(budget.amount).toBeCloseTo(500 * 7 / 31, 1); // $112.90/week → October = $500
-    }
+    });
+
+    it("a direct override shows; isModified false or a synced copy doesn't", async () => {
+      expect(await july()).toBe(400);
+      await db.collection("budget_periods").doc(P).update({ modifiedAmount: 250, isModified: true });
+      expect(await july()).toBe(250);
+      await db.collection("budget_periods").doc(P).update({ isModified: false });
+      expect(await july()).toBe(400);
+      await db.collection("budget_periods").doc(P).update({
+        modifiedAmount: 150, isModified: true, modifiedAmountSyncedFrom: `${B}_${Y}W30`,
+      });
+      expect(await july()).toBe(400);
+    });
+
+    it("a week's This Period Only on top of a legacy month override: week = typed, month = override + Δ", async () => {
+      await db.collection("budget_periods").doc(P).update({
+        modifiedAmount: 310, isModified: true, modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
+      });
+      const W = `${B}_${Y}W28`; // Jul 6–12
+      await db.collection("budget_periods").doc(W).set({
+        id: W, budgetId: B, userId: U, groupIds: [], periodId: `${Y}W28`, sourcePeriodId: `${Y}W28`,
+        periodType: "weekly", periodStart: ts(utc(Y, 7, 6)), periodEnd: ts(end_of(utc(Y, 7, 12))),
+        allocatedAmount: 90.32, spent: 0, isActive: true, isPrime: false,
+      });
+      await edit({ budgetPeriodId: W, newAmount: 100, cascadeScope: "this_period" });
+      const p = await page(B, JUL.lo, JUL.hi);
+      expect(p.weekly.get(`${Y}W28`)!.amount).toBe(100); // 310 × 7/31 = 70 → +30
+      expect(p.monthly.get(`${Y}M07`)!.amount).toBe(340);
+      // The legacy override is untouched (no sync-copy machinery for new edits).
+      const month = (await db.collection("budget_periods").doc(P).get()).data()!;
+      expect(month.modifiedAmount).toBe(310);
+      expect(month.periodAdjustments).toEqual([
+        { periodId: `${Y}W28`, startMs: utc(Y, 7, 6), endMs: end_of(utc(Y, 7, 12)), amount: 30 },
+      ]);
+      expect(month.remaining).toBe(340);
+    });
   });
 });
 /* eslint-enable @typescript-eslint/naming-convention */

@@ -23,7 +23,11 @@ import {
   chunk_for_batch,
   FIRESTORE_BATCH_LIMIT,
 } from "../types";
-import { BudgetPeriodEntity, PendingRolloverByType } from "../types/budgets/budget_entity.types";
+import {
+  BudgetPeriodEntity,
+  PendingRolloverByType,
+  PeriodAdjustment,
+} from "../types/budgets/budget_entity.types";
 
 /**
  * Firestore collection name.
@@ -48,6 +52,12 @@ interface LegacyBudgetPeriodDoc {
   modifiedAmountSyncedFrom?: string;
   modifiedAmountSyncedAt?: Timestamp;
   lastModifiedAt?: Timestamp;
+  periodAdjustments?: Array<{
+    periodId?: string;
+    startMs?: number;
+    endMs?: number;
+    amount?: number;
+  }>;
   rolledOverAmount?: number;
   spent?: number;
   remaining?: number;
@@ -73,6 +83,22 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** The doc's "This Period Only" adjustments (READ-ONLY; malformed entries are dropped). */
+function map_adjustments(doc: LegacyBudgetPeriodDoc): PeriodAdjustment[] {
+  const out: PeriodAdjustment[] = [];
+  for (const a of doc.periodAdjustments ?? []) {
+    if (
+      typeof a?.periodId === "string" &&
+      typeof a.startMs === "number" &&
+      typeof a.endMs === "number" &&
+      typeof a.amount === "number"
+    ) {
+      out.push({ period_id: a.periodId, start_ms: a.startMs, end_ms: a.endMs, amount: a.amount });
+    }
+  }
+  return out;
+}
+
 /**
  * Maps a legacy budget period document to the entity.
  */
@@ -84,8 +110,8 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
   // domain/budgets/period_override.
   const modified = direct_period_override(doc);
   // What this period actually has to spend (READ-ONLY — writers store `allocatedAmount` from
-  // `allocated_amount`, never this).
-  const effective = (modified ?? allocated) + rolled_over;
+  // `allocated_amount`, never this): override ?? allocation + "This Period Only" adjustments.
+  const effective = period_allocation(doc) + rolled_over;
   return {
     id: doc.id,
     budget_id: doc.budgetId,
@@ -96,6 +122,7 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
     period_type: (doc.periodType as BudgetPeriodEntity["period_type"]) ?? "monthly",
     allocated_amount: allocated,
     modified_amount: modified,
+    period_adjustments: map_adjustments(doc),
     rolled_over_amount: rolled_over,
     effective_amount: effective,
     spent,

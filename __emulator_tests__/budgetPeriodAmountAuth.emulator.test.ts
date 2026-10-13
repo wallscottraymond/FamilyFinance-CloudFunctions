@@ -18,6 +18,7 @@ const db = admin.firestore();
 
 import { Timestamp } from "firebase-admin/firestore";
 import { updateBudgetPeriodAmount } from "../src/functions/budgets/api/periods/updateBudgetPeriodAmount";
+import { period_allocation } from "../src/functions/domain/budgets/period_override.service";
 
 const DAY = 86_400_000;
 const start = Timestamp.fromMillis(Date.now() - 2 * DAY);
@@ -64,10 +65,10 @@ beforeEach(async () => {
   ]);
 });
 
-const amountOf = async (id: string) => {
-  const d = (await db.doc(`budget_periods/${id}`).get()).data()!;
-  return d.isModified ? d.modifiedAmount : d.allocatedAmount;
-};
+// THE amount rule (override ?? allocation + "This Period Only" adjustments) — the monthly doc
+// is both the edited period and its own month here.
+const amountOf = async (id: string) =>
+  period_allocation((await db.doc(`budget_periods/${id}`).get()).data()!);
 
 it("T-BPA-01 the owner edits their own period", async () => {
   await expect(call("alex", "mine_P")).resolves.toMatchObject({ success: true });

@@ -1,8 +1,10 @@
 /**
  * "This Period Only" — which amount a budget period really has (Transaction-Integrity X10).
  *
- * `updateBudgetPeriodAmount` stores the user's amount as `modifiedAmount` (+ `isModified`) on the
- * budget's OWN (prime) period. `syncModifiedAmountToOverlappingPeriods` then pastes the same
+ * NEW edits are stored as `periodAdjustments` on the budget's MONTHLY docs
+ * (domain/budgets/period_allocation_view) and counted by `period_allocation` below. LEGACY data:
+ * `updateBudgetPeriodAmount` used to store the user's amount as `modifiedAmount` (+ `isModified`)
+ * on the budget's OWN (prime) period. `syncModifiedAmountToOverlappingPeriods` then pastes the same
  * figure, unprorated, onto overlapping periods of the other types and marks them
  * `modifiedAmountSyncedFrom` / `modifiedAmountSyncedAt`. Those copies are bookkeeping, never the
  * period's amount (a week's $150 would otherwise become a whole month's allocation).
@@ -22,6 +24,8 @@ export interface PeriodAmountFields {
   modifiedAmountSyncedFrom?: string | null;
   modifiedAmountSyncedAt?: unknown;
   lastModifiedAt?: unknown;
+  /** "This Period Only" adjustments on a MONTHLY doc (domain/budgets/period_allocation_view). */
+  periodAdjustments?: Array<{ amount?: number | null }> | null;
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
@@ -46,7 +50,22 @@ export function direct_period_override(p: PeriodAmountFields): number | null {
   return p.modifiedAmount;
 }
 
-/** The amount this period has to spend before rollover: the override, else its allocation. */
+/** Σ of the "This Period Only" adjustment amounts stored on this (monthly) period. */
+export function period_adjustments_total(p: PeriodAmountFields): number {
+  let total = 0;
+  for (const a of p.periodAdjustments ?? []) {
+    if (typeof a?.amount === "number" && Number.isFinite(a.amount)) total += a.amount;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+/**
+ * The amount this period has to spend before rollover: the (legacy) override, else its
+ * allocation — plus the "This Period Only" adjustments stored on it (only monthly docs carry
+ * them; for the whole month the page shows exactly this sum).
+ */
 export function period_allocation(p: PeriodAmountFields): number {
-  return direct_period_override(p) ?? p.allocatedAmount ?? 0;
+  const base = direct_period_override(p) ?? p.allocatedAmount ?? 0;
+  const adjustments = period_adjustments_total(p);
+  return adjustments === 0 ? base : Math.round((base + adjustments) * 100) / 100;
 }

@@ -21,4 +21,12 @@ describe("This Period Only — THE rule (X10)", () => {
       modifiedAmountSyncedAt: at(1000), lastModifiedAt: at(2000),
     })).toBe(300);
   });
+  it("adjustments on the doc add to its allocation (and to a legacy override)", () => {
+    expect(period_allocation({ allocatedAmount: 400, periodAdjustments: [{ amount: 50 }, { amount: -20.5 }] }))
+      .toBe(429.5);
+    expect(period_allocation({
+      allocatedAmount: 400, modifiedAmount: 250, isModified: true, periodAdjustments: [{ amount: 10 }],
+    })).toBe(260);
+    expect(period_allocation({ allocatedAmount: 400, periodAdjustments: [] })).toBe(400);
+  });
 });

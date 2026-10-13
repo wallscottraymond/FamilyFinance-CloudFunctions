@@ -31,24 +31,19 @@ import {
   SplitForSpend,
 } from "./budget_spend.service";
 import { PeriodInstanceType } from "./period_generation.service";
+import {
+  bucket_allocation,
+  MonthlyPeriodForDerivation,
+  round2,
+} from "./period_allocation_view.service";
+
+export type { MonthlyPeriodForDerivation };
 
 /** A view's calendar bucket to derive (a weekly / bi-weekly source period). */
 export interface ViewBucket {
   period_id: string;
   period_type: PeriodInstanceType;
   /** Inclusive bucket bounds, epoch ms. */
-  start_ms: number;
-  end_ms: number;
-}
-
-/**
- * A materialized MONTHLY budget period, as the pro-ration needs it. `effective`
- * = allocated + rolled_over (the amount the user actually has this month).
- */
-export interface MonthlyPeriodForDerivation {
-  allocated_amount: number;
-  effective_amount: number;
-  /** Inclusive period bounds, epoch ms. */
   start_ms: number;
   end_ms: number;
 }
@@ -77,38 +72,6 @@ export interface DerivedBudgetViewPeriod {
    * negative leftover. See Everything-Else-Leftover-Limit.
    */
   no_income?: boolean;
-}
-
-/** UTC day index (days since epoch) for a timestamp. PURE. */
-function utc_day_index(ms: number): number {
-  const d = new Date(ms);
-  return Math.floor(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86_400_000
-  );
-}
-
-/** Inclusive UTC-normalized day count for a range. PURE. */
-function days_inclusive(start_ms: number, end_ms: number): number {
-  return utc_day_index(end_ms) - utc_day_index(start_ms) + 1;
-}
-
-/**
- * Inclusive UTC-day overlap (in days) between two ranges. 0 if disjoint. PURE.
- */
-function overlap_days(
-  a_start_ms: number,
-  a_end_ms: number,
-  b_start_ms: number,
-  b_end_ms: number
-): number {
-  const start = Math.max(utc_day_index(a_start_ms), utc_day_index(b_start_ms));
-  const end = Math.min(utc_day_index(a_end_ms), utc_day_index(b_end_ms));
-  return end >= start ? end - start + 1 : 0;
-}
-
-/** Round to 2 decimals. PURE. */
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -150,29 +113,13 @@ export function derive_budget_view_periods(
       splits
     );
 
-    // Pro-rate each overlapping monthly period's daily amount across the days it
-    // overlaps this bucket. daily = amount / days-in-that-monthly-period.
-    let allocated = 0;
-    let effective = 0;
-    for (const mp of monthly_periods) {
-      const days = overlap_days(
-        mp.start_ms,
-        mp.end_ms,
-        bucket.start_ms,
-        bucket.end_ms
-      );
-      if (days === 0) {
-        continue;
-      }
-      const mp_days = days_inclusive(mp.start_ms, mp.end_ms);
-      if (mp_days <= 0) {
-        continue;
-      }
-      allocated += (mp.allocated_amount / mp_days) * days;
-      effective += (mp.effective_amount / mp_days) * days;
-    }
-    allocated = round2(allocated);
-    effective = round2(effective);
+    // THE page rule (domain/budgets/period_allocation_view): each overlapping monthly period's
+    // daily amount × days overlapped, plus the "This Period Only" adjustments by their own range.
+    const { allocated, effective } = bucket_allocation(
+      monthly_periods,
+      bucket.start_ms,
+      bucket.end_ms
+    );
 
     result.push({
       budget_id,

@@ -1,50 +1,77 @@
 /**
  * Update Budget Period Amount
  *
- * Callable function to update a budget period's amount with proper cascade
- * to non-prime periods. Supports two modes:
- * - 'this_period': Update single period + cascade to referencing non-primes
- * - 'all_forward': Update budget base amount + all current/future periods
+ * Callable behind the budget period amount editor. Every mode is defined against THE period
+ * page's allocation rule (domain/budgets/period_allocation_view): the page builds every view's
+ * allocation from the budget's MONTHLY `budget_periods` docs, so that is where edits land.
  *
- * Key features:
- * - Blocks updates to past/historical periods
- * - Atomic transaction for all updates
- * - Proper cascade to non-prime periods using SUMPRODUCT
- * - Recalculates dailyRate, remaining, and primePeriodBreakdown
+ * - 'this_period' ("This Period Only"), any budget cadence, any edited period type: the page's
+ *   current amount for the edited period (excluding its own earlier adjustment) is compared with
+ *   the typed amount and the difference is stored as ONE adjustment
+ *   `{ periodId, startMs, endMs, amount }` in `periodAdjustments` on the monthly doc(s) the
+ *   period overlaps (split by overlap days, cents-exact, when it spans two months). Re-editing the
+ *   same period REPLACES its adjustment (sets, never accumulates). The edited period's own doc
+ *   gets `hasPeriodAdjustment` — the app's "custom amount" marker (a separate field, NOT
+ *   `isModified`, so the legacy modifiedAmount sync trigger never fires and a stale legacy
+ *   `modifiedAmount` can't be revived).
+ * - `reset: true` ("Reset to Original"): removes the edited period's adjustment(s) and clears a
+ *   legacy `modifiedAmount` / `isModified` on the edited doc.
+ * - 'all_forward' ("All Periods Forward"): the budget's amount becomes typed ÷ the edited
+ *   period's page share (domain/budgets/period_share), every override / adjustment from the edited
+ *   period on is cleared, and the periods are re-allocated with the shared domain
+ *   `compute_reallocated_periods` — so the edited period then shows what was typed.
+ *
+ * Past periods (ended before today, UTC) can't be edited. Every write path bumps the owner's
+ * derive version AFTER writing (derive caches live 24h).
  *
  * Memory: 512MiB, Timeout: 60s
  */
 
-import { budget_share_of_period } from "../../../domain/budgets/period_share.service";
-import { period_allocation } from "../../../domain/budgets/period_override.service";
-import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { Budget, BudgetPeriodDocument, UserRole } from "../../../../types";
+import { authenticateRequest } from "../../../../utils/auth";
+import { create_trace_context } from "../../../observability";
+import { group_repo } from "../../../repositories/sharing";
+import { budget_period_repo } from "../../../repositories/budget_period.repo";
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
+import { create_job_if_not_exists } from "../../../infrastructure/job_queue";
+import { can_manage_budget, group_id_of_key } from "../../../domain/sharing/budget_view.service";
+import { page_share } from "../../../domain/budgets/period_share.service";
 import {
-  Budget,
-  BudgetPeriodDocument,
-  UserRole,
-  PeriodType,
-} from '../../../../types';
-import { authenticateRequest } from '../../../../utils/auth';
-import { create_trace_context } from '../../../observability';
-import { group_repo } from '../../../repositories/sharing';
-import { can_manage_budget, group_id_of_key } from '../../../domain/sharing/budget_view.service';
+  direct_period_override,
+  period_allocation,
+} from "../../../domain/budgets/period_override.service";
 import {
-  findOverlappingPrimePeriods,
-  calculatePrimeContributions,
-} from '../../utils/nonPrimePeriodGeneration';
+  bucket_allocation,
+  MonthlyPeriodForDerivation,
+  overlap_days,
+  round2,
+  split_adjustment_by_month,
+  utc_day_index,
+} from "../../../domain/budgets/period_allocation_view.service";
+import {
+  budget_cadence_to_instance,
+  compute_reallocated_periods,
+  PeriodInstanceType,
+} from "../../../domain/budgets/period_generation.service";
+import { BudgetPeriodType } from "../../../types/budgets/budget_entity.types";
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-type CascadeScope = 'this_period' | 'all_forward';
+type CascadeScope = "this_period" | "all_forward";
 
 interface UpdateBudgetPeriodAmountRequest {
   budgetPeriodId: string;
-  newAmount: number;
-  cascadeScope: CascadeScope;
+  /** Not needed with `reset`. */
+  newAmount?: number;
+  /** Not needed with `reset` (a reset is always "This Period Only"). */
+  cascadeScope?: CascadeScope;
+  /** "Reset to Original": drop this period's "This Period Only" amount. */
+  reset?: boolean;
 }
 
 interface UpdateBudgetPeriodAmountResponse {
@@ -55,70 +82,93 @@ interface UpdateBudgetPeriodAmountResponse {
   error?: string;
 }
 
+/* eslint-disable @typescript-eslint/naming-convention */
+/** Firestore shape of one `periodAdjustments[]` entry. */
+interface StoredAdjustment {
+  periodId: string;
+  startMs: number;
+  endMs: number;
+  amount: number;
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
+type DocData = Record<string, unknown>;
+
+const COLLECTION = "budget_periods";
+const DAY_MS = 86_400_000;
+
 // ============================================================================
 // HELPERS
 // ============================================================================
 
-/**
- * Get today's date at midnight UTC for period comparison
- */
-function getTodayUTC(): Date {
+/** Today's date at midnight UTC, epoch ms. */
+function today_utc_ms(): number {
   const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 }
 
-/**
- * Check if a period is in the past (historical)
- * Past = periodEnd < today
- */
-function isPastPeriod(periodEnd: Timestamp): boolean {
-  const today = getTodayUTC();
-  return periodEnd.toDate() < today;
+/** Past = the period ended before today (UTC). */
+function is_past_period(period_end: Timestamp): boolean {
+  return period_end.toMillis() < today_utc_ms();
 }
 
-/**
- * Check if a period is current or future
- * Current + future = periodEnd >= today
- */
-function isCurrentOrFuturePeriod(periodEnd: Timestamp): boolean {
-  return !isPastPeriod(periodEnd);
+const ms_of = (v: unknown): number => (v as Timestamp).toMillis();
+
+/** The stored adjustments on a doc (malformed entries dropped). */
+function stored_adjustments(data: DocData): StoredAdjustment[] {
+  const raw = (data.periodAdjustments as StoredAdjustment[] | undefined) ?? [];
+  return raw.filter(
+    (a) =>
+      a &&
+      typeof a.periodId === "string" &&
+      typeof a.startMs === "number" &&
+      typeof a.endMs === "number" &&
+      typeof a.amount === "number"
+  );
 }
 
-/**
- * Calculate days in a period (inclusive, UTC-normalized)
- */
-function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
-  const start = startDate.toDate();
-  const end = endDate.toDate();
-
-  const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-  const endUTC = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
-
-  const diffDays = Math.round((endUTC - startUTC) / (1000 * 60 * 60 * 24));
-  return diffDays + 1;
-}
-
-/** Inclusive UTC days two periods share (0 when they don't overlap). */
-function overlapDays(
-  aStart: Timestamp,
-  aEnd: Timestamp,
-  bStart: Timestamp,
-  bEnd: Timestamp
-): number {
-  const day = (t: Timestamp): number => {
-    const d = t.toDate();
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86_400_000;
+/** A monthly doc as THE page reads it (base amounts + adjustments), minus one periodId's. */
+function to_monthly_for_derivation(
+  data: DocData,
+  exclude_period_id: string
+): MonthlyPeriodForDerivation {
+  const base =
+    direct_period_override(data) ?? (data.allocatedAmount as number | undefined) ?? 0;
+  const rolled = (data.rolledOverAmount as number | undefined) ?? 0;
+  return {
+    allocated_amount: base,
+    effective_amount: base + rolled,
+    start_ms: ms_of(data.periodStart),
+    end_ms: ms_of(data.periodEnd),
+    adjustments: stored_adjustments(data)
+      .filter((a) => a.periodId !== exclude_period_id)
+      .map((a) => ({
+        period_id: a.periodId,
+        start_ms: a.startMs,
+        end_ms: a.endMs,
+        amount: a.amount,
+      })),
   };
-  const from = Math.max(day(aStart), day(bStart));
-  const to = Math.min(day(aEnd), day(bEnd));
-  return to >= from ? to - from + 1 : 0;
 }
 
-/**
- * Calculate daily rate with 6 decimal precision (for prime periods)
- */
-function calculateDailyRate(amount: number, daysInPeriod: number): number {
-  return Math.round((amount / daysInPeriod) * 1000000) / 1000000;
+/** `remaining` for a doc once `changes` are applied (allocation incl. adjustments + rollover). */
+function remaining_after(data: DocData, changes: DocData): number {
+  const next = { ...data, ...changes };
+  const rolled = (next.rolledOverAmount as number | undefined) ?? 0;
+  const spent = (next.spent as number | undefined) ?? 0;
+  return round2(period_allocation(next) + rolled - spent);
+}
+
+/** Months (by UTC day) of [start, end] no monthly doc covers, as "YYYY-MM". */
+function uncovered_months(start_ms: number, end_ms: number, months: DocData[]): string[] {
+  const missing = new Set<string>();
+  for (let day = utc_day_index(start_ms); day <= utc_day_index(end_ms); day++) {
+    const covered = months.some(
+      (m) => utc_day_index(ms_of(m.periodStart)) <= day && utc_day_index(ms_of(m.periodEnd)) >= day
+    );
+    if (!covered) missing.add(new Date(day * DAY_MS).toISOString().slice(0, 7));
+  }
+  return [...missing];
 }
 
 // ============================================================================
@@ -129,11 +179,12 @@ export const updateBudgetPeriodAmount = onCall<
   UpdateBudgetPeriodAmountRequest,
   Promise<UpdateBudgetPeriodAmountResponse>
 >({
-  region: 'us-central1',
-  memory: '512MiB',
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 60,
 }, async (request: CallableRequest<UpdateBudgetPeriodAmountRequest>) => {
-  const { budgetPeriodId, newAmount, cascadeScope } = request.data;
+  const { budgetPeriodId, cascadeScope } = request.data;
+  const reset = request.data.reset === true;
   const warnings: string[] = [];
 
   try {
@@ -142,20 +193,24 @@ export const updateBudgetPeriodAmount = onCall<
     // ========================================================================
 
     if (!budgetPeriodId) {
-      throw new HttpsError('invalid-argument', 'budgetPeriodId is required');
+      throw new HttpsError("invalid-argument", "budgetPeriodId is required");
     }
-
-    if (newAmount === undefined || newAmount === null || isNaN(newAmount)) {
-      throw new HttpsError('invalid-argument', 'newAmount must be a valid number');
+    const raw_amount = request.data.newAmount;
+    if (!reset) {
+      if (typeof raw_amount !== "number" || !Number.isFinite(raw_amount)) {
+        throw new HttpsError("invalid-argument", "newAmount must be a valid number");
+      }
+      if (raw_amount < 0) {
+        throw new HttpsError("invalid-argument", "newAmount cannot be negative");
+      }
+      if (!cascadeScope || !["this_period", "all_forward"].includes(cascadeScope)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "cascadeScope must be \"this_period\" or \"all_forward\""
+        );
+      }
     }
-
-    if (newAmount < 0) {
-      throw new HttpsError('invalid-argument', 'newAmount cannot be negative');
-    }
-
-    if (!cascadeScope || !['this_period', 'all_forward'].includes(cascadeScope)) {
-      throw new HttpsError('invalid-argument', 'cascadeScope must be "this_period" or "all_forward"');
-    }
+    const new_amount = round2(raw_amount ?? 0);
 
     // ========================================================================
     // AUTHENTICATION
@@ -163,124 +218,61 @@ export const updateBudgetPeriodAmount = onCall<
 
     const { user, userData } = await authenticateRequest(request, UserRole.VIEWER);
     if (!user || !userData) {
-      throw new HttpsError('unauthenticated', 'Authentication required');
+      throw new HttpsError("unauthenticated", "Authentication required");
     }
 
     const db = admin.firestore();
 
-    console.log(`[updateBudgetPeriodAmount] User ${user.uid} updating period ${budgetPeriodId} to $${newAmount} (scope: ${cascadeScope})`);
+    console.log(
+      `[updateBudgetPeriodAmount] User ${user.uid} period ${budgetPeriodId}: ` +
+      (reset ? "reset" : `$${new_amount} (scope: ${cascadeScope})`)
+    );
 
     // ========================================================================
     // GET BUDGET PERIOD & BUDGET
     // ========================================================================
 
-    const periodDoc = await db.collection('budget_periods').doc(budgetPeriodId).get();
+    const periodDoc = await db.collection(COLLECTION).doc(budgetPeriodId).get();
     if (!periodDoc.exists) {
-      throw new HttpsError('not-found', 'Budget period not found');
+      throw new HttpsError("not-found", "Budget period not found");
     }
-
     const period = { id: periodDoc.id, ...periodDoc.data() } as BudgetPeriodDocument;
 
-    // Get the parent budget
-    const budgetDoc = await db.collection('budgets').doc(period.budgetId).get();
+    const budgetDoc = await db.collection("budgets").doc(period.budgetId).get();
     if (!budgetDoc.exists) {
-      throw new HttpsError('not-found', 'Parent budget not found');
+      throw new HttpsError("not-found", "Parent budget not found");
     }
-
     const budget = { id: budgetDoc.id, ...budgetDoc.data() } as Budget;
 
     // Ownership: the parent budget's CURRENT view (userId) — the caller's Me, or a group
     // they're in (Account-Rooted-Sharing PD6). Not createdBy, and no role bypass: every
     // user is an EDITOR, so a role check let anyone edit anyone's period. The admin SDK
     // skips rules, so this is the only guard.
-    const owner_key = (budget as unknown as { userId?: string }).userId ?? '';
+    const owner_key = (budget as unknown as { userId?: string }).userId ?? "";
     const owner_gid = group_id_of_key(owner_key);
-    const owner_group = owner_gid ? await group_repo.get(create_trace_context(false), owner_gid) : null;
+    const owner_group = owner_gid
+      ? await group_repo.get(create_trace_context(false), owner_gid)
+      : null;
     if (period.budgetId !== budget.id || !can_manage_budget(owner_key, user.uid, owner_group)) {
-      throw new HttpsError('not-found', 'Budget period not found');
+      throw new HttpsError("not-found", "Budget period not found");
     }
 
-    // Block past period updates
-    if (isPastPeriod(period.periodEnd)) {
-      throw new HttpsError('failed-precondition', 'Cannot edit past/historical periods. Only current and future periods can be modified.');
+    if (is_past_period(period.periodEnd)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Cannot edit past/historical periods. Only current and future periods can be modified."
+      );
     }
 
-    // Check for system budget
     if (budget.isSystemEverythingElse) {
-      throw new HttpsError('failed-precondition', 'Cannot edit "Everything Else" system budget');
+      throw new HttpsError("failed-precondition", "Cannot edit \"Everything Else\" system budget");
     }
 
-    // Warn if new amount < spent (overspent)
     const spent = period.spent || 0;
-    if (newAmount < spent) {
-      warnings.push(`Warning: New amount ($${newAmount.toFixed(2)}) is less than spent ($${spent.toFixed(2)}). This will show as overspent.`);
-    }
-
-    // ========================================================================
-    // DETERMINE PRIME PERIOD
-    // ========================================================================
-
-    // If editing a non-prime period, "This Period Only" edits the underlying prime.
-    let targetPrimePeriodId = budgetPeriodId;
-    let targetPrimePeriod = period;
-    let primeAmount = newAmount;
-    const budgetCadence = budget.period || "monthly";
-    const editsOwnPeriod = isPrimePeriod(period, budgetCadence);
-
-    // "All Periods Forward" sets the budget's NORMAL amount so the edited period, un-overridden,
-    // gets exactly what was typed: amount ÷ the period's normal share of the budget — from the
-    // CALENDAR (1 for the budget's own period; 7/31 for a week of a 31-day month; 31/7 for a month
-    // of a weekly budget), never from stored period lists or one-off overrides.
-    const share = editsOwnPeriod
-      ? 1
-      : budget_share_of_period(
-        period.periodStart.toMillis(),
-        period.periodEnd.toMillis(),
-        budgetCadence
-      );
-    const forwardBudgetAmount =
-      share && share > 0 ? Math.round((newAmount / share) * 100) / 100 : newAmount;
-
-    if (!editsOwnPeriod && cascadeScope === "this_period") {
-      // "This Period Only" on another period type: the same DOLLAR change lands on the budget's
-      // own period this one overlaps most — never a past one (that would rewrite history).
-      const ids = period.primePeriodIds ?? [];
-      const primeDocs = await Promise.all(
-        ids.map((id) => db.collection("budget_periods").doc(id).get())
-      );
-      let best: { doc: BudgetPeriodDocument; overlap: number } | null = null;
-      for (const d of primeDocs) {
-        if (!d.exists) continue;
-        const pr = { id: d.id, ...d.data() } as BudgetPeriodDocument;
-        if (isPastPeriod(pr.periodEnd)) continue;
-        const overlap =
-          overlapDays(period.periodStart, period.periodEnd, pr.periodStart, pr.periodEnd);
-        if (overlap > 0 && (!best || overlap > best.overlap)) best = { doc: pr, overlap };
-      }
-      if (!best) {
-        throw new HttpsError(
-          "failed-precondition",
-          "Change this amount from the budget's own period view."
-        );
-      }
-      targetPrimePeriod = best.doc;
-      targetPrimePeriodId = best.doc.id!;
-
-      // The prime's current amount (its own override counts, even $0) is the base.
-      const currentNonPrimeAmount = period.allocatedAmount;
-      const currentPrimeAmount = period_allocation(targetPrimePeriod);
-      primeAmount = Math.max(
-        0,
-        Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
-      );
-      console.log(
-        `[updateBudgetPeriodAmount] Non-prime "this period": prime ${targetPrimePeriodId} ` +
-        `$${currentPrimeAmount} → $${primeAmount}`
-      );
-    } else if (!editsOwnPeriod) {
-      console.log(
-        `[updateBudgetPeriodAmount] Non-prime "all forward": share ${share?.toFixed(4)} → ` +
-        `budget $${forwardBudgetAmount}`
+    if (!reset && new_amount < spent) {
+      warnings.push(
+        `Warning: New amount ($${new_amount.toFixed(2)}) is less than spent ` +
+        `($${spent.toFixed(2)}). This will show as overspent.`
       );
     }
 
@@ -291,328 +283,301 @@ export const updateBudgetPeriodAmount = onCall<
     let periodsUpdated = 0;
     let budgetUpdated = false;
 
-    if (cascadeScope === 'this_period') {
-      periodsUpdated = await updateThisPeriodOnly(
-        db,
-        targetPrimePeriod,
-        primeAmount,
-        period.budgetId
-      );
+    if (reset || cascadeScope === "this_period") {
+      periodsUpdated = await set_this_period_amount(db, period, reset ? null : new_amount);
     } else {
-      // 'all_forward'
-      const result = await updateAllPeriodsForward(db, budget, forwardBudgetAmount);
-      periodsUpdated = result.periodsUpdated;
-      budgetUpdated = result.budgetUpdated;
+      periodsUpdated = await set_all_periods_forward(db, budget, period, new_amount);
+      budgetUpdated = true;
     }
 
-    console.log(`[updateBudgetPeriodAmount] ✓ Success: ${periodsUpdated} periods updated, budget updated: ${budgetUpdated}`);
+    // Derive caches live 24h — invalidate AFTER the writes landed (`periodAdjustments` isn't a
+    // field the period-edit trigger watches, so nothing else bumps for it).
+    await bump_derive_version(owner_key).catch(() => {});
 
-    return {
-      success: true,
-      periodsUpdated,
-      budgetUpdated,
-      warnings,
-    };
+    // The amount changed → a rollover budget's chain (allocation − spent carried forward) is
+    // stale. Same async, deduped recompute the spend pipeline enqueues. Non-fatal.
+    if ((budget as unknown as { rolloverEnabled?: boolean }).rolloverEnabled) {
+      await create_job_if_not_exists(
+        "recalculate_rollover",
+        { user_id: owner_key, budget_id: budget.id, deduplication_key: budget.id },
+        { trace_id: `update_budget_period_amount_${budget.id}` }
+      ).catch((e) => console.error("[updateBudgetPeriodAmount] rollover enqueue failed:", e));
+    }
 
-  } catch (error: any) {
-    console.error('[updateBudgetPeriodAmount] Error:', error);
+    console.log(
+      `[updateBudgetPeriodAmount] ✓ ${periodsUpdated} periods updated, budget updated: ` +
+      `${budgetUpdated}`
+    );
 
+    return { success: true, periodsUpdated, budgetUpdated, warnings };
+  } catch (error: unknown) {
+    console.error("[updateBudgetPeriodAmount] Error:", error);
     if (error instanceof HttpsError) {
       throw error;
     }
-
-    throw new HttpsError('internal', error.message || 'Failed to update budget period amount');
+    const message = (error as { message?: string })?.message;
+    throw new HttpsError("internal", message || "Failed to update budget period amount");
   }
 });
 
 // ============================================================================
-// UPDATE STRATEGIES
+// THIS PERIOD ONLY / RESET
 // ============================================================================
 
 /**
- * Update only the target period and cascade to non-primes that reference it
+ * "This Period Only" (`new_amount`) or "Reset to Original" (`null`) for the edited period, any
+ * type, any budget cadence — in ONE transaction (the monthly docs are re-read inside it).
+ * Returns the number of docs written.
  */
-async function updateThisPeriodOnly(
+async function set_this_period_amount(
   db: admin.firestore.Firestore,
-  targetPeriod: BudgetPeriodDocument,
-  newAmount: number,
-  budgetId: string
+  period: BudgetPeriodDocument,
+  new_amount: number | null
 ): Promise<number> {
-  console.log(`[updateThisPeriodOnly] Updating period ${targetPeriod.id} to $${newAmount}`);
+  const start_ms = period.periodStart.toMillis();
+  const end_ms = period.periodEnd.toMillis();
+  const edited_pid = period.periodId || period.sourcePeriodId;
+  const edited_ref = db.collection(COLLECTION).doc(period.id!);
+  const months_query = db
+    .collection(COLLECTION)
+    .where("budgetId", "==", period.budgetId)
+    .where("periodType", "==", "monthly");
 
-  // Get budget to determine period type for prime identification
-  const budgetDoc = await db.collection('budgets').doc(budgetId).get();
-  const budget = budgetDoc.exists ? budgetDoc.data() : null;
-  const budgetPeriodType = budget?.period || 'monthly';
+  return db.runTransaction(async (tx) => {
+    const edited_snap = await tx.get(edited_ref);
+    const months_snap = await tx.get(months_query);
+    if (!edited_snap.exists) {
+      throw new HttpsError("not-found", "Budget period not found");
+    }
+    const edited = edited_snap.data() as DocData;
 
-  return db.runTransaction(async (transaction) => {
-    let updatedCount = 0;
-
-    // Calculate new values for the target prime period
-    const daysInPeriod = targetPeriod.daysInPeriod || getDaysInPeriod(targetPeriod.periodStart, targetPeriod.periodEnd);
-    const newDailyRate = calculateDailyRate(newAmount, daysInPeriod);
-    const spent = targetPeriod.spent || 0;
-    const newRemaining = newAmount - spent;
-
-    // Update the target period
-    const targetRef = db.collection('budget_periods').doc(targetPeriod.id!);
-    transaction.update(targetRef, {
-      modifiedAmount: newAmount,
-      isModified: true,
-      dailyRate: newDailyRate,
-      remaining: newRemaining,
-      isPrime: true, // Ensure isPrime is set for consistency
-      // Set directly by the user (a copy synced from another period carries this field; the
-      // period page shows only a direct amount).
-      modifiedAmountSyncedFrom: admin.firestore.FieldValue.delete(),
-      lastModifiedAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+    // The budget's monthly docs the edited period overlaps (derive's home for every view).
+    const months = months_snap.docs.filter((d) => {
+      const m = d.data();
+      return overlap_days(ms_of(m.periodStart), ms_of(m.periodEnd), start_ms, end_ms) > 0;
     });
-    updatedCount++;
 
-    console.log(`[updateThisPeriodOnly] Updated prime: $${newAmount}, dailyRate: ${newDailyRate.toFixed(6)}, remaining: ${newRemaining}`);
+    // Every changed doc's fields, merged per doc id (the edited doc may be a monthly one).
+    const writes = new Map<string, { ref: admin.firestore.DocumentReference; data: DocData }>();
+    const write = (ref: admin.firestore.DocumentReference, data: DocData): void => {
+      const cur = writes.get(ref.id);
+      writes.set(ref.id, { ref, data: { ...(cur?.data ?? {}), ...data } });
+    };
+    const now = Timestamp.now();
 
-    // Query ALL periods for this budget (not filtering by isPrime to handle legacy data)
-    const allPeriodsQuery = await db.collection('budget_periods')
-      .where('budgetId', '==', budgetId)
-      .get();
-
-    // Separate into primes and non-primes using period type matching
-    const allPrimes: BudgetPeriodDocument[] = [];
-    const nonPrimesToUpdate: admin.firestore.QueryDocumentSnapshot[] = [];
-
-    const targetPrimeStart = targetPeriod.periodStart.toDate();
-    const targetPrimeEnd = targetPeriod.periodEnd.toDate();
-
-    for (const doc of allPeriodsQuery.docs) {
-      const period = doc.data() as BudgetPeriodDocument;
-
-      if (isPrimePeriod(period, budgetPeriodType)) {
-        // This is a prime period
-        if (doc.id === targetPeriod.id) {
-          // Apply the pending update to the target prime for calculations
-          allPrimes.push({
-            ...period,
-            id: doc.id,
-            dailyRate: newDailyRate,
-            modifiedAmount: newAmount,
-            isModified: true,
-          });
-        } else {
-          allPrimes.push({ ...period, id: doc.id });
-        }
-      } else {
-        // This is a non-prime period - check if it overlaps with the updated prime
-        const nonPrimeStart = period.periodStart.toDate();
-        const nonPrimeEnd = period.periodEnd.toDate();
-
-        // Check if this non-prime overlaps with the target prime's date range
-        if (nonPrimeStart <= targetPrimeEnd && nonPrimeEnd >= targetPrimeStart) {
-          nonPrimesToUpdate.push(doc);
-        }
+    let parts: ReturnType<typeof split_adjustment_by_month> = [];
+    if (new_amount !== null) {
+      const missing = uncovered_months(start_ms, end_ms, months.map((d) => d.data()));
+      if (missing.length > 0) {
+        throw new HttpsError(
+          "failed-precondition",
+          `This budget has no monthly period for ${missing.join(", ")} yet, so this period's ` +
+          "amount can't be set. Try again after its periods are generated."
+        );
       }
+      // What the page shows for this period now, without this period's own earlier adjustment.
+      const current = bucket_allocation(
+        months.map((d) => to_monthly_for_derivation(d.data(), edited_pid)),
+        start_ms,
+        end_ms
+      ).allocated;
+      const delta = round2(new_amount - current);
+      if (delta !== 0) {
+        parts = split_adjustment_by_month(
+          edited_pid,
+          start_ms,
+          end_ms,
+          delta,
+          months.map((d) => ({
+            start_ms: ms_of(d.data().periodStart),
+            end_ms: ms_of(d.data().periodEnd),
+          }))
+        );
+      }
+      console.log(
+        `[updateBudgetPeriodAmount] This Period Only ${edited_pid}: page $${current} → ` +
+        `$${new_amount} (adjustment ${delta} over ${parts.length} month(s))`
+      );
     }
 
-    // Sort primes by start date for SUMPRODUCT calculation
-    allPrimes.sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
-
-    console.log(`[updateThisPeriodOnly] Found ${allPrimes.length} prime periods, ${nonPrimesToUpdate.length} non-prime periods to cascade`);
-
-    // Update each non-prime period that overlaps with the updated prime
-    for (const nonPrimeDoc of nonPrimesToUpdate) {
-      const nonPrime = nonPrimeDoc.data() as BudgetPeriodDocument;
-
-      // Find overlapping primes and recalculate using SUMPRODUCT
-      const targetStart = nonPrime.periodStart.toDate();
-      const targetEnd = nonPrime.periodEnd.toDate();
-
-      const overlappingPrimes = findOverlappingPrimePeriods(targetStart, targetEnd, allPrimes);
-      const { totalAmount, breakdown } = calculatePrimeContributions(targetStart, targetEnd, overlappingPrimes);
-
-      const nonPrimeSpent = nonPrime.spent || 0;
-      const nonPrimeRemaining = totalAmount - nonPrimeSpent;
-      const nonPrimeDays = nonPrime.daysInPeriod || getDaysInPeriod(nonPrime.periodStart, nonPrime.periodEnd);
-      const nonPrimeDailyRate = Math.round((totalAmount / nonPrimeDays) * 100) / 100; // 2 decimal for non-prime
-
-      transaction.update(nonPrimeDoc.ref, {
-        allocatedAmount: totalAmount,
-        remaining: nonPrimeRemaining,
-        dailyRate: nonPrimeDailyRate,
-        primePeriodBreakdown: breakdown,
-        primePeriodIds: overlappingPrimes.map(p => p.id!),
-        isPrime: false, // Ensure isPrime is set for consistency
-        updatedAt: Timestamp.now(),
-        lastCalculated: Timestamp.now(),
+    // Replace this period's adjustment on every monthly doc it overlaps (sets, never accumulates).
+    months.forEach((d, i) => {
+      const data = d.data();
+      const existing = stored_adjustments(data);
+      const kept = existing.filter((a) => a.periodId !== edited_pid);
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const added: StoredAdjustment[] = parts
+        .filter((p) => p.month_index === i)
+        .map((p) => ({
+          periodId: p.adjustment.period_id,
+          startMs: p.adjustment.start_ms,
+          endMs: p.adjustment.end_ms,
+          amount: p.adjustment.amount,
+        }));
+      /* eslint-enable @typescript-eslint/naming-convention */
+      if (kept.length === existing.length && added.length === 0) return;
+      const next = [...kept, ...added];
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const changes: DocData = { periodAdjustments: next };
+      write(d.ref, {
+        periodAdjustments: next.length > 0 ? next : FieldValue.delete(),
+        remaining: remaining_after(data, changes),
+        updatedAt: now,
       });
-      updatedCount++;
+      /* eslint-enable @typescript-eslint/naming-convention */
+    });
 
-      console.log(`[updateThisPeriodOnly] Updated non-prime ${nonPrimeDoc.id}: $${totalAmount.toFixed(2)} (SUMPRODUCT from ${overlappingPrimes.length} primes)`);
+    // The edited doc: the "custom" marker (+ on reset, clear a legacy override).
+    /* eslint-disable @typescript-eslint/naming-convention */
+    if (new_amount !== null) {
+      // (Never `isModified` / `lastModifiedAt`: those decide whether a legacy `modifiedAmount`
+      // on the doc counts — direct_period_override — and `isModified` fires the legacy sync.)
+      write(edited_ref, { hasPeriodAdjustment: parts.length > 0, updatedAt: now });
+    } else {
+      const clear: DocData = { hasPeriodAdjustment: false, updatedAt: now };
+      if (edited.modifiedAmount !== undefined || edited.isModified === true) {
+        // Legacy "This Period Only" on the doc itself.
+        clear.modifiedAmount = FieldValue.delete();
+        clear.isModified = false;
+      }
+      write(edited_ref, clear);
     }
+    /* eslint-enable @typescript-eslint/naming-convention */
 
-    return updatedCount;
+    for (const { ref, data } of writes.values()) {
+      tx.update(ref, data);
+    }
+    return writes.size;
   });
 }
 
-/**
- * Normalize period type for comparison (handles string vs enum differences)
- */
-function normalizePeriodType(periodType: string | PeriodType): string {
-  if (!periodType) return '';
-  return String(periodType).toLowerCase();
-}
+// ============================================================================
+// ALL PERIODS FORWARD
+// ============================================================================
 
 /**
- * Check if a period is a prime period (matches the budget's period type)
- * Prime periods are the "source of truth" for daily rates
+ * "All Periods Forward": budget amount = typed ÷ the edited period's page share; clear every
+ * override / adjustment from the edited period on; re-allocate with the shared domain rule
+ * (as process_budget_updated does). Returns the number of period docs written.
  */
-function isPrimePeriod(period: BudgetPeriodDocument, budgetPeriodType: string): boolean {
-  // First check the explicit isPrime flag if set
-  if (period.isPrime === true) return true;
-  if (period.isPrime === false) return false;
-
-  // Fall back to period type matching (for legacy data without isPrime)
-  const normalizedPeriodType = normalizePeriodType(period.periodType);
-  const normalizedBudgetType = normalizePeriodType(budgetPeriodType);
-  return normalizedPeriodType === normalizedBudgetType;
-}
-
-/**
- * Update the budget base amount and all current + future periods
- */
-async function updateAllPeriodsForward(
+async function set_all_periods_forward(
   db: admin.firestore.Firestore,
   budget: Budget,
-  newBudgetAmount: number
-): Promise<{ periodsUpdated: number; budgetUpdated: boolean }> {
-  console.log(`[updateAllPeriodsForward] Updating budget ${budget.id} and all current/future periods`);
+  period: BudgetPeriodDocument,
+  new_amount: number
+): Promise<number> {
+  const start_ms = period.periodStart.toMillis();
+  const edited_start_day_ms = utc_day_index(start_ms) * DAY_MS;
+  const cadence = String(budget.period || "monthly").toLowerCase();
+  const share = page_share(start_ms, period.periodEnd.toMillis(), cadence);
+  const new_budget_amount = share > 0 ? round2(new_amount / share) : new_amount;
+  console.log(
+    `[updateBudgetPeriodAmount] All Periods Forward ${period.periodId}: share ` +
+    `${share.toFixed(6)} → budget $${budget.amount} → $${new_budget_amount}`
+  );
 
-  // `newBudgetAmount` is the budget's new NORMAL amount (the caller converted the entered
-  // period amount by that period's share of the budget); every current / future prime period
-  // gets it, and their one-off "This Period Only" overrides are cleared.
-  console.log(`[updateAllPeriodsForward] Budget amount: $${budget.amount} → $${newBudgetAmount}`);
+  const snap = await db.collection(COLLECTION).where("budgetId", "==", budget.id).get();
+  const docs = snap.docs.map((d) => ({ ref: d.ref, data: d.data() as DocData }));
 
-  // Get budget period type - this determines what's "prime"
-  // Prime periods match the budget's period type (e.g., monthly budget = monthly periods are prime)
-  const budgetPeriodType = budget.period || 'monthly';
-
-  console.log(`[updateAllPeriodsForward] Budget period type: ${budgetPeriodType}`);
-
-  return db.runTransaction(async (transaction) => {
-    let periodsUpdated = 0;
-
-    // Update the budget document
-    const budgetRef = db.collection('budgets').doc(budget.id!);
-    transaction.update(budgetRef, {
-      amount: newBudgetAmount,
-      remaining: newBudgetAmount - (budget.spent || 0),
-      updatedAt: Timestamp.now(),
-    });
-
-    // Query all periods for this budget
-    const allPeriodsQuery = await db.collection('budget_periods')
-      .where('budgetId', '==', budget.id)
-      .get();
-
-    // Separate into current/future primes and non-primes
-    // Use period type matching to identify primes (not just isPrime field)
-    const currentFuturePrimes: admin.firestore.QueryDocumentSnapshot[] = [];
-    const currentFutureNonPrimes: admin.firestore.QueryDocumentSnapshot[] = [];
-
-    for (const doc of allPeriodsQuery.docs) {
-      const period = doc.data() as BudgetPeriodDocument;
-
-      if (isCurrentOrFuturePeriod(period.periodEnd)) {
-        // Use period type matching to correctly identify primes vs non-primes
-        if (isPrimePeriod(period, budgetPeriodType)) {
-          currentFuturePrimes.push(doc);
-        } else {
-          currentFutureNonPrimes.push(doc);
-        }
-      }
+  // Every period whose adjustment reaches the edited period's start (all of a straddling
+  // period's parts go together).
+  const cleared_pids = new Set<string>();
+  for (const d of docs) {
+    for (const a of stored_adjustments(d.data)) {
+      if (a.endMs >= edited_start_day_ms) cleared_pids.add(a.periodId);
     }
+  }
 
-    console.log(`[updateAllPeriodsForward] Current/future primes: ${currentFuturePrimes.length}, non-primes: ${currentFutureNonPrimes.length}`);
-
-    // Update all current/future prime periods
-    // Prime periods get the full budget amount for their period
-    const updatedPrimes: BudgetPeriodDocument[] = [];
-
-    for (const primeDoc of currentFuturePrimes) {
-      const prime = primeDoc.data() as BudgetPeriodDocument;
-
-      // Calculate new allocated amount based on new budget amount
-      const daysInPeriod = prime.daysInPeriod || getDaysInPeriod(prime.periodStart, prime.periodEnd);
-
-      // Prime periods get the full budget amount
-      const newAllocatedAmount = newBudgetAmount;
-      const newDailyRate = calculateDailyRate(newAllocatedAmount, daysInPeriod);
-      const primeSpent = prime.spent || 0;
-      const newRemaining = newAllocatedAmount - primeSpent;
-
-      transaction.update(primeDoc.ref, {
-        allocatedAmount: newAllocatedAmount,
-        originalAmount: newAllocatedAmount,
-        dailyRate: newDailyRate,
-        remaining: newRemaining,
-        modifiedAmount: null, // Clear any manual override
-        isModified: false,
-        isPrime: true, // Ensure isPrime is set for future consistency
-        updatedAt: Timestamp.now(),
-        lastCalculated: Timestamp.now(),
-      });
-      periodsUpdated++;
-
-      console.log(`[updateAllPeriodsForward] Updated prime ${primeDoc.id}: $${newAllocatedAmount}, dailyRate: ${newDailyRate.toFixed(6)}`);
-
-      // Track for non-prime recalculation
-      updatedPrimes.push({
-        ...prime,
-        id: primeDoc.id,
-        allocatedAmount: newAllocatedAmount,
-        dailyRate: newDailyRate,
-      });
-    }
-
-    // Update all current/future non-prime periods using SUMPRODUCT
-    // Non-prime periods derive their amount from overlapping prime daily rates
-    for (const nonPrimeDoc of currentFutureNonPrimes) {
-      const nonPrime = nonPrimeDoc.data() as BudgetPeriodDocument;
-
-      const targetStart = nonPrime.periodStart.toDate();
-      const targetEnd = nonPrime.periodEnd.toDate();
-
-      // Find overlapping primes and calculate using SUMPRODUCT (same as initial creation)
-      const overlappingPrimes = findOverlappingPrimePeriods(targetStart, targetEnd, updatedPrimes);
-      const { totalAmount, breakdown } = calculatePrimeContributions(targetStart, targetEnd, overlappingPrimes);
-
-      const nonPrimeSpent = nonPrime.spent || 0;
-      const nonPrimeRemaining = totalAmount - nonPrimeSpent;
-      const nonPrimeDays = nonPrime.daysInPeriod || getDaysInPeriod(nonPrime.periodStart, nonPrime.periodEnd);
-      const nonPrimeDailyRate = Math.round((totalAmount / nonPrimeDays) * 100) / 100;
-
-      transaction.update(nonPrimeDoc.ref, {
-        allocatedAmount: totalAmount,
-        originalAmount: totalAmount,
-        remaining: nonPrimeRemaining,
-        dailyRate: nonPrimeDailyRate,
-        primePeriodBreakdown: breakdown,
-        primePeriodIds: overlappingPrimes.map(p => p.id!),
-        modifiedAmount: null,
-        isModified: false,
-        isPrime: false, // Ensure isPrime is set for future consistency
-        updatedAt: Timestamp.now(),
-        lastCalculated: Timestamp.now(),
-      });
-      periodsUpdated++;
-
-      console.log(`[updateAllPeriodsForward] Updated non-prime ${nonPrimeDoc.id}: $${totalAmount.toFixed(2)} (SUMPRODUCT from ${overlappingPrimes.length} primes)`);
-    }
-
-    console.log(`[updateAllPeriodsForward] ✓ Updated ${periodsUpdated} periods`);
-
-    return {
-      periodsUpdated,
-      budgetUpdated: true,
-    };
+  // 1. The budget's new normal amount + the cleared overrides, in one batch.
+  const now = Timestamp.now();
+  const post = new Map<string, DocData>(); // each doc's fields after this step
+  let batch = db.batch();
+  let ops = 0;
+  const flush = async (): Promise<void> => {
+    if (ops === 0) return;
+    await batch.commit();
+    batch = db.batch();
+    ops = 0;
+  };
+  /* eslint-disable @typescript-eslint/naming-convention */
+  batch.update(db.collection("budgets").doc(budget.id!), {
+    amount: new_budget_amount,
+    remaining: new_budget_amount - (budget.spent || 0),
+    updatedAt: now,
   });
+  ops++;
+  const touched = new Set<string>();
+  for (const d of docs) {
+    const changes: DocData = {};
+    const ends_on_or_after = ms_of(d.data.periodEnd) >= edited_start_day_ms;
+    if (ends_on_or_after && (d.data.modifiedAmount != null || d.data.isModified === true)) {
+      changes.modifiedAmount = FieldValue.delete();
+      changes.isModified = false;
+    }
+    const adjustments = stored_adjustments(d.data);
+    const kept = adjustments.filter((a) => !cleared_pids.has(a.periodId));
+    if (kept.length !== adjustments.length) {
+      changes.periodAdjustments = kept.length > 0 ? kept : FieldValue.delete();
+    }
+    const pid = String(d.data.periodId ?? "");
+    if (d.data.hasPeriodAdjustment === true && (ends_on_or_after || cleared_pids.has(pid))) {
+      changes.hasPeriodAdjustment = false;
+    }
+    const after: DocData = { ...d.data };
+    if ("modifiedAmount" in changes) {
+      delete after.modifiedAmount;
+      after.isModified = false;
+    }
+    if ("periodAdjustments" in changes) after.periodAdjustments = kept;
+    post.set(d.ref.id, after);
+    if (Object.keys(changes).length === 0) continue;
+    batch.update(d.ref, { ...changes, updatedAt: now });
+    touched.add(d.ref.id);
+    if (++ops >= 450) await flush();
+  }
+  /* eslint-enable @typescript-eslint/naming-convention */
+  await flush();
+
+  // 2. Re-allocate with the shared domain rule. Cutoff = the earliest of today, the edited
+  //    period's start and the start of ITS month: the page spreads each monthly home evenly over
+  //    its days, so every prime feeding the edited period's month (e.g. this month's weeks that
+  //    already ended) must take the new amount or the edited period shows a blend.
+  //    (process_budget_updated uses start of today; this callable doesn't enqueue it — the
+  //    budget doc write only bumps the derive version via on_budget_written.)
+  const s = new Date(edited_start_day_ms);
+  const month_start_ms = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1);
+  const cutoff = Timestamp.fromMillis(Math.min(today_utc_ms(), month_start_ms));
+  const computed = compute_reallocated_periods({
+    new_amount: new_budget_amount,
+    budget_cadence: budget_cadence_to_instance(cadence as BudgetPeriodType),
+    cutoff,
+    periods: docs.map((d) => ({
+      id: d.ref.id,
+      period_id: String(d.data.periodId ?? ""),
+      period_type: d.data.periodType as PeriodInstanceType,
+      start_date: d.data.periodStart as Timestamp,
+      end_date: d.data.periodEnd as Timestamp,
+      spent: (d.data.spent as number | undefined) ?? 0,
+      rolled_over_amount: (d.data.rolledOverAmount as number | undefined) ?? 0,
+      daily_rate: (d.data.dailyRate as number | undefined) ?? 0,
+    })),
+  });
+  if (computed.validation_errors) {
+    throw new HttpsError("invalid-argument", computed.validation_errors.join("; "));
+  }
+  // `remaining` honours whatever override / adjustments a period still keeps (those that ended
+  // before the edited period).
+  const updates = (computed.entities ?? []).map((u) => {
+    const after = post.get(u.id) ?? {};
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const remaining = remaining_after(after, {
+      allocatedAmount: u.allocated_amount,
+      isPrime: u.is_prime ?? after.isPrime,
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    touched.add(u.id);
+    return { ...u, remaining };
+  });
+  await budget_period_repo.update_allocations(create_trace_context(false), updates);
+  return touched.size;
 }

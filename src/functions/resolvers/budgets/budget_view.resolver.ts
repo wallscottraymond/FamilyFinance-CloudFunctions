@@ -96,7 +96,9 @@ export async function resolve_budget_view_deps(
     .map((p) => ({
       // "This Period Only" (a per-period amount the user set) replaces the budget's amount.
       allocated_amount: p.modified_amount ?? p.allocated_amount,
-      effective_amount: p.effective_amount,
+      // BASE (no adjustments): the page spreads adjustments by their own range, not the month.
+      effective_amount: (p.modified_amount ?? p.allocated_amount) + p.rolled_over_amount,
+      adjustments: p.period_adjustments ?? [],
       start_ms: p.start_date.toMillis(),
       end_ms: p.end_date.toMillis(),
     }));
