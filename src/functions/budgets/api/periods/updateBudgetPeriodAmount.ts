@@ -15,6 +15,7 @@
  * Memory: 512MiB, Timeout: 60s
  */
 
+import { budget_share_of_period } from "../../../domain/budgets/period_share.service";
 import { period_allocation } from "../../../domain/budgets/period_override.service";
 import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
@@ -219,60 +220,67 @@ export const updateBudgetPeriodAmount = onCall<
     // DETERMINE PRIME PERIOD
     // ========================================================================
 
-    // If editing a non-prime period, we need to edit the underlying prime
+    // If editing a non-prime period, "This Period Only" edits the underlying prime.
     let targetPrimePeriodId = budgetPeriodId;
     let targetPrimePeriod = period;
-    // The amounts written to the PRIME period when the user edits a NON-prime one (e.g. a week of
-    // a monthly budget) — never the week's raw figure, which would set a whole month to one week:
-    //  - "This Period Only": the same DOLLAR change lands on the month (the week's extra money);
-    //  - "All Periods Forward": the same RATIO (the budget's rate changes, at its own cadence).
     let primeAmount = newAmount;
+    const budgetCadence = budget.period || "monthly";
+    const editsOwnPeriod = isPrimePeriod(period, budgetCadence);
+
     // "All Periods Forward" sets the budget's NORMAL amount so the edited period, un-overridden,
-    // gets exactly what was typed: amount ÷ the period's normal share of the budget (1 for the
-    // budget's own period; for a week of a monthly budget, Σ overlap days ÷ that month's days).
-    let forwardBudgetAmount = newAmount;
+    // gets exactly what was typed: amount ÷ the period's normal share of the budget — from the
+    // CALENDAR (1 for the budget's own period; 7/31 for a week of a 31-day month; 31/7 for a month
+    // of a weekly budget), never from stored period lists or one-off overrides.
+    const share = editsOwnPeriod
+      ? 1
+      : budget_share_of_period(
+        period.periodStart.toMillis(),
+        period.periodEnd.toMillis(),
+        budgetCadence
+      );
+    const forwardBudgetAmount =
+      share && share > 0 ? Math.round((newAmount / share) * 100) / 100 : newAmount;
 
-    if (period.isPrime === false && period.primePeriodIds && period.primePeriodIds.length > 0) {
-      // This is a non-prime period - find the primary prime it references
-      // For simplicity, we'll update the first referenced prime
-      // (In practice, user edits the weekly view which spans one or two months)
-      const firstPrimeId = period.primePeriodIds[0];
-      const primeDoc = await db.collection('budget_periods').doc(firstPrimeId).get();
-
-      if (!primeDoc.exists) {
-        throw new HttpsError('not-found', 'Referenced prime period not found');
+    if (!editsOwnPeriod && cascadeScope === "this_period") {
+      // "This Period Only" on another period type: the same DOLLAR change lands on the budget's
+      // own period this one overlaps most — never a past one (that would rewrite history).
+      const ids = period.primePeriodIds ?? [];
+      const primeDocs = await Promise.all(
+        ids.map((id) => db.collection("budget_periods").doc(id).get())
+      );
+      let best: { doc: BudgetPeriodDocument; overlap: number } | null = null;
+      for (const d of primeDocs) {
+        if (!d.exists) continue;
+        const pr = { id: d.id, ...d.data() } as BudgetPeriodDocument;
+        if (isPastPeriod(pr.periodEnd)) continue;
+        const overlap =
+          overlapDays(period.periodStart, period.periodEnd, pr.periodStart, pr.periodEnd);
+        if (overlap > 0 && (!best || overlap > best.overlap)) best = { doc: pr, overlap };
       }
+      if (!best) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Change this amount from the budget's own period view."
+        );
+      }
+      targetPrimePeriod = best.doc;
+      targetPrimePeriodId = best.doc.id!;
 
-      targetPrimePeriod = { id: primeDoc.id, ...primeDoc.data() } as BudgetPeriodDocument;
-      targetPrimePeriodId = firstPrimeId;
-
-      console.log(`[updateBudgetPeriodAmount] Non-prime period detected. Editing underlying prime: ${targetPrimePeriodId}`);
-
-      // "This Period Only": the same DOLLAR change lands on the month the week starts in (the
-      // week's extra money). The month's current amount (its own override counts, even $0) is
-      // the base.
+      // The prime's current amount (its own override counts, even $0) is the base.
       const currentNonPrimeAmount = period.allocatedAmount;
       const currentPrimeAmount = period_allocation(targetPrimePeriod);
       primeAmount = Math.max(
         0,
         Math.round((currentPrimeAmount + (newAmount - (currentNonPrimeAmount || 0))) * 100) / 100
       );
-      // The edited period's normal share of the budget, over EVERY prime it overlaps (a month of
-      // a weekly budget spans 4–5 weeks; a week can straddle two months).
-      const primeDocs = await Promise.all(
-        period.primePeriodIds.map((id) => db.collection("budget_periods").doc(id).get())
-      );
-      const share = primeDocs.reduce((sum, d) => {
-        if (!d.exists) return sum;
-        const pr = d.data() as BudgetPeriodDocument;
-        const overlap =
-          overlapDays(period.periodStart, period.periodEnd, pr.periodStart, pr.periodEnd);
-        return sum + overlap / getDaysInPeriod(pr.periodStart, pr.periodEnd);
-      }, 0);
-      if (share > 0) forwardBudgetAmount = Math.round((newAmount / share) * 100) / 100;
       console.log(
-        `[updateBudgetPeriodAmount] Non-prime edit: this-period month $${currentPrimeAmount} → ` +
-        `$${primeAmount}; forward budget → $${forwardBudgetAmount} (share ${share.toFixed(4)})`
+        `[updateBudgetPeriodAmount] Non-prime "this period": prime ${targetPrimePeriodId} ` +
+        `$${currentPrimeAmount} → $${primeAmount}`
+      );
+    } else if (!editsOwnPeriod) {
+      console.log(
+        `[updateBudgetPeriodAmount] Non-prime "all forward": share ${share?.toFixed(4)} → ` +
+        `budget $${forwardBudgetAmount}`
       );
     }
 

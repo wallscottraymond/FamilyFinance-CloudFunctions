@@ -137,8 +137,10 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
   });
   it('All Periods Forward on a WEEKLY budget from the MONTHLY tab: the month ends at what was typed', async () => {
     // Weekly budget; October 2031 (31 days) overlaps 5 weeks: 4 + 7 + 7 + 7 + 6 days.
-    for (const amount of [100, 0]) { // a $0 budget too (was a silent no-op / wrong units)
-      const WB = `${B}_weekly_${amount}`;
+    // a $0 budget too (was a silent no-op / wrong units), and a month doc whose stored prime
+    // list is INCOMPLETE (generated at the horizon / rebuilt after a forward edit)
+    for (const [amount, partial] of [[100, false], [0, false], [100, true]] as const) {
+      const WB = `${B}_weekly_${amount}_${partial}`;
       await db.collection('budgets').doc(WB).set({
         id: WB, userId: U, createdBy: U, groupIds: [], isActive: true,
         access: { ownerId: U, createdBy: U, groupIds: [], isPrivate: true },
@@ -165,7 +167,7 @@ describe('"This Period Only" amount on the period page (emulator)', () => {
         id: M, budgetId: WB, userId: U, groupIds: [], periodId: '2031M10', sourcePeriodId: '2031M10',
         periodType: 'monthly', periodStart: ts('2031-10-01T00:00:00Z'), periodEnd: ts('2031-10-31T23:59:59.999Z'),
         allocatedAmount: Math.round(amount * 31 / 7 * 100) / 100, spent: 0, isActive: true, isPrime: false,
-        primePeriodIds: weeks.map(([pid]) => `${WB}_${pid}`),
+        primePeriodIds: (partial ? weeks.slice(0, 1) : weeks).map(([pid]) => `${WB}_${pid}`),
       });
       await edit_amount({ budgetPeriodId: M, newAmount: 500, cascadeScope: 'all_forward' });
       const budget = (await db.collection('budgets').doc(WB).get()).data()!;
