@@ -34,6 +34,10 @@ beforeEach(async () => {
       userId: "alex", createdBy: "alex", name: "Groceries", amount: 100, categoryIds: ["groceries"],
       isActive: true, isOngoing: true, isSystemEverythingElse: false,
     });
+    await setDoc(doc(db, "budget_periods/bp1"), {
+      userId: "alex", budgetId: "b1", periodId: "2031M10", allocatedAmount: 100,
+      originalAmount: 100, isActive: true, userNotes: "",
+    });
     await setDoc(doc(db, "_reassign_runs/r1"), { user_id: "alex" });
     await setDoc(doc(db, "_migration_snapshots/m1"), { budgets: {} });
     await setDoc(doc(db, "_config/reassign"), { enabled: true });
@@ -74,4 +78,15 @@ it("engine state (runs, snapshots, kill switch) is unreadable and unwritable by 
   await assertFails(getDoc(doc(alex(), "_reassign_runs/r1")));
   await assertFails(getDoc(doc(alex(), "_migration_snapshots/m1")));
   await assertFails(setDoc(doc(alex(), "_config/reassign"), { enabled: false }));
+});
+
+it("a budget period's amount changes only through the callable; notes / pause stay client fields", async () => {
+  const bp = () => doc(alex(), "budget_periods/bp1");
+  await assertFails(updateDoc(bp(), { modifiedAmount: 50 }));
+  await assertFails(updateDoc(bp(), { modifiedAmount: 50, isModified: true }));
+  await assertFails(updateDoc(bp(), { isModified: true }));
+  await assertFails(updateDoc(bp(), { hasPeriodAdjustment: true }));
+  await assertFails(updateDoc(bp(), { periodAdjustments: [] }));
+  await assertSucceeds(updateDoc(bp(), { userNotes: "hi", updatedAt: new Date() }));
+  await assertSucceeds(updateDoc(bp(), { isActive: false }));
 });

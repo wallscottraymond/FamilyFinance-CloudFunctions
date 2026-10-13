@@ -10,10 +10,14 @@ import { BudgetPeriodDocument, PeriodType } from '../../../../types';
 
 // Mock firebase-admin
 jest.mock('firebase-admin', () => ({
-  firestore: jest.fn(() => ({
-    collection: jest.fn(),
-    batch: jest.fn()
-  })),
+  firestore: Object.assign(
+    jest.fn(() => ({
+      collection: jest.fn(),
+      batch: jest.fn()
+    })),
+    // admin.firestore.FieldValue.delete() — the clear path uses it
+    { FieldValue: { delete: () => '__delete__' } }
+  ),
   initializeApp: jest.fn()
 }));
 
@@ -298,7 +302,8 @@ describe('syncNotesToOverlappingPeriods', () => {
           periodStart: Timestamp.fromDate(new Date('2025-04-07')),
           periodEnd: Timestamp.fromDate(new Date('2025-04-13')),
           modifiedAmount: 750,
-          isModified: true
+          isModified: true,
+          modifiedAmountSyncedFrom: 'period-1'
         })
       };
 
@@ -322,6 +327,44 @@ describe('syncNotesToOverlappingPeriods', () => {
           isModified: false
         })
       );
+    });
+  });
+
+  describe('syncModifiedAmountToOverlappingPeriods — clearing never touches a direct override', () => {
+    it('leaves another period\'s own (direct) override and other sources\' copies alone', async () => {
+      const sourcePeriod = createMockPeriod({ periodType: PeriodType.WEEKLY, id: 'week-1' });
+      const direct = {
+        id: 'month-1',
+        ref: { id: 'month-1' },
+        data: () => ({
+          budgetId: 'budget-123',
+          periodType: PeriodType.MONTHLY,
+          periodStart: Timestamp.fromDate(new Date('2025-04-01')),
+          periodEnd: Timestamp.fromDate(new Date('2025-04-30')),
+          modifiedAmount: 300,
+          isModified: true,
+        })
+      };
+      const other_copy = {
+        id: 'half-1',
+        ref: { id: 'half-1' },
+        data: () => ({
+          budgetId: 'budget-123',
+          periodType: PeriodType.BI_MONTHLY,
+          periodStart: Timestamp.fromDate(new Date('2025-04-01')),
+          periodEnd: Timestamp.fromDate(new Date('2025-04-15')),
+          modifiedAmount: 300,
+          isModified: true,
+          modifiedAmountSyncedFrom: 'month-1',
+        })
+      };
+      mockDb.collection().get.mockResolvedValue({ empty: false, size: 2, docs: [direct, other_copy] });
+
+      const result = await syncModifiedAmountToOverlappingPeriods(mockDb, sourcePeriod, undefined);
+
+      expect(result.success).toBe(true);
+      expect(result.periodsUpdated).toBe(0);
+      expect(mockBatch.update).not.toHaveBeenCalled();
     });
   });
 

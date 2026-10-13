@@ -34,7 +34,7 @@ import { Budget, BudgetPeriodDocument, UserRole } from "../../../../types";
 import { authenticateRequest } from "../../../../utils/auth";
 import { create_trace_context } from "../../../observability";
 import { group_repo } from "../../../repositories/sharing";
-import { budget_period_repo } from "../../../repositories/budget_period.repo";
+import { allocation_update_fields } from "../../../repositories/budget_period.repo";
 import { bump_derive_version } from "../../../repositories/derive_version.repo";
 import { create_job_if_not_exists } from "../../../infrastructure/job_queue";
 import { can_manage_budget, group_id_of_key } from "../../../domain/sharing/budget_view.service";
@@ -47,6 +47,7 @@ import {
   bucket_allocation,
   MonthlyPeriodForDerivation,
   overlap_days,
+  rebase_reallocated_periods,
   round2,
   split_adjustment_by_month,
   utc_day_index,
@@ -286,7 +287,7 @@ export const updateBudgetPeriodAmount = onCall<
     if (reset || cascadeScope === "this_period") {
       periodsUpdated = await set_this_period_amount(db, period, reset ? null : new_amount);
     } else {
-      periodsUpdated = await set_all_periods_forward(db, budget, period, new_amount);
+      periodsUpdated = await set_all_periods_forward(db, budget.id!, period, new_amount);
       budgetUpdated = true;
     }
 
@@ -456,128 +457,141 @@ async function set_this_period_amount(
 // ============================================================================
 
 /**
- * "All Periods Forward": budget amount = typed ÷ the edited period's page share; clear every
- * override / adjustment from the edited period on; re-allocate with the shared domain rule
- * (as process_budget_updated does). Returns the number of period docs written.
+ * "All Periods Forward", in ONE Firestore transaction that re-reads the budget and its periods
+ * (so a "This Period Only" landing meanwhile is never overwritten, and a failure leaves nothing
+ * half-written — the transaction is all-or-nothing and retried on contention):
+ *  - budget amount = typed ÷ the edited period's page share;
+ *  - "forward" resets custom amounts: every legacy override on a period ending in / after the
+ *    edited period's month, and every adjustment reaching that month (all of a straddling
+ *    period's parts together), are cleared;
+ *  - periods are re-allocated with the shared domain rule (as process_budget_updated does), and
+ *    the adjustments it does NOT clear (earlier custom periods inside the re-allocated range) are
+ *    rebased so they keep showing what the user typed (rebase_reallocated_periods).
+ * Only the fields that change are written. Returns the number of period docs written.
  */
 async function set_all_periods_forward(
   db: admin.firestore.Firestore,
-  budget: Budget,
+  budget_id: string,
   period: BudgetPeriodDocument,
   new_amount: number
 ): Promise<number> {
   const start_ms = period.periodStart.toMillis();
   const edited_start_day_ms = utc_day_index(start_ms) * DAY_MS;
-  const cadence = String(budget.period || "monthly").toLowerCase();
-  const share = page_share(start_ms, period.periodEnd.toMillis(), cadence);
-  const new_budget_amount = share > 0 ? round2(new_amount / share) : new_amount;
-  console.log(
-    `[updateBudgetPeriodAmount] All Periods Forward ${period.periodId}: share ` +
-    `${share.toFixed(6)} → budget $${budget.amount} → $${new_budget_amount}`
-  );
-
-  const snap = await db.collection(COLLECTION).where("budgetId", "==", budget.id).get();
-  const docs = snap.docs.map((d) => ({ ref: d.ref, data: d.data() as DocData }));
-
-  // Every period whose adjustment reaches the edited period's start (all of a straddling
-  // period's parts go together).
-  const cleared_pids = new Set<string>();
-  for (const d of docs) {
-    for (const a of stored_adjustments(d.data)) {
-      if (a.endMs >= edited_start_day_ms) cleared_pids.add(a.periodId);
-    }
-  }
-
-  // 1. The budget's new normal amount + the cleared overrides, in one batch.
-  const now = Timestamp.now();
-  const post = new Map<string, DocData>(); // each doc's fields after this step
-  let batch = db.batch();
-  let ops = 0;
-  const flush = async (): Promise<void> => {
-    if (ops === 0) return;
-    await batch.commit();
-    batch = db.batch();
-    ops = 0;
-  };
-  /* eslint-disable @typescript-eslint/naming-convention */
-  batch.update(db.collection("budgets").doc(budget.id!), {
-    amount: new_budget_amount,
-    remaining: new_budget_amount - (budget.spent || 0),
-    updatedAt: now,
-  });
-  ops++;
-  const touched = new Set<string>();
-  for (const d of docs) {
-    const changes: DocData = {};
-    const ends_on_or_after = ms_of(d.data.periodEnd) >= edited_start_day_ms;
-    if (ends_on_or_after && (d.data.modifiedAmount != null || d.data.isModified === true)) {
-      changes.modifiedAmount = FieldValue.delete();
-      changes.isModified = false;
-    }
-    const adjustments = stored_adjustments(d.data);
-    const kept = adjustments.filter((a) => !cleared_pids.has(a.periodId));
-    if (kept.length !== adjustments.length) {
-      changes.periodAdjustments = kept.length > 0 ? kept : FieldValue.delete();
-    }
-    const pid = String(d.data.periodId ?? "");
-    if (d.data.hasPeriodAdjustment === true && (ends_on_or_after || cleared_pids.has(pid))) {
-      changes.hasPeriodAdjustment = false;
-    }
-    const after: DocData = { ...d.data };
-    if ("modifiedAmount" in changes) {
-      delete after.modifiedAmount;
-      after.isModified = false;
-    }
-    if ("periodAdjustments" in changes) after.periodAdjustments = kept;
-    post.set(d.ref.id, after);
-    if (Object.keys(changes).length === 0) continue;
-    batch.update(d.ref, { ...changes, updatedAt: now });
-    touched.add(d.ref.id);
-    if (++ops >= 450) await flush();
-  }
-  /* eslint-enable @typescript-eslint/naming-convention */
-  await flush();
-
-  // 2. Re-allocate with the shared domain rule. Cutoff = the earliest of today, the edited
-  //    period's start and the start of ITS month: the page spreads each monthly home evenly over
-  //    its days, so every prime feeding the edited period's month (e.g. this month's weeks that
-  //    already ended) must take the new amount or the edited period shows a blend.
-  //    (process_budget_updated uses start of today; this callable doesn't enqueue it — the
-  //    budget doc write only bumps the derive version via on_budget_written.)
-  const s = new Date(edited_start_day_ms);
-  const month_start_ms = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1);
+  const sd = new Date(edited_start_day_ms);
+  const month_start_ms = Date.UTC(sd.getUTCFullYear(), sd.getUTCMonth(), 1);
+  // Cutoff = the earlier of today and the start of the edited period's month: the page spreads
+  // each monthly home evenly over its days, so every prime feeding the edited period's month
+  // (e.g. this month's weeks that already ended) must take the new amount or the edited period
+  // shows a blend. (The budget write below only bumps the derive version via on_budget_written;
+  // process_budget_updated is not enqueued by this callable.)
   const cutoff = Timestamp.fromMillis(Math.min(today_utc_ms(), month_start_ms));
-  const computed = compute_reallocated_periods({
-    new_amount: new_budget_amount,
-    budget_cadence: budget_cadence_to_instance(cadence as BudgetPeriodType),
-    cutoff,
-    periods: docs.map((d) => ({
-      id: d.ref.id,
-      period_id: String(d.data.periodId ?? ""),
-      period_type: d.data.periodType as PeriodInstanceType,
-      start_date: d.data.periodStart as Timestamp,
-      end_date: d.data.periodEnd as Timestamp,
-      spent: (d.data.spent as number | undefined) ?? 0,
-      rolled_over_amount: (d.data.rolledOverAmount as number | undefined) ?? 0,
-      daily_rate: (d.data.dailyRate as number | undefined) ?? 0,
-    })),
-  });
-  if (computed.validation_errors) {
-    throw new HttpsError("invalid-argument", computed.validation_errors.join("; "));
-  }
-  // `remaining` honours whatever override / adjustments a period still keeps (those that ended
-  // before the edited period).
-  const updates = (computed.entities ?? []).map((u) => {
-    const after = post.get(u.id) ?? {};
+  const budget_ref = db.collection("budgets").doc(budget_id);
+  const periods_query = db.collection(COLLECTION).where("budgetId", "==", budget_id);
+
+  return db.runTransaction(async (tx) => {
+    const budget_snap = await tx.get(budget_ref);
+    const snap = await tx.get(periods_query);
+    if (!budget_snap.exists) throw new HttpsError("not-found", "Parent budget not found");
+    const budget = budget_snap.data() as DocData;
+    const cadence = String(budget.period || "monthly").toLowerCase();
+    const share = page_share(start_ms, period.periodEnd.toMillis(), cadence);
+    const new_budget_amount = share > 0 ? round2(new_amount / share) : new_amount;
+    console.log(
+      `[updateBudgetPeriodAmount] All Periods Forward ${period.periodId}: share ` +
+      `${share.toFixed(6)} → budget $${budget.amount} → $${new_budget_amount}`
+    );
+
+    // Every period whose adjustment reaches the edited period's month.
+    const cleared_pids = new Set<string>();
+    for (const d of snap.docs) {
+      for (const a of stored_adjustments(d.data())) {
+        if (a.endMs >= month_start_ms) cleared_pids.add(a.periodId);
+      }
+    }
+
+    // 1. The clears — per doc, only the fields that change; `after` = the doc once cleared.
+    const changes = new Map<string, DocData>();
+    const after = new Map<string, DocData>();
+    const change = (id: string, fields: DocData): void => {
+      changes.set(id, { ...(changes.get(id) ?? {}), ...fields });
+    };
     /* eslint-disable @typescript-eslint/naming-convention */
-    const remaining = remaining_after(after, {
-      allocatedAmount: u.allocated_amount,
-      isPrime: u.is_prime ?? after.isPrime,
-    });
+    for (const d of snap.docs) {
+      const data = d.data();
+      const next: DocData = { ...data };
+      const in_or_after_month = ms_of(data.periodEnd) >= month_start_ms;
+      if (in_or_after_month && (data.modifiedAmount != null || data.isModified === true)) {
+        change(d.id, { modifiedAmount: FieldValue.delete(), isModified: false });
+        delete next.modifiedAmount;
+        next.isModified = false;
+      }
+      const adjustments = stored_adjustments(data);
+      const kept = adjustments.filter((a) => !cleared_pids.has(a.periodId));
+      if (kept.length !== adjustments.length) {
+        change(d.id, { periodAdjustments: kept.length > 0 ? kept : FieldValue.delete() });
+        next.periodAdjustments = kept;
+      }
+      const pid = String(data.periodId ?? "");
+      if (data.hasPeriodAdjustment === true && (in_or_after_month || cleared_pids.has(pid))) {
+        change(d.id, { hasPeriodAdjustment: false });
+      }
+      after.set(d.id, next);
+    }
     /* eslint-enable @typescript-eslint/naming-convention */
-    touched.add(u.id);
-    return { ...u, remaining };
+
+    // 2. Re-allocate with the shared domain rule, rebasing the adjustments that remain.
+    const computed = compute_reallocated_periods({
+      new_amount: new_budget_amount,
+      budget_cadence: budget_cadence_to_instance(cadence as BudgetPeriodType),
+      cutoff,
+      periods: snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          period_id: String(data.periodId ?? ""),
+          period_type: data.periodType as PeriodInstanceType,
+          start_date: data.periodStart as Timestamp,
+          end_date: data.periodEnd as Timestamp,
+          spent: (data.spent as number | undefined) ?? 0,
+          rolled_over_amount: (data.rolledOverAmount as number | undefined) ?? 0,
+          daily_rate: (data.dailyRate as number | undefined) ?? 0,
+        };
+      }),
+    });
+    if (computed.validation_errors) {
+      throw new HttpsError("invalid-argument", computed.validation_errors.join("; "));
+    }
+    const updates = rebase_reallocated_periods(
+      snap.docs.map((d) => {
+        const data = after.get(d.id)!;
+        return {
+          id: d.id,
+          start_ms: ms_of(data.periodStart),
+          end_ms: ms_of(data.periodEnd),
+          override: direct_period_override(data),
+          allocated_amount: (data.allocatedAmount as number | undefined) ?? 0,
+          adjustments: to_monthly_for_derivation(data, "").adjustments ?? [],
+          rolled_over_amount: (data.rolledOverAmount as number | undefined) ?? 0,
+          spent: (data.spent as number | undefined) ?? 0,
+        };
+      }),
+      computed.entities ?? []
+    );
+    const now = Timestamp.now();
+    for (const u of updates) change(u.id, allocation_update_fields(u, now));
+
+    // 3. Write: the budget's new normal amount + each changed period, atomically.
+    /* eslint-disable @typescript-eslint/naming-convention */
+    tx.update(budget_ref, {
+      amount: new_budget_amount,
+      remaining: new_budget_amount - ((budget.spent as number | undefined) || 0),
+      updatedAt: now,
+    });
+    for (const d of snap.docs) {
+      const fields = changes.get(d.id);
+      if (fields) tx.update(d.ref, { ...fields, updatedAt: now });
+    }
+    /* eslint-enable @typescript-eslint/naming-convention */
+    return changes.size;
   });
-  await budget_period_repo.update_allocations(create_trace_context(false), updates);
-  return touched.size;
 }

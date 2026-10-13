@@ -147,3 +147,79 @@ export function split_adjustment_by_month(
     };
   });
 }
+
+/**
+ * Keep the user's custom periods ABSOLUTE when a monthly doc's BASE allocation changes (a budget
+ * amount change re-allocates the month). An adjustment is a delta on top of the month's
+ * pro-rated base, so without this the page amount of its range would drift with the base. Each
+ * adjustment (clipped to the month) is rebased so the page shows the same figure for its range:
+ *
+ *   amount' = round2(amount + round2(old_base × d ÷ D) − round2(new_base × d ÷ D))
+ *
+ * (d = the adjustment's days inside the month, D = the month's days; rounding each pro-rated
+ * term the way the page does keeps a single-month period exact to the cent). `old_base` /
+ * `new_base` are the doc's base as the page reads it (legacy override ?? allocation). PURE.
+ */
+export function rebase_adjustments(
+  adjustments: PeriodAdjustment[],
+  old_base: number,
+  new_base: number,
+  month_start_ms: number,
+  month_end_ms: number
+): PeriodAdjustment[] {
+  if (old_base === new_base) return adjustments;
+  const month_days = days_inclusive(month_start_ms, month_end_ms);
+  if (month_days <= 0) return adjustments;
+  return adjustments.map((adj) => {
+    const d = overlap_days(adj.start_ms, adj.end_ms, month_start_ms, month_end_ms);
+    if (d === 0) return adj;
+    const shift =
+      round2((old_base * d) / month_days) - round2((new_base * d) / month_days);
+    return { ...adj, amount: round2(adj.amount + shift) };
+  });
+}
+
+/** An existing period as a re-allocation's adjustment rebase needs it. */
+export interface PeriodForRebase {
+  id: string;
+  start_ms: number;
+  end_ms: number;
+  /** The legacy direct override the page reads (direct_period_override), else null. */
+  override: number | null;
+  /** The stored allocation BEFORE the re-allocation. */
+  allocated_amount: number;
+  adjustments: PeriodAdjustment[];
+  rolled_over_amount: number;
+  spent: number;
+}
+
+/**
+ * Apply `rebase_adjustments` to a re-allocation's updates (`compute_reallocated_periods`
+ * output): each updated period carrying adjustments gets `period_adjustments` rebased from its
+ * old base to its new one, and every update's `remaining` is the page's amount
+ * (override ?? allocation + adjustments) + rollover − spent. Used by BOTH re-allocation paths
+ * (update_budget → process_budget_updated, and "All Periods Forward"). PURE.
+ */
+export function rebase_reallocated_periods<
+  U extends { id: string; allocated_amount: number; remaining: number },
+>(
+  periods: PeriodForRebase[],
+  updates: U[]
+): Array<U & { period_adjustments?: PeriodAdjustment[] }> {
+  const by_id = new Map(periods.map((p) => [p.id, p]));
+  return updates.map((u) => {
+    const p = by_id.get(u.id);
+    if (!p) return u;
+    const old_base = p.override ?? p.allocated_amount;
+    const new_base = p.override ?? u.allocated_amount;
+    const adjustments =
+      p.adjustments.length > 0
+        ? rebase_adjustments(p.adjustments, old_base, new_base, p.start_ms, p.end_ms)
+        : p.adjustments;
+    const adj_total = adjustments.reduce((s, a) => s + a.amount, 0);
+    const remaining = round2(new_base + adj_total + p.rolled_over_amount - p.spent);
+    return p.adjustments.length > 0
+      ? { ...u, remaining, period_adjustments: adjustments }
+      : { ...u, remaining };
+  });
+}

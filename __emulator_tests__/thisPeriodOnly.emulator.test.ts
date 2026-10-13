@@ -21,6 +21,7 @@ const db = admin.firestore();
 
 import { derive_period_orchestrator } from "../src/functions/orchestrators/periods/derive_period.orchestrator";
 import { process_budget_created_orchestrator } from "../src/functions/orchestrators/budgets/process_budget_created.orchestrator";
+import { process_budget_updated_orchestrator } from "../src/functions/orchestrators/budgets/process_budget_updated.orchestrator";
 import { budget_cadence_to_instance } from "../src/functions/domain/budgets/period_generation.service";
 import { page_share } from "../src/functions/domain/budgets/period_share.service";
 import { updateBudgetPeriodAmount } from "../src/functions/budgets/api/periods/updateBudgetPeriodAmount";
@@ -227,6 +228,74 @@ describe("This Period Only / Reset / All Periods Forward on the period page (emu
       });
     }
   }
+
+  // Custom periods stay ABSOLUTE across re-allocation (adjustments are rebased, not left as
+  // stale deltas): All Periods Forward on a LATER month, then an update_budget amount change.
+  for (const c of CADENCES) {
+    it(`${c.period} budget — a custom November week keeps its amount through later re-allocations`, async () => {
+      const B = `tp_rebase_${c.period}_${RUN}`;
+      await create_budget(B, c.period, c.amount, START, GEN_END);
+      const NOV_WEEK = `${Y}W46`; // Nov 9–15, inside November
+      const STRADDLE = `${Y}W44`; // Oct 26 – Nov 1, across two months
+      await edit({ budgetPeriodId: `${B}_${NOV_WEEK}`, newAmount: 5, cascadeScope: "this_period" });
+      await edit({ budgetPeriodId: `${B}_${STRADDLE}`, newAmount: 42.42, cascadeScope: "this_period" });
+      const week = async (pid: string) => (await page(B, WIN.lo, WIN.hi)).weekly.get(pid)!.amount;
+      expect(cents(await week(NOV_WEEK))).toBe(500);
+
+      // All Periods Forward on December: November (re-allocated, before the edited month) keeps
+      // its custom weeks — rebased, not cleared.
+      await edit({ budgetPeriodId: `${B}_${Y}M12`, newAmount: 777, cascadeScope: "all_forward" });
+      expect(cents(await week(NOV_WEEK))).toBe(500);
+      expect(Math.abs((await week(STRADDLE)) - 42.42)).toBeLessThanOrEqual(0.01);
+      // (A weekly budget's December home is short here — its weeks are generated only through
+      // Dec 27 to stay clear of the year-boundary week — so December is checked for the others.)
+      if (c.period !== "weekly") {
+        const dec = (await page(B, WIN.lo, end_of(utc(Y, 12, 31)))).monthly.get(`${Y}M12`)!.amount;
+        expect(Math.abs(dec - 777)).toBeLessThanOrEqual(0.005 * page_share(utc(Y, 12, 1),
+          end_of(utc(Y, 12, 31)), c.period) + 0.011);
+      }
+
+      // update_budget amount change → process_budget_updated re-allocates (cutoff today).
+      const amount = Math.round(c.amount * 1.37 * 100) / 100;
+      await db.collection("budgets").doc(B).update({ amount });
+      await process_budget_updated_orchestrator(t(), {
+        budget_id: B, user_id: U, group_ids: [], budget_name: B, category_ids: [],
+        amount, cadence: budget_cadence_to_instance(c.period), start_ms: START,
+        generation_end_ms: GEN_END, is_recurring: true, added_claims: [],
+        released_category_ids: [], everything_else_budget_id: null, range_changed: false,
+        regenerate_periods: true, name_changed: false,
+      });
+      expect(cents(await week(NOV_WEEK))).toBe(500);
+      expect(Math.abs((await week(STRADDLE)) - 42.42)).toBeLessThanOrEqual(0.01);
+      // …and the stored remaining agrees with THE amount rule on the November doc.
+      const nov = (await db.collection("budget_periods").doc(`${B}_${Y}M11`).get()).data()!;
+      const adj = (nov.periodAdjustments as Array<{ amount: number }>).reduce((x, a) => x + a.amount, 0);
+      expect(nov.remaining).toBeCloseTo(nov.allocatedAmount + adj + (nov.rolledOverAmount ?? 0)
+        - (nov.spent ?? 0), 2);
+    });
+  }
+
+  it("All Periods Forward clears the custom periods from the edited month on (forward = reset)", async () => {
+    const B = `tp_afpclear_${RUN}`;
+    await create_budget(B, "monthly", 400, START, GEN_END);
+    await edit({ budgetPeriodId: `${B}_${Y}W41`, newAmount: 9, cascadeScope: "this_period" }); // Oct 5–11
+    await edit({ budgetPeriodId: `${B}_${Y}W44`, newAmount: 9, cascadeScope: "this_period" }); // Oct 26–Nov 1
+    await edit({ budgetPeriodId: `${B}_${Y}W38`, newAmount: 9, cascadeScope: "this_period" }); // Sep 14–20
+    // All Periods Forward from a LATER October week clears every October custom period (and both
+    // parts of the straddling one) but keeps — rebased — September's.
+    await edit({ budgetPeriodId: `${B}_${Y}W43`, newAmount: 70, cascadeScope: "all_forward" });
+    const p = await page(B, WIN.lo, WIN.hi);
+    expect(cents(p.weekly.get(`${Y}W38`)!.amount)).toBe(900);
+    const budget = (await db.collection("budgets").doc(B).get()).data()!;
+    expect(cents(p.weekly.get(`${Y}W41`)!.amount)).toBe(cents(budget.amount * 7 / 31));
+    for (const m of ["M10", "M11"]) {
+      const d = (await db.collection("budget_periods").doc(`${B}_${Y}${m}`).get()).data()!;
+      expect([m, d.periodAdjustments ?? []]).toEqual([m, []]);
+    }
+    const sep = (await db.collection("budget_periods").doc(`${B}_${Y}M09`).get()).data()!;
+    expect((sep.periodAdjustments as Array<{ periodId: string }>).map((a) => a.periodId))
+      .toEqual([`${Y}W38`]);
+  });
 
   it("a straddling week needs BOTH months' monthly docs (failed-precondition otherwise)", async () => {
     const B = `tp_missing_${RUN}`;

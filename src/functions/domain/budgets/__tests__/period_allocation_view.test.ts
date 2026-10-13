@@ -1,6 +1,8 @@
 import {
   bucket_allocation,
   MonthlyPeriodForDerivation,
+  rebase_adjustments,
+  rebase_reallocated_periods,
   split_adjustment_by_month,
 } from "../period_allocation_view.service";
 
@@ -70,5 +72,48 @@ describe("split_adjustment_by_month — cents-exact by overlap days", () => {
     const oct = { ...OCT, adjustments: [parts[1].adjustment] };
     expect(bucket_allocation([sep, oct], day("2031-09-28"), day("2031-10-04", true)).allocated)
       .toBe(80);
+  });
+});
+
+describe("rebase_adjustments — custom periods stay ABSOLUTE when the month's base changes", () => {
+  const week = { period_id: "2031W41", start_ms: day("2031-10-05"), end_ms: day("2031-10-11", true) };
+  it("the adjusted week shows the same amount before and after (to the cent)", () => {
+    for (const [from, to] of [[310, 620], [400, 123.45], [310, 0], [99.99, 1000]]) {
+      // week typed $5 under the old base: delta = 5 − round2(from × 7/31)
+      const adj = [{ ...week, amount: Math.round((5 - Math.round(from * 7 / 31 * 100) / 100) * 100) / 100 }];
+      const before = bucket_allocation([{ ...OCT, allocated_amount: from, adjustments: adj }],
+        week.start_ms, week.end_ms).allocated;
+      const rebased = rebase_adjustments(adj, from, to, OCT.start_ms, OCT.end_ms);
+      const after = bucket_allocation([{ ...OCT, allocated_amount: to, adjustments: rebased }],
+        week.start_ms, week.end_ms).allocated;
+      expect([from, to, before, after]).toEqual([from, to, 5, 5]);
+    }
+  });
+  it("a whole-month adjustment keeps the month absolute; unchanged base → untouched", () => {
+    const month = [{ period_id: "2031M10", start_ms: OCT.start_ms, end_ms: OCT.end_ms, amount: -10 }];
+    expect(rebase_adjustments(month, 310, 400, OCT.start_ms, OCT.end_ms)[0].amount).toBe(-100);
+    expect(rebase_adjustments(month, 310, 310, OCT.start_ms, OCT.end_ms)).toBe(month);
+  });
+});
+
+describe("rebase_reallocated_periods — both re-allocation paths", () => {
+  const adj = { period_id: "2031W41", start_ms: day("2031-10-05"), end_ms: day("2031-10-11", true), amount: -65 };
+  const period = {
+    id: "m10", start_ms: OCT.start_ms, end_ms: OCT.end_ms, override: null, allocated_amount: 310,
+    adjustments: [adj], rolled_over_amount: 10, spent: 20,
+  };
+  it("rebases a re-allocated month's adjustments and sets remaining by THE amount rule", () => {
+    const [u] = rebase_reallocated_periods([period], [{ id: "m10", allocated_amount: 620, remaining: 0 }]);
+    expect(u.period_adjustments![0].amount).toBe(-135); // −65 + 70 − 140
+    expect(u.remaining).toBe(620 - 135 + 10 - 20);
+  });
+  it("a legacy override keeps the base (no rebase); a period without adjustments gets none", () => {
+    const [u] = rebase_reallocated_periods([{ ...period, override: 300 }],
+      [{ id: "m10", allocated_amount: 620, remaining: 0 }]);
+    expect(u.period_adjustments![0].amount).toBe(-65);
+    expect(u.remaining).toBe(300 - 65 + 10 - 20);
+    const [v] = rebase_reallocated_periods([{ ...period, adjustments: [] }],
+      [{ id: "m10", allocated_amount: 620, remaining: 0 }]);
+    expect(v.period_adjustments).toBeUndefined();
   });
 });

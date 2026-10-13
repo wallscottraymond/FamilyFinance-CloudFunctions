@@ -15,7 +15,7 @@ import {
   direct_period_override,
   period_allocation,
 } from "../domain/budgets/period_override.service";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   TraceContext,
   WriteResult,
@@ -134,6 +134,75 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
     created_at: doc.createdAt ?? doc.updatedAt ?? Timestamp.now(),
     updated_at: doc.updatedAt ?? Timestamp.now(),
   };
+}
+
+/** One re-allocated period's allocation update (input of `allocation_update_fields`). */
+export interface AllocationUpdate {
+  id: string;
+  allocated_amount: number;
+  daily_rate: number;
+  remaining: number;
+  is_prime?: boolean;
+  prime_period_ids?: string[];
+  prime_period_breakdown?: BudgetPeriodEntity["prime_period_breakdown"];
+  /**
+   * Rebased "This Period Only" adjustments (domain rebase_reallocated_periods), written in the
+   * SAME write as the allocation so a custom period stays what the user typed. Omitted → the
+   * stored adjustments are left untouched.
+   */
+  period_adjustments?: PeriodAdjustment[];
+}
+
+/**
+ * The Firestore fields of one allocation update — shared by `update_allocations` (batch) and
+ * "All Periods Forward" (its transaction), so both write the identical shape.
+ */
+export function allocation_update_fields(
+  u: AllocationUpdate,
+  now: Timestamp
+): Record<string, unknown> {
+  /* eslint-disable @typescript-eslint/naming-convention */
+  const update_data: Record<string, unknown> = {
+    allocatedAmount: u.allocated_amount,
+    originalAmount: u.allocated_amount,
+    remaining: u.remaining,
+    dailyRate: u.daily_rate,
+    lastCalculated: now,
+    updatedAt: now,
+  };
+  // Refresh the prime/non-prime overlap breakdown when recomputed, so it
+  // stays consistent with the new amount (kept off the document when the
+  // caller doesn't supply it, to avoid clobbering existing values).
+  if (u.is_prime !== undefined) {
+    update_data.isPrime = u.is_prime;
+  }
+  if (u.prime_period_ids !== undefined) {
+    update_data.primePeriodIds = u.prime_period_ids;
+  }
+  if (u.period_adjustments !== undefined) {
+    update_data.periodAdjustments =
+      u.period_adjustments.length > 0
+        ? u.period_adjustments.map((a) => ({
+          periodId: a.period_id,
+          startMs: a.start_ms,
+          endMs: a.end_ms,
+          amount: a.amount,
+        }))
+        : FieldValue.delete();
+  }
+  if (u.prime_period_breakdown !== undefined) {
+    update_data.primePeriodBreakdown = u.prime_period_breakdown.map((b) => ({
+      primePeriodId: b.prime_period_id,
+      sourcePeriodId: b.source_period_id,
+      daysContributed: b.days_contributed,
+      dailyRate: b.daily_rate,
+      amountContributed: b.amount_contributed,
+      overlapStart: b.overlap_start,
+      overlapEnd: b.overlap_end,
+    }));
+  }
+  /* eslint-enable @typescript-eslint/naming-convention */
+  return update_data;
 }
 
 /**
@@ -477,15 +546,7 @@ export const budget_period_repo = {
    */
   async update_allocations(
     _ctx: TraceContext,
-    updates: Array<{
-      id: string;
-      allocated_amount: number;
-      daily_rate: number;
-      remaining: number;
-      is_prime?: boolean;
-      prime_period_ids?: string[];
-      prime_period_breakdown?: BudgetPeriodEntity["prime_period_breakdown"];
-    }>
+    updates: AllocationUpdate[]
   ): Promise<WriteResult[]> {
     if (updates.length === 0) {
       return [];
@@ -498,36 +559,7 @@ export const budget_period_repo = {
     for (const chunk of chunks) {
       const batch = db.batch();
       for (const u of chunk) {
-        /* eslint-disable @typescript-eslint/naming-convention */
-        const update_data: Record<string, unknown> = {
-          allocatedAmount: u.allocated_amount,
-          originalAmount: u.allocated_amount,
-          remaining: u.remaining,
-          dailyRate: u.daily_rate,
-          lastCalculated: now,
-          updatedAt: now,
-        };
-        // Refresh the prime/non-prime overlap breakdown when recomputed, so it
-        // stays consistent with the new amount (kept off the document when the
-        // caller doesn't supply it, to avoid clobbering existing values).
-        if (u.is_prime !== undefined) {
-          update_data.isPrime = u.is_prime;
-        }
-        if (u.prime_period_ids !== undefined) {
-          update_data.primePeriodIds = u.prime_period_ids;
-        }
-        if (u.prime_period_breakdown !== undefined) {
-          update_data.primePeriodBreakdown = u.prime_period_breakdown.map((b) => ({
-            primePeriodId: b.prime_period_id,
-            sourcePeriodId: b.source_period_id,
-            daysContributed: b.days_contributed,
-            dailyRate: b.daily_rate,
-            amountContributed: b.amount_contributed,
-            overlapStart: b.overlap_start,
-            overlapEnd: b.overlap_end,
-          }));
-        }
-        /* eslint-enable @typescript-eslint/naming-convention */
+        const update_data = allocation_update_fields(u, now);
         batch.update(db.collection(COLLECTION).doc(u.id), update_data);
         results.push(
           create_write_result("budget_period", u.id, "merge", { id: u.id }, update_data)

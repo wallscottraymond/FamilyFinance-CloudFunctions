@@ -283,6 +283,17 @@ export async function syncModifiedAmountToOverlappingPeriods(
       const periodStart = period.periodStart.toDate();
       const periodEnd = period.periodEnd.toDate();
 
+      // CLEARING (the source's override was removed): only undo the copies THIS source pasted.
+      // Never touch another period's own DIRECT override (e.g. the monthly doc's own "This
+      // Period Only" amount) — that's not a copy and isn't this source's to remove.
+      const clearing = newModifiedAmount === undefined || newModifiedAmount === null;
+      const is_our_copy =
+        (period as unknown as { modifiedAmountSyncedFrom?: string }).modifiedAmountSyncedFrom ===
+        sourcePeriod.id;
+      if (clearing && !is_our_copy) {
+        continue;
+      }
+
       if (periodsOverlap(sourceStart, sourceEnd, periodStart, periodEnd)) {
         const updates: any = {
           // A cleared override (null / undefined) leaves the copy NOT modified.

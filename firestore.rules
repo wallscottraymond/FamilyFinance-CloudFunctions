@@ -1248,8 +1248,9 @@ service cloud.firestore {
       // Allow updates to user-modifiable fields for budget periods
       let allowedFields = [
         'userNotes',           // User notes
-        'modifiedAmount',      // Modified budget amount
-        'isModified',          // Modification flag
+        // NOT modifiedAmount / isModified / periodAdjustments / hasPeriodAdjustment: amounts change
+        // only through the updateBudgetPeriodAmount callable (This Period Only / Reset / All
+        // Periods Forward), which keeps the period page consistent.
         'isActive',            // Active/inactive status
         'lastModifiedBy',      // Who modified it
         'lastModifiedAt',      // When modified

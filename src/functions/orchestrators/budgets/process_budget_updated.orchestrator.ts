@@ -26,6 +26,7 @@ import {
   compute_budget_periods,
   compute_reallocated_periods,
 } from "../../domain/budgets/period_generation.service";
+import { rebase_reallocated_periods } from "../../domain/budgets/period_allocation_view.service";
 import { reassign_view, REHOME_BACK_MS } from "../sharing/view_reassign";
 import { ProcessBudgetUpdatedPayload } from "../../types/budgets/update_budget.types";
 
@@ -160,7 +161,24 @@ async function reallocate_periods(
     })),
   });
 
-  const updates = computed.entities ?? [];
+  // Custom "This Period Only" periods stay ABSOLUTE: their adjustments are rebased from each
+  // month's old base to its new one, written with the allocation (same batch). Not transactional
+  // (a background job over many docs): a This Period Only landing between the read above and
+  // this write on the SAME monthly doc would be overwritten — a narrow window, accepted here.
+  // The (now idempotent) job can simply be re-run.
+  const updates = rebase_reallocated_periods(
+    existing.map((p) => ({
+      id: p.id,
+      start_ms: p.start_date.toMillis(),
+      end_ms: p.end_date.toMillis(),
+      override: p.modified_amount ?? null,
+      allocated_amount: p.allocated_amount,
+      adjustments: p.period_adjustments ?? [],
+      rolled_over_amount: p.rolled_over_amount,
+      spent: p.spent,
+    })),
+    computed.entities ?? []
+  );
   if (updates.length === 0) {
     return;
   }
