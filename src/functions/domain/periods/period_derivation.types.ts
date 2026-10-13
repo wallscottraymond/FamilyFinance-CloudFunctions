@@ -15,6 +15,7 @@ import { BudgetForMatch } from "../transactions/match_budget.service";
 import { PlacementBucket } from "../recurring/occurrence_placement.service";
 import { ActualPayment } from "../recurring/reconcile_occurrences.service";
 import { RemovalInterval } from "../recurring/recurring_suppression.service";
+import { ManualSettledOccurrences } from "../recurring/manual_settlement.service";
 import { DepositForSlot } from "../recurring/income_slot_amounts";
 import { RecurringScheduleForGeneration } from "../outflows/outflow_period.service";
 
@@ -46,6 +47,9 @@ export interface RecurringForDerivation {
   /** INCOME only: per-occurrence expected overrides keyed by UTC due-date `YYYY-MM-DD`.
    *  Wins over the per-slot auto-estimate AND the definition override, for that ONE occurrence. */
   occurrence_amount_overrides?: Record<string, number>;
+  /** "Mark as paid / received" marks keyed by UTC due date — applied after reconcile by the
+   *  shared rule (domain/recurring/manual_settlement): a real payment always wins. */
+  manual_settled_occurrences?: ManualSettledOccurrences;
   /** User remove/pause spans — occurrences in a suppressed period are dropped on read. */
   removal_intervals: RemovalInterval[];
   /** GROUP views only: the member whose account this bill/income is on (owner badge,

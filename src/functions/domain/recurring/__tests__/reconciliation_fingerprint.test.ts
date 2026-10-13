@@ -8,11 +8,12 @@ const result: ReconciliationResult = {
   status: 'complete',
   matched_amount: 15.49,
   pending_amount: 0,
+  manual_amount: 0,
   expected_amount: 15.49,
   occurrences_expected: 1,
   occurrences_paid: 1,
   has_pending: false,
-  occurrences: [{ due_date_ms: 1_760_000_000_000, paid: true, pending: false, transaction_id: 't1', amount: 15.49 }],
+  occurrences: [{ due_date_ms: 1_760_000_000_000, paid: true, pending: false, transaction_id: 't1', amount: 15.49, manual: false }],
   matched_splits: [{ transaction_id: 't1', split_id: 's1', amount: 15.49, is_pending: false, date_ms: 1 } as never],
 };
 

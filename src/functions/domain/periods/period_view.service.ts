@@ -22,12 +22,12 @@ import {
 } from "../budgets/everything_else_leftover.service";
 import { generate_expected_occurrences_in_window } from "../outflows/outflow_period.service";
 import type { ActualPayment } from "../recurring/reconcile_occurrences.service";
-import { estimate_slot_amounts } from "../recurring/income_slot_amounts";
 import {
   reconcile_occurrences,
   reconcile_income_occurrences,
-  ExpectedOccurrence,
 } from "../recurring/reconcile_occurrences.service";
+import { build_expected_occurrences } from "../recurring/expected_occurrences.service";
+import { apply_manual_settlements } from "../recurring/manual_settlement.service";
 import {
   place_occurrences,
   PlacedOccurrenceGroup,
@@ -97,50 +97,8 @@ export function compute_period_view(
   const bills: DerivedRecurringResult[] = [];
   const income: DerivedRecurringResult[] = [];
   for (const r of deps.recurring) {
-    // Both bills AND income generate EXPECTED occurrences from the schedule (freq +
-    // anchor) across the window — so a semi-monthly item yields 2/month and future
-    // months still show upcoming occurrences (income no longer projects just one).
-    let expected: ExpectedOccurrence[] = generate_expected_occurrences_in_window(
-      r.schedule,
-      deps.span_start_ms,
-      deps.span_end_ms
-    ).map((g) => ({
-      occurrence_id: `${r.id}_${g.due_date_ms}`,
-      recurring_id: r.id,
-      due_date_ms: g.due_date_ms,
-      amount_due: g.amount_due,
-    }));
-    // INCOME per-slot amounts: give each occurrence its OWN slot's recent-average amount
-    // (mid-month vs end-of-month) from history, instead of the single blended stream average.
-    // Received occurrences still use the ACTUAL deposit (in reconcile); this sets the amount
-    // shown for OUTSTANDING occurrences.
-    // SKIP when the user set an explicit expected-amount override ("this + future") — an
-    // explicit override MUST win over the auto slot-estimate, otherwise editing the expected
-    // does nothing for multi-occurrence income (its amount_due already carries the override).
-    if (r.kind === "inflow" && !r.has_amount_override && (r.payment_history?.length ?? 0) > 0) {
-      const occ_days = expected.map((e) => new Date(e.due_date_ms).getUTCDate());
-      const slot_amounts = estimate_slot_amounts(occ_days, r.payment_history!);
-      if (slot_amounts.size > 0) {
-        expected = expected.map((e) => {
-          const day = new Date(e.due_date_ms).getUTCDate();
-          const amt = slot_amounts.get(day);
-          return amt != null ? { ...e, amount_due: amt } : e;
-        });
-      }
-    }
-    // Per-occurrence MANUAL override wins over everything (slot estimate + definition
-    // override): if the user set an amount for a specific occurrence — keyed by its UTC
-    // due-date `YYYY-MM-DD` — use it. Outstanding occurrences only; received ones show the
-    // actual deposit via reconcile below. Lets the user edit one check at a time (e.g. just
-    // the Sep 30 commission) without moving the others.
-    const occ_overrides = r.occurrence_amount_overrides;
-    if (r.kind === "inflow" && occ_overrides && Object.keys(occ_overrides).length > 0) {
-      expected = expected.map((e) => {
-        const key = new Date(e.due_date_ms).toISOString().slice(0, 10);
-        const amt = occ_overrides[key];
-        return amt != null ? { ...e, amount_due: amt } : e;
-      });
-    }
+    // Expected occurrences (due date + the amount the page expects) — the shared rule.
+    const expected = build_expected_occurrences(r, deps.span_start_ms, deps.span_end_ms);
     // Income reconciles those expected occurrences against ACTUAL Plaid deposits
     // (authoritative receipts, with extras surfaced); bills reconcile against linked
     // payments. Both then place into the view buckets identically.
@@ -157,7 +115,10 @@ export function compute_period_view(
           expected,
           resolve_pinned_payments(r.payments, r.schedule, deps.span_start_ms, deps.span_end_ms)
         );
-    const groups = place_occurrences(reconciled, deps.placement_buckets);
+    // "Mark as paid / received": an occurrence no real payment settled but the user marked is
+    // settled manually (the ONE rule stored reconcile applies too — never double-counted).
+    const settled = apply_manual_settlements(reconciled, r.manual_settled_occurrences);
+    const groups = place_occurrences(settled, deps.placement_buckets);
     // Suppress groups whose period is removed/paused for this item (per-period snap).
     const visible_groups = groups.filter((g) => {
       const end_ms = period_end_by_id.get(g.period_id);

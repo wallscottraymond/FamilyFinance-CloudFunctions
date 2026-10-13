@@ -32,6 +32,8 @@ export interface CanonicalOccurrence {
   amount_due: number;
   amount_paid: number;
   is_paid: boolean;
+  /** Settled by the user's "Mark as paid / received" (no transaction) — see manual_settlement. */
+  is_manual?: boolean;
 }
 
 /** A view's calendar bucket (a monthly / weekly / bi-weekly source period). */
@@ -65,9 +67,10 @@ export interface PlacedOccurrenceGroup {
   /**
    * Per-occurrence placement for calendar rendering — one entry per occurrence
    * placed in this period, so the client can draw each due day (not just the
-   * aggregate first/next). `paid` includes pending (pending counts as paid).
+   * aggregate first/next). `paid` includes pending (pending counts as paid). `manual` (present
+   * only when true) = settled by the user's "Mark as paid / received", not a transaction.
    */
-  occurrences: Array<{ due_ms: number; paid: boolean; amount: number }>;
+  occurrences: Array<{ due_ms: number; paid: boolean; amount: number; manual?: true }>;
   /** Earliest due date of any placed occurrence, epoch ms (null if none). */
   first_due_ms: number | null;
   /**
@@ -119,7 +122,7 @@ export function place_occurrences(
     let first_due_ms: number | null = null;
     let next_unpaid_due_ms: number | null = null;
     const occurrence_ids: string[] = [];
-    const placed_details: Array<{ due_ms: number; paid: boolean; amount: number }> = [];
+    const placed_details: PlacedOccurrenceGroup["occurrences"] = [];
     for (const o of placed) {
       occurrence_ids.push(o.occurrence_id);
       // A RECEIVED/paid occurrence shows the ACTUAL amount (the real deposit/payment — free
@@ -129,6 +132,7 @@ export function place_occurrences(
         due_ms: o.due_date_ms,
         paid: o.is_paid,
         amount: o.is_paid ? o.amount_paid : o.amount_due,
+        ...(o.is_manual ? { manual: true as const } : {}),
       });
       total_due += o.amount_due;
       total_paid += o.amount_paid;

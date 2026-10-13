@@ -28,6 +28,7 @@ import {
   splits_paying_recurring,
 } from "../../domain/recurring/stream_membership";
 import { fingerprint_stored } from "../../domain/recurring/reconciliation_fingerprint";
+import { ManualSettledOccurrences } from "../../domain/recurring/manual_settlement.service";
 
 export type RecurringType = "outflow" | "inflow";
 
@@ -60,6 +61,8 @@ export interface ResolvedLinkedSplit {
 export interface ResolvedReconciliation {
   periods: ResolvedReconciliationPeriod[];
   splits: ResolvedLinkedSplit[];
+  /** "Mark as paid / received" marks on the definition (applied by the shared rule). */
+  manual_marks: ManualSettledOccurrences;
 }
 
 export interface ResolveReconciliationInput {
@@ -106,7 +109,7 @@ export async function resolve_recurring_reconciliation(
     ? await outflow_repo.get_by_id(ctx, input.recurring_id, { include_deleted: true })
     : await inflow_repo.get_by_id(ctx, input.recurring_id, { include_deleted: true });
   if (!recurring) {
-    return { periods: [], splits: [] };
+    return { periods: [], splits: [], manual_marks: {} };
   }
   const transaction_ids: string[] = recurring.transaction_ids ?? [];
   const is_variable_amount = derive_is_variable_amount(recurring);
@@ -256,5 +259,5 @@ export async function resolve_recurring_reconciliation(
       `active_periods=${periods.length}, linked_splits=${splits.length}`
   );
 
-  return { periods, splits };
+  return { periods, splits, manual_marks: recurring.manual_settled_occurrences ?? {} };
 }

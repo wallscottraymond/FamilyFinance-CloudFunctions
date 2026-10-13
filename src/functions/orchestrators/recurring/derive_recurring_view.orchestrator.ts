@@ -44,6 +44,7 @@ import {
   PlacedOccurrenceGroup,
 } from "../../domain/recurring/occurrence_placement.service";
 import { PeriodInstanceType } from "../../domain/budgets";
+import { apply_manual_settlements } from "../../domain/recurring/manual_settlement.service";
 
 const BUDGET: PerformanceBudget = {
   max_reads: 60,
@@ -138,7 +139,9 @@ export async function derive_recurring_view_orchestrator(
     }));
 
     const reconciled = reconcile_occurrences(expected, deps.payments);
-    const groups = place_occurrences(reconciled, deps.buckets);
+    // "Mark as paid / received" (the shared rule — a real payment always wins).
+    const settled = apply_manual_settlements(reconciled, deps.manual_settled_occurrences);
+    const groups = place_occurrences(settled, deps.buckets);
 
     if (is_budget_exceeded(perf, BUDGET)) {
       console.warn(

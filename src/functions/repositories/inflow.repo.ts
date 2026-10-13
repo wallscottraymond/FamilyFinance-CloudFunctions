@@ -28,6 +28,12 @@ import {
 } from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
 import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
+import {
+  ManualSettledOccurrences,
+  ManualSettledOccurrencesDoc,
+  map_manual_settled_occurrences,
+  write_manual_settlement,
+} from "./manual_settlement_doc";
 
 /**
  * Firestore collection name.
@@ -105,6 +111,11 @@ export interface Inflow {
   // across Plaid re-sync.
   removed_by_user: boolean;
   removal_intervals: RemovalInterval[];
+
+  // "Mark as paid / received" marks keyed by UTC due date `YYYY-MM-DD` (a payment made outside
+  // the linked accounts). Applied on read by domain/recurring/manual_settlement — a real
+  // payment always wins. Preserved across Plaid re-sync. Absent/empty = none.
+  manual_settled_occurrences: ManualSettledOccurrences;
 
   // Sync tracking
   last_synced_at?: Timestamp;
@@ -185,6 +196,9 @@ interface LegacyInflowDoc {
   // User remove/pause state (preserved across Plaid re-sync, like isHidden).
   removedByUser?: boolean;
   removalIntervals?: RemovalIntervalDoc[];
+  // "Mark as paid / received" marks (see the entity field). Written only by the
+  // set_occurrence_settled callable; preserved across Plaid re-sync.
+  manualSettledOccurrences?: ManualSettledOccurrencesDoc;
 
   // Sync tracking
   lastSyncedAt?: Timestamp;
@@ -258,6 +272,7 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
 
     removed_by_user: doc.removedByUser ?? false,
     removal_intervals: map_removal_intervals(doc.removalIntervals),
+    manual_settled_occurrences: map_manual_settled_occurrences(doc.manualSettledOccurrences),
 
     last_synced_at: doc.lastSyncedAt,
   };
@@ -328,6 +343,11 @@ function map_persistence_to_doc(
     // Preserve user remove/pause state across re-sync (Plaid never sets these).
     removedByUser: existing?.removedByUser ?? false,
     removalIntervals: existing?.removalIntervals ?? [],
+    // Preserve "Mark as paid / received" marks across re-sync (Plaid never sets them). Only
+    // written when present, so a doc without marks is byte-identical (no rewrite fan-out).
+    ...(existing?.manualSettledOccurrences
+      ? { manualSettledOccurrences: existing.manualSettledOccurrences }
+      : {}),
 
     lastSyncedAt: now,
   };
@@ -454,6 +474,36 @@ export const inflow_repo = {
       `[${ctx.trace_id}] inflow_repo.apply_period_suppression ${id}: flipped ${flipped}/${snap.size} periods (user ${user_id})`
     );
     return flipped;
+  },
+
+  /**
+   * Set ("Mark as received") or clear (null) ONE occurrence's manual mark, keyed by its UTC
+   * due date `YYYY-MM-DD`, in a transaction. Only the `set_occurrence_settled` orchestrator
+   * calls this. Records an audit entry.
+   */
+  async set_manual_settlement(
+    ctx: TraceContext,
+    id: string,
+    date_key: string,
+    mark: { amount: number; marked_by: string } | null,
+    user_id: string
+  ): Promise<WriteResult> {
+    const { before, after } = await write_manual_settlement(COLLECTION, id, date_key, mark);
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const before_part = { manualSettledOccurrences: before };
+    const after_part = { manualSettledOccurrences: after };
+    /* eslint-enable @typescript-eslint/naming-convention */
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "recurring_inflow",
+      entity_id: id,
+      before: before_part,
+      after: after_part,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { operation: "set_manual_settlement", date_key } },
+    });
+    return create_write_result("inflow", id, "merge", before_part, after_part);
   },
 
   /**

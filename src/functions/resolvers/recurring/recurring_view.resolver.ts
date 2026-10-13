@@ -26,6 +26,7 @@ import { PeriodInstanceType } from "../../domain/budgets";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
+import { ManualSettledOccurrences } from "../../domain/recurring/manual_settlement.service";
 
 /** Which recurring stream: a bill (outflow) or income (inflow). */
 export type RecurringKind = "outflow" | "inflow";
@@ -36,9 +37,18 @@ export interface RecurringViewDeps {
   schedule: RecurringScheduleForGeneration;
   buckets: PlacementBucket[];
   payments: ActualPayment[];
+  /** "Mark as paid / received" marks on the definition (applied after reconcile). */
+  manual_settled_occurrences: ManualSettledOccurrences;
   /** The union span of the buckets (generation + payment fetch range), epoch ms. */
   span_start_ms: number;
   span_end_ms: number;
+}
+
+interface RecurringSource {
+  schedule: RecurringScheduleForGeneration;
+  name: string;
+  link_field: string;
+  manual_settled_occurrences: ManualSettledOccurrences;
 }
 
 /** Resolve the item's schedule + display name + split link field, or null. */
@@ -47,7 +57,7 @@ async function resolve_source(
   user_id: string,
   kind: RecurringKind,
   recurring_id: string
-): Promise<{ schedule: RecurringScheduleForGeneration; name: string; link_field: string } | null> {
+): Promise<RecurringSource | null> {
   if (kind === "outflow") {
     const o = await outflow_repo.get_by_id(ctx, recurring_id);
     if (!o || o.user_id !== user_id) {
@@ -64,6 +74,7 @@ async function resolve_source(
       },
       name: o.user_custom_name || o.merchant_name || o.description || "Bill",
       link_field: "outflowId",
+      manual_settled_occurrences: o.manual_settled_occurrences ?? {},
     };
   }
   const i = await inflow_repo.get_by_id(ctx, recurring_id);
@@ -81,6 +92,7 @@ async function resolve_source(
     },
     name: i.user_custom_name || i.payer_name || i.description || "Income",
     link_field: "inflowId",
+    manual_settled_occurrences: i.manual_settled_occurrences ?? {},
   };
 }
 
@@ -122,6 +134,7 @@ export async function resolve_recurring_view_deps(
       schedule: source.schedule,
       buckets: [],
       payments: [],
+      manual_settled_occurrences: source.manual_settled_occurrences,
       span_start_ms: window_start_ms,
       span_end_ms: window_end_ms,
     };
@@ -159,6 +172,7 @@ export async function resolve_recurring_view_deps(
     schedule: source.schedule,
     buckets,
     payments,
+    manual_settled_occurrences: source.manual_settled_occurrences,
     span_start_ms,
     span_end_ms,
   };

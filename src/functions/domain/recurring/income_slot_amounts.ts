@@ -75,3 +75,20 @@ export function estimate_slot_amounts(
   }
   return out;
 }
+
+/**
+ * A stored transaction (raw doc fields) → its deposit for slotting, or null when it isn't real
+ * income (a removed account's / superseded pending's `isActive=false`). Amount = |Σ splits|, else
+ * |amount|. Shared by the period page and "Mark as received" so both estimate from the same
+ * history. PURE.
+ */
+export function history_doc_to_deposit(d: Record<string, unknown>): DepositForSlot | null {
+  if (d.isActive === false) return null;
+  const splits = (d.splits as Array<{ amount?: number }>) ?? [];
+  const amount = Math.abs(
+    splits.reduce((s, sp) => s + (sp.amount ?? 0), 0) || (d.amount as number) || 0
+  );
+  const date = d.transactionDate as { toMillis?: () => number } | undefined;
+  if (!date || typeof date.toMillis !== "function") return null;
+  return { date_ms: date.toMillis(), amount };
+}

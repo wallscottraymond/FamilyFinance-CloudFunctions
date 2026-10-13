@@ -121,7 +121,9 @@ export async function reconcile_recurring_periods_orchestrator(
           amount_per_occurrence: p.amount_per_occurrence,
           occurrence_due_dates_ms: p.occurrence_due_dates_ms,
         },
-        by_period.get(p.period_id) ?? []
+        by_period.get(p.period_id) ?? [],
+        // "Mark as paid / received": occurrences no real payment settled but the user marked.
+        resolved.manual_marks
       )
     );
 

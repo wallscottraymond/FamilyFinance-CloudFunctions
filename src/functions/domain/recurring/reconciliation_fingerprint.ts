@@ -23,8 +23,10 @@ const ms = (v: unknown): number | null => {
 export function fingerprint_result(r: ReconciliationResult): string {
   return JSON.stringify([
     r.status, r2(r.matched_amount), r2(r.pending_amount), r2(r.expected_amount),
-    r.occurrences_expected, r.occurrences_paid, !!r.has_pending,
-    r.occurrences.map((o) => [o.due_date_ms, !!o.paid, !!o.pending, o.transaction_id ?? null, r2(o.amount)]),
+    r.occurrences_expected, r.occurrences_paid, !!r.has_pending, r2(r.manual_amount),
+    r.occurrences.map((o) => [
+      o.due_date_ms, !!o.paid, !!o.pending, o.transaction_id ?? null, r2(o.amount), !!o.manual,
+    ]),
     r.matched_splits.map((s) => [s.transaction_id, s.split_id, r2(s.amount), !!s.is_pending]),
   ]);
 }
@@ -37,8 +39,11 @@ export function fingerprint_stored(stored: unknown): string | null {
   const splits = (s.matchedSplits as Array<Record<string, unknown>> | undefined) ?? [];
   return JSON.stringify([
     s.status, r2(s.matchedAmount), r2(s.pendingAmount), r2(s.expectedAmount),
-    s.occurrencesExpected, s.occurrencesPaid, !!s.hasPending,
-    occ.map((o) => [ms(o.dueDate), !!o.paid, !!o.pending, (o.transactionId as string | null) ?? null, r2(o.amount)]),
+    s.occurrencesExpected, s.occurrencesPaid, !!s.hasPending, r2(s.manualAmount),
+    occ.map((o) => [
+      ms(o.dueDate), !!o.paid, !!o.pending, (o.transactionId as string | null) ?? null,
+      r2(o.amount), !!o.manual,
+    ]),
     splits.map((x) => [x.transactionId, x.splitId, r2(x.amount), !!x.isPending]),
   ]);
 }

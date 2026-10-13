@@ -65,7 +65,10 @@ import {
   is_split_on_stream,
   splits_paying_recurring,
 } from "../../domain/recurring/stream_membership";
-import { DepositForSlot } from "../../domain/recurring/income_slot_amounts";
+import {
+  DepositForSlot,
+  history_doc_to_deposit,
+} from "../../domain/recurring/income_slot_amounts";
 import { PeriodInstanceType } from "../../domain/budgets";
 import {
   DeriveScope,
@@ -568,6 +571,8 @@ export function shape_period_derivation_deps(
       // User remove/pause spans — filtered per period on read (not a blanket skip,
       // so past periods still show a going-forward/paused bill).
       removal_intervals: o.removal_intervals,
+      // "Mark as paid" marks (cash / unlinked-account payments) — applied after reconcile.
+      manual_settled_occurrences: o.manual_settled_occurrences,
       ...owner_of(o.user_id),
     });
     if (o.removal_intervals?.length) removal_by_id.set(o.id, o.removal_intervals);
@@ -605,6 +610,8 @@ export function shape_period_derivation_deps(
       occurrence_amount_overrides: i.occurrence_amount_overrides,
       // Income remove/pause spans — filtered per period on read, same as bills.
       removal_intervals: i.removal_intervals,
+      // "Mark as received" marks (income received outside linked accounts).
+      manual_settled_occurrences: i.manual_settled_occurrences,
       ...owner_of(i.user_id),
     });
     if (i.removal_intervals?.length) removal_by_id.set(i.id, i.removal_intervals);
@@ -846,16 +853,12 @@ export function shape_period_derivation_deps(
     const history_by_inflow = new Map<string, DepositForSlot[]>();
     for (const d of raw.inflow_history_docs) {
       // A removed account's / superseded pending's deposit isn't real income — not in the estimate.
-      if (d.isActive === false) continue;
+      const deposit = history_doc_to_deposit(d as unknown as Record<string, unknown>);
+      if (!deposit) continue;
       const inflow_id = inflow_tx_to_id.get(d.transactionId as string);
       if (!inflow_id) continue;
-      const splits = (d.splits as Array<{ amount?: number }>) ?? [];
-      const amount = Math.abs(
-        splits.reduce((s, sp) => s + (sp.amount ?? 0), 0) || (d.amount as number) || 0
-      );
-      const date_ms = (d.transactionDate as Timestamp).toMillis();
       const list = history_by_inflow.get(inflow_id) ?? [];
-      list.push({ date_ms, amount });
+      list.push(deposit);
       history_by_inflow.set(inflow_id, list);
     }
     for (const r of recurring) {

@@ -16,6 +16,10 @@
  */
 
 import { split_spend_status } from "../budgets/budget_spend.service";
+import {
+  ManualSettledOccurrences,
+  manual_settlement_amount,
+} from "./manual_settlement.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -195,6 +199,8 @@ export interface OccurrenceStatus {
   amount: number | null;
   /** True when this occurrence is satisfied ONLY by a still-pending payment. */
   pending: boolean;
+  /** Settled by the user's "Mark as paid / received" (no transaction; `amount` = the mark). */
+  manual: boolean;
 }
 
 export interface ReconciliationResult {
@@ -204,6 +210,8 @@ export interface ReconciliationResult {
   matched_amount: number;
   /** Pending-only amount (tracked separately; does NOT flip status). */
   pending_amount: number;
+  /** Amount settled by "Mark as paid / received" marks (occurrences no real payment settled). */
+  manual_amount: number;
   /** Recomputed = occurrences_expected × amount_per_occurrence (self-corrected). */
   expected_amount: number;
   /** Occurrences the period expects (self-corrected to its date range). */
@@ -241,7 +249,8 @@ const AMOUNT_EPSILON = 0.005;
  */
 export function compute_period_reconciliation(
   period: PeriodForReconciliation,
-  linked_splits: LinkedSplit[]
+  linked_splits: LinkedSplit[],
+  manual_marks?: ManualSettledOccurrences
 ): ReconciliationResult {
   // Self-correct: only occurrences within the period's own date range.
   let due = period.occurrence_due_dates_ms
@@ -307,10 +316,28 @@ export function compute_period_reconciliation(
   // An occurrence is paid when its net amount is positive (variable) or meets the
   // per-occurrence amount (fixed) — counting posted + pending. It's `pending` when
   // paid but its net came entirely from pending payments (no posted portion).
+  //
+  // "Mark as paid / received" (the shared rule — domain/recurring/manual_settlement): an
+  // occurrence that ANY real payment landed on is the payment's, the mark ignored; one with no
+  // real payment but a mark is settled manually by the mark's amount.
+  let manual_amount = 0;
   const occurrences: OccurrenceStatus[] = due.map((d, i) => {
     const paid = period.is_variable_amount
       ? occ_sum[i] > AMOUNT_EPSILON
       : occ_sum[i] >= period.amount_per_occurrence - AMOUNT_EPSILON;
+    const has_real_payment = paid || occ_txn[i] !== null || occ_pending_txn[i] !== null;
+    const manual = manual_settlement_amount(d, has_real_payment, manual_marks);
+    if (manual !== null) {
+      manual_amount += manual;
+      return {
+        due_date_ms: d,
+        paid: true,
+        transaction_id: null,
+        amount: manual,
+        pending: false,
+        manual: true,
+      };
+    }
     const posted_portion = occ_sum[i] - occ_pending_sum[i];
     const pending = paid && posted_portion <= AMOUNT_EPSILON && occ_pending_sum[i] > AMOUNT_EPSILON;
     return {
@@ -319,17 +346,18 @@ export function compute_period_reconciliation(
       transaction_id: occ_txn[i] ?? occ_pending_txn[i],
       amount: occ_txn[i] === null && occ_pending_txn[i] === null ? null : occ_sum[i],
       pending,
+      manual: false,
     };
   });
   const occurrences_paid = occurrences.filter((o) => o.paid).length;
   const has_pending = occurrences.some((o) => o.pending);
 
-  // Status counts pending toward paid, so use the COMBINED amount.
+  // Status counts pending (and manual marks) toward paid, so use the COMBINED amount.
   const status = compute_status({
     is_variable: period.is_variable_amount,
     occurrences_expected,
     occurrences_paid,
-    matched_amount: matched_amount + pending_amount,
+    matched_amount: matched_amount + pending_amount + manual_amount,
     expected_amount,
   });
 
@@ -338,6 +366,7 @@ export function compute_period_reconciliation(
     status,
     matched_amount,
     pending_amount,
+    manual_amount,
     expected_amount,
     occurrences_expected,
     occurrences_paid,

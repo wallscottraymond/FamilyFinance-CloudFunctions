@@ -599,13 +599,15 @@ export const inflow_period_repo = {
         const occurrences_unpaid = Math.max(0, r.occurrences_expected - r.occurrences_paid);
         // Count-but-flag-pending (see outflow_period.repo): pending receipts count
         // toward received + occurrences; `hasPending` flags them for the tile.
-        const counted_received = r.matched_amount + r.pending_amount;
+        // "Mark as received" marks count too (occurrences no real payment settled — shared rule).
+        const counted_received = r.matched_amount + r.pending_amount + r.manual_amount;
         /* eslint-disable @typescript-eslint/naming-convention */
         const update_data = {
           reconciliation: {
             status: r.status,
             matchedAmount: r.matched_amount,
             pendingAmount: r.pending_amount,
+            manualAmount: r.manual_amount,
             expectedAmount: r.expected_amount,
             occurrencesExpected: r.occurrences_expected,
             occurrencesPaid: r.occurrences_paid,
@@ -616,6 +618,7 @@ export const inflow_period_repo = {
               pending: o.pending,
               transactionId: o.transaction_id,
               amount: o.amount,
+              manual: o.manual,
             })),
             matchedSplits: r.matched_splits.map((s) => ({
               transactionId: s.transaction_id,

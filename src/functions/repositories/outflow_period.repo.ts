@@ -771,13 +771,15 @@ export const outflow_period_repo = {
         // occurrences (so the item doesn't look unpaid); `hasPending` flags that some
         // of it is still pending so the tile can mark it. Posted vs pending split is
         // kept in `reconciliation.matchedAmount` / `pendingAmount`.
-        const counted_paid = r.matched_amount + r.pending_amount;
+        // "Mark as paid" marks count too (occurrences no real payment settled — the shared rule).
+        const counted_paid = r.matched_amount + r.pending_amount + r.manual_amount;
         /* eslint-disable @typescript-eslint/naming-convention */
         const update_data = {
           reconciliation: {
             status: r.status,
             matchedAmount: r.matched_amount,
             pendingAmount: r.pending_amount,
+            manualAmount: r.manual_amount,
             expectedAmount: r.expected_amount,
             occurrencesExpected: r.occurrences_expected,
             occurrencesPaid: r.occurrences_paid,
@@ -788,6 +790,7 @@ export const outflow_period_repo = {
               pending: o.pending,
               transactionId: o.transaction_id,
               amount: o.amount,
+              manual: o.manual,
             })),
             matchedSplits: r.matched_splits.map((s) => ({
               transactionId: s.transaction_id,

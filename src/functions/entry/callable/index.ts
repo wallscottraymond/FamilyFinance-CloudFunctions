@@ -40,6 +40,8 @@ export { manage_recurring_outflow } from "./manage_recurring_outflow.entry";
 export { manage_recurring_inflow } from "./manage_recurring_inflow.entry";
 // Recovery screen: list currently removed/paused recurring items
 export { list_suppressed_recurring } from "./list_suppressed_recurring.entry";
+// "Mark as paid / received": settle ONE bill / income occurrence by hand (cash, unlinked account)
+export { set_occurrence_settled } from "./set_occurrence_settled.entry";
 
 // Derive-On-Read Period Architecture (Phase 3): bill/income view derivation
 export { derive_recurring_view } from "./derive_recurring_view.entry";
