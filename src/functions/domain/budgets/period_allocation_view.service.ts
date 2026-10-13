@@ -151,14 +151,20 @@ export function split_adjustment_by_month(
 /**
  * Keep the user's custom periods ABSOLUTE when a monthly doc's BASE allocation changes (a budget
  * amount change re-allocates the month). An adjustment is a delta on top of the month's
- * pro-rated base, so without this the page amount of its range would drift with the base. Each
- * adjustment (clipped to the month) is rebased so the page shows the same figure for its range:
+ * pro-rated base, so without this the page amount of its range would drift with the base. The
+ * adjustments are rebased so the page shows the same figure for EVERY custom range:
  *
- *   amount' = round2(amount + round2(old_base × d ÷ D) − round2(new_base × d ÷ D))
+ *  - an adjustment overlapping no other one (the usual case): shift by the base change over its
+ *    days, rounding each pro-rated term the way the page does (exact to the cent):
+ *      amount' = round2(amount + round2(old_base × d ÷ D) − round2(new_base × d ÷ D))
+ *  - adjustments that OVERLAP (a custom month + a custom week inside it, a half-month + a week):
+ *    each one's page figure includes the others' share of its days, so they're solved TOGETHER —
+ *    for each range i: Σ_j x_j · overlap(i, j) ÷ days(j) = Δ · days(i) ÷ D (x = the change in
+ *    amount, Δ = old_base − new_base). Shifting each independently would count the base change
+ *    twice on the overlap (a custom week inside a custom month would go negative).
  *
- * (d = the adjustment's days inside the month, D = the month's days; rounding each pro-rated
- * term the way the page does keeps a single-month period exact to the cent). `old_base` /
- * `new_base` are the doc's base as the page reads it (legacy override ?? allocation). PURE.
+ * (d = the adjustment's days inside the month, D = the month's days.) `old_base` / `new_base`
+ * are the doc's base as the page reads it (legacy override ?? allocation). PURE.
  */
 export function rebase_adjustments(
   adjustments: PeriodAdjustment[],
@@ -170,13 +176,83 @@ export function rebase_adjustments(
   if (old_base === new_base) return adjustments;
   const month_days = days_inclusive(month_start_ms, month_end_ms);
   if (month_days <= 0) return adjustments;
-  return adjustments.map((adj) => {
-    const d = overlap_days(adj.start_ms, adj.end_ms, month_start_ms, month_end_ms);
-    if (d === 0) return adj;
-    const shift =
-      round2((old_base * d) / month_days) - round2((new_base * d) / month_days);
-    return { ...adj, amount: round2(adj.amount + shift) };
-  });
+  const delta = old_base - new_base;
+  const in_month = (a: PeriodAdjustment): number =>
+    overlap_days(a.start_ms, a.end_ms, month_start_ms, month_end_ms);
+  const own_days = (a: PeriodAdjustment): number => days_inclusive(a.start_ms, a.end_ms);
+  const ov = (a: PeriodAdjustment, b: PeriodAdjustment): number =>
+    overlap_days(
+      Math.max(a.start_ms, month_start_ms),
+      Math.min(a.end_ms, month_end_ms),
+      b.start_ms,
+      b.end_ms
+    );
+
+  // Group the in-month adjustments by overlap (connected components).
+  const idx = adjustments.map((a, i) => i).filter((i) => in_month(adjustments[i]) > 0);
+  const group_of = new Map<number, number>();
+  const groups: number[][] = [];
+  for (const i of idx) {
+    if (group_of.has(i)) continue;
+    const group = [i];
+    group_of.set(i, groups.length);
+    for (let k = 0; k < group.length; k++) {
+      for (const j of idx) {
+        if (!group_of.has(j) && ov(adjustments[group[k]], adjustments[j]) > 0) {
+          group_of.set(j, groups.length);
+          group.push(j);
+        }
+      }
+    }
+    groups.push(group);
+  }
+
+  const out = adjustments.map((a) => ({ ...a }));
+  for (const group of groups) {
+    if (group.length === 1) {
+      const a = adjustments[group[0]];
+      const d = in_month(a);
+      const shift = round2((old_base * d) / month_days) - round2((new_base * d) / month_days);
+      out[group[0]].amount = round2(a.amount + shift);
+      continue;
+    }
+    // Solve M x = s with Gaussian elimination (partial pivoting); M_ij = overlap(i,j) / days(j).
+    const n = group.length;
+    const m = group.map((gi) =>
+      group.map((gj) => ov(adjustments[gi], adjustments[gj]) / own_days(adjustments[gj]))
+    );
+    const rhs = group.map((gi) => (delta * in_month(adjustments[gi])) / month_days);
+    const x = solve_linear(m, rhs);
+    for (let k = 0; k < n; k++) {
+      const gi = group[k];
+      const shift = x
+        ? x[k]
+        : round2((old_base * in_month(adjustments[gi])) / month_days) -
+          round2((new_base * in_month(adjustments[gi])) / month_days);
+      out[gi].amount = round2(adjustments[gi].amount + shift);
+    }
+  }
+  return out;
+}
+
+/** Solve a small dense linear system (Gaussian elimination, partial pivoting); null if singular. */
+function solve_linear(m: number[][], rhs: number[]): number[] | null {
+  const n = rhs.length;
+  const a = m.map((row, i) => [...row, rhs[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(a[r][col]) > Math.abs(a[pivot][col])) pivot = r;
+    }
+    if (Math.abs(a[pivot][col]) < 1e-12) return null;
+    [a[col], a[pivot]] = [a[pivot], a[col]];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = a[r][col] / a[col][col];
+      for (let c = col; c <= n; c++) a[r][c] -= f * a[col][c];
+    }
+  }
+  return a.map((row, i) => row[n] / row[i]);
 }
 
 /** An existing period as a re-allocation's adjustment rebase needs it. */

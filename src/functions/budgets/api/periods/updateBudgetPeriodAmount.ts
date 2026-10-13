@@ -479,12 +479,13 @@ async function set_all_periods_forward(
   const edited_start_day_ms = utc_day_index(start_ms) * DAY_MS;
   const sd = new Date(edited_start_day_ms);
   const month_start_ms = Date.UTC(sd.getUTCFullYear(), sd.getUTCMonth(), 1);
-  // Cutoff = the earlier of today and the start of the edited period's month: the page spreads
-  // each monthly home evenly over its days, so every prime feeding the edited period's month
-  // (e.g. this month's weeks that already ended) must take the new amount or the edited period
-  // shows a blend. (The budget write below only bumps the derive version via on_budget_written;
+  // Cutoff = the start of the edited period's month — "forward" from the period edited, never
+  // earlier months (editing June on Mar 15 leaves March–May as they are). The page spreads each
+  // monthly home evenly over its days, so every prime feeding the edited period's month (e.g.
+  // this month's weeks that already ended) must take the new amount or the edited period shows
+  // a blend. (The budget write below only bumps the derive version via on_budget_written;
   // process_budget_updated is not enqueued by this callable.)
-  const cutoff = Timestamp.fromMillis(Math.min(today_utc_ms(), month_start_ms));
+  const cutoff = Timestamp.fromMillis(month_start_ms);
   const budget_ref = db.collection("budgets").doc(budget_id);
   const periods_query = db.collection(COLLECTION).where("budgetId", "==", budget_id);
 

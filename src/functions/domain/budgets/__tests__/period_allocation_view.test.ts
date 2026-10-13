@@ -117,3 +117,41 @@ describe("rebase_reallocated_periods — both re-allocation paths", () => {
     expect(v.period_adjustments).toBeUndefined();
   });
 });
+
+describe("rebase_adjustments — OVERLAPPING custom periods are solved together", () => {
+  const APR_S = day("2031-04-01");
+  const APR_E = day("2031-04-30", true);
+  const page = (base: number, adjustments: Parameters<typeof rebase_adjustments>[0], s: number, e: number) =>
+    bucket_allocation([{ allocated_amount: base, effective_amount: base, start_ms: APR_S, end_ms: APR_E, adjustments }], s, e).allocated;
+  const WEEK_S = day("2031-04-06");
+  const WEEK_E = day("2031-04-12", true);
+  const HALF_E = day("2031-04-15", true);
+
+  it("a custom month + a custom week inside it keep BOTH page figures when the base changes", () => {
+    // April $300; month set to $400 (adj +100); then the week Apr 6–12 set to $50.
+    const week_before = page(300, [{ period_id: "M", start_ms: APR_S, end_ms: APR_E, amount: 100 }], WEEK_S, WEEK_E);
+    const adj = [
+      { period_id: "M", start_ms: APR_S, end_ms: APR_E, amount: 100 },
+      { period_id: "W", start_ms: WEEK_S, end_ms: WEEK_E, amount: Math.round((50 - week_before) * 100) / 100 },
+    ];
+    const week = page(300, adj, WEEK_S, WEEK_E);
+    const month = page(300, adj, APR_S, APR_E);
+    expect(week).toBeCloseTo(50, 2);
+    for (const to of [600, 150, 0, 301.37]) {
+      const rebased = rebase_adjustments(adj, 300, to, APR_S, APR_E);
+      expect(page(to, rebased, WEEK_S, WEEK_E)).toBeCloseTo(week, 2)
+      expect(page(to, rebased, APR_S, APR_E)).toBeCloseTo(month, 2);
+    }
+  });
+
+  it("a half-month and a week overlapping it", () => {
+    const adj = [
+      { period_id: "H", start_ms: APR_S, end_ms: HALF_E, amount: 40 },
+      { period_id: "W", start_ms: WEEK_S, end_ms: WEEK_E, amount: -12.5 },
+    ];
+    const before = [page(300, adj, APR_S, HALF_E), page(300, adj, WEEK_S, WEEK_E)];
+    const rebased = rebase_adjustments(adj, 300, 640, APR_S, APR_E);
+    expect(page(640, rebased, APR_S, HALF_E)).toBeCloseTo(before[0], 2);
+    expect(page(640, rebased, WEEK_S, WEEK_E)).toBeCloseTo(before[1], 2);
+  });
+});

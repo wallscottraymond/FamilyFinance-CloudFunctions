@@ -297,6 +297,18 @@ describe("This Period Only / Reset / All Periods Forward on the period page (emu
       .toEqual([`${Y}W38`]);
   });
 
+  it("All Periods Forward on a LATER month leaves the months before it alone", async () => {
+    const B = `tp_afplater_${RUN}`;
+    await create_budget(B, "monthly", 400, START, GEN_END);
+    const before = await page(B, WIN.lo, WIN.hi);
+    await edit({ budgetPeriodId: `${B}_${Y}M12`, newAmount: 600, cascadeScope: "all_forward" });
+    const after = await page(B, WIN.lo, end_of(utc(Y, 12, 31)));
+    for (const m of ["09", "10", "11"]) {
+      expect(after.monthly.get(`${Y}M${m}`)!.amount).toBe(before.monthly.get(`${Y}M${m}`)!.amount);
+    }
+    expect(after.monthly.get(`${Y}M12`)!.amount).toBeCloseTo(600, 2);
+  });
+
   it("a straddling week needs BOTH months' monthly docs (failed-precondition otherwise)", async () => {
     const B = `tp_missing_${RUN}`;
     await create_budget(B, "monthly", 400, START, GEN_END);
