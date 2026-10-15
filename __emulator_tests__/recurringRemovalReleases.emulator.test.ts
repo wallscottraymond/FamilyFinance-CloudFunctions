@@ -114,6 +114,14 @@ describe('a removed bill\'s payments count in budgets (emulator)', () => {
     expect(p.spent).toBe(0);
   });
 
+  it('the paid due date names the transaction that paid it, by DOC id (detail screen opens it)', async () => {
+    const r = await derive_period_orchestrator(t(), U, {
+      view_cadence: 'monthly', window_start_ms: AUG.start, window_end_ms: AUG.end, force: true,
+    });
+    const occ = (r.bills.find((b) => b.recurring_id === BILL)?.groups ?? []).flatMap((g) => g.occurrences);
+    expect(occ.filter((o) => o.paid).map((o) => o.transaction_id)).toEqual([PAY]);
+  });
+
   it('Remove (all time): the payment counts in its budget on the page, and the stored link is released', async () => {
     await manage({ id: BILL, action: 'remove', mode: 'all' });
     expect((await page()).spent).toBe(15); // page reads the removal directly

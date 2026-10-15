@@ -34,6 +34,8 @@ export interface CanonicalOccurrence {
   is_paid: boolean;
   /** Settled by the user's "Mark as paid / received" (no transaction) — see manual_settlement. */
   is_manual?: boolean;
+  /** The transaction (Firestore DOC id) that paid it, when one did (reconcile sets it). */
+  matched_transaction_id?: string | null;
 }
 
 /** A view's calendar bucket (a monthly / weekly / bi-weekly source period). */
@@ -69,8 +71,16 @@ export interface PlacedOccurrenceGroup {
    * placed in this period, so the client can draw each due day (not just the
    * aggregate first/next). `paid` includes pending (pending counts as paid). `manual` (present
    * only when true) = settled by the user's "Mark as paid / received", not a transaction.
+   * `transaction_id` (present only when a transaction paid it) = that transaction's DOC id, so
+   * the detail screen can open it (Tappable-Transaction-Rows).
    */
-  occurrences: Array<{ due_ms: number; paid: boolean; amount: number; manual?: true }>;
+  occurrences: Array<{
+    due_ms: number;
+    paid: boolean;
+    amount: number;
+    manual?: true;
+    transaction_id?: string;
+  }>;
   /** Earliest due date of any placed occurrence, epoch ms (null if none). */
   first_due_ms: number | null;
   /**
@@ -133,6 +143,9 @@ export function place_occurrences(
         paid: o.is_paid,
         amount: o.is_paid ? o.amount_paid : o.amount_due,
         ...(o.is_manual ? { manual: true as const } : {}),
+        ...(o.is_paid && !o.is_manual && o.matched_transaction_id
+          ? { transaction_id: o.matched_transaction_id }
+          : {}),
       });
       total_due += o.amount_due;
       total_paid += o.amount_paid;

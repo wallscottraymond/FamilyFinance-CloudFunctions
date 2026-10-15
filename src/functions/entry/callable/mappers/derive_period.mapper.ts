@@ -54,6 +54,8 @@ function map_recurring(r: DerivedRecurringResult) {
         amount: o.amount,
         // Settled by "Mark as paid / received" (no transaction) — the detail screen's undo.
         ...(o.manual ? { manual: true } : {}),
+        // The transaction that paid it (doc id) — the detail screen opens it.
+        ...(o.transaction_id ? { transactionId: o.transaction_id } : {}),
       })),
       firstDueMs: g.first_due_ms,
       nextUnpaidDueMs: g.next_unpaid_due_ms,

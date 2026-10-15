@@ -184,3 +184,25 @@ describe("place_occurrences", () => {
     expect(weekly.reduce((n, g) => n + g.count_in_period, 0)).toBe(1);
   });
 });
+
+describe("place_occurrences — the transaction that paid each occurrence (Tappable-Transaction-Rows)", () => {
+  const place = (o: CanonicalOccurrence) => place_occurrences([o], [junMonthBucket])[0].occurrences[0];
+
+  it("a paid occurrence carries its paying transaction's doc id", () => {
+    const placed = place(occ("o1", JUN_15, { is_paid: true, amount_paid: 2000, matched_transaction_id: "txn_doc_1" }));
+    expect(placed).toEqual({ due_ms: JUN_15, paid: true, amount: 2000, transaction_id: "txn_doc_1" });
+  });
+
+  it("an unpaid occurrence has none (even with a stale id)", () => {
+    expect(place(occ("o1", JUN_15, { matched_transaction_id: "txn_doc_1" }))).not.toHaveProperty("transaction_id");
+  });
+
+  it("a manual mark (Mark as paid) has none: no transaction paid it", () => {
+    const placed = place(occ("o1", JUN_15, { is_paid: true, is_manual: true, amount_paid: 2000 }));
+    expect(placed).toEqual({ due_ms: JUN_15, paid: true, amount: 2000, manual: true });
+  });
+
+  it("a paid occurrence without a known transaction just omits it", () => {
+    expect(place(occ("o1", JUN_15, { is_paid: true, amount_paid: 2000 }))).not.toHaveProperty("transaction_id");
+  });
+});

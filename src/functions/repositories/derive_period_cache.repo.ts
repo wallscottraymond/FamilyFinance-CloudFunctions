@@ -39,6 +39,12 @@ export interface CachedDerivedPeriod<TResult> {
   result: TResult;
 }
 
+/** Result SHAPE version, part of the doc id: bump whenever the derived result's shape changes
+ *  so a cached result in the old shape is never served. v2 = paid occurrences carry
+ *  `transaction_id` (Tappable-Transaction-Rows). Every function bundling this repo
+ *  (derive_period, derive_period_range, derive_budget_view, widget_snapshot) deploys together. */
+const CACHE_SHAPE = "v2";
+
 /** Deterministic doc id for a derive call. Windows are ms epoch ints — safe in an id. */
 function cache_doc_id(
   user_id: string,
@@ -46,7 +52,7 @@ function cache_doc_id(
   window_start_ms: number,
   window_end_ms: number
 ): string {
-  return `${user_id}__${view_cadence}__${window_start_ms}__${window_end_ms}`;
+  return `${user_id}__${view_cadence}__${window_start_ms}__${window_end_ms}__${CACHE_SHAPE}`;
 }
 
 /** Read the cached derived period for this exact call, or null. 1 read. */
