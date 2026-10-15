@@ -32,6 +32,7 @@ import {
 } from "../../observability";
 import {
   load_period_derivation_raw,
+  PeriodDerivationRaw,
   shape_period_derivation_deps,
 } from "../../resolvers/periods/period_derivation.resolver";
 import {
@@ -46,7 +47,6 @@ import {
   DeriveGoalsViewResult,
 } from "../../domain/goals/goals_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
-import { source_period_repo } from "../../repositories/source_period.repo";
 import {
   resolve_view_version,
   view_key_for,
@@ -107,15 +107,11 @@ export async function derive_period_range_orchestrator(
   log_operation_start(span, user_id);
 
   try {
-    const range_start_ms = Math.min(...input.windows.map((w) => w.start_ms));
-    const range_end_ms = Math.max(...input.windows.map((w) => w.end_ms));
-
-    // 1. Version + every window's cached result + the range's source periods (for goal period
-    //    dates, exactly as `derive_goals_view` reads them) — one parallel round-trip.
+    // 1. Version + every window's cached result — one parallel round-trip.
     // Cache key + version per VIEW (Me exactly as before; a group = "group:<id>", membership
     // checked even on a cache hit).
     const view_key = view_key_for(user_id, input.scope);
-    const [{ version: data_version }, cached, range_periods] = await Promise.all([
+    const [{ version: data_version }, cached] = await Promise.all([
       resolve_view_version(ctx, user_id, input.scope),
       input.force
         ? Promise.resolve(input.windows.map(() => null))
@@ -129,17 +125,13 @@ export async function derive_period_range_orchestrator(
             )
           )
         ),
-      source_period_repo.get_overlapping(
-        ctx,
-        Timestamp.fromMillis(range_start_ms),
-        Timestamp.fromMillis(range_end_ms)
-      ),
     ]);
-    perf.reads += 1 + (input.force ? 0 : input.windows.length) + range_periods.length;
+    perf.reads += 1 + (input.force ? 0 : input.windows.length);
 
     const now_ms = Date.now();
     const results = new Map<number, { derive: DerivePeriodResult; from_cache: boolean }>();
     const misses: number[] = [];
+    let loaded_goals: PeriodDerivationRaw["all_goals"] | undefined;
     input.windows.forEach((_, i) => {
       const c = cached[i];
       if (c && c.data_version === data_version && now_ms - c.computed_at_ms < CACHE_TTL_MS) {
@@ -163,6 +155,7 @@ export async function derive_period_range_orchestrator(
         input.scope
       );
       perf.reads += 8 + raw.txns.length;
+      loaded_goals = raw.all_goals;
 
       for (const i of misses) {
         const w = input.windows[i];
@@ -183,17 +176,22 @@ export async function derive_period_range_orchestrator(
       }
     }
 
-    // 3. Goals per window (goals read once; each period reads its own balance snapshots).
-    const period_by_id = new Map(range_periods.map((p) => [p.period_id, p]));
-    const goal_periods = input.windows
-      .map((w) => period_by_id.get(w.period_id))
-      .filter((p): p is NonNullable<typeof p> => p !== undefined)
-      .map((p) => ({ period_id: p.period_id, start: p.start_date, end: p.end_date }));
+    // 3. Goals per window (goals read once — reused from the miss load when there was one; each
+    //    period reads its own balance snapshots). Each window IS a source period (the app sends
+    //    its startDate/endDate millis, and source-period timestamps are millisecond-exact —
+    //    verified 980/980 on 2026-10-08), so its bounds are the goal period dates: no
+    //    source-period read (~99 docs/call before).
+    const goal_periods = input.windows.map((w) => ({
+      period_id: w.period_id,
+      start: Timestamp.fromMillis(w.start_ms),
+      end: Timestamp.fromMillis(w.end_ms),
+    }));
     const goal_views = await resolve_goal_measurements_for_periods(
       ctx,
       user_id,
       goal_periods,
-      input.scope
+      input.scope,
+      loaded_goals
     );
 
     const windows: DerivePeriodRangeWindowResult[] = input.windows.map((w, i) => {

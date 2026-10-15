@@ -476,7 +476,10 @@ describe("derive_period_range parity", () => {
     expect(mockStore.calls.outflows).toBe(1);
     expect(mockStore.calls.inflows).toBe(1);
     expect(mockStore.calls.history).toBe(1);
-    expect(mockStore.calls.goals).toBe(2); // once for derivation (EE leftover), once for goal views
+    // Goals once: the goal views reuse the derivation load's goals (Performance-Review-4 A2).
+    expect(mockStore.calls.goals).toBe(1);
+    // Source periods once (the loader's): goal dates come from the windows themselves.
+    expect(mockStore.calls.get_overlapping).toBe(1);
 
     if (process.env.DUMP_DERIVE_PARITY) {
       const f = `${process.env.DUMP_DERIVE_PARITY}.${cadence}.json`;
@@ -561,11 +564,22 @@ describe("derive_period_range parity", () => {
     expect(range.windows.every((w) => !w.from_cache)).toBe(true);
   });
 
-  it("returns goals: null for a period_id that isn't a real source period", async () => {
+  it("measures goals over the window's own bounds (no source-period read on a full hit)", async () => {
+    // Performance-Review-4 A2: each window IS a source period (the app sends its millis), so
+    // goal dates come from the window — a fully cached range reads no source periods at all.
     const w = monthly_windows()[0];
-    const range = await derive_period_range_orchestrator(ctx, UID, {
-      view_cadence: "monthly", windows: [{ ...w, period_id: "NOT_A_PERIOD" }],
+    const first = await derive_period_orchestrator(ctx, UID, {
+      view_cadence: "monthly", window_start_ms: w.start_ms, window_end_ms: w.end_ms,
     });
-    expect(range.windows[0].goals).toBeNull();
+    mockStore.cache.set(`${UID}|monthly|${w.start_ms}|${w.end_ms}`, {
+      data_version: 7, computed_at_ms: Date.now(), result: first,
+    });
+    mockStore.calls = {};
+    const range = await derive_period_range_orchestrator(ctx, UID, {
+      view_cadence: "monthly", windows: [w],
+    });
+    expect(range.windows[0].from_cache).toBe(true);
+    expect(range.windows[0].goals).not.toBeNull();
+    expect(mockStore.calls.get_overlapping ?? 0).toBe(0);
   });
 });
