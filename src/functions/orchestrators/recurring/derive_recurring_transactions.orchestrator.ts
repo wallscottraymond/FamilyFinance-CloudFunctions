@@ -1,11 +1,17 @@
 /**
  * Derive Recurring Transactions (orchestrator)
  *
- * READ-ONLY: every transaction that belongs to a recurring inflow/outflow stream,
- * for its detail screen. Source of truth is the stream's own `transaction_ids`
- * (Plaid links them; matched to our transactions by the `transactionId` field).
+ * READ-ONLY: every transaction that pays a recurring inflow/outflow, for its detail screen.
+ * Candidates = the stream's own `transaction_ids` (Plaid membership, matched to our docs by the
+ * `transactionId` field) UNION the transactions whose splits are linked to it
+ * (`splitOutflowIds` / `splitInflowIds`: hand-assigned bill pins + engine matches — a manual bill
+ * has no Plaid stream at all). Each candidate then goes through THE per-split rule the period
+ * page and reconcile use (`splits_paying_recurring`), so the list and the paid status agree.
  * Each row is flagged `in_period` for the currently-viewed window so the screen
  * can render a "This Period" section and a "Historical" (all-time) section.
+ *
+ * Row ids are Firestore DOC ids (Transaction Detail loads `transactions/{docId}`); each row
+ * carries the card payload so the app renders the real transaction row (Tappable-Transaction-Rows).
  *
  * @module orchestrators/recurring/derive_recurring_transactions
  */
@@ -23,16 +29,25 @@ import {
   is_edge_money,
   splits_paying_recurring,
 } from "../../domain/recurring/stream_membership";
+import {
+  CardTransaction,
+  to_card_transaction,
+} from "../../domain/transactions/transaction_card.service";
 
 export type RecurringKind = "outflow" | "inflow";
 
 export interface DerivedRecurringTransaction {
+  /** Firestore DOC id (what Transaction Detail loads) — not the Plaid transaction id. */
   transaction_id: string;
+  /** The splits paying this recurring (`splitId ?? id`). */
+  split_ids: string[];
   date_ms: number;
   name: string;
   amount: number;
   is_pending: boolean;
   in_period: boolean;
+  /** The transaction, for the app's shared transaction row. */
+  card: CardTransaction;
 }
 
 export async function derive_recurring_transactions_orchestrator(
@@ -43,7 +58,7 @@ export async function derive_recurring_transactions_orchestrator(
   window_start_ms: number,
   window_end_ms: number
 ): Promise<DerivedRecurringTransaction[]> {
-  // 1. Load the recurring record → its Plaid transaction ids.
+  // 1. Load the recurring record → its Plaid stream ids.
   const record =
     kind === "inflow"
       ? await inflow_repo.get_by_id(ctx, recurring_id)
@@ -51,8 +66,19 @@ export async function derive_recurring_transactions_orchestrator(
   if (!record || record.user_id !== user_id) return [];
   const plaid_ids = record.transaction_ids ?? [];
 
-  // 2. Fetch those transactions (by the `transactionId` field).
-  const txns = await transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, plaid_ids);
+  // 2. Candidates: the Plaid stream's transactions + the ones linked by split (one
+  //    `array-contains` query on the durable denorm), deduped by doc id.
+  const [stream_txns, linked_txns] = await Promise.all([
+    transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, plaid_ids),
+    transaction_repo.get_by_split_recurring_link(ctx, user_id, kind, recurring_id),
+  ]);
+  const by_doc_id = new Map<string, (typeof stream_txns)[number]>();
+  for (const t of [...stream_txns, ...linked_txns]) {
+    const doc_id = (t as { id?: string }).id;
+    if (doc_id && !by_doc_id.has(doc_id)) by_doc_id.set(doc_id, t);
+  }
+  const stream_ids = new Set(plaid_ids);
+  const txns = Array.from(by_doc_id.values());
 
   // 3. Map + flag in-period.
   const rows: DerivedRecurringTransaction[] = txns
@@ -68,7 +94,8 @@ export async function derive_recurring_transactions_orchestrator(
         )
     )
     // Per SPLIT (the period page's rule): the splits paying this recurring — a "remove from bill"
-    // or a budget pin takes only THAT split off; no paying split → not one of its payments.
+    // or a budget pin takes only THAT split off; no paying split → not one of its payments. A
+    // transaction outside the Plaid stream pays only through splits explicitly linked to it.
     .map((data) => ({
       data,
       // Edge money (a transfer crossing the view) pays nothing — as the period page.
@@ -78,7 +105,9 @@ export async function derive_recurring_transactions_orchestrator(
           ((data as { splits?: unknown[] }).splits ?? []) as Array<Record<string, unknown>>,
           kind,
           recurring_id,
-          true
+          stream_ids.has(
+            ((data as unknown as Record<string, unknown>).transactionId as string) ?? ""
+          )
         ),
     }))
     // Its NET countable amount, as the period page and reconcile count it (Ignored adds nothing,
@@ -88,11 +117,15 @@ export async function derive_recurring_transactions_orchestrator(
       net: compute_countable_split_net(row.splits as CountableSplitInput[], "").amount,
     }))
     .filter(({ splits, net }) => splits.length > 0 && net > 0)
-    .map(({ data, net }) => {
+    .map(({ data, splits, net }) => {
       const d = data as unknown as Record<string, unknown>;
+      const doc_id = d.id as string;
       const date_ms = (d.transactionDate as Timestamp).toMillis();
       return {
-        transaction_id: (d.transactionId as string) ?? (d.id as string) ?? "",
+        transaction_id: doc_id,
+        split_ids: (splits as Array<Record<string, unknown>>)
+          .map((s) => ((s.splitId as string) ?? (s.id as string) ?? ""))
+          .filter(Boolean),
         date_ms,
         name:
           (d.merchantName as string) ||
@@ -102,6 +135,7 @@ export async function derive_recurring_transactions_orchestrator(
         amount: net,
         is_pending: d.isPending === true,
         in_period: date_ms >= window_start_ms && date_ms <= window_end_ms,
+        card: to_card_transaction(doc_id, d),
       };
     });
 

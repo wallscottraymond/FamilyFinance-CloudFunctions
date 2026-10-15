@@ -129,7 +129,7 @@ describe('a removed bill\'s payments count in budgets (emulator)', () => {
     expect(r.splits.map((x) => x.transaction_id)).not.toContain(PAY);
     // …and the bill's transaction list doesn't show it as a payment either.
     const list = await derive_recurring_transactions_orchestrator(t(), U, BILL, 'outflow', AUG.start, AUG.end);
-    expect(list.map((x) => x.transaction_id)).not.toContain(`p_${PAY}`);
+    expect(list.map((x) => x.transaction_id)).not.toContain(PAY); // row ids are doc ids
   });
 
   it('Restore: the payment pays the bill again (page and stored)', async () => {
@@ -142,6 +142,9 @@ describe('a removed bill\'s payments count in budgets (emulator)', () => {
     expect((await split()).outflowId).toBe(BILL);
     const r = await resolve_recurring_reconciliation(t(), { recurring_id: BILL, recurring_type: 'outflow' } as never);
     expect(r.splits.map((x) => x.transaction_id)).toContain(PAY);
+    // …and the bill's list shows it again, by DOC id (what Transaction Detail opens).
+    const list = await derive_recurring_transactions_orchestrator(t(), U, BILL, 'outflow', AUG.start, AUG.end);
+    expect(list.map((x) => x.transaction_id)).toContain(PAY);
   });
 
   it('a MANUAL bill pin survives Remove → Restore (parked, not lost)', async () => {

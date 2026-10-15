@@ -54,6 +54,10 @@ import {
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
 import {
+  CardTransaction,
+  to_card_transaction,
+} from "../../domain/transactions/transaction_card.service";
+import {
   detect_internal_transfers_from_txns,
   txn_effective_category,
   map_raw_split_to_on_read_match,
@@ -65,6 +69,9 @@ const PAIRING_BUFFER_MS = TRANSFER_PAIRING_BUFFER_MS;
 
 /** L2 cache collection for this callable ([[Firestore-Read-Cost-Reduction]] B′). */
 const BUDGET_TXN_CACHE = "derived_budget_txn_cache";
+/** Result SHAPE version, part of the cache key: bump whenever the row shape changes so a cached
+ *  result in the old shape (24h TTL) is never served. v2 = rows carry `card`. */
+const BUDGET_TXN_CACHE_SHAPE = "v2";
 
 export type DerivedSpendStatus = "counted" | "ignored" | "refund";
 export type IgnoredReason = "transfer" | "income" | "manual" | null;
@@ -78,6 +85,9 @@ export interface DerivedBudgetTransaction {
   is_pending: boolean;
   spend_status: DerivedSpendStatus;
   ignored_reason: IgnoredReason;
+  /** The whole transaction, for the app's shared transaction row (one per split row; the app
+   *  groups a transaction's rows into one tile). */
+  card: CardTransaction;
 }
 
 export async function derive_budget_transactions_orchestrator(
@@ -96,7 +106,7 @@ export async function derive_budget_transactions_orchestrator(
   // L2 CACHE: serve the version-matched result (2 reads) instead of the ~348-doc window read
   // + derivation. Correctness = version match (bumped on every budget/txn write); the cache
   // stamp uses the version read BEFORE compute so a mid-compute bump forces the next miss.
-  const cache_id = `${view_key}__${budget_id}__${start_ms}__${end_ms}`;
+  const cache_id = `${view_key}__${budget_id}__${start_ms}__${end_ms}__${BUDGET_TXN_CACHE_SHAPE}`;
   let data_version: number;
   if (force) {
     data_version = (await resolve_view_version(ctx, user_id, scope_request)).version;
@@ -207,6 +217,7 @@ export async function derive_budget_transactions_orchestrator(
       "Transaction";
 
     const is_edge = crossing.ids.has(id);
+    const card = to_card_transaction(id, data as Record<string, unknown>);
     for (const s of raw) {
       const outflow_id = (s.outflowId as string | null) ?? null;
       const inflow_id = (s.inflowId as string | null) ?? null;
@@ -262,6 +273,7 @@ export async function derive_budget_transactions_orchestrator(
         is_pending,
         spend_status,
         ignored_reason,
+        card,
       });
     }
   }

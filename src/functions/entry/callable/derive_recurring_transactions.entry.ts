@@ -66,11 +66,13 @@ export const derive_recurring_transactions = onCall(
           kind: input.kind,
           transactions: rows.map((r) => ({
             transactionId: r.transaction_id,
+            splitIds: r.split_ids,
             dateMs: r.date_ms,
             name: r.name,
             amount: r.amount,
             isPending: r.is_pending,
             inPeriod: r.in_period,
+            card: r.card,
           })),
         },
         ctx.trace_id

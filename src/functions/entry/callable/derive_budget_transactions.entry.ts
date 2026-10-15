@@ -88,6 +88,7 @@ export const derive_budget_transactions = onCall(
             isPending: r.is_pending,
             spendStatus: r.spend_status,
             ignoredReason: r.ignored_reason,
+            card: r.card,
           })),
         },
         ctx.trace_id
