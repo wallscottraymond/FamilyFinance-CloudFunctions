@@ -14,7 +14,14 @@
  *   S_CCIN    income  MATURE  MONTHLY  CC payment       the card's "payment received" credit
  *   S_PAY     income  MATURE  BIWEEKLY INCOME_WAGES     payroll
  *
- * Plus grocery noise. Everything is deterministic for a fixed clock (`NOW_ISO`, frozen via jest
+ * Plus grocery noise. With `{ removals: true }` (the flag-off golden only), three more OLD bills
+ * the user later removes / restores / pauses (see REMOVAL_BILLS) — the D26 boundary cases:
+ *
+ *   S_RMV     bill    MATURE  MONTHLY  active          City Water, due 29th, paid Jul–Sep  → removed from Oct 1
+ *   S_RST     bill    MATURE  MONTHLY  active          Car Loan, due 12th, paid Jul–Oct    → removed Sep 1, restored Oct 20
+ *   S_PSE     bill    MATURE  MONTHLY  active          Iron Gym, due 29th, paid Jul–Sep    → paused Sep 1 → Oct 2
+ *
+ * Everything is deterministic for a fixed clock (`NOW_ISO`, frozen via jest
  * fake Date in the suites), and ids are prefixed with `tag` so many scenarios share one emulator.
  *
  * The same file runs against the untouched base commit to produce the flag-off golden dump
@@ -68,9 +75,23 @@ interface PlaidTxnSpec {
   detailed: string;
 }
 
+/** The three OLD bills the golden removes / restores / pauses (`{ removals: true }`). Categories are
+ *  among SCENARIO_CATEGORY_CODES (read as unmapped, as on the base golden run). */
+export const REMOVAL_BILLS = {
+  RMV: { name: 'CITY WATER', merchant: 'City Water', primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_WATER', amount: 61, paid_days_ago: [78, 47, 16], first_days_ago: 78, last_days_ago: 16, next_days: 14 },
+  RST: { name: 'CAR LOAN CO', merchant: 'Car Loan Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_CAR_PAYMENT', amount: 233, paid_days_ago: [95, 64, 33, 3], first_days_ago: 95, last_days_ago: 3, next_days: 28 },
+  PSE: { name: 'IRON GYM', merchant: 'Iron Gym', primary: 'PERSONAL_CARE', detailed: 'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS', amount: 45, paid_days_ago: [78, 47, 16], first_days_ago: 78, last_days_ago: 16, next_days: 14 },
+} as const;
+
 /** The scenario's transactions (keys are stable; ids come from `ids.txn(key)`). */
-export function scenarioTxnSpecs(): PlaidTxnSpec[] {
+export function scenarioTxnSpecs(opts: { removals?: boolean } = {}): PlaidTxnSpec[] {
   const out: PlaidTxnSpec[] = [];
+  if (opts.removals) {
+    for (const [k, b] of Object.entries(REMOVAL_BILLS)) {
+      b.paid_days_ago.forEach((d, i) => out.push({ key: `${k.toLowerCase()}${i}`, account: 'chk', amount: b.amount, days_ago: d,
+        name: b.name, merchant: b.merchant, primary: b.primary, detailed: b.detailed }));
+    }
+  }
   for (let m = 0; m < 5; m++) {
     out.push({ key: `spot${m}`, account: 'chk', amount: 15.49, days_ago: 10 + 30 * m, name: 'SPOTIFY USA', merchant: 'Spotify',
       primary: 'ENTERTAINMENT', detailed: 'ENTERTAINMENT_MUSIC_AND_AUDIO' });
@@ -191,7 +212,8 @@ const keys = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => 
 export function scenarioRecurring(
   ids: ScenarioIds,
   overrides: Record<string, StreamOverride> = {},
-  now_ms = NOW_MS
+  now_ms = NOW_MS,
+  opts: { removals?: boolean } = {}
 ) {
   const s = (name: string, base: Parameters<typeof plaidStream>[2]) => {
     const o = overrides[name] ?? {};
@@ -228,6 +250,14 @@ export function scenarioRecurring(
       s('CCPAY', { account: 'chk', keys: keys('ccpay', 3), amount: 300, description: 'CAPITAL ONE PAYMENT', merchant: 'Capital One',
         primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', frequency: 'MONTHLY', status: 'MATURE',
         is_active: true, first_days_ago: 80, last_days_ago: 20, next_days: 10 }),
+      ...(opts.removals
+        ? Object.entries(REMOVAL_BILLS).map(([k, b]) => {
+          ids.streams[k] = `${ids.tag}_S_${k}`;
+          return s(k, { account: 'chk', keys: keys(k.toLowerCase(), b.paid_days_ago.length), amount: b.amount, description: b.name,
+            merchant: b.merchant, primary: b.primary, detailed: b.detailed, frequency: 'MONTHLY', status: 'MATURE', is_active: true,
+            first_days_ago: b.first_days_ago, last_days_ago: b.last_days_ago, next_days: b.next_days });
+        })
+        : []),
     ],
     inflow_streams: [
       s('CCIN', { account: 'card', keys: keys('ccin', 3), amount: -300, description: 'PAYMENT THANK YOU', merchant: 'Capital One',
@@ -329,8 +359,8 @@ export async function seedMonthlySourcePeriods(db: Firestore, months: Array<[num
 }
 
 /** Mock implementations for `sync_transactions` (one page, then nothing new) + recurring. */
-export function scenarioMocks(ids: ScenarioIds, now_ms = NOW_MS) {
-  const txns = scenarioTxnSpecs().map((s) => plaidTxn(ids, s, now_ms));
+export function scenarioMocks(ids: ScenarioIds, now_ms = NOW_MS, opts: { removals?: boolean } = {}) {
+  const txns = scenarioTxnSpecs(opts).map((s) => plaidTxn(ids, s, now_ms));
   return {
     txns,
     sync: async (_tok: string, cursor: string | null) => ({
