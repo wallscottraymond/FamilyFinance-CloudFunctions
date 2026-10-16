@@ -24,6 +24,8 @@ import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
 import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
+import { recurring_review_repo } from "../../repositories/recurring_review.repo";
+import { resolve_review_item } from "../../domain/recurring/review_item.service";
 
 /**
  * Performance budget for cascade operation.
@@ -160,6 +162,24 @@ export async function cascade_soft_delete_recurring_orchestrator(
     perf.reads += 2;
     perf.writes += outflow_periods_deleted + inflow_periods_deleted;
 
+    // Bills-to-review items about this account's payments are closed (X19): the account's bills
+    // are gone, so "Still a bill?" / "Possible bill" tiles for it must not linger. Non-fatal.
+    let review_items_closed = 0;
+    try {
+      const open_items = await recurring_review_repo.get_open_for_account(
+        ctx,
+        input.user_id,
+        input.plaid_account_id
+      );
+      const now_ms = Date.now();
+      review_items_closed = await recurring_review_repo.upsert_items(
+        ctx,
+        open_items.map((item) => resolve_review_item(item, "account_removed", now_ms))
+      );
+    } catch (error) {
+      console.error(`[${ctx.trace_id}] closing review items for ${input.plaid_account_id} failed:`, error);
+    }
+
     log_operation_success(span, input.user_id);
 
     // Async debug logging
@@ -188,7 +208,8 @@ export async function cascade_soft_delete_recurring_orchestrator(
       `[${ctx.trace_id}] cascade_soft_delete_recurring: ` +
       `outflows=${outflows_deleted}/${input.outflow_ids.length}, ` +
       `inflows=${inflows_deleted}/${input.inflow_ids.length}, ` +
-      `outflow_periods=${outflow_periods_deleted}, inflow_periods=${inflow_periods_deleted}`
+      `outflow_periods=${outflow_periods_deleted}, inflow_periods=${inflow_periods_deleted}, ` +
+      `review_items_closed=${review_items_closed}`
     );
 
     return {

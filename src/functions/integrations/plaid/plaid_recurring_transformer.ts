@@ -109,6 +109,15 @@ export interface InflowForPersistence {
   transaction_ids: string[];
   tags: string[];
   rules: unknown[];
+
+  // Convert-To-Recurring capture rules — never set by this transformer (it stays a pure Plaid
+  // mapping); the capture planner sets them for v2 records only. Absent = today's behavior.
+  /** Stamp for a NEW record created under the v2 rules (ignored for an existing doc). */
+  capture_rules_version?: number;
+  /** Plaid's own `is_active` for a v2 record (whose `is_active` is ours). */
+  plaid_is_active?: boolean;
+  /** A schedule the user picked when tracking a suggestion (D8). */
+  user_frequency?: AppFrequency;
 }
 
 /**
@@ -171,6 +180,15 @@ export interface OutflowForPersistence {
   transaction_ids: string[];
   tags: string[];
   rules: unknown[];
+
+  // Convert-To-Recurring capture rules — never set by this transformer (it stays a pure Plaid
+  // mapping); the capture planner sets them for v2 records only. Absent = today's behavior.
+  /** Stamp for a NEW record created under the v2 rules (ignored for an existing doc). */
+  capture_rules_version?: number;
+  /** Plaid's own `is_active` for a v2 record (whose `is_active` is ours). */
+  plaid_is_active?: boolean;
+  /** A schedule the user picked when tracking a suggestion (D8). */
+  user_frequency?: AppFrequency;
 }
 
 // ============================================================================

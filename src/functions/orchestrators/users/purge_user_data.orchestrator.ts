@@ -288,6 +288,8 @@ export async function purge_user_data_orchestrator(
       "derived_period_cache",
       "derived_budget_txn_cache",
       "derived_recurring_view_cache",
+      // Bills-to-review items (Convert-To-Recurring, X19): ids are `${user_id}__…` too.
+      "recurring_review_items",
     ]) {
       await record(
         collection,
@@ -362,6 +364,9 @@ export async function purge_user_data_orchestrator(
       "_transfer_classification_state",
       "_assignment_watermarks",
       "_recurring_reconcile_watermarks",
+      // Convert-To-Recurring per-user state (suppressed ids, "Not a bill" vendors, detector throttle).
+      "_recurring_review_state",
+      "_recurring_detector_state",
     ]) {
       await hard_delete_doc(collection, user_id).catch(() => {});
     }

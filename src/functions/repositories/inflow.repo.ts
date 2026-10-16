@@ -117,6 +117,17 @@ export interface Inflow {
   // payment always wins. Preserved across Plaid re-sync. Absent/empty = none.
   manual_settled_occurrences: ManualSettledOccurrences;
 
+  // Convert-To-Recurring capture rules (Phase 1). All null on records created before the release /
+  // with the flag off — those keep today's behavior forever (D13).
+  /** `2` = created under the new capture rules (stamped at creation only). */
+  capture_rules_version: number | null;
+  /** Plaid's own active flag, kept for v2 records (their `is_active` is OURS, not Plaid's). */
+  plaid_is_active: boolean | null;
+  /** When the user answered "Still a bill" to a Plaid-inactive v2 record (ms). */
+  plaid_inactive_ack_at_ms: number | null;
+  /** Set when this record was merged into another (Phase 2) — hidden from Removed / no Restore. */
+  merged_into_id: string | null;
+
   // Sync tracking
   last_synced_at?: Timestamp;
 }
@@ -200,6 +211,15 @@ interface LegacyInflowDoc {
   // set_occurrence_settled callable; preserved across Plaid re-sync.
   manualSettledOccurrences?: ManualSettledOccurrencesDoc;
 
+  // Convert-To-Recurring capture rules (X1): every one is written ONLY when present (conditional
+  // spread in `map_persistence_to_doc`), so a doc without them stays byte-identical across syncs.
+  captureRulesVersion?: number;
+  plaidIsActive?: boolean;
+  plaidInactiveAckAt?: Timestamp;
+  mergedIntoId?: string;
+  /** The schedule the user picked when tracking a Plaid suggestion (D8); wins over Plaid's. */
+  userFrequency?: string;
+
   // Sync tracking
   lastSyncedAt?: Timestamp;
 }
@@ -274,6 +294,11 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
     removal_intervals: map_removal_intervals(doc.removalIntervals),
     manual_settled_occurrences: map_manual_settled_occurrences(doc.manualSettledOccurrences),
 
+    capture_rules_version: doc.captureRulesVersion ?? null,
+    plaid_is_active: doc.plaidIsActive ?? null,
+    plaid_inactive_ack_at_ms: doc.plaidInactiveAckAt?.toMillis?.() ?? null,
+    merged_into_id: doc.mergedIntoId ?? null,
+
     last_synced_at: doc.lastSyncedAt,
   };
 }
@@ -314,7 +339,8 @@ function map_persistence_to_doc(
     merchantName: entity.payer_name,
     userCustomName: existing?.userCustomName ?? entity.user_custom_name,
 
-    frequency: entity.frequency,
+    // A schedule the user picked (tracking a Plaid suggestion, D8) wins over Plaid's guess.
+    frequency: existing?.userFrequency ?? entity.user_frequency ?? entity.frequency,
     firstDate: Timestamp.fromDate(entity.first_date),
     lastDate: Timestamp.fromDate(entity.last_date),
     predictedNextDate: entity.predicted_next_date
@@ -348,6 +374,28 @@ function map_persistence_to_doc(
     ...(existing?.manualSettledOccurrences
       ? { manualSettledOccurrences: existing.manualSettledOccurrences }
       : {}),
+
+    // Convert-To-Recurring (X1): preserved with CONDITIONAL spreads, flag on or off — never
+    // `?? null` (that would add a key to every existing doc and rewrite all of them on the first
+    // sync). The stamp is only ever ADDED at creation (`entity.capture_rules_version` is set by the
+    // capture planner for new records only); an existing doc keeps whatever it has.
+    ...(existing?.captureRulesVersion !== undefined
+      ? { captureRulesVersion: existing.captureRulesVersion }
+      : !existing && entity.capture_rules_version !== undefined
+        ? { captureRulesVersion: entity.capture_rules_version }
+        : {}),
+    ...(entity.plaid_is_active !== undefined
+      ? { plaidIsActive: entity.plaid_is_active }
+      : existing?.plaidIsActive !== undefined
+        ? { plaidIsActive: existing.plaidIsActive }
+        : {}),
+    ...(existing?.plaidInactiveAckAt ? { plaidInactiveAckAt: existing.plaidInactiveAckAt } : {}),
+    ...(existing?.mergedIntoId ? { mergedIntoId: existing.mergedIntoId } : {}),
+    ...(existing?.userFrequency
+      ? { userFrequency: existing.userFrequency }
+      : entity.user_frequency
+        ? { userFrequency: entity.user_frequency }
+        : {}),
 
     lastSyncedAt: now,
   };
@@ -680,6 +728,113 @@ export const inflow_repo = {
   },
 
   /**
+   * The stored docs (raw camelCase, ANY state — active, inactive, stale) for the given ids, ONE
+   * batched read. Missing ids are absent from the map. The recurring sync prefetches with this and
+   * hands the map to `save_batch` (which then skips its own identical read).
+   */
+  async get_raw_by_ids(
+    _ctx: TraceContext,
+    ids: string[]
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const out = new Map<string, Record<string, unknown>>();
+    const db = getFirestore();
+    for (const chunk of chunk_for_batch([...new Set(ids)])) {
+      if (chunk.length === 0) continue;
+      const snaps = await db.getAll(...chunk.map((id) => doc_ref(id)));
+      for (const snap of snaps) {
+        if (snap.exists) out.set(snap.id, snap.data() as Record<string, unknown>);
+      }
+    }
+    return out;
+  },
+
+  /** A user's INACTIVE records (stopped / stale / soft-deleted) — loaded lazily by the capture
+   *  planner only when a new v2 stream needs a same-bill candidate (X9). */
+  async get_inactive_by_user_id(_ctx: TraceContext, user_id: string): Promise<Inflow[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", false)
+      .get();
+    return snapshot.docs.map((doc) => map_to_entity(doc.data() as LegacyInflowDoc));
+  },
+
+  /**
+   * Record Plaid's opinion on v2 records Plaid stopped returning (D19: they are not stale-marked;
+   * the user is asked "Still a bill?"). Writes only docs whose value changes. Stamped with the
+   * sync run so the recurring trigger leaves the bump to the sync.
+   */
+  async set_plaid_is_active(
+    ctx: TraceContext,
+    ids: string[],
+    value: boolean,
+    user_id: string,
+    run_id?: string
+  ): Promise<number> {
+    if (ids.length === 0) return 0;
+    const db = getFirestore();
+    const now = Timestamp.now();
+    let written = 0;
+    for (const chunk of chunk_for_batch(ids)) {
+      const snaps = await db.getAll(...chunk.map((id) => doc_ref(id)));
+      const batch = db.batch();
+      let n = 0;
+      for (const snap of snaps) {
+        if (!snap.exists) continue;
+        const before = snap.data() as LegacyInflowDoc;
+        if (before.plaidIsActive === value) continue;
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const patch: Record<string, unknown> = { plaidIsActive: value, updatedAt: now };
+        if (run_id) {
+          patch.syncRunId = run_id;
+          patch.lastWriteSource = "plaid_sync";
+        }
+        /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(snap.ref, patch);
+        n++;
+        record_audit_entry_async({
+          user_id,
+          action: "update",
+          entity_type: "recurring_inflow",
+          entity_id: snap.id,
+          before: { plaidIsActive: before.plaidIsActive ?? null },
+          after: { plaidIsActive: value },
+          trace_id: ctx.trace_id,
+          metadata: { source: "api", context: { reason: "plaid_inactive_v2" } },
+        });
+      }
+      if (n > 0) await batch.commit();
+      written += n;
+    }
+    return written;
+  },
+
+  /** "Still a bill" answer on a v2 record: remember it (preserved across syncs) so it isn't asked again. */
+  async set_plaid_inactive_ack(
+    ctx: TraceContext,
+    id: string,
+    ack_ms: number,
+    user_id: string
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      plaidInactiveAckAt: Timestamp.fromMillis(ack_ms),
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "recurring_inflow",
+      entity_id: id,
+      before: null,
+      after: { plaidInactiveAckAt: ack_ms },
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { operation: "still_a_bill" } },
+    });
+  },
+
+  /**
    * Saves a batch of inflows with upsert logic.
    *
    * For each inflow:
@@ -691,7 +846,11 @@ export const inflow_repo = {
     entities: InflowForPersistence[],
     /** Sync run writing these: stamped as `syncRunId` so the recurring triggers leave the
      *  period generation + reconcile to the sync (it does them once, inline). */
-    run_id?: string
+    run_id?: string,
+    /** The stored docs for `entities` ids, already read by the caller (`get_raw_by_ids`) — a
+     *  missing key means "doesn't exist". When given, this skips the read below, so the sync's
+     *  read count is unchanged by the prefetch. */
+    prefetched?: Map<string, Record<string, unknown>>
   ): Promise<BatchWriteResult & { written: RecurringWrittenDoc[] }> {
     if (entities.length === 0) {
       return { results: [], count: 0, success: true, written: [] };
@@ -705,10 +864,14 @@ export const inflow_repo = {
     // Get existing documents for upsert logic — ONE batched read of the raw docs (was an
     // `in` query for existence PLUS a per-doc `.get()` for the data: 2 reads per stream).
     const existing_docs = new Map<string, LegacyInflowDoc>();
-    for (const ids of chunk_for_batch(entities.map((e) => e.id))) {
-      const snaps = await db.getAll(...ids.map((id) => doc_ref(id)));
-      for (const snap of snaps) {
-        if (snap.exists) existing_docs.set(snap.id, snap.data() as LegacyInflowDoc);
+    if (prefetched) {
+      for (const [id, d] of prefetched) existing_docs.set(id, d as unknown as LegacyInflowDoc);
+    } else {
+      for (const ids of chunk_for_batch(entities.map((e) => e.id))) {
+        const snaps = await db.getAll(...ids.map((id) => doc_ref(id)));
+        for (const snap of snaps) {
+          if (snap.exists) existing_docs.set(snap.id, snap.data() as LegacyInflowDoc);
+        }
       }
     }
 

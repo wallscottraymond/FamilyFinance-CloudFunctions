@@ -894,6 +894,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Bills to review (Convert-To-Recurring, D9/D14/D15): the app's ONE listener reads the owner's
+    // items (`userId == auth.uid`). Owner-only — a suggestion on a group-shared account is shown
+    // only to the account's owner (D15) — so no group / family / admin read branches. All writes go
+    // through Cloud Functions (admin SDK). A list query must carry `userId == auth.uid`.
+    match /recurring_review_items/{itemId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Server-only review memory (suppressed Plaid txn ids, "Not a bill" vendors, detector throttle).
+    match /_recurring_review_state/{userId} {
+      allow read, write: if false;
+    }
+    match /_recurring_detector_state/{userId} {
+      allow read, write: if false;
+    }
+
     // =======================
     // GROUP SUMMARIES COLLECTION RULES - PERIOD-CENTRIC
     // =======================

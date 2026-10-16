@@ -85,9 +85,14 @@ async function seedExtras(userId: string, itemDocId: string): Promise<void> {
 
 /** What the user made / the app keeps for them beyond the account graph (Transaction-Integrity X17). */
 const USER_MADE = ["goals", "tags", "rules", "account_balance_snapshots"] as const;
-const CACHES = ["derived_period_cache", "derived_budget_txn_cache", "derived_recurring_view_cache"] as const;
+const CACHES = [
+  "derived_period_cache", "derived_budget_txn_cache", "derived_recurring_view_cache",
+  // Bills-to-review items share the `${uid}__…` id prefix (Convert-To-Recurring X19).
+  "recurring_review_items",
+] as const;
 const STATE_DOCS = [
   "user_data_versions", "_transfer_classification_state", "_assignment_watermarks", "_recurring_reconcile_watermarks",
+  "_recurring_review_state", "_recurring_detector_state",
 ] as const;
 async function seedUserMade(userId: string): Promise<void> {
   const batch = db.batch();

@@ -8,6 +8,7 @@
  */
 
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { CONVERT_TO_RECURRING_FLAG } from "../domain/recurring/capture_rules";
 
 /**
  * Collection for feature flags.
@@ -136,44 +137,67 @@ export async function is_flag_enabled(
     group_ids?: string[];
   }
 ): Promise<boolean> {
-  const flag = await get_feature_flag(flag_name);
-
-  // Flag doesn't exist or is globally disabled
-  if (!flag || !flag.enabled) {
+  // Hardened (Convert-To-Recurring X18): a flag doc missing a field, a malformed field, or a
+  // failed flag read must never throw into a caller (sync, derive) — every problem reads as OFF.
+  let flag: FeatureFlag | null;
+  try {
+    flag = await get_feature_flag(flag_name);
+  } catch (error) {
+    console.warn(`[feature_flags] flag ${flag_name} could not be read; treating as off:`, error);
     return false;
   }
 
+  // Flag doesn't exist or is globally disabled
+  if (!flag || flag.enabled !== true) {
+    return false;
+  }
+
+  const user_ids = Array.isArray(flag.enabled_user_ids) ? flag.enabled_user_ids : [];
+  const group_ids = Array.isArray(flag.enabled_group_ids) ? flag.enabled_group_ids : [];
+  const rollout = typeof flag.rollout_percentage === "number" ? flag.rollout_percentage : 0;
+
   // Check user-specific enablement
-  if (context?.user_id && flag.enabled_user_ids.includes(context.user_id)) {
+  if (context?.user_id && user_ids.includes(context.user_id)) {
     return true;
   }
 
   // Check group-specific enablement
-  if (context?.group_ids) {
-    for (const group_id of context.group_ids) {
-      if (flag.enabled_group_ids.includes(group_id)) {
+  if (Array.isArray(context?.group_ids)) {
+    for (const group_id of context!.group_ids!) {
+      if (group_ids.includes(group_id)) {
         return true;
       }
     }
   }
 
   // Check rollout percentage
-  if (flag.rollout_percentage >= 100) {
+  if (rollout >= 100) {
     return true;
   }
 
-  if (flag.rollout_percentage <= 0) {
+  if (rollout <= 0) {
     return false;
   }
 
   // Use user_id to deterministically assign to rollout bucket
   if (context?.user_id) {
     const bucket = hash_to_percentage(context.user_id + flag_name);
-    return bucket < flag.rollout_percentage;
+    return bucket < rollout;
   }
 
   // No user context and partial rollout - default to false
   return false;
+}
+
+/**
+ * Is the Convert-To-Recurring capture-rules flag on for this user? (`_feature_flags/
+ * convert_to_recurring_v1`, owner allowlist.) Never throws; any problem = off. Gates ONLY new
+ * stamping, the possible-bill detector and the review-answer callable (X11) — records already
+ * stamped v2 keep v2 behavior whatever the flag says (D16).
+ */
+export async function is_convert_to_recurring_enabled(user_id: string): Promise<boolean> {
+  if (!user_id) return false;
+  return is_flag_enabled(CONVERT_TO_RECURRING_FLAG, { user_id });
 }
 
 /**
