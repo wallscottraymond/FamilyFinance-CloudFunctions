@@ -62,12 +62,12 @@ beforeAll(async () => {
   ({ sync_item_orchestrator } = require('../src/functions/orchestrators/plaid/sync_item.orchestrator'));
   ({ derive_period_orchestrator } = require('../src/functions/orchestrators/periods/derive_period.orchestrator'));
   /* eslint-enable @typescript-eslint/no-var-requires */
-  await seedMonthlySourcePeriods(db, [[2026, 4], [2026, 5], [2026, 6], [2026, 7], [2026, 8], [2026, 9], [2026, 10], [2026, 11], [2026, 12], [2027, 1]]);
+  await seedMonthlySourcePeriods(db, [[2037, 4], [2037, 5], [2037, 6], [2037, 7], [2037, 8], [2037, 9], [2037, 10], [2037, 11], [2037, 12], [2038, 1]]);
 }, 60000);
 afterAll(() => jest.useRealTimers());
 
-const OCT = { start: Date.UTC(2026, 9, 1), end: Date.UTC(2026, 10, 1) - 1 };
-const SEP = { start: Date.UTC(2026, 8, 1), end: Date.UTC(2026, 9, 1) - 1 };
+const OCT = { start: Date.UTC(2037, 9, 1), end: Date.UTC(2037, 10, 1) - 1 };
+const SEP = { start: Date.UTC(2037, 8, 1), end: Date.UTC(2037, 9, 1) - 1 };
 
 async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   const ids = scenarioIds(tag);
@@ -111,8 +111,10 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
       derive_oct: await derive(OCT),
       derive_sep: await derive(SEP),
     },
+    // `categories` is global reference data (module-cached): its read count depends on what other
+    // suites left in the emulator, not on the code under test — excluded from the parity count.
     counts: [c1, c2].map((c) => c && {
-      reads: c.reads - (c.reads_by._audit ?? 0),
+      reads: c.reads - (c.reads_by._audit ?? 0) - (c.reads_by.categories ?? 0),
       writes: c.writes - (c.writes_by._audit ?? 0),
       audit_writes: c.writes_by._audit ?? 0,
       reads_by: c.reads_by,

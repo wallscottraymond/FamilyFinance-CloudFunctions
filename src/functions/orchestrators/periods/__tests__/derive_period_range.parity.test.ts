@@ -203,6 +203,11 @@ jest.mock("../../../repositories/transaction.repo", () => ({
 jest.mock("../../../repositories/user.repo", () => ({
   user_repo: { get_by_id: jest.fn(async () => ({ id: "u1", data: {} })) },
 }));
+// Convert-To-Recurring: the derive reads each member's review state (held-out Plaid ids, X3).
+// None here → today's numbers.
+jest.mock("../../../repositories/recurring_review.repo", () => ({
+  recurring_review_repo: { get_state: jest.fn(async () => null) },
+}));
 jest.mock("../../../repositories/derive_version.repo", () => ({
   get_derive_version: async () => 7,
 }));

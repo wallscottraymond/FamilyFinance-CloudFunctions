@@ -77,7 +77,7 @@ describe('It ended → going-forward end (emulator)', () => {
     expect(r.state.status).toBe('active'); // still this month's bill
     const doc = (await db.collection('outflows').doc(SPOT).get()).data()!;
     expect(doc.isActive).toBe(true); // NOT turned inactive (X4)
-    expect(doc.removalIntervals).toEqual([{ fromMs: Date.UTC(2026, 10, 1), toMs: null, mode: 'going_forward' }]);
+    expect(doc.removalIntervals).toEqual([{ fromMs: Date.UTC(2037, 10, 1), toMs: null, mode: 'going_forward' }]);
     // Past periods unchanged; detail opens; nothing expected in November.
     expect(paidTotal(await h.bill(SEP, SPOT))).toBe(15.49);
     expect(paidTotal(await h.bill(OCT, SPOT))).toBe(15.49);
@@ -86,10 +86,10 @@ describe('It ended → going-forward end (emulator)', () => {
     expect(view).toBeTruthy();
 
     // F9: a November payment posted later is NOT linked; counts as a normal transaction.
-    jest.setSystemTime(Date.parse('2026-11-04T12:00:00Z'));
+    jest.setSystemTime(Date.parse('2037-11-04T12:00:00Z'));
     const nov_before = await h.eeSpent(NOV);
     h.postTxns([plaidTxn(h.ids, { key: 'spotnov', account: 'chk', amount: 15.49, days_ago: 0, name: 'SPOTIFY USA',
-      merchant: 'Spotify', primary: 'ENTERTAINMENT', detailed: 'ENTERTAINMENT_MUSIC_AND_AUDIO' }, Date.parse('2026-11-03T12:00:00Z'))]);
+      merchant: 'Spotify', primary: 'ENTERTAINMENT', detailed: 'ENTERTAINMENT_MUSIC_AND_AUDIO' }, Date.parse('2037-11-03T12:00:00Z'))]);
     await h.sync('nov');
     expect((await h.txn('spotnov'))?.splits[0].outflowId ?? null).toBeNull();
     expect(await h.eeSpent(NOV)).toBe(Math.round((nov_before + 15.49) * 100) / 100);
@@ -97,7 +97,7 @@ describe('It ended → going-forward end (emulator)', () => {
 
     // Removed list: shown (ending next month); Restore cancels the end.
     let list = await list_suppressed(ctx(), uid, NOW_MS);
-    expect(list.items.find((i: { id: string }) => i.id === SPOT)).toMatchObject({ status: 'removed', ends_ms: Date.UTC(2026, 10, 1) });
+    expect(list.items.find((i: { id: string }) => i.id === SPOT)).toMatchObject({ status: 'removed', ends_ms: Date.UTC(2037, 10, 1) });
     await manage(ctx(), uid, [], { id: SPOT, action: 'restore' }, NOW_MS, outflow_repo, 'recurring_outflow');
     expect((await db.collection('outflows').doc(SPOT).get()).data()!.removalIntervals).toEqual([]);
     expect((await h.bill(NOV, SPOT))?.groups.length).toBeGreaterThan(0);
@@ -119,14 +119,14 @@ describe('It ended → going-forward end (emulator)', () => {
     // (Pre-existing, not changed here: the extension resumes the day AFTER the latest period's
     // 23:59:59.999 end, so it never re-creates the month right after it — Dec stays missing.)
     await manage(ctx(), uid, [], { id: SPOT, action: 'end' }, NOW_MS, outflow_repo, 'recurring_outflow');
-    for (const p of ['2026M12', '2027M01']) await db.collection('outflow_periods').doc(`${SPOT}_${p}`).delete();
-    const created = await extendOutflowPeriodsFor(db, await db.collection('outflows').doc(SPOT).get(), new Date('2027-02-01T00:00:00Z'));
+    for (const p of ['2037M12', '2038M01']) await db.collection('outflow_periods').doc(`${SPOT}_${p}`).delete();
+    const created = await extendOutflowPeriodsFor(db, await db.collection('outflows').doc(SPOT).get(), new Date('2038-02-01T00:00:00Z'));
     expect(created).toBeGreaterThan(0);
     const periods = await db.collection('outflow_periods').where('outflowId', '==', SPOT).get();
     const by_id = new Map(periods.docs.map((d) => [d.id, d.data()]));
-    expect(by_id.get(`${SPOT}_2026M10`)?.isActive).toBe(true);
-    expect(by_id.has(`${SPOT}_2026M12`)).toBe(false); // the pre-existing skipped month
-    expect(by_id.get(`${SPOT}_2027M01`)?.isActive).toBe(false); // created by the extension, flipped
+    expect(by_id.get(`${SPOT}_2037M10`)?.isActive).toBe(true);
+    expect(by_id.has(`${SPOT}_2037M12`)).toBe(false); // the pre-existing skipped month
+    expect(by_id.get(`${SPOT}_2038M01`)?.isActive).toBe(false); // created by the extension, flipped
     expect((await h.bill(NOV, SPOT))?.groups ?? []).toEqual([]); // derive agrees
 
     // D13: an OLD record's extension is untouched (periods created active, as today).
@@ -135,10 +135,10 @@ describe('It ended → going-forward end (emulator)', () => {
     void _v; void _p;
     await db.collection('outflows').doc(OLDID).set({
       ...old_doc, id: OLDID,
-      removedByUser: true, removalIntervals: [{ fromMs: Date.UTC(2026, 10, 1), toMs: null, mode: 'going_forward' }],
-      firstDate: Timestamp.fromDate(new Date('2026-12-05T00:00:00Z')),
+      removedByUser: true, removalIntervals: [{ fromMs: Date.UTC(2037, 10, 1), toMs: null, mode: 'going_forward' }],
+      firstDate: Timestamp.fromDate(new Date('2037-12-05T00:00:00Z')),
     });
-    await extendOutflowPeriodsFor(db, await db.collection('outflows').doc(OLDID).get(), new Date('2027-02-01T00:00:00Z'));
+    await extendOutflowPeriodsFor(db, await db.collection('outflows').doc(OLDID).get(), new Date('2038-02-01T00:00:00Z'));
     const old_periods = await db.collection('outflow_periods').where('outflowId', '==', OLDID).get();
     expect(old_periods.size).toBeGreaterThan(0);
     expect(old_periods.docs.every((d) => d.data().isActive === true)).toBe(true);

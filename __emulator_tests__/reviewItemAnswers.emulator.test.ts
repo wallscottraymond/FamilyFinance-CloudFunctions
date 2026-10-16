@@ -90,8 +90,8 @@ describe('answering review items (emulator)', () => {
     await h.sync('f3');
     expect((await h.txn('avantnew'))?.splits[0].outflowId).toBe(h.ids.streams.AVANT);
     // F4: a payment Plaid hasn't added to the stream yet (same merchant + account) still links.
-    jest.setSystemTime(Date.parse('2026-11-06T12:00:00Z'));
-    h.postTxns([avantTxn(h.ids, 'avantf4', 0, 88)].map((t) => ({ ...t, date: '2026-11-06', authorized_date: '2026-11-06' })));
+    jest.setSystemTime(Date.parse('2037-11-06T12:00:00Z'));
+    h.postTxns([avantTxn(h.ids, 'avantf4', 0, 88)].map((t) => ({ ...t, date: '2037-11-06', authorized_date: '2037-11-06' })));
     await h.sync('f4');
     jest.setSystemTime(NOW_MS);
     expect((await h.txn('avantf4'))?.splits[0].outflowId).toBe(h.ids.streams.AVANT);

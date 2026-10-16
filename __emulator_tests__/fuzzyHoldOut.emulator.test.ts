@@ -65,7 +65,7 @@ describe('X3 — held-out payments never fuzzy-link to an old bill (emulator)', 
     await h.sync('link');
     const OLD = h.ids.streams.SUNBIT;
     expect((await db.collection('outflows').doc(OLD).get()).data()?.captureRulesVersion).toBeUndefined();
-    const sep_paid = paidTotal(await h.bill({ start: Date.UTC(2026, 8, 1), end: Date.UTC(2026, 9, 1) - 1 }, OLD));
+    const sep_paid = paidTotal(await h.bill({ start: Date.UTC(2037, 8, 1), end: Date.UTC(2037, 9, 1) - 1 }, OLD));
 
     // 2. Flag on; Plaid keeps the old stream AND starts a new, unsure Sunbit stream; a payment posts.
     await setFlag(db, [h.ids.userId]);
@@ -93,7 +93,7 @@ describe('X3 — held-out payments never fuzzy-link to an old bill (emulator)', 
     const oct_old = await h.bill(OCT, OLD);
     expect((oct_old?.groups ?? []).flatMap((g: { occurrences: Array<{ transaction_id?: string }> }) => g.occurrences)
       .map((o: { transaction_id?: string }) => o.transaction_id)).not.toContain(`plaid_${h.ids.txn('sunbitnew')}`);
-    expect(paidTotal(await h.bill({ start: Date.UTC(2026, 8, 1), end: Date.UTC(2026, 9, 1) - 1 }, OLD))).toBe(sep_paid);
+    expect(paidTotal(await h.bill({ start: Date.UTC(2037, 8, 1), end: Date.UTC(2037, 9, 1) - 1 }, OLD))).toBe(sep_paid);
 
     // Derive: a stale AUTO link on the held-out payment is ignored on read…
     const ref = db.collection('transactions').doc(`plaid_${h.ids.txn('sunbitnew')}`);

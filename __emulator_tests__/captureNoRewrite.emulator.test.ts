@@ -56,7 +56,7 @@ beforeAll(async () => {
   ({ sync_item_orchestrator } = require('../src/functions/orchestrators/plaid/sync_item.orchestrator'));
   ({ invalidate_flag_cache } = require('../src/functions/infrastructure/feature_flags'));
   /* eslint-enable @typescript-eslint/no-var-requires */
-  await seedMonthlySourcePeriods(db, [[2026, 4], [2026, 5], [2026, 6], [2026, 7], [2026, 8], [2026, 9], [2026, 10], [2026, 11], [2026, 12], [2027, 1]]);
+  await seedMonthlySourcePeriods(db, [[2037, 4], [2037, 5], [2037, 6], [2037, 7], [2037, 8], [2037, 9], [2037, 10], [2037, 11], [2037, 12], [2038, 1]]);
 }, 60000);
 afterAll(() => jest.useRealTimers());
 
@@ -81,7 +81,7 @@ describe('T1 — repeated syncs rewrite nothing (emulator)', () => {
     const o = (s: string) => db.collection('outflows').doc(ids.streams[s]);
     const i = (s: string) => db.collection('inflows').doc(ids.streams[s]);
     const ack = Timestamp.fromMillis(NOW_MS - 86400000);
-    const end_from = Date.UTC(2026, 10, 1);
+    const end_from = Date.UTC(2037, 10, 1);
     /* eslint-disable @typescript-eslint/naming-convention */
     await o('SPOT').update({ captureRulesVersion: 2, plaidIsActive: true });
     await o('CCPAY').update({ captureRulesVersion: 2, plaidIsActive: true, plaidInactiveAckAt: ack });

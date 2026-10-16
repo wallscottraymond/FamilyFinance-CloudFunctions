@@ -23,7 +23,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { Firestore, Timestamp } from 'firebase-admin/firestore';
 
-export const NOW_ISO = '2026-10-15T12:00:00Z';
+export const NOW_ISO = '2037-10-15T12:00:00Z';
 export const NOW_MS = Date.parse(NOW_ISO);
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -242,9 +242,25 @@ export function scenarioRecurring(
   };
 }
 
+/** Plaid category codes the scenarios use. Other suites seed `categories` docs for some of these;
+ *  the scenarios are defined with NONE of them present (as on the base golden run). */
+export const SCENARIO_CATEGORY_CODES = [
+  'ENTERTAINMENT_MUSIC_AND_AUDIO', 'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS', 'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT',
+  'ENTERTAINMENT_TV_AND_MOVIES', 'TRANSFER_OUT_ACCOUNT_TRANSFER', 'TRANSFER_IN_ACCOUNT_TRANSFER',
+  'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', 'INCOME_WAGES', 'FOOD_AND_DRINK_GROCERIES', 'RENT_AND_UTILITIES_WATER',
+  'INCOME_OTHER_INCOME', 'FOOD_AND_DRINK_COFFEE', 'GENERAL_MERCHANDISE_OTHER', 'LOAN_PAYMENTS_MORTGAGE_PAYMENT',
+  'LOAN_PAYMENTS_CAR_PAYMENT', 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES',
+];
+
 /** Seed the user, item, accounts, Everything-Else budgets and the current month source periods. */
 export async function seedScenario(db: Firestore, ids: ScenarioIds): Promise<void> {
   const now = Timestamp.fromMillis(NOW_MS);
+  // Isolation from other suites in the same emulator run: the scenario's category codes unmapped.
+  const del = db.batch();
+  for (const code of SCENARIO_CATEGORY_CODES) del.delete(db.collection('categories').doc(code));
+  await del.commit();
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('../../src/functions/repositories/category.repo').invalidate_category_cache();
   const batch = db.batch();
   batch.set(db.collection('plaid_items').doc(ids.itemDocId), {
     id: ids.itemDocId, plaidItemId: ids.itemDocId, userId: ids.userId, groupIds: [],

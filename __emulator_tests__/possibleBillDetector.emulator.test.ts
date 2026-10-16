@@ -96,7 +96,7 @@ describe('possible-bill detector (emulator)', () => {
     expect(by('Sunbit').map((i) => i.source)).toEqual(['plaid']); // X14: one tile, Plaid's
     expect(by('Avant').map((i) => i.source)).toEqual(['plaid']);
     const state = (await db.collection('_recurring_review_state').doc(h.ids.userId).get()).data()!;
-    expect(state.detectorLastRunDay).toBe('2026-10-15');
+    expect(state.detectorLastRunDay).toBe('2037-10-15');
     expect(state.dismissedVendorKeys).toEqual([]); // R11: the detector never writes "Not a bill"
   }, 180000);
 
@@ -171,7 +171,7 @@ describe('possible-bill detector (emulator)', () => {
       });
     }
     await writer.close();
-    await db.collection('_recurring_review_state').doc(h.ids.userId).update({ detectorLastRunDay: '2026-10-14' });
+    await db.collection('_recurring_review_state').doc(h.ids.userId).update({ detectorLastRunDay: '2037-10-14' });
     const warn = jest.spyOn(console, 'warn');
     const c = startCounting();
     const r = await job.run_detect_possible_recurring_job(ctx(), { user_id: h.ids.userId });

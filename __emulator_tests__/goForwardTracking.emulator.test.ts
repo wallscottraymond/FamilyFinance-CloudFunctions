@@ -87,9 +87,9 @@ describe('go-forward tracking (emulator)', () => {
     const h = await makeHarness(db, 'qzf12', mocks, { flag: true });
     await h.sync('link');
     const SPOT = h.ids.streams.SPOT;
-    jest.setSystemTime(Date.parse('2026-11-05T12:00:00Z'));
-    const NOV = { start: Date.UTC(2026, 10, 1), end: Date.UTC(2026, 11, 1) - 1 };
-    const at = Date.parse('2026-11-04T12:00:00Z');
+    jest.setSystemTime(Date.parse('2037-11-05T12:00:00Z'));
+    const NOV = { start: Date.UTC(2037, 10, 1), end: Date.UTC(2037, 11, 1) - 1 };
+    const at = Date.parse('2037-11-04T12:00:00Z');
     const pend = { ...plaidTxn(h.ids, { key: 'f12p', account: 'chk', amount: 15.49, days_ago: 0, name: 'SPOTIFY USA',
       merchant: 'Spotify', primary: 'ENTERTAINMENT', detailed: 'ENTERTAINMENT_MUSIC_AND_AUDIO' }, at), pending: true };
     h.postTxns([pend]);

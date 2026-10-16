@@ -201,7 +201,7 @@ describe('rejectedStreamNoStale (gap 8) + X10 existing v2 stream turns UNKNOWN /
     await h.sync('link');
     const SPOT = h.ids.streams.SPOT;
     const rec = scenarioRecurring(h.ids);
-    rec.outflow_streams = rec.outflow_streams.map((s) => (s.stream_id === SPOT ? { ...s, first_date: '2027-06-01' } : s));
+    rec.outflow_streams = rec.outflow_streams.map((s) => (s.stream_id === SPOT ? { ...s, first_date: '2038-06-01' } : s));
     h.setRecurring(rec);
     await h.sync('rejected');
     let o = await outflow(SPOT);
