@@ -27,6 +27,8 @@ export interface Harness {
   sync: (label: string) => Promise<any>;
   /** Next sync returns these new transactions (posted unless `pending`). */
   postTxns: (txns: any[]) => void;
+  /** Next sync reports these Plaid transaction ids removed (pending → posted). */
+  removeTxns: (plaid_ids: string[]) => void;
   setRecurring: (r: any) => void;
   derive: (w: { start: number; end: number }) => Promise<any>;
   bill: (w: { start: number; end: number }, recurring_id: string) => Promise<any | undefined>;
@@ -67,6 +69,7 @@ export async function makeHarness(
   if (opts.flag) await setFlag(db, [ids.userId]);
   const base = scenarioMocks(ids);
   let pending: any[] = base.txns;
+  let removed: string[] = [];
   let cursor_n = 0;
   let recurring = opts.recurring ?? scenarioRecurring(ids);
   const { sync_item_orchestrator } = require('../../src/functions/orchestrators/plaid/sync_item.orchestrator');
@@ -76,9 +79,11 @@ export async function makeHarness(
     mocks.mockSync.mockImplementation(async () => {
       const added = pending;
       pending = [];
+      const gone = removed.map((transaction_id) => ({ transaction_id }));
+      removed = [];
       cursor_n++;
       return {
-        added, modified: [], removed: [], next_cursor: `c${cursor_n}`, has_more: false,
+        added, modified: [], removed: gone, next_cursor: `c${cursor_n}`, has_more: false,
         transactions_update_status: 'HISTORICAL_UPDATE_COMPLETE', accounts: [], request_id: 'r',
       };
     });
@@ -100,6 +105,7 @@ export async function makeHarness(
       });
     },
     postTxns: (txns: any[]) => { pending = [...pending, ...txns]; },
+    removeTxns: (plaid_ids: string[]) => { removed = [...removed, ...plaid_ids]; },
     setRecurring: (r: any) => { recurring = r; },
     derive,
     bill: async (w, id) => (await derive(w)).bills.find((b: any) => b.recurring_id === id),
