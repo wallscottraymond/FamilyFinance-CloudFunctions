@@ -12,6 +12,7 @@
  * @module resolvers/transactions/assignment_context
  */
 
+import { is_v2_record } from "../../domain/recurring/capture_rules";
 import {
   budget_to_match_input,
   build_match_budgets,
@@ -116,6 +117,13 @@ export interface SharedAssignmentContext {
    * membership and manual pins / detaches are unaffected. One read (the review state doc).
    */
   fuzzy_excluded_plaid_ids?: Set<string>;
+  /**
+   * v2 bills / income (captured under the new rules) → the account their payments come from.
+   * The FUZZY scorer links a payment to one of these only from that same account (F13: a payment
+   * from another account — the bill moved — is not auto-linked; stream membership, D1 and manual
+   * pins are unaffected). Old records keep today's fuzzy matching (D13). No extra reads.
+   */
+  v2_account_by_recurring_id?: Map<string, string>;
 }
 
 /** One view's budgets, as the engine matches against them. */
@@ -176,6 +184,10 @@ export async function resolve_shared_assignment_context(
   for (const r of [...outflows, ...inflows]) {
     if (r.removal_intervals?.length) removal_intervals_by_id.set(r.id, r.removal_intervals);
   }
+  const v2_account_by_recurring_id = new Map<string, string>();
+  for (const r of [...outflows, ...inflows]) {
+    if (is_v2_record(r) && r.account_id) v2_account_by_recurring_id.set(r.id, r.account_id);
+  }
 
   return {
     real_budgets,
@@ -189,6 +201,7 @@ export async function resolve_shared_assignment_context(
     active_outflow_ids,
     removal_intervals_by_id,
     fuzzy_excluded_plaid_ids: new Set(review_state?.suppressed_txn_ids ?? []),
+    v2_account_by_recurring_id,
   };
 }
 
@@ -312,6 +325,8 @@ export async function resolve_assignment_context(
       inflow_tx_to_id: resolved_shared.inflow_tx_to_id,
       preloaded_candidates,
       fuzzy_excluded_plaid_ids: resolved_shared.fuzzy_excluded_plaid_ids,
+      v2_account_by_recurring_id: resolved_shared.v2_account_by_recurring_id,
+      txn_account_id: (data.accountId as string | null) ?? null,
     }
   );
 

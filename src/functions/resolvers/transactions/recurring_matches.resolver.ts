@@ -212,6 +212,10 @@ export async function resolve_recurring_matches(
     preloaded_candidates?: PreloadedRecurringCandidates;
     /** Plaid ids held out of the FUZZY scorer (X3) — stream membership above still applies. */
     fuzzy_excluded_plaid_ids?: Set<string>;
+    /** v2 record id → its account: fuzzy-linked only from that account (F13). */
+    v2_account_by_recurring_id?: Map<string, string>;
+    /** The transaction's (Plaid) account id. */
+    txn_account_id?: string | null;
   } = {}
 ): Promise<RecurringBySplit> {
   const out: RecurringBySplit = {};
@@ -253,13 +257,22 @@ export async function resolve_recurring_matches(
     return out;
   }
 
-  const candidates = await candidates_for_txn(
+  const all_candidates = await candidates_for_txn(
     ctx,
     user_id,
     is_expense,
     txn_date_ms,
     opts.preloaded_candidates
   );
+  // F13: a v2 bill / income is fuzzy-matched only by payments from its own account (a payment from
+  // another account — the bill moved — is not auto-linked in Phase 1). Old records: unchanged.
+  const v2_accounts = opts.v2_account_by_recurring_id;
+  const candidates = v2_accounts && v2_accounts.size > 0
+    ? all_candidates.filter((c) => {
+      const account = v2_accounts.get(c.recurring_id);
+      return account === undefined || account === (opts.txn_account_id ?? null);
+    })
+    : all_candidates;
 
   if (candidates.length === 0) {
     return out;

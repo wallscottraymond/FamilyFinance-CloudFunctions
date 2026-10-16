@@ -36,7 +36,9 @@ export async function resolve_review_answer_context(
     return { ok: false, reason: "permission_denied" };
   }
   let record_owner_ok = true;
-  if (item.record_id && item.kind === "still_a_bill") {
+  // The record the answer acts on must be the caller's too: "Still a bill" / "It ended" write it,
+  // and "Keep separate" decides about it (same bill: the stopped bill) — D24 / X16.
+  if (item.record_id && (item.kind === "still_a_bill" || item.kind === "same_bill")) {
     const repo = item.direction === "outflow" ? outflow_repo : inflow_repo;
     const record = await repo.get_by_id(ctx, item.record_id, { include_deleted: true });
     record_owner_ok = !!record && record.user_id === user_id;
