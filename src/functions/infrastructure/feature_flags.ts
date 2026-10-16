@@ -10,12 +10,19 @@
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { CONVERT_TO_RECURRING_FLAG } from "../domain/recurring/capture_rules";
 
+/** The production flag collection. */
+export const FEATURE_FLAGS_COLLECTION = "_feature_flags";
+
 /**
  * Collection for feature flags. The override exists ONLY for the emulator suites (each test file
- * gets its own flag collection, so parallel suites can't clobber one global flag doc); it is never
- * set in deployed functions.
+ * gets its own flag collection, so parallel suites can't clobber one global flag doc). It is
+ * honored ONLY when `FIRESTORE_EMULATOR_HOST` is set (hardening, review round 3 defect 7): a stray
+ * override in a deployed function's environment can never redirect the real flag read.
  */
-const COLLECTION = process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE || "_feature_flags";
+export function feature_flags_collection(env: NodeJS.ProcessEnv = process.env): string {
+  const override = env.FEATURE_FLAGS_COLLECTION_OVERRIDE;
+  return override && env.FIRESTORE_EMULATOR_HOST ? override : FEATURE_FLAGS_COLLECTION;
+}
 
 /**
  * Feature flag definition.
@@ -81,7 +88,7 @@ export async function load_feature_flags(force_reload = false): Promise<void> {
   }
 
   const db = getFirestore();
-  const snapshot = await db.collection(COLLECTION).get();
+  const snapshot = await db.collection(feature_flags_collection()).get();
 
   const flags = new Map<string, FeatureFlag>();
   snapshot.docs.forEach((doc) => {
@@ -213,7 +220,7 @@ export async function set_feature_flag(
   settings: Partial<Omit<FeatureFlag, "name" | "created_at" | "updated_at">>
 ): Promise<void> {
   const db = getFirestore();
-  const doc_ref = db.collection(COLLECTION).doc(flag_name);
+  const doc_ref = db.collection(feature_flags_collection()).doc(flag_name);
   const now = Timestamp.now();
 
   const doc = await doc_ref.get();
@@ -249,7 +256,7 @@ export async function set_feature_flag(
  */
 export async function delete_feature_flag(flag_name: string): Promise<void> {
   const db = getFirestore();
-  await db.collection(COLLECTION).doc(flag_name).delete();
+  await db.collection(feature_flags_collection()).doc(flag_name).delete();
 
   // Invalidate cache
   flag_cache = null;
