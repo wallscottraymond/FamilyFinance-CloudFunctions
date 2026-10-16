@@ -61,6 +61,7 @@ import { bump_derive_version } from "../../repositories/derive_version.repo";
 import {
   capture_records_from_raw,
   resolve_capture_review_context,
+  resolve_inactive_capture_records,
 } from "../../resolvers/recurring/recurring_capture.resolver";
 import type { CaptureRecordInfo } from "../../resolvers/plaid/recurring_sync.resolver";
 import {
@@ -346,7 +347,7 @@ export async function sync_recurring_orchestrator(
       ctx.user_id,
       review_ids_for_sync(ctx.user_id, streams, [...existing_records.values(), ...stale_records])
     );
-    plan = plan_recurring_capture({
+    const plan_input = {
       user_id: ctx.user_id,
       plaid_item_doc_id: deps.plaid_item.doc_id,
       now_ms: Date.now(),
@@ -356,7 +357,26 @@ export async function sync_recurring_orchestrator(
       stale_candidates: stale_records,
       review_items: review_context.items,
       state: review_context.state,
-    });
+      same_bill: {
+        candidates: deps.active_records,
+        active_account_ids: deps.active_account_ids,
+        inactive_loaded: false,
+      },
+    };
+    plan = plan_recurring_capture(plan_input);
+    if (plan.wants_inactive_records) {
+      // X9: only when a new v2 stream found no same-bill candidate among what's loaded — the
+      // user's inactive records (stopped bills, other items) + their active accounts, then replan.
+      const inactive = await resolve_inactive_capture_records(create_child_span(ctx), ctx.user_id);
+      plan = plan_recurring_capture({
+        ...plan_input,
+        same_bill: {
+          candidates: [...deps.active_records, ...inactive.records],
+          active_account_ids: inactive.active_account_ids,
+          inactive_loaded: true,
+        },
+      });
+    }
   }
 
   // 7. PERSIST INFLOWS
@@ -641,6 +661,7 @@ function build_planner_streams(
         transaction_ids: st.transaction_ids ?? [],
         average_amount: Math.abs(st.average_amount?.amount ?? 0),
         predicted_next_ms: st.predicted_next_date ? Date.parse(st.predicted_next_date) : null,
+        first_date_ms: st.first_date ? Date.parse(st.first_date) : 0,
       });
     }
   };

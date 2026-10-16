@@ -15,6 +15,7 @@
 import { TraceContext } from "../../types";
 import { recurring_review_repo } from "../../repositories/recurring_review.repo";
 import { inflow_repo, outflow_repo } from "../../repositories";
+import { account_repo } from "../../repositories/account.repo";
 import { RecurringReviewState, ReviewItem } from "../../domain/recurring/review_item.service";
 import { CaptureRecordInfo, to_capture_record_info } from "../plaid/recurring_sync.resolver";
 
@@ -35,19 +36,25 @@ export async function resolve_capture_review_context(
   return { state, items };
 }
 
-/** The user's inactive bills + income (same-bill candidates), as planner records. */
+/** The user's inactive bills + income (same-bill candidates) + their active Plaid account ids. */
 export async function resolve_inactive_capture_records(
   ctx: TraceContext,
   user_id: string
-): Promise<CaptureRecordInfo[]> {
-  const [outflows, inflows] = await Promise.all([
+): Promise<{ records: CaptureRecordInfo[]; active_account_ids: Set<string> }> {
+  const [outflows, inflows, accounts] = await Promise.all([
     outflow_repo.get_inactive_by_user_id(ctx, user_id),
     inflow_repo.get_inactive_by_user_id(ctx, user_id),
+    account_repo.get_by_user_id(ctx, user_id),
   ]);
-  return [
-    ...outflows.map((o) => to_capture_record_info(o, "outflow", o.merchant_name)),
-    ...inflows.map((i) => to_capture_record_info(i, "inflow", i.payer_name)),
-  ];
+  return {
+    records: [
+      ...outflows.map((o) => to_capture_record_info(o, "outflow", o.merchant_name)),
+      ...inflows.map((i) => to_capture_record_info(i, "inflow", i.payer_name)),
+    ],
+    active_account_ids: new Set(
+      accounts.filter((a) => a.is_active !== false).flatMap((a) => [a.account_id, a.id].filter(Boolean) as string[])
+    ),
+  };
 }
 
 /** Raw prefetched docs → planner records (no reads). */

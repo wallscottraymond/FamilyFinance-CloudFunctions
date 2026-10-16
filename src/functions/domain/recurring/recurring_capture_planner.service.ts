@@ -51,6 +51,7 @@ import {
   suggested_subject,
 } from "./review_item.service";
 import { is_currently_suppressed, RemovalInterval } from "./recurring_suppression.service";
+import { find_replaced_record } from "./same_bill.service";
 
 /** A stored record as the planner sees it (see `CaptureRecordInfo` in the sync resolver). */
 export interface PlannerRecord {
@@ -95,6 +96,8 @@ export interface PlannerStream {
   transaction_ids: string[];
   average_amount: number;
   predicted_next_ms: number | null;
+  /** Plaid's first payment date of the stream (ms; 0 when unknown). */
+  first_date_ms: number;
 }
 
 export interface CapturePlanInput {
@@ -109,6 +112,16 @@ export interface CapturePlanInput {
   stale_candidates: PlannerRecord[];
   review_items: Map<string, ReviewItem>;
   state: RecurringReviewState | null;
+  /**
+   * Same-bill candidates beyond this response's own records (D7): the user's active records, and
+   * — once loaded lazily (X9) — their inactive ones, with the user's active account ids (an
+   * account-removal soft delete is never "stopped").
+   */
+  same_bill?: {
+    candidates: PlannerRecord[];
+    active_account_ids: Set<string>;
+    inactive_loaded: boolean;
+  };
 }
 
 export interface CapturePlan {
@@ -123,6 +136,9 @@ export interface CapturePlan {
   /** Every item this sync wants to exist, at its current content (caller writes changed ones). */
   review_items: ReviewItem[];
   state_change: ReviewStateChange;
+  /** A new v2 stream found no same-bill candidate among the loaded records: load the user's
+   *  inactive records and plan again (X9 — lazy, ≈ never in steady state). */
+  wants_inactive_records?: boolean;
 }
 
 /** The review-item ids a sync must look up for this response (X8: getAll, no query). */
@@ -251,6 +267,42 @@ function suggested_item(
   );
 }
 
+function same_bill_item(
+  input: CapturePlanInput,
+  s: PlannerStream,
+  old: PlannerRecord,
+  existing: ReviewItem | undefined
+): ReviewItem {
+  return make_review_item(
+    {
+      user_id: input.user_id,
+      kind: "same_bill",
+      direction: s.direction,
+      source: "plaid",
+      status: "open",
+      answer: null,
+      subject_key: s.stream_id,
+      vendor_key: stream_vendor(s),
+      account_id: s.account_id,
+      plaid_item_doc_id: input.plaid_item_doc_id,
+      stream_id: s.stream_id,
+      record_id: old.id,
+      // "Looks like <the bill you know> changed. Same bill?"
+      name: old.name,
+      amount: Math.abs(s.average_amount),
+      frequency: app_frequency(s.raw_frequency),
+      plaid_status: String(s.raw_status ?? "UNKNOWN").toUpperCase(),
+      category: s.detailed_category,
+      transaction_ids: s.transaction_ids,
+      next_due_ms: s.predicted_next_ms,
+      user_frequency: null,
+      resolved_at_ms: null,
+    },
+    input.now_ms,
+    existing
+  );
+}
+
 /** Plan one recurring sync under the capture rules. PURE. */
 export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   const plan: CapturePlan = {
@@ -271,6 +323,19 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
   const suppress = (ids: string[]) => plan.state_change.add_suppressed!.push(...ids);
   const unsuppress = (ids: string[]) => plan.state_change.remove_suppressed!.push(...ids);
+
+  // Same-bill pool + "stopped in this sync" (returned inactive, or a stale candidate).
+  const pool_by_id = new Map<string, PlannerRecord>();
+  for (const r of [...(input.same_bill?.candidates ?? []), ...input.existing.values()]) pool_by_id.set(r.id, r);
+  const same_bill_pool = [...pool_by_id.values()];
+  const stopped_in_sync = new Set<string>([
+    ...input.streams.filter((x) => x.raw_is_active === false && input.existing.has(x.stream_id)).map((x) => x.stream_id),
+    ...input.stale_candidates.map((r) => r.id),
+  ]);
+  const same_bill_ctx = {
+    active_account_ids: input.same_bill?.active_account_ids ?? new Set<string>(),
+    stopped_in_sync,
+  };
 
   for (const s of input.streams) {
     const ex = input.existing.get(s.stream_id);
@@ -341,6 +406,15 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       }
       continue;
     }
+    // Same bill? A new stream replacing a bill that STOPPED is held as a question, not a second
+    // bill (D7, D10: no double count while unanswered). Two active streams never match.
+    const replaced = find_replaced_record(s, vk, same_bill_pool, same_bill_ctx);
+    if (replaced) {
+      suppress(s.transaction_ids);
+      plan.review_items.push(same_bill_item(input, s, replaced, same_bill));
+      continue;
+    }
+    if (input.same_bill && !input.same_bill.inactive_loaded) plan.wants_inactive_records = true;
     // Mature, known schedule, active → a v2 record.
     create_v2(s, null);
     if (suggested?.status === "open") {

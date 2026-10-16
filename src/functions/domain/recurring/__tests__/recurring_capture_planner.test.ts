@@ -33,7 +33,7 @@ const stream = (id: string, o: Partial<PlannerStream> = {}): PlannerStream => ({
   direction: "outflow", stream_id: id, entity: entity(id), raw_status: "MATURE", raw_frequency: "MONTHLY",
   raw_is_active: true, account_id: "chk", account_type: "depository", merchant_name: `M ${id}`,
   description: id.toUpperCase(), detailed_category: "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT",
-  transaction_ids: [`${id}_t1`, `${id}_t2`], average_amount: 10, predicted_next_ms: null, ...o,
+  transaction_ids: [`${id}_t1`, `${id}_t2`], average_amount: 10, predicted_next_ms: null, first_date_ms: NOW - 20 * 86400000, ...o,
 });
 
 const record = (id: string, o: Partial<PlannerRecord> = {}): PlannerRecord => ({
