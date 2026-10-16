@@ -19,6 +19,8 @@ import {
   RESOLVED_ITEM_TTL_MS,
   RecurringReviewState,
   ReviewItem,
+  ReviewStateChange,
+  apply_review_state_change,
   suppressed_hash,
 } from "../domain/recurring/review_item.service";
 
@@ -64,6 +66,28 @@ interface ReviewStateDoc {
   dismissedVendorKeys: string[];
   detectorLastRunDay: string | null;
   updatedAt: Timestamp;
+}
+
+function state_from_doc(user_id: string, d: ReviewStateDoc): RecurringReviewState {
+  return {
+    user_id,
+    suppressed_txn_ids: d.suppressedTxnIds ?? [],
+    dismissed_vendor_keys: d.dismissedVendorKeys ?? [],
+    detector_last_run_day: d.detectorLastRunDay ?? null,
+  };
+}
+
+function state_to_doc(state: RecurringReviewState): ReviewStateDoc {
+  /* eslint-disable @typescript-eslint/naming-convention */
+  return {
+    userId: state.user_id,
+    suppressedTxnIds: state.suppressed_txn_ids,
+    suppressedHash: suppressed_hash(state),
+    dismissedVendorKeys: state.dismissed_vendor_keys,
+    detectorLastRunDay: state.detector_last_run_day,
+    updatedAt: Timestamp.now(),
+  };
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 function to_doc(item: ReviewItem): ReviewItemDoc {
@@ -139,33 +163,42 @@ export const recurring_review_repo = {
   async get_state(_ctx: TraceContext, user_id: string): Promise<RecurringReviewState | null> {
     if (!user_id) return null;
     const snap = await state_ref(user_id).get();
-    if (!snap.exists) return null;
-    const d = snap.data() as ReviewStateDoc;
-    return {
-      user_id,
-      suppressed_txn_ids: d.suppressedTxnIds ?? [],
-      dismissed_vendor_keys: d.dismissedVendorKeys ?? [],
-      detector_last_run_day: d.detectorLastRunDay ?? null,
-    };
+    return snap.exists ? state_from_doc(user_id, snap.data() as ReviewStateDoc) : null;
   },
 
-  /** Replace the user's review state (callers write only when it changed). */
-  async set_state(ctx: TraceContext, state: RecurringReviewState): Promise<void> {
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const doc: ReviewStateDoc = {
-      userId: state.user_id,
-      suppressedTxnIds: state.suppressed_txn_ids,
-      suppressedHash: suppressed_hash(state),
-      dismissedVendorKeys: state.dismissed_vendor_keys,
-      detectorLastRunDay: state.detector_last_run_day,
-      updatedAt: Timestamp.now(),
-    };
-    /* eslint-enable @typescript-eslint/naming-convention */
-    await state_ref(state.user_id).set(doc);
-    console.log(
-      `[${ctx.trace_id}] recurring_review_repo.set_state ${state.user_id}: ` +
-        `suppressed=${state.suppressed_txn_ids.length} dismissed=${state.dismissed_vendor_keys.length}`
-    );
+  /**
+   * Apply a change to the user's review state ATOMICALLY: read-modify-write in one transaction, so
+   * concurrent writers (a sync, an answer, the detector) never lose each other's change (e.g. a
+   * "Not a bill" landing while a sync writes its held-out ids). Writes only when it changed.
+   * Callers first check the change against the state they already read and skip this when it is a
+   * no-op there (no extra read). Returns the previous (fresh) state and what changed.
+   */
+  async apply_state_change(
+    ctx: TraceContext,
+    user_id: string,
+    change: ReviewStateChange
+  ): Promise<{
+    previous: RecurringReviewState | null;
+    next: RecurringReviewState;
+    changed: boolean;
+    suppressed_changed: boolean;
+  }> {
+    const db = getFirestore();
+    const ref = state_ref(user_id);
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const previous = snap.exists ? state_from_doc(user_id, snap.data() as ReviewStateDoc) : null;
+      const r = apply_review_state_change(previous, user_id, change);
+      if (r.changed) tx.set(ref, state_to_doc(r.next));
+      return { previous, ...r };
+    });
+    if (out.changed) {
+      console.log(
+        `[${ctx.trace_id}] recurring_review_repo.apply_state_change ${user_id}: ` +
+          `suppressed=${out.next.suppressed_txn_ids.length} dismissed=${out.next.dismissed_vendor_keys.length}`
+      );
+    }
+    return out;
   },
 
   /** The items at these (deterministic) ids — one batched read; missing ids are absent (X8). */

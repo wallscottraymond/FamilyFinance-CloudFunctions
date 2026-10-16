@@ -468,14 +468,17 @@ export async function sync_recurring_orchestrator(
         create_child_span(ctx),
         changed_items(plan.review_items, review_context.items)
       );
-      const next_state = apply_review_state_change(review_context.state, ctx.user_id, plan.state_change);
-      if (next_state.changed) {
-        await recurring_review_repo.set_state(create_child_span(ctx), next_state.next);
-        const had = new Set(review_context.state?.suppressed_txn_ids ?? []);
-        newly_suppressed = next_state.next.suppressed_txn_ids.filter((id) => !had.has(id));
+      // Checked against the state already read (no extra read when nothing changes); written in a
+      // transaction against the FRESH doc so a concurrent answer / detector write isn't lost.
+      if (apply_review_state_change(review_context.state, ctx.user_id, plan.state_change).changed) {
+        const next_state = await recurring_review_repo.apply_state_change(create_child_span(ctx), ctx.user_id, plan.state_change);
+        if (next_state.changed) {
+          const had = new Set(next_state.previous?.suppressed_txn_ids ?? []);
+          newly_suppressed = next_state.next.suppressed_txn_ids.filter((id) => !had.has(id));
+        }
+        // The held-out set feeds the derive and the engine (X3): invalidate the derive cache.
+        if (next_state.suppressed_changed) await bump_derive_version(ctx.user_id).catch(() => {});
       }
-      // The held-out set feeds the derive and the engine (X3): invalidate the derive cache.
-      if (next_state.suppressed_changed) await bump_derive_version(ctx.user_id).catch(() => {});
     } catch (error) {
       const error_msg = error instanceof Error ? error.message : "Unknown error";
       console.error(`[${ctx.trace_id}] Review item / state write failed:`, error_msg);

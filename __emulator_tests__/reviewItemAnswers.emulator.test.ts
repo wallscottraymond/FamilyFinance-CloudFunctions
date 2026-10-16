@@ -122,6 +122,32 @@ describe('answering review items (emulator)', () => {
     await expect(answer(ctx(), uid, { item_id: sunbit.id, answer: 'track' }, NOW_MS)).rejects.toThrow(/already answered/);
   }, 180000);
 
+  it('state doc: concurrent writers never lose each other (two "Not a bill" + a sync-style write at once)', async () => {
+    const h = await makeHarness(db, 'qzconc', mocks, { flag: true });
+    await h.sync('link');
+    const uid = h.ids.userId;
+    const sunbit = await item_named(uid, 'Sunbit');
+    const avant = await item_named(uid, 'Avant');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { recurring_review_repo } = require('../src/functions/repositories/recurring_review.repo');
+    // All three start from the SAME state (each orchestrator read it before any wrote).
+    await Promise.all([
+      answer(ctx(), uid, { item_id: sunbit.id, answer: 'not_bill' }, NOW_MS),
+      answer(ctx(), uid, { item_id: avant.id, answer: 'not_bill' }, NOW_MS),
+      recurring_review_repo.apply_state_change(ctx(), uid, { add_suppressed: ['qzconc_extra_id'] }),
+    ]);
+    const state = (await db.collection('_recurring_review_state').doc(uid).get()).data()!;
+    expect([...state.dismissedVendorKeys].sort()).toEqual(['outflow:avant', 'outflow:sunbit']);
+    expect(state.suppressedTxnIds).toContain('qzconc_extra_id');
+    expect(state.suppressedTxnIds).toContain(h.ids.txn('sunbit0')); // the sync's held-out ids survive
+    // Repo level, 8 writers racing on one doc: every change lands.
+    await Promise.all(Array.from({ length: 8 }, (_, n) =>
+      recurring_review_repo.apply_state_change(ctx(), uid, { add_dismissed_vendor_keys: [`outflow:race${n}`] })));
+    const after = (await db.collection('_recurring_review_state').doc(uid).get()).data()!;
+    for (let n = 0; n < 8; n++) expect(after.dismissedVendorKeys).toContain(`outflow:race${n}`);
+    expect(after.dismissedVendorKeys).toEqual(expect.arrayContaining(['outflow:avant', 'outflow:sunbit']));
+  }, 180000);
+
   it('still a bill (remembered, never re-asked) / it ended (going-forward end)', async () => {
     const h = await makeHarness(db, 'qzstill', mocks, { flag: true });
     await h.sync('link');

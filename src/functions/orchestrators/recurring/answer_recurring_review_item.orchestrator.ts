@@ -93,9 +93,11 @@ export async function answer_recurring_review_item_orchestrator(
 
     // 4. The item + the review state.
     await recurring_review_repo.upsert_items(ctx, [plan.item!]);
-    const next = apply_review_state_change(context.state, user_id, plan.state_change);
-    if (next.changed) await recurring_review_repo.set_state(ctx, next.next);
-    if (next.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
+    if (apply_review_state_change(context.state, user_id, plan.state_change).changed) {
+      // Atomic against the fresh doc (a concurrent sync / detector write is never lost).
+      const next = await recurring_review_repo.apply_state_change(ctx, user_id, plan.state_change);
+      if (next.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
+    }
 
     // 5. "Track" / "keep separate": re-sync the item now so the bill exists right away.
     if (plan.resync_item_doc_id) {
