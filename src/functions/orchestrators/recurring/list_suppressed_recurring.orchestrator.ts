@@ -18,7 +18,10 @@ import {
 } from "../../observability";
 import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
-import { current_removal_state } from "../../domain/recurring/recurring_suppression.service";
+import {
+  current_removal_state,
+  pending_end,
+} from "../../domain/recurring/recurring_suppression.service";
 
 export interface SuppressedRecurringItem {
   kind: "outflow" | "inflow";
@@ -27,6 +30,8 @@ export interface SuppressedRecurringItem {
   status: "removed" | "paused";
   /** For `paused`: when it auto-resumes. */
   resume_ms: number | null;
+  /** An "It ended" whose end starts next month (it still counts this month). */
+  ends_ms?: number;
 }
 
 export interface ListSuppressedRecurringResult {
@@ -50,26 +55,33 @@ export async function list_suppressed_recurring_orchestrator(
     const items: SuppressedRecurringItem[] = [];
 
     for (const o of outflows) {
+      // Merged-away bills stay out of the list, so a Restore can't double count (X4 / D23).
+      if (o.merged_into_id) continue;
       const state = current_removal_state(o.removal_intervals, now_ms);
-      if (state.status === "active") continue;
+      const ending = state.status === "active" ? pending_end(o.removal_intervals, now_ms) : null;
+      if (state.status === "active" && !ending) continue;
       items.push({
         kind: "outflow",
         id: o.id,
         name: o.user_custom_name || o.merchant_name || o.description || "Bill",
-        status: state.status,
+        status: state.status === "active" ? "removed" : state.status,
         resume_ms: state.resume_ms,
+        ...(ending ? { ends_ms: ending.from_ms } : {}),
       });
     }
 
     for (const i of inflows) {
+      if (i.merged_into_id) continue;
       const state = current_removal_state(i.removal_intervals, now_ms);
-      if (state.status === "active") continue;
+      const ending = state.status === "active" ? pending_end(i.removal_intervals, now_ms) : null;
+      if (state.status === "active" && !ending) continue;
       items.push({
         kind: "inflow",
         id: i.id,
         name: i.user_custom_name || i.payer_name || i.description || "Income",
-        status: state.status,
+        status: state.status === "active" ? "removed" : state.status,
         resume_ms: state.resume_ms,
+        ...(ending ? { ends_ms: ending.from_ms } : {}),
       });
     }
 

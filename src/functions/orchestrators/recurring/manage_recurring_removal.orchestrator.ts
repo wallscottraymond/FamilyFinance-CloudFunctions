@@ -28,6 +28,7 @@ import {
   RemovalReadableRepo,
 } from "../../resolvers/recurring/recurring_removal.resolver";
 import {
+  apply_end_at,
   apply_remove,
   apply_pause,
   apply_restore,
@@ -66,7 +67,10 @@ export type ManageRecurringRemovalInput =
   | { id: string; action: "remove"; mode: "all" | "going_forward" }
   | { id: string; action: "pause"; resume_ms: number }
   | { id: string; action: "restore" }
-  | { id: string; action: "delete" };
+  | { id: string; action: "delete" }
+  /** "It ended" (Convert-To-Recurring X4): end going forward after the last payment. Internal —
+   *  reached through the review-answer callable, not the manage entry. */
+  | { id: string; action: "end" };
 
 export interface ManageRecurringRemovalResult {
   id: string;
@@ -146,10 +150,18 @@ export async function manage_recurring_removal_orchestrator(
       return { id: input.id, action: "delete", deleted: true, state: null };
     }
 
+    // 3b. A bill merged into another can't be restored from the Removed list (it would count
+    //     twice next to the bill it was merged into — X4 / D23); the merge is undone instead.
+    if (input.action === "restore" && context.merged_into_id) {
+      throw new ValidationError(["this bill was merged into another — undo the merge instead"]);
+    }
+
     // 4. Apply the pure suppression transition.
     const month_start_ms = month_start_utc(now_ms);
     let next: RemovalInterval[];
-    if (input.action === "remove") {
+    if (input.action === "end") {
+      next = apply_end_at(context.removal_intervals, context.last_payment_ms, now_ms, month_start_ms);
+    } else if (input.action === "remove") {
       next = apply_remove(context.removal_intervals, input.mode, now_ms, month_start_ms);
     } else if (input.action === "pause") {
       if (input.resume_ms <= now_ms) {
@@ -165,12 +177,15 @@ export async function manage_recurring_removal_orchestrator(
     // list + totals — not just the derive path. Covers remove / pause / restore alike.
     await repo.set_removal_intervals(ctx, input.id, next, has_open_interval(next), user_id);
     await repo.apply_period_suppression(ctx, input.id, next, user_id);
-    // Only months from now on change — except "remove all", which reaches back to the start.
-    await reassign_released_payments(
-      ctx,
-      context,
-      input.action === "remove" && input.mode === "all" ? undefined : month_start_ms
-    );
+    // Only months from now on change — except "remove all", which reaches back to the start, and
+    // an end, which starts the month after the last payment (possibly earlier than this month).
+    const released_from =
+      input.action === "remove" && input.mode === "all"
+        ? undefined
+        : input.action === "end"
+          ? Math.min(month_start_ms, next[next.length - 1].from_ms)
+          : month_start_ms;
+    await reassign_released_payments(ctx, context, released_from);
 
     log_operation_success(span, user_id);
     return {

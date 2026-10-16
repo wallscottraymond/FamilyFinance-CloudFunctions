@@ -128,7 +128,47 @@ export function apply_pause(
  * active (idempotent).
  */
 export function apply_restore(intervals: RemovalInterval[], now_ms: number): RemovalInterval[] {
-  return close_active_at(intervals, now_ms);
+  // An END that hasn't started yet ("It ended" after this month's payment) is simply cancelled.
+  // Only `apply_end_at` makes a future-starting interval, so today's data is unaffected.
+  return close_active_at(intervals, now_ms).filter((i) => !(i.from_ms > now_ms && i.to_ms === null));
+}
+
+/** Start of the UTC month after the one containing `ms`. */
+function next_month_start_utc(ms: number): number {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+}
+
+/**
+ * Apply an END ("It ended", Convert-To-Recurring X4 / D22 / D23): a going-forward removal that
+ * starts the month AFTER the last payment — so every month up to and including the last payment
+ * keeps its bill (history, paid marks, pins intact), and nothing is expected after it. With no
+ * known payment it starts this month (like a going-forward remove). Never later than next month
+ * (an end can't be pushed past the current month's payment). Supersedes the active interval, as
+ * remove does. Restore undoes it (a not-yet-started end is cancelled outright).
+ *
+ * The same mechanism every reader already honors (derive, engine, reconcile, stored periods) —
+ * the bill is NOT turned inactive, so past periods and its detail keep working.
+ */
+export function apply_end_at(
+  intervals: RemovalInterval[],
+  last_payment_ms: number | null,
+  now_ms: number,
+  month_start_ms: number
+): RemovalInterval[] {
+  const superseded = close_active_at(intervals, now_ms);
+  const from_ms =
+    last_payment_ms === null
+      ? month_start_ms
+      : Math.min(next_month_start_utc(last_payment_ms), next_month_start_utc(now_ms));
+  // Drop any not-yet-started end being replaced (re-answering moves it, never stacks it).
+  const kept = superseded.filter((i) => !(i.from_ms > now_ms && i.to_ms === null));
+  return [...kept, { from_ms, to_ms: null, mode: "going_forward" }];
+}
+
+/** The open (indefinite) interval that starts after `now_ms`, if any — an end not yet in effect. */
+export function pending_end(intervals: RemovalInterval[], now_ms: number): RemovalInterval | null {
+  return intervals.find((i) => i.from_ms > now_ms && i.to_ms === null) ?? null;
 }
 
 /**

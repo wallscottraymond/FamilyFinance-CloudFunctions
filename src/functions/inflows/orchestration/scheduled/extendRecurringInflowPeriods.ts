@@ -22,6 +22,9 @@ import {
   PlaidRecurringFrequency
 } from '../../../../types';
 import { calculateAllOccurrencesInPeriod } from '../../inflow_periods/utils/calculateAllOccurrencesInPeriod';
+import { inflow_repo } from '../../../repositories/inflow.repo';
+import { is_v2_record } from '../../../domain/recurring/capture_rules';
+import { RemovalMode } from '../../../domain/recurring/recurring_suppression.service';
 
 /**
  * Scheduled function to extend recurring inflow periods
@@ -83,181 +86,11 @@ export const extendRecurringInflowPeriods = onSchedule({
 
     // Process each active inflow
     for (const inflowDoc of activeInflowsSnapshot.docs) {
-      const inflow = { id: inflowDoc.id, ...inflowDoc.data() } as any;
-
       try {
-        console.log(`[extendRecurringInflowPeriods] Processing inflow: ${inflow.description || inflow.merchantName || inflow.id}`);
-
-        // Get existing inflow periods for this inflow
-        const existingPeriodsQuery = db.collection('inflow_periods')
-          .where('inflowId', '==', inflow.id);
-
-        const existingPeriodsSnapshot = await existingPeriodsQuery.get();
-        const existingPeriodIds = new Set(
-          existingPeriodsSnapshot.docs.map(doc => doc.data().sourcePeriodId)
-        );
-
-        // Calculate payment cycle info
-        const cycleInfo = calculatePaymentCycle(inflow);
-
-        // Find missing source periods and create inflow periods
-        const newInflowPeriods: InflowPeriod[] = [];
-
-        for (const sourcePeriod of allSourcePeriods) {
-          // Skip if inflow period already exists for this source period
-          if (existingPeriodIds.has(sourcePeriod.id)) {
-            continue;
-          }
-
-          // Extract ownership fields
-          const userId = inflow.ownerId || inflow.userId;
-          const groupId = inflow.groupId || null;
-
-          // Calculate period amounts
-          const periodCalc = calculatePeriodAmounts(sourcePeriod, cycleInfo, inflow);
-
-          // Calculate multi-occurrence tracking
-          const occurrences = calculateAllOccurrencesInPeriod(inflow, sourcePeriod);
-
-          // Calculate financial totals based on occurrences
-          const amountPerOccurrence = cycleInfo.incomeAmount;
-          const totalAmountDue = amountPerOccurrence * occurrences.numberOfOccurrences;
-
-          // Initialize occurrence tracking arrays
-          const occurrencePaidFlags = new Array(occurrences.numberOfOccurrences).fill(false);
-          const occurrenceTransactionIds = new Array(occurrences.numberOfOccurrences).fill(null);
-
-          // Determine first and last expected dates
-          const firstDueDateInPeriod = occurrences.numberOfOccurrences > 0 ? occurrences.occurrenceDueDates[0] : null;
-          const lastDueDateInPeriod = occurrences.numberOfOccurrences > 0
-            ? occurrences.occurrenceDueDates[occurrences.numberOfOccurrences - 1]
-            : null;
-
-          // Build inflow period document
-          const inflowPeriodDoc: InflowPeriod = {
-            // === IDENTITY ===
-            id: `${inflow.id}_${sourcePeriod.id}`,
-            inflowId: inflow.id!,
-            sourcePeriodId: sourcePeriod.id!,
-
-            // === OWNERSHIP & ACCESS ===
-            ownerId: userId,
-            createdBy: inflow.createdBy || userId,
-            updatedBy: userId,
-            groupId: groupId,
-
-            // === PLAID IDENTIFIERS ===
-            accountId: inflow.accountId,
-            plaidItemId: inflow.plaidItemId,
-
-            // === FINANCIAL TRACKING ===
-            actualAmount: null,
-            amountWithheld: periodCalc.amountEarned,
-            averageAmount: cycleInfo.incomeAmount,
-            expectedAmount: totalAmountDue,
-            amountPerOccurrence: amountPerOccurrence,
-            amountAllocated: occurrences.amountAllocated,
-            totalAmountDue: totalAmountDue,
-            totalAmountPaid: 0,
-            totalAmountUnpaid: totalAmountDue,
-
-            // === TIMESTAMPS ===
-            createdAt: now,
-            updatedAt: now,
-            lastCalculated: now,
-
-            // === PAYMENT CYCLE INFO ===
-            currency: inflow.currency || 'USD',
-            cycleDays: cycleInfo.cycleDays,
-            cycleStartDate: cycleInfo.cycleStartDate,
-            cycleEndDate: cycleInfo.cycleEndDate,
-            dailyWithholdingRate: periodCalc.amountEarned / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate),
-
-            // === INFLOW METADATA (Denormalized) ===
-            description: inflow.description || null,
-            frequency: inflow.frequency,
-
-            // === PAYMENT STATUS ===
-            isPaid: false,
-            isFullyPaid: false,
-            isPartiallyPaid: false,
-            isReceiptPeriod: occurrences.numberOfOccurrences > 0,
-
-            // === CATEGORIZATION ===
-            internalDetailedCategory: inflow.internalDetailedCategory || null,
-            internalPrimaryCategory: inflow.internalPrimaryCategory || null,
-            plaidPrimaryCategory: inflow.plaidPrimaryCategory || 'INCOME',
-            plaidDetailedCategory: inflow.plaidDetailedCategory || '',
-
-            // === STATUS & CONTROL ===
-            isActive: true,
-            isHidden: false,
-
-            // === MERCHANT INFO ===
-            merchant: inflow.merchantName,
-            payee: inflow.merchantName,
-
-            // === PERIOD CONTEXT ===
-            periodStartDate: sourcePeriod.startDate,
-            periodEndDate: sourcePeriod.endDate,
-            periodType: sourcePeriod.type,
-
-            // === PREDICTION ===
-            predictedNextDate: occurrences.nextExpectedDate,
-
-            // === USER INTERACTION ===
-            rules: [],
-            tags: inflow.tags || [],
-            type: inflow.type || 'income',
-            note: null,
-            userCustomName: inflow.userCustomName || null,
-
-            // === SOURCE ===
-            source: inflow.source || 'plaid',
-
-            // === TRANSACTION TRACKING ===
-            transactionIds: [],
-
-            // === MULTI-OCCURRENCE TRACKING ===
-            numberOfOccurrencesInPeriod: occurrences.numberOfOccurrences,
-            numberOfOccurrencesPaid: 0,
-            numberOfOccurrencesUnpaid: occurrences.numberOfOccurrences,
-            occurrenceDueDates: occurrences.occurrenceDueDates,
-            occurrencePaidFlags: occurrencePaidFlags,
-            occurrenceTransactionIds: occurrenceTransactionIds,
-
-            // === PROGRESS METRICS ===
-            paymentProgressPercentage: 0,
-            dollarProgressPercentage: 0,
-
-            // === DUE DATE TRACKING ===
-            firstDueDateInPeriod: firstDueDateInPeriod,
-            lastDueDateInPeriod: lastDueDateInPeriod,
-            nextUnpaidDueDate: firstDueDateInPeriod
-          } as any;
-
-          newInflowPeriods.push(inflowPeriodDoc);
-        }
-
-        // Persist new inflow periods
-        if (newInflowPeriods.length > 0) {
-          console.log(`[extendRecurringInflowPeriods] Creating ${newInflowPeriods.length} new inflow periods for ${inflow.id}`);
-          await batchCreateInflowPeriods(db, newInflowPeriods);
-
-          // Update inflow metadata
-          await db.collection('inflows').doc(inflow.id!).update({
-            lastExtended: now,
-          });
-
-          totalPeriodsCreated += newInflowPeriods.length;
-        } else {
-          console.log(`[extendRecurringInflowPeriods] No new periods needed for inflow ${inflow.id}`);
-        }
-
+        totalPeriodsCreated += await extendInflowPeriodsFor(db, inflowDoc, allSourcePeriods, now);
         inflowsProcessed++;
-
       } catch (error) {
-        console.error(`[extendRecurringInflowPeriods] Error processing inflow ${inflow.id}:`, error);
+        console.error(`[extendRecurringInflowPeriods] Error processing inflow ${inflowDoc.id}:`, error);
         // Continue processing other inflows
       }
     }
@@ -361,4 +194,206 @@ async function batchCreateInflowPeriods(
     await batch.commit();
     console.log(`[extendRecurringInflowPeriods] Created batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(inflowPeriods.length / BATCH_SIZE)} (${batchPeriods.length} periods)`);
   }
+}
+
+/**
+ * Extend ONE inflow's materialized periods over `allSourcePeriods` (the per-inflow body of the
+ * monthly job; exported for tests). Returns the number of periods created.
+ *
+ * Convert-To-Recurring X20: for a v2 record with removal intervals ("It ended" keeps it active),
+ * the new periods are flipped to match the intervals (`apply_period_suppression`), so stored
+ * periods never drift from the derive. Old records keep today's behavior (D13).
+ */
+export async function extendInflowPeriodsFor(
+  db: admin.firestore.Firestore,
+  inflowDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
+  allSourcePeriods: SourcePeriod[],
+  now: Timestamp
+): Promise<number> {
+  const inflow = { id: inflowDoc.id, ...inflowDoc.data() } as any;
+  let totalPeriodsCreated = 0;
+  console.log(`[extendRecurringInflowPeriods] Processing inflow: ${inflow.description || inflow.merchantName || inflow.id}`);
+
+  // Get existing inflow periods for this inflow
+  const existingPeriodsQuery = db.collection('inflow_periods')
+    .where('inflowId', '==', inflow.id);
+
+  const existingPeriodsSnapshot = await existingPeriodsQuery.get();
+  const existingPeriodIds = new Set(
+    existingPeriodsSnapshot.docs.map(doc => doc.data().sourcePeriodId)
+  );
+
+  // Calculate payment cycle info
+  const cycleInfo = calculatePaymentCycle(inflow);
+
+  // Find missing source periods and create inflow periods
+  const newInflowPeriods: InflowPeriod[] = [];
+
+  for (const sourcePeriod of allSourcePeriods) {
+    // Skip if inflow period already exists for this source period
+    if (existingPeriodIds.has(sourcePeriod.id)) {
+      continue;
+    }
+
+    // Extract ownership fields
+    const userId = inflow.ownerId || inflow.userId;
+    const groupId = inflow.groupId || null;
+
+    // Calculate period amounts
+    const periodCalc = calculatePeriodAmounts(sourcePeriod, cycleInfo, inflow);
+
+    // Calculate multi-occurrence tracking
+    const occurrences = calculateAllOccurrencesInPeriod(inflow, sourcePeriod);
+
+    // Calculate financial totals based on occurrences
+    const amountPerOccurrence = cycleInfo.incomeAmount;
+    const totalAmountDue = amountPerOccurrence * occurrences.numberOfOccurrences;
+
+    // Initialize occurrence tracking arrays
+    const occurrencePaidFlags = new Array(occurrences.numberOfOccurrences).fill(false);
+    const occurrenceTransactionIds = new Array(occurrences.numberOfOccurrences).fill(null);
+
+    // Determine first and last expected dates
+    const firstDueDateInPeriod = occurrences.numberOfOccurrences > 0 ? occurrences.occurrenceDueDates[0] : null;
+    const lastDueDateInPeriod = occurrences.numberOfOccurrences > 0
+      ? occurrences.occurrenceDueDates[occurrences.numberOfOccurrences - 1]
+      : null;
+
+    // Build inflow period document
+    const inflowPeriodDoc: InflowPeriod = {
+      // === IDENTITY ===
+      id: `${inflow.id}_${sourcePeriod.id}`,
+      inflowId: inflow.id!,
+      sourcePeriodId: sourcePeriod.id!,
+
+      // === OWNERSHIP & ACCESS ===
+      ownerId: userId,
+      createdBy: inflow.createdBy || userId,
+      updatedBy: userId,
+      groupId: groupId,
+
+      // === PLAID IDENTIFIERS ===
+      accountId: inflow.accountId,
+      plaidItemId: inflow.plaidItemId,
+
+      // === FINANCIAL TRACKING ===
+      actualAmount: null,
+      amountWithheld: periodCalc.amountEarned,
+      averageAmount: cycleInfo.incomeAmount,
+      expectedAmount: totalAmountDue,
+      amountPerOccurrence: amountPerOccurrence,
+      amountAllocated: occurrences.amountAllocated,
+      totalAmountDue: totalAmountDue,
+      totalAmountPaid: 0,
+      totalAmountUnpaid: totalAmountDue,
+
+      // === TIMESTAMPS ===
+      createdAt: now,
+      updatedAt: now,
+      lastCalculated: now,
+
+      // === PAYMENT CYCLE INFO ===
+      currency: inflow.currency || 'USD',
+      cycleDays: cycleInfo.cycleDays,
+      cycleStartDate: cycleInfo.cycleStartDate,
+      cycleEndDate: cycleInfo.cycleEndDate,
+      dailyWithholdingRate: periodCalc.amountEarned / getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate),
+
+      // === INFLOW METADATA (Denormalized) ===
+      description: inflow.description || null,
+      frequency: inflow.frequency,
+
+      // === PAYMENT STATUS ===
+      isPaid: false,
+      isFullyPaid: false,
+      isPartiallyPaid: false,
+      isReceiptPeriod: occurrences.numberOfOccurrences > 0,
+
+      // === CATEGORIZATION ===
+      internalDetailedCategory: inflow.internalDetailedCategory || null,
+      internalPrimaryCategory: inflow.internalPrimaryCategory || null,
+      plaidPrimaryCategory: inflow.plaidPrimaryCategory || 'INCOME',
+      plaidDetailedCategory: inflow.plaidDetailedCategory || '',
+
+      // === STATUS & CONTROL ===
+      isActive: true,
+      isHidden: false,
+
+      // === MERCHANT INFO ===
+      merchant: inflow.merchantName,
+      payee: inflow.merchantName,
+
+      // === PERIOD CONTEXT ===
+      periodStartDate: sourcePeriod.startDate,
+      periodEndDate: sourcePeriod.endDate,
+      periodType: sourcePeriod.type,
+
+      // === PREDICTION ===
+      predictedNextDate: occurrences.nextExpectedDate,
+
+      // === USER INTERACTION ===
+      rules: [],
+      tags: inflow.tags || [],
+      type: inflow.type || 'income',
+      note: null,
+      userCustomName: inflow.userCustomName || null,
+
+      // === SOURCE ===
+      source: inflow.source || 'plaid',
+
+      // === TRANSACTION TRACKING ===
+      transactionIds: [],
+
+      // === MULTI-OCCURRENCE TRACKING ===
+      numberOfOccurrencesInPeriod: occurrences.numberOfOccurrences,
+      numberOfOccurrencesPaid: 0,
+      numberOfOccurrencesUnpaid: occurrences.numberOfOccurrences,
+      occurrenceDueDates: occurrences.occurrenceDueDates,
+      occurrencePaidFlags: occurrencePaidFlags,
+      occurrenceTransactionIds: occurrenceTransactionIds,
+
+      // === PROGRESS METRICS ===
+      paymentProgressPercentage: 0,
+      dollarProgressPercentage: 0,
+
+      // === DUE DATE TRACKING ===
+      firstDueDateInPeriod: firstDueDateInPeriod,
+      lastDueDateInPeriod: lastDueDateInPeriod,
+      nextUnpaidDueDate: firstDueDateInPeriod
+    } as any;
+
+    newInflowPeriods.push(inflowPeriodDoc);
+  }
+
+  // Persist new inflow periods
+  if (newInflowPeriods.length > 0) {
+    console.log(`[extendRecurringInflowPeriods] Creating ${newInflowPeriods.length} new inflow periods for ${inflow.id}`);
+    await batchCreateInflowPeriods(db, newInflowPeriods);
+
+    // Update inflow metadata
+    await db.collection('inflows').doc(inflow.id!).update({
+      lastExtended: now,
+    });
+
+    totalPeriodsCreated += newInflowPeriods.length;
+  } else {
+    console.log(`[extendRecurringInflowPeriods] No new periods needed for inflow ${inflow.id}`);
+  }
+
+
+  if (
+    is_v2_record(inflow) &&
+    (inflow.removalIntervals?.length ?? 0) > 0 &&
+    totalPeriodsCreated > 0
+  ) {
+    await inflow_repo.apply_period_suppression(
+      { trace_id: "extend_inflow_periods", span_id: inflowDoc.id },
+      inflowDoc.id,
+      (inflow.removalIntervals as Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>).map(
+        (i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode })
+      ),
+      inflow.ownerId ?? ""
+    );
+  }
+  return totalPeriodsCreated;
 }
