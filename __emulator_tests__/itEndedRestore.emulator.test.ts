@@ -115,9 +115,8 @@ describe('It ended → going-forward end (emulator)', () => {
     await expect(manage(ctx(), uid, [], { id: CCPAY, action: 'restore' }, NOW_MS, outflow_repo, 'recurring_outflow'))
       .rejects.toThrow(/merged/);
 
-    // X20: the monthly extension honors the end. Drop Dec + Jan, extend: Jan is re-created INACTIVE.
-    // (Pre-existing, not changed here: the extension resumes the day AFTER the latest period's
-    // 23:59:59.999 end, so it never re-creates the month right after it — Dec stays missing.)
+    // X20: the monthly extension honors the end. Drop Dec + Jan, extend: both are re-created
+    // (40-day look-back, working 69a7a76) and INACTIVE.
     await manage(ctx(), uid, [], { id: SPOT, action: 'end' }, NOW_MS, outflow_repo, 'recurring_outflow');
     for (const p of ['2037M12', '2038M01']) await db.collection('outflow_periods').doc(`${SPOT}_${p}`).delete();
     const created = await extendOutflowPeriodsFor(db, await db.collection('outflows').doc(SPOT).get(), new Date('2038-02-01T00:00:00Z'));
@@ -125,7 +124,7 @@ describe('It ended → going-forward end (emulator)', () => {
     const periods = await db.collection('outflow_periods').where('outflowId', '==', SPOT).get();
     const by_id = new Map(periods.docs.map((d) => [d.id, d.data()]));
     expect(by_id.get(`${SPOT}_2037M10`)?.isActive).toBe(true);
-    expect(by_id.has(`${SPOT}_2037M12`)).toBe(false); // the pre-existing skipped month
+    expect(by_id.get(`${SPOT}_2037M12`)?.isActive).toBe(false); // re-created by the look-back, flipped
     expect(by_id.get(`${SPOT}_2038M01`)?.isActive).toBe(false); // created by the extension, flipped
     expect((await h.bill(NOV, SPOT))?.groups ?? []).toEqual([]); // derive agrees
 
