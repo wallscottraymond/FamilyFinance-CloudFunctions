@@ -141,6 +141,51 @@ export interface CapturePlan {
   /** A new v2 stream found no same-bill candidate among the loaded records: load the user's
    *  inactive records and plan again (X9 — lazy, ≈ never in steady state). */
   wants_inactive_records?: boolean;
+  /** The state change that doesn't depend on any save (held-out ids of streams not saved, …). */
+  base_change?: { add_suppressed: string[]; remove_suppressed: string[] };
+  /** What each save brings with it (released ids, closed items) — dropped when its save fails
+   *  (review round 3 defect 3). `state_change` = base_change + every effect. */
+  save_effects?: SaveEffect[];
+}
+
+/** The state / item changes that follow from saving one stream's record. */
+export interface SaveEffect {
+  direction: ReviewDirection;
+  stream_id: string;
+  /** Held-out ids released because this stream's record now exists. */
+  release: string[];
+  /** Review items closed because of this save (e.g. "matured"). */
+  item_ids: string[];
+}
+
+/** base + effects → the state change; ids both held out and released end released (stream
+ *  membership wins). PURE. */
+export function compose_state_change(
+  base: { add_suppressed: string[]; remove_suppressed: string[] },
+  effects: SaveEffect[]
+): ReviewStateChange {
+  const remove = new Set<string>([...base.remove_suppressed, ...effects.flatMap((e) => e.release)]);
+  return {
+    add_suppressed: [...new Set(base.add_suppressed)].filter((id) => !remove.has(id)),
+    remove_suppressed: [...remove],
+  };
+}
+
+/**
+ * A save batch failed for these directions: nothing that depended on those saves may land — the
+ * held-out ids stay held, the items they would have closed stay as they are, so the next sync
+ * (which sees no record yet) does it all again (review round 3 defect 3). PURE.
+ */
+export function drop_failed_saves(plan: CapturePlan, failed: Set<ReviewDirection>): CapturePlan {
+  if (failed.size === 0 || !plan.save_effects || !plan.base_change) return plan;
+  const ok = plan.save_effects.filter((e) => !failed.has(e.direction));
+  const dropped_items = new Set(plan.save_effects.filter((e) => failed.has(e.direction)).flatMap((e) => e.item_ids));
+  return {
+    ...plan,
+    save_effects: ok,
+    state_change: compose_state_change(plan.base_change, ok),
+    review_items: plan.review_items.filter((i) => !dropped_items.has(i.id)),
+  };
 }
 
 /** The review-item ids a sync must look up for this response (X8: getAll, no query). */
@@ -328,8 +373,17 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
   const suggest_candidates: SuggestCandidate[] = [];
   const matured_subjects = new Set<string>();
-  const suppress = (ids: string[]) => plan.state_change.add_suppressed!.push(...ids);
-  const unsuppress = (ids: string[]) => plan.state_change.remove_suppressed!.push(...ids);
+  const base_change = { add_suppressed: [] as string[], remove_suppressed: [] as string[] };
+  const effects = new Map<string, SaveEffect>();
+  const effect = (s: PlannerStream): SaveEffect => {
+    let e = effects.get(s.stream_id);
+    if (!e) {
+      e = { direction: s.direction, stream_id: s.stream_id, release: [], item_ids: [] };
+      effects.set(s.stream_id, e);
+    }
+    return e;
+  };
+  const suppress = (ids: string[]) => base_change.add_suppressed.push(...ids);
 
   // Same-bill pool + "stopped in this sync" (returned inactive, or a stale candidate).
   const pool_by_id = new Map<string, PlannerRecord>();
@@ -399,7 +453,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       // The answered item's held-out payments are released now that the bill exists (not at
       // answer time — fix round: the hold-out must cover the gap until creation).
       for (const it of [suggested, same_bill]) {
-        if (it && it.status === "resolved" && it.source === "plaid") unsuppress(it.transaction_ids);
+        if (it && it.status === "resolved" && it.source === "plaid") effect(s).release.push(...it.transaction_ids);
       }
       continue;
     }
@@ -434,8 +488,10 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     // Mature, known schedule, active → a v2 record.
     create_v2(s, null);
     if (suggested?.status === "open") {
-      plan.review_items.push(resolve_review_item(suggested, "matured", input.now_ms));
-      unsuppress(suggested.transaction_ids);
+      const closed = resolve_review_item(suggested, "matured", input.now_ms);
+      plan.review_items.push(closed);
+      effect(s).item_ids.push(closed.id);
+      effect(s).release.push(...suggested.transaction_ids);
       matured_subjects.add(suggested_subject(s.direction, vk));
     }
   }
@@ -476,7 +532,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       ...(s.direction === "inflow" && is_card_payment_inflow(s.detailed_category) ? { is_hidden: true } : {}),
       ...(user_frequency ? { user_frequency: user_frequency as OutflowForPersistence["frequency"] } : {}),
     } as OutflowForPersistence | InflowForPersistence);
-    unsuppress(s.transaction_ids);
+    effect(s).release.push(...s.transaction_ids);
   }
 
   // ── Stale candidates (this item's active records Plaid didn't return as valid).
@@ -500,8 +556,8 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   }
 
   // Ids both suppressed and saved this round end saved (stream membership wins).
-  const saved = new Set(plan.state_change.remove_suppressed);
-  plan.state_change.remove_suppressed = [...saved];
-  plan.state_change.add_suppressed = plan.state_change.add_suppressed!.filter((id) => !saved.has(id));
+  plan.base_change = base_change;
+  plan.save_effects = [...effects.values()];
+  plan.state_change = compose_state_change(base_change, plan.save_effects);
   return plan;
 }

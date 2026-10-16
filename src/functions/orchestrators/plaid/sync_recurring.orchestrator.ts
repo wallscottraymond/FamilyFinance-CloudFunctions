@@ -67,6 +67,7 @@ import type { CaptureRecordInfo } from "../../resolvers/plaid/recurring_sync.res
 import {
   CapturePlan,
   PlannerStream,
+  drop_failed_saves,
   plan_recurring_capture,
   review_ids_for_sync,
 } from "../../domain/recurring/recurring_capture_planner.service";
@@ -379,7 +380,8 @@ export async function sync_recurring_orchestrator(
     }
   }
 
-  // 7. PERSIST INFLOWS
+  // 7. PERSIST INFLOWS (a failed direction drops what depended on its saves — defect 3)
+  const failed_save_directions = new Set<"outflow" | "inflow">();
   let inflows_synced = 0;
   if (plan.save_inflows.length > 0) {
     try {
@@ -396,6 +398,7 @@ export async function sync_recurring_orchestrator(
       const error_msg = error instanceof Error ? error.message : "Unknown error";
       console.error(`[${ctx.trace_id}] Error saving inflows:`, error_msg);
       errors.push(`Inflow save error: ${error_msg}`);
+      failed_save_directions.add("inflow");
     }
   }
 
@@ -416,6 +419,7 @@ export async function sync_recurring_orchestrator(
       const error_msg = error instanceof Error ? error.message : "Unknown error";
       console.error(`[${ctx.trace_id}] Error saving outflows:`, error_msg);
       errors.push(`Outflow save error: ${error_msg}`);
+      failed_save_directions.add("outflow");
     }
   }
 
@@ -456,6 +460,9 @@ export async function sync_recurring_orchestrator(
   }
 
   // 8b. REVIEW ITEMS + STATE (only when the planner ran; each written only when it changed).
+  //     A save that failed takes its effects with it: the ids it would release stay held and the
+  //     items it would close stay open, so the next sync does it again (defect 3).
+  plan = drop_failed_saves(plan, failed_save_directions);
   let review_items_written = 0;
   let newly_suppressed: string[] = [];
   if (planner_needed) {

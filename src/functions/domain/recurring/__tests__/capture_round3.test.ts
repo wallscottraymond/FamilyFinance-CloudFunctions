@@ -6,6 +6,7 @@ import {
   CapturePlanInput,
   PlannerRecord,
   PlannerStream,
+  drop_failed_saves,
   plan_recurring_capture,
   review_ids_for_sync,
   stream_vendor,
@@ -161,6 +162,43 @@ describe("review round 3 — defect 2 (one deterministic tile per vendor)", () =
       expect(new Set(mine.map((i) => i.status))).toEqual(new Set(["resolved"]));
       expect(mine[0].answer).toBe("matured");
     }
+  });
+});
+
+
+describe("review round 3 — defect 3 (a failed save keeps everything that depended on it)", () => {
+  it("tracked creation whose save fails: ids stay held, no item change; other direction unaffected", () => {
+    const s = stream("tr", { raw_status: "EARLY_DETECTION" });
+    const tracked = resolve_review_item(sugg(s), "track", NOW - 10);
+    const inc: PlannerStream = { ...stream("pay"), direction: "inflow", detailed_category: "INCOME_WAGES",
+      merchant_name: "Acme", description: "ACME", transaction_ids: ["pay_t1"] };
+    const p = plan({ streams: [s, inc], review_items: by_id(tracked) });
+    expect(p.save_outflows.map((e) => e.id)).toEqual(["tr"]);
+    expect([...p.state_change.remove_suppressed!].sort()).toEqual(["pay_t1", "tr_t1", "tr_t2"]);
+    const failed = drop_failed_saves(p, new Set(["outflow"]));
+    expect(failed.state_change.remove_suppressed).toEqual(["pay_t1"]); // the inflow save still releases
+    expect(failed.state_change.add_suppressed).toEqual([]);
+    expect(drop_failed_saves(p, new Set(["outflow", "inflow"])).state_change).toEqual({ add_suppressed: [], remove_suppressed: [] });
+    expect(drop_failed_saves(p, new Set())).toBe(p);
+  });
+
+  it("matured creation whose save fails: the open tile stays open, its ids stay held", () => {
+    const early = stream("m", { raw_status: "EARLY_DETECTION" });
+    const open = sugg(early);
+    const p = plan({ streams: [stream("m")], review_items: by_id(open) });
+    expect(p.review_items.map((i) => i.answer)).toEqual(["matured"]);
+    const failed = drop_failed_saves(p, new Set(["outflow"]));
+    expect(failed.review_items).toEqual([]);
+    expect(failed.state_change.remove_suppressed).toEqual([]);
+  });
+
+  it("an id held by an unsaved stream and released by a failed save stays held", () => {
+    const shared = "shared_t";
+    const a = stream("a", { transaction_ids: [shared] }); // mature → created
+    const b = stream("b", { raw_status: "TOMBSTONED", transaction_ids: [shared], merchant_name: "Other", description: "OTHER" });
+    const p = plan({ streams: [a, b] });
+    expect(p.state_change.add_suppressed).toEqual([]); // saved wins
+    expect(drop_failed_saves(p, new Set(["outflow"])).state_change.add_suppressed).toEqual([shared]);
   });
 });
 
