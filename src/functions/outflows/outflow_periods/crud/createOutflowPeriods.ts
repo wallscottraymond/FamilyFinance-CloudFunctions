@@ -8,6 +8,7 @@
  */
 
 import * as admin from 'firebase-admin';
+import { is_suppressed_in_period } from '../../../domain/recurring/recurring_suppression.service';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   OutflowPeriod,
@@ -186,6 +187,14 @@ export async function createOutflowPeriodsFromSource(
     return { periodsCreated: 0, periodIds: [] };
   }
 
+  // A removed bill's periods inside its removal window are created inactive (the same rule
+  // apply_period_suppression applies to existing ones), and a hidden bill's periods are created
+  // hidden — otherwise newly extended periods resurface removed bills and internal transfers
+  // (the assign-to-bill picker filters on these per-period flags).
+  const removalIntervals = ((outflow.removalIntervals ?? []) as Array<{ fromMs: number; toMs: number | null; mode: any }>)
+    .map((d) => ({ from_ms: d.fromMs, to_ms: d.toMs, mode: d.mode }));
+  const outflowHidden = outflow.isHidden === true;
+
   // Calculate payment cycle information
   const cycleInfo = calculatePaymentCycle(outflow);
   console.log(`[createOutflowPeriodsFromSource] Payment cycle: ${cycleInfo.cycleDays} days, Bill: $${cycleInfo.billAmount.toFixed(2)}`);
@@ -291,8 +300,8 @@ export async function createOutflowPeriodsFromSource(
       plaidDetailedCategory: outflow.plaidDetailedCategory || '',
 
       // === STATUS & CONTROL ===
-      isActive: true,
-      isHidden: false,
+      isActive: !is_suppressed_in_period(removalIntervals, sourcePeriod.endDate.toMillis()),
+      isHidden: outflowHidden,
 
       // === MERCHANT INFO ===
       merchant: merchantName,
