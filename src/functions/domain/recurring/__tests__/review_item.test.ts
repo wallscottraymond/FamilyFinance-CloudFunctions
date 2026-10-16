@@ -76,8 +76,34 @@ describe("review_item", () => {
       add_dismissed_vendor_keys: Array.from({ length: MAX_DISMISSED_VENDOR_KEYS + 5 }, (_, i) => `outflow:v${i}`),
     });
     expect(big.next.suppressed_txn_ids).toHaveLength(MAX_SUPPRESSED_TXN_IDS);
-    expect(big.next.suppressed_txn_ids[0]).toBe("p10"); // oldest dropped first
+    // Deterministic cap (defect 6): sorted, the first MAX kept — never insertion order.
+    const all_ids = Array.from({ length: MAX_SUPPRESSED_TXN_IDS + 10 }, (_, i) => `p${i}`);
+    expect(big.next.suppressed_txn_ids).toEqual([...all_ids].sort().slice(0, MAX_SUPPRESSED_TXN_IDS));
     expect(big.next.dismissed_vendor_keys).toHaveLength(MAX_DISMISSED_VENDOR_KEYS);
+  });
+
+  it("defect 6: the held-out cap is deterministic — identical input never changes the state", () => {
+    for (const n of [MAX_SUPPRESSED_TXN_IDS - 1, MAX_SUPPRESSED_TXN_IDS, MAX_SUPPRESSED_TXN_IDS + 1, MAX_SUPPRESSED_TXN_IDS + 700]) {
+      const ids = Array.from({ length: n }, (_, i) => `plaid_${(i * 7919) % 100003}_${i}`);
+      const shuffled = [...ids].reverse();
+      const r1 = apply_review_state_change(null, "u1", { add_suppressed: ids });
+      expect(r1.next.suppressed_txn_ids.length).toBe(Math.min(n, MAX_SUPPRESSED_TXN_IDS));
+      // The same ids again, in any order (the evicted ones included): no change at all.
+      let state = r1.next;
+      for (let k = 0; k < 5; k++) {
+        const r = apply_review_state_change(state, "u1", { add_suppressed: k % 2 ? ids : shuffled });
+        expect([r.changed, r.suppressed_changed]).toEqual([false, false]);
+        state = r.next;
+      }
+      // Built in a different order from scratch → the identical stored set.
+      expect(apply_review_state_change(null, "u1", { add_suppressed: shuffled }).next.suppressed_txn_ids)
+        .toEqual(r1.next.suppressed_txn_ids);
+      // The capped doc stays far under 1 MB.
+      const bytes = Buffer.byteLength(JSON.stringify({
+        suppressedTxnIds: state.suppressed_txn_ids, dismissedVendorKeys: Array.from({ length: MAX_DISMISSED_VENDOR_KEYS }, (_, i) => `outflow:${"v".repeat(60)}${i}`),
+      }));
+      expect(bytes).toBeLessThan(1024 * 1024);
+    }
   });
 
   it("utc_day", () => {

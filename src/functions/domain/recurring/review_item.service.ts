@@ -87,7 +87,14 @@ export interface RecurringReviewState {
   detector_last_run_day: string | null;
 }
 
-/** Bounds (CLAUDE.md write rule 9: every array field has a prune policy). Oldest dropped first. */
+/**
+ * Bounds (CLAUDE.md write rule 9: every array field has a prune policy). The held-out ids are
+ * capped DETERMINISTICALLY (review round 3 defect 6): the set is kept sorted and the first
+ * MAX_SUPPRESSED_TXN_IDS ids are kept, so identical input always yields the identical stored set
+ * — an insertion-order cap evicted a different subset each sync (each re-added id pushed another
+ * out: a write + a derive bump + a re-assign on every sync). Vendor keys only ever grow by a
+ * user's tap; their cap drops the oldest.
+ */
 export const MAX_SUPPRESSED_TXN_IDS = 5000;
 export const MAX_DISMISSED_VENDOR_KEYS = 1000;
 export const MAX_ITEM_TRANSACTION_IDS = 60;
@@ -205,14 +212,9 @@ export function apply_review_state_change(
 ): { next: RecurringReviewState; changed: boolean; suppressed_changed: boolean } {
   const base = current ?? empty_review_state(user_id);
   const remove = new Set(change.remove_suppressed ?? []);
-  const suppressed = base.suppressed_txn_ids.filter((id) => !remove.has(id));
-  const have = new Set(suppressed);
-  for (const id of change.add_suppressed ?? []) {
-    if (!have.has(id)) {
-      suppressed.push(id);
-      have.add(id);
-    }
-  }
+  const have = new Set(base.suppressed_txn_ids.filter((id) => !remove.has(id)));
+  for (const id of change.add_suppressed ?? []) have.add(id);
+  const suppressed = cap_suppressed_ids([...have]);
   const dismissed = [...base.dismissed_vendor_keys];
   const have_d = new Set(dismissed);
   for (const k of change.add_dismissed_vendor_keys ?? []) {
@@ -223,7 +225,7 @@ export function apply_review_state_change(
   }
   const next: RecurringReviewState = {
     user_id,
-    suppressed_txn_ids: suppressed.slice(-MAX_SUPPRESSED_TXN_IDS),
+    suppressed_txn_ids: suppressed,
     dismissed_vendor_keys: dismissed.slice(-MAX_DISMISSED_VENDOR_KEYS),
     detector_last_run_day: change.detector_last_run_day ?? base.detector_last_run_day,
   };
@@ -239,6 +241,11 @@ export function apply_review_state_change(
     next.dismissed_vendor_keys.length === 0 &&
     next.detector_last_run_day === null;
   return { next, changed: changed && !(current === null && is_empty), suppressed_changed };
+}
+
+/** The deterministic held-out cap: sorted, first MAX_SUPPRESSED_TXN_IDS kept (defect 6). PURE. */
+export function cap_suppressed_ids(ids: string[]): string[] {
+  return [...new Set(ids)].sort().slice(0, MAX_SUPPRESSED_TXN_IDS);
 }
 
 /** Is this vendor remembered as "Not a bill" / "Not income" for the user? */
