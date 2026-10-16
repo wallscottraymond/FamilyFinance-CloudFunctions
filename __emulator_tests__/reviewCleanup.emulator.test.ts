@@ -9,7 +9,8 @@
  *        "npx jest --selectProjects emulator --testPathPattern reviewCleanup"
  */
 import * as admin from 'firebase-admin';
-import { cascade_soft_delete_recurring_orchestrator } from '../src/functions/orchestrators/accounts/cascade_soft_delete_recurring.orchestrator';
+import { remove_account_orchestrator } from '../src/functions/orchestrators/accounts/remove_account.orchestrator';
+import { scenarioIds, seedScenario } from './helpers/captureScenario';
 import { recurring_review_repo } from '../src/functions/repositories/recurring_review.repo';
 import { make_review_item, ReviewItem } from '../src/functions/domain/recurring/review_item.service';
 
@@ -27,20 +28,24 @@ const item = (uid: string, subject: string, account: string, status: ReviewItem[
   }, Date.now());
 
 describe('review items follow account removal (emulator)', () => {
-  it('closes the removed account\'s open items only', async () => {
-    const uid = `rc_${Date.now()}`;
-    const a = item(uid, 'outflow:avant', 'acct_removed');
-    const b = item(uid, 'outflow:hulu', 'acct_kept');
-    const c = item(uid, 'outflow:old', 'acct_removed', 'dismissed');
+  it('removing an account with NO saved bills / income still closes its open items (only those)', async () => {
+    const ids = scenarioIds(`qzrc${Date.now() % 100000}`);
+    await seedScenario(db, ids); // user + item with chk / sav / card; no outflows or inflows
+    const uid = ids.userId;
+    const a = item(uid, 'outflow:avant', ids.chk);
+    const b = item(uid, 'outflow:hulu', ids.sav);
+    const c = item(uid, 'outflow:old', ids.chk, 'dismissed');
     await recurring_review_repo.upsert_items(ctx(), [a, b, c]);
-    await cascade_soft_delete_recurring_orchestrator(ctx(), {
-      plaid_account_id: 'acct_removed', user_id: uid, outflow_ids: [], inflow_ids: [], trace_id: 't',
-    });
+    const r = await remove_account_orchestrator(ctx(), uid, {
+      account_id: ids.chk, idempotency_key: `rc_${Math.random()}`, removal_mode: 'keep_history',
+    } as never);
+    expect(r.success).toBe(true);
+    expect([r.outflow_count, r.inflow_count]).toEqual([0, 0]); // the recurring cascade never runs
     const got = await recurring_review_repo.get_items_by_ids(ctx(), [a.id, b.id, c.id]);
     expect(got.get(a.id)?.status).toBe('resolved');
     expect(got.get(a.id)?.answer).toBe('account_removed');
     expect((await db.collection('recurring_review_items').doc(a.id).get()).data()?.expireAt).toBeDefined();
-    expect(got.get(b.id)?.status).toBe('open');
+    expect(got.get(b.id)?.status).toBe('open'); // another account's item
     expect(got.get(c.id)?.status).toBe('dismissed'); // the "Not a bill" memory is kept
     expect((await db.collection('recurring_review_items').doc(c.id).get()).data()?.expireAt).toBeUndefined();
   });

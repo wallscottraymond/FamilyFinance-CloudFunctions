@@ -31,6 +31,8 @@ import {
 } from "../../observability";
 import { account_repo } from "../../repositories";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
+import { recurring_review_repo } from "../../repositories/recurring_review.repo";
+import { resolve_review_item } from "../../domain/recurring/review_item.service";
 import {
   check_idempotency,
   claim_key,
@@ -351,6 +353,24 @@ export async function remove_account_orchestrator(
     // The account's isActive is a derive-scope input (Me + any group it's shared into); the
     // transaction cascade job bumps too, but it may not run (no txns / not requested).
     await bump_derive_version(user_id).catch(() => {});
+
+    // 10a. Bills-to-review items about this account are closed (X19) — ALWAYS, not only via the
+    //      recurring cascade (which runs only when the account has saved bills / income: a
+    //      "Possible bill" about an account with no saved records would otherwise linger).
+    //      One query; non-fatal.
+    try {
+      const open_items = await recurring_review_repo.get_open_for_account(ctx, user_id, account.account_id);
+      perf.reads += Math.max(1, open_items.length);
+      if (open_items.length > 0) {
+        const now_ms = Date.now();
+        perf.writes += await recurring_review_repo.upsert_items(
+          ctx,
+          open_items.map((item) => resolve_review_item(item, "account_removed", now_ms))
+        );
+      }
+    } catch (error) {
+      console.error(`[${ctx.trace_id}] closing review items for ${account.account_id} failed:`, error);
+    }
 
     // 10b. Pause goals that watch this account — its balance stops updating.
     const linked_goals = await goal_repo.get_by_account(ctx, user_id, input.account_id);
