@@ -101,6 +101,17 @@ export function plan_review_answer(
       // capture planner releases them when it creates the v2 record (create_v2), not here — in
       // between, a merchant guess could still link them to an old bill.
       plan.resync_item_doc_id = item.plaid_item_doc_id;
+      // Remembered until its bill exists (defect 4): the planner of that Plaid item (or the
+      // account's removal) resolves it — never a silently lost track or orphaned held-out ids.
+      plan.state_change = {
+        add_pending_tracks: [{
+          item_id: item.id,
+          plaid_item_doc_id: item.plaid_item_doc_id,
+          account_id: item.account_id,
+          stream_id: item.stream_id,
+          since_ms: now_ms,
+        }],
+      };
       break;
     case "not_bill":
       // Remembered per user + vendor (D11 / D15); its payments stay normal transactions — still

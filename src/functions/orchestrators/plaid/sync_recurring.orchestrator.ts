@@ -346,7 +346,8 @@ export async function sync_recurring_orchestrator(
     review_context = await resolve_capture_review_context(
       create_child_span(ctx),
       ctx.user_id,
-      review_ids_for_sync(ctx.user_id, streams, [...existing_records.values(), ...stale_records])
+      review_ids_for_sync(ctx.user_id, streams, [...existing_records.values(), ...stale_records]),
+      deps.plaid_item.doc_id
     );
     const plan_input = {
       user_id: ctx.user_id,

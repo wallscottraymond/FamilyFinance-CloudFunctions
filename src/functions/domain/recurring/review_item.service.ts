@@ -37,7 +37,13 @@ export type ReviewAnswer =
   | "same_bill"
   | "matured"
   | "auto_active"
-  | "account_removed";
+  | "account_removed"
+  /** A "Track" / "Keep separate" whose bill could not be made (stream gone / rejected / its
+   *  account removed): the held-out payments are released (defect 4). */
+  | "track_unavailable"
+  /** A "Still a bill?" about a bill the user no longer sees (removed / paused / merged): the
+   *  question is moot (defect 5). */
+  | "not_shown";
 
 /** A review item (snake_case domain shape; the repo maps it to the camelCase doc). */
 export interface ReviewItem {
@@ -85,6 +91,23 @@ export interface RecurringReviewState {
   dismissed_vendor_keys: string[];
   /** UTC day (YYYY-MM-DD) the possible-bill detector last ran fully. */
   detector_last_run_day: string | null;
+  /**
+   * "Track" / "Keep separate" answers whose bill doesn't exist yet (review round 3 defect 4). The
+   * planner of that Plaid item resolves each one — bill saved (stamped or not) → released; stream
+   * gone / rejected → released + the item closed `track_unavailable` — and account removal
+   * resolves the ones on that account. So a track is never silently lost and its held-out ids
+   * are never orphaned.
+   */
+  pending_tracks?: PendingTrack[];
+}
+
+/** A tracked item waiting for its bill (see `RecurringReviewState.pending_tracks`). */
+export interface PendingTrack {
+  item_id: string;
+  plaid_item_doc_id: string | null;
+  account_id: string | null;
+  stream_id: string | null;
+  since_ms: number;
 }
 
 /**
@@ -98,6 +121,7 @@ export interface RecurringReviewState {
 export const MAX_SUPPRESSED_TXN_IDS = 5000;
 export const MAX_DISMISSED_VENDOR_KEYS = 1000;
 export const MAX_ITEM_TRANSACTION_IDS = 60;
+export const MAX_PENDING_TRACKS = 200;
 /** Resolved items expire (console TTL policy on `expireAt`); open + dismissed never carry it. */
 export const RESOLVED_ITEM_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
@@ -165,7 +189,9 @@ export function changed_items(next: ReviewItem[], existing: Map<string, ReviewIt
 }
 
 /** Answers the system writes itself — an item closed this way may open again. */
-export const SYSTEM_CLOSE_ANSWERS: ReadonlySet<string> = new Set(["matured", "auto_active", "account_removed"]);
+export const SYSTEM_CLOSE_ANSWERS: ReadonlySet<string> = new Set([
+  "matured", "auto_active", "account_removed", "track_unavailable", "not_shown",
+]);
 
 /** Has the USER answered this item (closed with a user answer)? A background writer (sync,
  *  detector, account removal) never overwrites such an item (review round 3 defect 1). */
@@ -185,10 +211,14 @@ export function is_user_answered(item: ReviewItem | null | undefined): boolean {
  */
 export function may_background_write(
   current: ReviewItem | null,
-  seen: ReviewItem | undefined
+  seen: ReviewItem | undefined,
+  next?: ReviewItem
 ): boolean {
   if (!current) return !seen;
   if (!seen || seen.content_hash !== current.content_hash || seen.updated_at_ms !== current.updated_at_ms) return false;
+  // The one system write over a user's answer: a "Track" / "Keep separate" whose bill could not
+  // be made is closed with that outcome (defect 4) — never reopened.
+  if (next?.answer === "track_unavailable") return current.answer === "track" || current.answer === "keep_separate";
   return !is_user_answered(current);
 }
 
@@ -214,7 +244,7 @@ export function resolve_review_item(
 }
 
 export function empty_review_state(user_id: string): RecurringReviewState {
-  return { user_id, suppressed_txn_ids: [], dismissed_vendor_keys: [], detector_last_run_day: null };
+  return { user_id, suppressed_txn_ids: [], dismissed_vendor_keys: [], detector_last_run_day: null, pending_tracks: [] };
 }
 
 /** Hash of the derive-relevant part of the state: only the suppressed ids feed the derive. */
@@ -227,6 +257,9 @@ export interface ReviewStateChange {
   remove_suppressed?: string[];
   add_dismissed_vendor_keys?: string[];
   detector_last_run_day?: string;
+  /** Track answers waiting for their bill (defect 4); an item id already pending is replaced. */
+  add_pending_tracks?: PendingTrack[];
+  remove_pending_track_ids?: string[];
 }
 
 /**
@@ -251,23 +284,35 @@ export function apply_review_state_change(
       have_d.add(k);
     }
   }
+  const drop_pending = new Set([
+    ...(change.remove_pending_track_ids ?? []),
+    ...(change.add_pending_tracks ?? []).map((p) => p.item_id),
+  ]);
+  const pending = [
+    ...(base.pending_tracks ?? []).filter((p) => !drop_pending.has(p.item_id)),
+    ...(change.add_pending_tracks ?? []),
+  ].slice(-MAX_PENDING_TRACKS);
   const next: RecurringReviewState = {
     user_id,
     suppressed_txn_ids: suppressed,
     dismissed_vendor_keys: dismissed.slice(-MAX_DISMISSED_VENDOR_KEYS),
     detector_last_run_day: change.detector_last_run_day ?? base.detector_last_run_day,
+    pending_tracks: pending,
   };
   const suppressed_changed = suppressed_hash(next) !== suppressed_hash(current);
+  const pending_key = (list: PendingTrack[] | undefined) => JSON.stringify(list ?? []);
   const changed =
     !current ||
     suppressed_changed ||
     next.dismissed_vendor_keys.join("\n") !== base.dismissed_vendor_keys.join("\n") ||
-    next.detector_last_run_day !== base.detector_last_run_day;
+    next.detector_last_run_day !== base.detector_last_run_day ||
+    pending_key(next.pending_tracks) !== pending_key(base.pending_tracks);
   // A brand-new state that holds nothing is not worth a write.
   const is_empty =
     next.suppressed_txn_ids.length === 0 &&
     next.dismissed_vendor_keys.length === 0 &&
-    next.detector_last_run_day === null;
+    next.detector_last_run_day === null &&
+    pending.length === 0;
   return { next, changed: changed && !(current === null && is_empty), suppressed_changed };
 }
 

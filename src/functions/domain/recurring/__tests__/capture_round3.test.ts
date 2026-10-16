@@ -202,4 +202,62 @@ describe("review round 3 — defect 3 (a failed save keeps everything that depen
   });
 });
 
+
+describe("review round 3 — defect 4 (a track always gets an outcome)", () => {
+  const s = stream("tr", { raw_status: "EARLY_DETECTION" });
+  const tracked = resolve_review_item(sugg(s, { transaction_ids: ["tr_t1", "tr_t2"] }), "track", NOW - 10);
+  const pending = { item_id: tracked.id, plaid_item_doc_id: "item", account_id: "chk", stream_id: "tr", since_ms: NOW - 10 };
+  const st = state({ suppressed_txn_ids: ["tr_t1", "tr_t2"], pending_tracks: [pending] });
+
+  it("bill created (v2) → fulfilled: pending cleared, ids released, item untouched", () => {
+    const p = plan({ streams: [s], review_items: by_id(tracked), state: st });
+    expect(p.save_outflows[0].capture_rules_version).toBe(2);
+    expect(p.state_change.remove_pending_track_ids).toEqual([tracked.id]);
+    expect(p.state_change.remove_suppressed).toEqual(expect.arrayContaining(["tr_t1", "tr_t2"]));
+    expect(p.review_items).toEqual([]);
+    // …and a failed save keeps it pending (defect 3).
+    expect(drop_failed_saves(p, new Set(["outflow"])).state_change.remove_pending_track_ids).toBeUndefined();
+  });
+
+  it("saved UNSTAMPED (first seen inactive / flag off at the re-sync) → fulfilled the same way", () => {
+    for (const o of [
+      { streams: [{ ...s, raw_is_active: false, entity: entity("tr", { is_active: false }) }] },
+      { streams: [s], flag_on: false },
+    ]) {
+      const p = plan({ ...o, review_items: by_id(tracked), state: st });
+      expect(p.save_outflows).toHaveLength(1);
+      expect(p.save_outflows[0].capture_rules_version).toBeUndefined();
+      expect(p.state_change.remove_pending_track_ids).toEqual([tracked.id]);
+      expect(p.state_change.remove_suppressed).toEqual(expect.arrayContaining(["tr_t1", "tr_t2"]));
+      expect(p.review_items).toEqual([]);
+    }
+  });
+
+  it("stream gone / rejected → ids released, item closed track_unavailable, pending cleared", () => {
+    for (const streams of [[], [{ ...s, entity: null }]]) {
+      const p = plan({ streams, review_items: by_id(tracked), state: st });
+      expect(p.save_outflows).toEqual([]);
+      expect(p.state_change.remove_pending_track_ids).toEqual([tracked.id]);
+      expect(p.state_change.remove_suppressed).toEqual(expect.arrayContaining(["tr_t1", "tr_t2"]));
+      expect(p.review_items).toHaveLength(1);
+      expect(p.review_items[0]).toMatchObject({ id: tracked.id, status: "resolved", answer: "track_unavailable" });
+      // The guard lets exactly this system write replace the user's "track".
+      expect(may_background_write(tracked, tracked, p.review_items[0])).toBe(true);
+    }
+  });
+
+  it("another Plaid item's pending track is left alone", () => {
+    const other = state({ suppressed_txn_ids: ["tr_t1"], pending_tracks: [{ ...pending, plaid_item_doc_id: "itemB" }] });
+    const p = plan({ streams: [], review_items: by_id(tracked), state: other });
+    expect(p.state_change.remove_pending_track_ids).toBeUndefined();
+    expect(p.review_items).toEqual([]);
+  });
+
+  it("a track_unavailable item is a system close: the vendor can be suggested again", () => {
+    const closed = resolve_review_item(tracked, "track_unavailable", NOW);
+    const p = plan({ streams: [s], review_items: by_id(closed) });
+    expect(p.review_items[0]).toMatchObject({ id: tracked.id, status: "open" });
+  });
+});
+
 void [review_ids_for_sync, build_review_item_id, record, ids]; // shared helpers (used by later sections)

@@ -371,6 +371,33 @@ export async function remove_account_orchestrator(
           new Map(open_items.map((item) => [item.id, item]))
         )).written;
       }
+      // "Track" answers on this account still waiting for their bill can never get one now
+      // (defect 4): their held-out payments are released and the items closed
+      // `track_unavailable`. One state read (+ the items, only when some are pending).
+      const state = await recurring_review_repo.get_state(ctx, user_id);
+      perf.reads += 1;
+      const pending = (state?.pending_tracks ?? []).filter((p) => p.account_id === account.account_id);
+      if (pending.length > 0) {
+        const now_ms = Date.now();
+        const tracked = await recurring_review_repo.get_items_by_ids(ctx, pending.map((p) => p.item_id));
+        perf.reads += pending.length;
+        const closable = [...tracked.values()].filter(
+          (i) => i.status === "resolved" && (i.answer === "track" || i.answer === "keep_separate")
+        );
+        perf.writes += (await recurring_review_repo.write_items_guarded(
+          ctx,
+          user_id,
+          closable.map((i) => resolve_review_item(i, "track_unavailable", now_ms)),
+          tracked
+        )).written;
+        const change = {
+          remove_pending_track_ids: pending.map((p) => p.item_id),
+          remove_suppressed: [...tracked.values()].flatMap((i) => i.transaction_ids),
+        };
+        const r = await recurring_review_repo.apply_state_change(ctx, user_id, change);
+        if (r.changed) perf.writes += 1;
+        if (r.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
+      }
     } catch (error) {
       console.error(`[${ctx.trace_id}] closing review items for ${account.account_id} failed:`, error);
     }

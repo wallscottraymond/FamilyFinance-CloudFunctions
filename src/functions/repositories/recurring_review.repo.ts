@@ -71,6 +71,14 @@ interface ReviewStateDoc {
   suppressedHash: string;
   dismissedVendorKeys: string[];
   detectorLastRunDay: string | null;
+  /** Track answers waiting for their bill (defect 4). Absent on docs written before it. */
+  pendingTracks?: Array<{
+    itemId: string;
+    plaidItemDocId: string | null;
+    accountId: string | null;
+    streamId: string | null;
+    sinceMs: number;
+  }>;
   updatedAt: Timestamp;
 }
 
@@ -80,6 +88,13 @@ function state_from_doc(user_id: string, d: ReviewStateDoc): RecurringReviewStat
     suppressed_txn_ids: d.suppressedTxnIds ?? [],
     dismissed_vendor_keys: d.dismissedVendorKeys ?? [],
     detector_last_run_day: d.detectorLastRunDay ?? null,
+    pending_tracks: (d.pendingTracks ?? []).map((p) => ({
+      item_id: p.itemId,
+      plaid_item_doc_id: p.plaidItemDocId ?? null,
+      account_id: p.accountId ?? null,
+      stream_id: p.streamId ?? null,
+      since_ms: p.sinceMs ?? 0,
+    })),
   };
 }
 
@@ -91,6 +106,13 @@ function state_to_doc(state: RecurringReviewState): ReviewStateDoc {
     suppressedHash: suppressed_hash(state),
     dismissedVendorKeys: state.dismissed_vendor_keys,
     detectorLastRunDay: state.detector_last_run_day,
+    pendingTracks: (state.pending_tracks ?? []).map((p) => ({
+      itemId: p.item_id,
+      plaidItemDocId: p.plaid_item_doc_id,
+      accountId: p.account_id,
+      streamId: p.stream_id,
+      sinceMs: p.since_ms,
+    })),
     updatedAt: Timestamp.now(),
   };
   /* eslint-enable @typescript-eslint/naming-convention */
@@ -261,7 +283,7 @@ export const recurring_review_repo = {
         chunk.forEach((item, k) => {
           const snap = item_snaps[k];
           const current = snap.exists ? from_doc(snap.data() as ReviewItemDoc) : null;
-          if (item.user_id !== user_id || !may_background_write(current, seen.get(item.id))) {
+          if (item.user_id !== user_id || !may_background_write(current, seen.get(item.id), item)) {
             skip.push(item.id);
             return;
           }

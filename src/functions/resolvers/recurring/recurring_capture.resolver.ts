@@ -27,12 +27,21 @@ export interface CaptureReviewContext {
 export async function resolve_capture_review_context(
   ctx: TraceContext,
   user_id: string,
-  review_ids: string[]
+  review_ids: string[],
+  plaid_item_doc_id?: string
 ): Promise<CaptureReviewContext> {
   const [state, items] = await Promise.all([
     recurring_review_repo.get_state(ctx, user_id),
     recurring_review_repo.get_items_by_ids(ctx, review_ids),
   ]);
+  // Pending tracks of this Plaid item whose item wasn't among the subjects in hand (its stream is
+  // gone from the response): one more getAll, only then (defect 4 — ≈ never in steady state).
+  const missing = (state?.pending_tracks ?? [])
+    .filter((p) => p.plaid_item_doc_id === plaid_item_doc_id && !items.has(p.item_id))
+    .map((p) => p.item_id);
+  if (missing.length > 0) {
+    for (const [id, item] of await recurring_review_repo.get_items_by_ids(ctx, missing)) items.set(id, item);
+  }
   return { state, items };
 }
 

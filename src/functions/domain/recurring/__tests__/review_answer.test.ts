@@ -15,7 +15,10 @@ describe("plan_review_answer", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.plan.item).toMatchObject({ status: "resolved", answer: "track" });
-    expect(r.plan.state_change).toEqual({});
+    // Remembered as pending until the bill exists (defect 4).
+    expect(r.plan.state_change).toEqual({ add_pending_tracks: [{
+      item_id: r.plan.item!.id, plaid_item_doc_id: "item1", account_id: "chk", stream_id: "s", since_ms: NOW,
+    }] });
     expect(r.plan.resync_item_doc_id).toBe("item1");
   });
 
@@ -40,7 +43,8 @@ describe("plan_review_answer", () => {
     expect(b.ok && b.plan.record_action).toBe("end");
     const same = item({ kind: "same_bill", subject_key: "new_stream", record_id: "old" });
     const c = plan_review_answer(same, "keep_separate", NOW);
-    expect(c.ok && [c.plan.state_change, c.plan.resync_item_doc_id]).toEqual([{}, "item1"]);
+    expect(c.ok && [c.plan.state_change.add_pending_tracks?.map((p) => p.item_id), c.plan.resync_item_doc_id])
+      .toEqual([[same.id], "item1"]);
   });
 
   it("Phase 2 answers and wrong answers are refused", () => {

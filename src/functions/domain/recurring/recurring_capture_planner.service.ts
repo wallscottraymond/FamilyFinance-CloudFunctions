@@ -142,7 +142,7 @@ export interface CapturePlan {
    *  inactive records and plan again (X9 — lazy, ≈ never in steady state). */
   wants_inactive_records?: boolean;
   /** The state change that doesn't depend on any save (held-out ids of streams not saved, …). */
-  base_change?: { add_suppressed: string[]; remove_suppressed: string[] };
+  base_change?: BaseChange;
   /** What each save brings with it (released ids, closed items) — dropped when its save fails
    *  (review round 3 defect 3). `state_change` = base_change + every effect. */
   save_effects?: SaveEffect[];
@@ -156,18 +156,26 @@ export interface SaveEffect {
   release: string[];
   /** Review items closed because of this save (e.g. "matured"). */
   item_ids: string[];
+  /** Pending tracks this save fulfils (defect 4). */
+  remove_pending: string[];
+}
+
+/** The part of a plan's state change that doesn't depend on a save. */
+export interface BaseChange {
+  add_suppressed: string[];
+  remove_suppressed: string[];
+  remove_pending_track_ids: string[];
 }
 
 /** base + effects → the state change; ids both held out and released end released (stream
  *  membership wins). PURE. */
-export function compose_state_change(
-  base: { add_suppressed: string[]; remove_suppressed: string[] },
-  effects: SaveEffect[]
-): ReviewStateChange {
+export function compose_state_change(base: BaseChange, effects: SaveEffect[]): ReviewStateChange {
   const remove = new Set<string>([...base.remove_suppressed, ...effects.flatMap((e) => e.release)]);
+  const pending = [...new Set([...base.remove_pending_track_ids, ...effects.flatMap((e) => e.remove_pending)])];
   return {
     add_suppressed: [...new Set(base.add_suppressed)].filter((id) => !remove.has(id)),
     remove_suppressed: [...remove],
+    ...(pending.length > 0 ? { remove_pending_track_ids: pending } : {}),
   };
 }
 
@@ -365,20 +373,25 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     review_items: [],
     state_change: { add_suppressed: [], remove_suppressed: [] },
   };
-  const save = (dir: ReviewDirection, e: OutflowForPersistence | InflowForPersistence) => {
-    if (dir === "outflow") plan.save_outflows.push(e as OutflowForPersistence);
+  // Every saved stream releases its own ids: a saved stream's payments are never held out
+  // (stream membership wins — this is also what frees a track saved UNSTAMPED, defect 4).
+  const save = (s: PlannerStream, e: OutflowForPersistence | InflowForPersistence) => {
+    if (s.direction === "outflow") plan.save_outflows.push(e as OutflowForPersistence);
     else plan.save_inflows.push(e as InflowForPersistence);
+    saved_ids.add(s.stream_id);
+    effect(s).release.push(...s.transaction_ids);
   };
+  const saved_ids = new Set<string>();
   const item_at = (kind: ReviewItem["kind"], subject: string) =>
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
   const suggest_candidates: SuggestCandidate[] = [];
   const matured_subjects = new Set<string>();
-  const base_change = { add_suppressed: [] as string[], remove_suppressed: [] as string[] };
+  const base_change: BaseChange = { add_suppressed: [], remove_suppressed: [], remove_pending_track_ids: [] };
   const effects = new Map<string, SaveEffect>();
   const effect = (s: PlannerStream): SaveEffect => {
     let e = effects.get(s.stream_id);
     if (!e) {
-      e = { direction: s.direction, stream_id: s.stream_id, release: [], item_ids: [] };
+      e = { direction: s.direction, stream_id: s.stream_id, release: [], item_ids: [], remove_pending: [] };
       effects.set(s.stream_id, e);
     }
     return e;
@@ -403,7 +416,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
 
     // ── Existing OLD record: today's path, untouched.
     if (ex && !ex.v2) {
-      if (s.entity) save(s.direction, s.entity);
+      if (s.entity) save(s, s.entity);
       continue;
     }
 
@@ -411,7 +424,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     if (ex && ex.v2) {
       if (!s.entity) continue; // rejected: not saved (invalid), never stale-marked (X10)
       const unknown_freq = is_low_confidence_stream("MATURE", s.raw_frequency);
-      save(s.direction, {
+      save(s, {
         ...s.entity,
         is_active: ex.is_active,
         plaid_is_active: s.raw_is_active,
@@ -435,11 +448,11 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     // ── New stream.
     if (!s.entity) continue; // rejected and no record: nothing to do (as today)
     if (!input.flag_on) {
-      save(s.direction, s.entity); // today's handling (no stamp)
+      save(s, s.entity); // today's handling (no stamp)
       continue;
     }
     if (s.raw_is_active === false) {
-      save(s.direction, s.entity); // X2: a stream first seen inactive keeps today's handling
+      save(s, s.entity); // X2: a stream first seen inactive keeps today's handling
       continue;
     }
     const vk = stream_vendor(s);
@@ -452,8 +465,12 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       create_v2(s, suggested?.answer === "track" ? suggested.user_frequency : null);
       // The answered item's held-out payments are released now that the bill exists (not at
       // answer time — fix round: the hold-out must cover the gap until creation).
+      // Only the item's OWN stream releases its ids (another item's stream of the same vendor
+      // may be tracked too; the item's stream is resolved by its pending track, defect 4).
       for (const it of [suggested, same_bill]) {
-        if (it && it.status === "resolved" && it.source === "plaid") effect(s).release.push(...it.transaction_ids);
+        if (it && it.status === "resolved" && it.source === "plaid" && it.stream_id === s.stream_id) {
+          effect(s).release.push(...it.transaction_ids);
+        }
       }
       continue;
     }
@@ -523,7 +540,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   }
 
   function create_v2(s: PlannerStream, user_frequency: string | null): void {
-    save(s.direction, {
+    save(s, {
       ...s.entity!,
       capture_rules_version: CAPTURE_RULES_VERSION,
       plaid_is_active: true,
@@ -532,7 +549,6 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       ...(s.direction === "inflow" && is_card_payment_inflow(s.detailed_category) ? { is_hidden: true } : {}),
       ...(user_frequency ? { user_frequency: user_frequency as OutflowForPersistence["frequency"] } : {}),
     } as OutflowForPersistence | InflowForPersistence);
-    effect(s).release.push(...s.transaction_ids);
   }
 
   // ── Stale candidates (this item's active records Plaid didn't return as valid).
@@ -552,6 +568,31 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       plan.review_items.push(still_a_bill_item(input, r, open));
     } else if (r.plaid_is_active !== false && is_shown(r, input.now_ms) && r.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
       plan.review_items.push(still_a_bill_item(input, r, open));
+    }
+  }
+
+  // ── Pending tracks of THIS Plaid item (defect 4): every "Track" / "Keep separate" gets an
+  //    outcome. Its stream saved (v2 — or unstamped: flag off at the re-sync / first seen
+  //    inactive) → the bill exists: fulfilled, its payments released with the save. Its stream gone
+  //    from the response, rejected, or on a removed account → no bill can be made: the payments
+  //    are released (normal transactions again) and the item is closed `track_unavailable` (a
+  //    system close: the vendor may be suggested again if Plaid brings it back).
+  const by_stream = new Map(input.streams.map((x) => [x.stream_id, x]));
+  for (const pt of input.state?.pending_tracks ?? []) {
+    if (pt.plaid_item_doc_id !== input.plaid_item_doc_id) continue;
+    const item = input.review_items.get(pt.item_id);
+    const s = pt.stream_id ? by_stream.get(pt.stream_id) : undefined;
+    if (s && saved_ids.has(s.stream_id)) {
+      effect(s).remove_pending.push(pt.item_id);
+      if (item) effect(s).release.push(...item.transaction_ids);
+      continue;
+    }
+    if (s && s.entity) continue; // present + valid but not saved this round: still pending
+    base_change.remove_pending_track_ids.push(pt.item_id);
+    if (!item) continue;
+    base_change.remove_suppressed.push(...item.transaction_ids, ...(s?.transaction_ids ?? []));
+    if (item.status === "resolved" && (item.answer === "track" || item.answer === "keep_separate")) {
+      plan.review_items.push(resolve_review_item(item, "track_unavailable", input.now_ms));
     }
   }
 
