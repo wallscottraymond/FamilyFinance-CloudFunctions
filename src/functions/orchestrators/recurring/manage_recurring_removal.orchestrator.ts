@@ -161,6 +161,11 @@ export async function manage_recurring_removal_orchestrator(
     let next: RemovalInterval[];
     if (input.action === "end") {
       next = apply_end_at(context.removal_intervals, context.last_payment_ms, now_ms, month_start_ms);
+      // Already ended by a removal in effect (defect 5): nothing to write, nothing to release.
+      if (next === context.removal_intervals) {
+        log_operation_success(span, user_id);
+        return { id: input.id, action: input.action, deleted: false, state: current_removal_state(next, now_ms) };
+      }
     } else if (input.action === "remove") {
       next = apply_remove(context.removal_intervals, input.mode, now_ms, month_start_ms);
     } else if (input.action === "pause") {

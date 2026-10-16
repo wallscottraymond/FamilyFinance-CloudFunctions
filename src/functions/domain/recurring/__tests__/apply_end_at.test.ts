@@ -56,3 +56,43 @@ describe("apply_end_at (It ended, X4)", () => {
     expect(apply_restore(removed, NOW)).toEqual([{ from_ms: OCT1, to_ms: NOW, mode: "going_forward" }]);
   });
 });
+
+describe("apply_end_at never shortens a suppression already in effect (review round 3 defect 5)", () => {
+  const OCT5 = d("2026-10-05T00:00:00Z");
+  const NOV1 = d("2026-11-01T00:00:00Z");
+  const month_ok = (iv: Parameters<typeof is_payment_suppressed>[0]) => ({
+    oct: is_payment_suppressed(iv, d("2026-10-20T00:00:00Z")),
+    nov: is_payment_suppressed(iv, d("2026-11-20T00:00:00Z")),
+    now: current_removal_state(iv!, NOW).status,
+  });
+
+  it("removed (all / going forward) right now → unchanged (the same array: a no-op)", () => {
+    for (const mode of ["all", "going_forward"] as const) {
+      const removed = apply_remove([], mode, NOW - 86400000, OCT1);
+      const out = apply_end_at(removed, OCT5, NOW, OCT1); // paid this month: the old code ended from Nov 1
+      expect(out).toBe(removed);
+      expect(month_ok(out)).toEqual({ oct: true, nov: true, now: "removed" });
+    }
+  });
+
+  it("paused right now (last payment this month) → the current month stays suppressed; never resumes", () => {
+    const paused = [{ from_ms: OCT1, to_ms: d("2027-02-15T00:00:00Z"), mode: "paused" as const }];
+    const out = apply_end_at(paused, OCT5, NOW, OCT1);
+    expect(out).toEqual([
+      { from_ms: OCT1, to_ms: NOW, mode: "paused" },
+      { from_ms: OCT1, to_ms: null, mode: "going_forward" },
+    ]);
+    expect(month_ok(out)).toEqual({ oct: true, nov: true, now: "removed" });
+    expect(is_payment_suppressed(out, d("2027-03-20T00:00:00Z"))).toBe(true); // the pause never resumes
+    // Before the fix: the end started Nov 1 and the bill came back for the rest of October.
+    expect(out.some((i) => i.from_ms === NOV1)).toBe(false);
+  });
+
+  it("nothing in effect → unchanged behavior (ends the month after the last payment)", () => {
+    expect(apply_end_at([], OCT5, NOW, OCT1)).toEqual([{ from_ms: NOV1, to_ms: null, mode: "going_forward" }]);
+    // A past, closed removal doesn't count as "in effect".
+    const past = [{ from_ms: d("2026-06-01T00:00:00Z"), to_ms: d("2026-07-10T00:00:00Z"), mode: "going_forward" as const }];
+    expect(apply_end_at(past, OCT5, NOW, OCT1)).toEqual([...past, { from_ms: NOV1, to_ms: null, mode: "going_forward" }]);
+  });
+});
+

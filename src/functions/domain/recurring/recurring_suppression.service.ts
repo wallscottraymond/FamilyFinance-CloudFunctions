@@ -156,11 +156,20 @@ export function apply_end_at(
   now_ms: number,
   month_start_ms: number
 ): RemovalInterval[] {
+  // Never SHORTEN a suppression already in effect (review round 3 defect 5): ending a bill that is
+  // removed or paused right now must not bring it back for the rest of the month.
+  //  - an indefinite removal covers now ("Remove" all / going forward): it already ends the bill —
+  //    nothing changes (the caller only closes the question);
+  //  - a pause covers now: it is closed and the end starts no later than the pause did, so the
+  //    current month stays suppressed and the pause never resumes.
+  const active = intervals.find((i) => interval_covers_now(i, now_ms));
+  if (active && active.to_ms === null) return intervals;
   const superseded = close_active_at(intervals, now_ms);
-  const from_ms =
+  const natural =
     last_payment_ms === null
       ? month_start_ms
       : Math.min(next_month_start_utc(last_payment_ms), next_month_start_utc(now_ms));
+  const from_ms = active ? Math.min(natural, active.from_ms) : natural;
   // Drop any not-yet-started end being replaced (re-answering moves it, never stacks it).
   const kept = superseded.filter((i) => !(i.from_ms > now_ms && i.to_ms === null));
   return [...kept, { from_ms, to_ms: null, mode: "going_forward" }];

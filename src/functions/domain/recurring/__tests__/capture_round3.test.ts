@@ -260,4 +260,40 @@ describe("review round 3 — defect 4 (a track always gets an outcome)", () => {
   });
 });
 
+
+describe("review round 3 — defect 5 (no \"Still a bill?\" for a bill that isn't shown)", () => {
+  const still = (r: PlannerRecord): ReviewItem => make_review_item({
+    user_id: U, kind: "still_a_bill", direction: "outflow", source: "plaid", status: "open", answer: null,
+    subject_key: r.id, vendor_key: null, account_id: "chk", plaid_item_doc_id: "item", stream_id: r.id, record_id: r.id,
+    name: r.name, amount: 10, frequency: "monthly", plaid_status: "MATURE", category: null, transaction_ids: [],
+    next_due_ms: null, user_frequency: null, resolved_at_ms: null,
+  }, NOW - 1000);
+  const removed = [{ from_ms: NOW - 86400000, to_ms: null, mode: "going_forward" }];
+  const paused = [{ from_ms: NOW - 86400000, to_ms: NOW + 30 * 86400000, mode: "paused" }];
+
+  it("open question about a removed / paused / hidden / merged v2 bill → closed not_shown, never refreshed", () => {
+    for (const o of [{ removal_intervals: removed }, { removal_intervals: paused }, { is_hidden: true }, { merged_into_id: "x" }]) {
+      const r = record("b", { v2: true, plaid_is_active: false, ...o });
+      const q = still(r);
+      const s = stream("b", { raw_is_active: false });
+      const p = plan({ streams: [s], existing: new Map([["b", r]]), review_items: by_id(q) });
+      expect(p.review_items).toHaveLength(1);
+      expect(p.review_items[0]).toMatchObject({ id: q.id, status: "resolved", answer: "not_shown" });
+      // Plaid stopped returning it entirely (stale candidate) → the same.
+      const p2 = plan({ streams: [], stale_candidates: [r], review_items: by_id(q) });
+      expect(p2.review_items.map((i) => i.answer)).toEqual(["not_shown"]);
+      // Once closed, nothing more is written for it.
+      const closed = p.review_items[0];
+      expect(plan({ streams: [s], existing: new Map([["b", r]]), review_items: by_id(closed) }).review_items).toEqual([]);
+    }
+  });
+
+  it("a shown bill keeps its open question (refreshed as before)", () => {
+    const r = record("b", { v2: true, plaid_is_active: false });
+    const q = still(r);
+    const p = plan({ streams: [stream("b", { raw_is_active: false })], existing: new Map([["b", r]]), review_items: by_id(q) });
+    expect(p.review_items[0]).toMatchObject({ status: "open" });
+  });
+});
+
 void [review_ids_for_sync, build_review_item_id, record, ids]; // shared helpers (used by later sections)

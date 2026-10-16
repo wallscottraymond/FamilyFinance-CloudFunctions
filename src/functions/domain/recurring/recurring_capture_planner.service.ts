@@ -432,7 +432,11 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
         ...(unknown_freq ? { frequency: ex.frequency as OutflowForPersistence["frequency"] } : {}),
       } as OutflowForPersistence | InflowForPersistence);
       const open = item_at("still_a_bill", ex.id);
-      if (s.raw_is_active === false) {
+      if (open?.status === "open" && !is_shown(ex, input.now_ms)) {
+        // The user removed / paused / merged the bill meanwhile: the question is moot — closed,
+        // never refreshed (defect 5; no tile for a bill that isn't shown).
+        plan.review_items.push(resolve_review_item(open, "not_shown", input.now_ms));
+      } else if (s.raw_is_active === false) {
         const changed = ex.plaid_is_active !== false;
         if (open?.status === "open") {
           plan.review_items.push(still_a_bill_item(input, ex, open)); // keep (refresh) the question
@@ -564,7 +568,9 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       (r.direction === "outflow" ? plan.plaid_inactive_outflow_ids : plan.plaid_inactive_inflow_ids).push(r.id);
     }
     const open = item_at("still_a_bill", r.id);
-    if (open?.status === "open") {
+    if (open?.status === "open" && !is_shown(r, input.now_ms)) {
+      plan.review_items.push(resolve_review_item(open, "not_shown", input.now_ms)); // moot (defect 5)
+    } else if (open?.status === "open") {
       plan.review_items.push(still_a_bill_item(input, r, open));
     } else if (r.plaid_is_active !== false && is_shown(r, input.now_ms) && r.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
       plan.review_items.push(still_a_bill_item(input, r, open));
