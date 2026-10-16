@@ -45,3 +45,19 @@ describe('review items follow account removal (emulator)', () => {
     expect((await db.collection('recurring_review_items').doc(c.id).get()).data()?.expireAt).toBeUndefined();
   });
 });
+
+describe('robustness (emulator)', () => {
+  it('flag doc missing / malformed fields → the check never throws and reads as off (what sync, detector and callable call)', async () => {
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const ff = require('../src/functions/infrastructure/feature_flags');
+    /* eslint-enable @typescript-eslint/no-var-requires */
+    await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({ enabled: true }); // no lists at all
+    ff.invalidate_flag_cache();
+    await expect(ff.is_convert_to_recurring_enabled('anyone')).resolves.toBe(false);
+    await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({ enabled: true, enabled_user_ids: 'oops' });
+    ff.invalidate_flag_cache();
+    await expect(ff.is_convert_to_recurring_enabled('oops')).resolves.toBe(false);
+    await db.collection('_feature_flags').doc('convert_to_recurring_v1').delete();
+    ff.invalidate_flag_cache();
+  });
+});

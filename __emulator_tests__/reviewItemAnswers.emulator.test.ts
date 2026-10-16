@@ -165,4 +165,30 @@ describe('answering review items (emulator)', () => {
     await expect(answer(ctx(), owner.ids.userId, { item_id: owner_item.id, answer: 'not_bill' }, NOW_MS))
       .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   }, 180000);
+
+  it('a vendor key with "/" makes a valid item id that can be written, read and answered', async () => {
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const ff = require('../src/functions/infrastructure/feature_flags');
+    const { recurring_review_repo } = require('../src/functions/repositories/recurring_review.repo');
+    const { make_review_item } = require('../src/functions/domain/recurring/review_item.service');
+    /* eslint-enable @typescript-eslint/no-var-requires */
+    const uid = `rs_${Date.now()}`;
+    await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({
+      enabled: true, enabled_user_ids: [uid], enabled_group_ids: [], rollout_percentage: 0,
+    });
+    ff.invalidate_flag_cache();
+    const it_ = make_review_item({
+      user_id: uid, kind: 'suggested', direction: 'outflow', source: 'plaid', status: 'open', answer: null,
+      subject_key: 'outflow:paypal /inst xfer', vendor_key: 'paypal /inst xfer', account_id: 'acct1', plaid_item_doc_id: 'item',
+      stream_id: 's', record_id: null, name: 'PayPal', amount: 10, frequency: 'monthly', plaid_status: 'EARLY_DETECTION',
+      category: null, transaction_ids: [], next_due_ms: null, user_frequency: null, resolved_at_ms: null,
+    }, Date.now());
+    expect(it_.id).not.toContain('/');
+    await recurring_review_repo.upsert_items(ctx(), [it_]);
+    expect((await recurring_review_repo.get_items_by_ids(ctx(), [it_.id])).get(it_.id)?.subject_key).toBe('outflow:paypal /inst xfer');
+    const r = await answer(ctx(), uid, { item_id: it_.id, answer: 'not_bill' }, Date.now());
+    expect(r.status).toBe('dismissed');
+    const state = (await db.collection('_recurring_review_state').doc(uid).get()).data()!;
+    expect(state.dismissedVendorKeys).toEqual(['outflow:paypal /inst xfer']);
+  });
 });
