@@ -128,7 +128,8 @@ describe('It ended → going-forward end (emulator)', () => {
     expect(by_id.get(`${SPOT}_2038M01`)?.isActive).toBe(false); // created by the extension, flipped
     expect((await h.bill(NOV, SPOT))?.groups ?? []).toEqual([]); // derive agrees
 
-    // D13: an OLD record's extension is untouched (periods created active, as today).
+    // An OLD record's extension follows working's deployed 2ae62e6 (new periods inside the removal
+    // window are created inactive, no post-pass) — this branch adds nothing for old records (D13).
     const OLDID = `${h.ids.tag}_old_bill`;
     const { captureRulesVersion: _v, plaidIsActive: _p, ...old_doc } = (await db.collection('outflows').doc(h.ids.streams.XFER).get()).data()!;
     void _v; void _p;
@@ -140,6 +141,7 @@ describe('It ended → going-forward end (emulator)', () => {
     await extendOutflowPeriodsFor(db, await db.collection('outflows').doc(OLDID).get(), new Date('2038-02-01T00:00:00Z'));
     const old_periods = await db.collection('outflow_periods').where('outflowId', '==', OLDID).get();
     expect(old_periods.size).toBeGreaterThan(0);
-    expect(old_periods.docs.every((d) => d.data().isActive === true)).toBe(true);
+    // Every period here starts Dec 2037+ (after the Nov 1 removal) → created inactive.
+    expect(old_periods.docs.every((d) => d.data().isActive === false)).toBe(true);
   }, 240000);
 });
