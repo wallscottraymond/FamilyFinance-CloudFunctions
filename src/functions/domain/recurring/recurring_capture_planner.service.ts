@@ -35,6 +35,7 @@ import type {
 import { vendor_key } from "../transactions/vendor_key.service";
 import {
   CAPTURE_RULES_VERSION,
+  is_card_payment_inflow,
   is_low_confidence_stream,
   is_tombstoned_stream,
   may_suggest_stream,
@@ -428,6 +429,9 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       ...s.entity!,
       capture_rules_version: CAPTURE_RULES_VERSION,
       plaid_is_active: true,
+      // A card-side "payment received" credit isn't income: hidden from creation (gap 3, X7) —
+      // the v2 classifier keeps it hidden.
+      ...(s.direction === "inflow" && is_card_payment_inflow(s.detailed_category) ? { is_hidden: true } : {}),
       ...(user_frequency ? { user_frequency: user_frequency as OutflowForPersistence["frequency"] } : {}),
     } as OutflowForPersistence | InflowForPersistence);
     unsuppress(s.transaction_ids);

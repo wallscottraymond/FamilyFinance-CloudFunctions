@@ -582,8 +582,14 @@ export function shape_period_derivation_deps(
   const outflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
   for (const o of outflows) {
     if (!o.is_active || o.is_hidden) continue; // hidden = classified internal transfer
-    // Skip only INTERNAL account transfers; external ACH bills (mortgage, etc.) stay.
-    if (is_transfer_category(o.plaid_detailed_category) && is_internal_stream(o.transaction_ids)) {
+    // Skip only INTERNAL account transfers; external ACH bills (mortgage, etc.) stay. A v2 record
+    // is decided by the classifier's majority rule alone (X7) — no on-read any-one check, or one
+    // coincidental pair in the window would hide it here while the engine still links it.
+    if (
+      o.capture_rules_version !== 2 &&
+      is_transfer_category(o.plaid_detailed_category) &&
+      is_internal_stream(o.transaction_ids)
+    ) {
       continue;
     }
     recurring.push({
@@ -618,8 +624,12 @@ export function shape_period_derivation_deps(
   const inflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
   for (const i of inflows) {
     if (!i.is_active || i.is_hidden) continue; // hidden = classified internal transfer
-    // Skip only INTERNAL account transfers; external inbound transfers stay.
-    if (is_transfer_category(i.plaid_detailed_category) && is_internal_stream(i.transaction_ids)) {
+    // Skip only INTERNAL account transfers; external inbound transfers stay. (v2: classifier only.)
+    if (
+      i.capture_rules_version !== 2 &&
+      is_transfer_category(i.plaid_detailed_category) &&
+      is_internal_stream(i.transaction_ids)
+    ) {
       continue;
     }
     recurring.push({

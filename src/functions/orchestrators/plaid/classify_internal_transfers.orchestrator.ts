@@ -27,7 +27,8 @@ import { inflow_repo, outflow_repo } from "../../repositories";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
-import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
+import { CAPTURE_RULES_VERSION } from "../../domain/recurring/capture_rules";
+import { target_hidden } from "../../domain/recurring/transfer_hiding.service";
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import { resolve_transfer_roles } from "../../resolvers/transactions/transfer_roles.resolver";
@@ -44,8 +45,6 @@ import {
 } from "../../repositories/transfer_classification_state.repo";
 import { createHash } from "crypto";
 
-/** Credit-card payments are always KEPT (a real recurring bill), never hidden. */
-const CC_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
 /** Window of transactions loaded for matched-pair detection. */
 const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
 /** Pairing slack each side — THE shared one (the period page pairs the same). */
@@ -62,6 +61,8 @@ interface ClassifiableRecord {
   plaid_detailed_category: string;
   transaction_ids: string[];
   is_hidden: boolean;
+  /** Convert-To-Recurring: `2` = the v2 hiding rule applies (X7); old records keep today's. */
+  capture_rules_version?: number | null;
 }
 
 export interface ClassifyInternalTransfersResult {
@@ -91,6 +92,9 @@ function fingerprint(
         r.plaid_detailed_category,
         hidden ? 1 : 0,
         [...(r.transaction_ids ?? [])].sort().join(","),
+        // Only v2 rows carry a marker, so every existing user's fingerprint is unchanged (no
+        // forced re-scan on deploy; CLASSIFIER_VERSION untouched — X21).
+        ...(r.capture_rules_version === CAPTURE_RULES_VERSION ? ["v2"] : []),
       ].join("|")
     )
     .sort();
@@ -99,19 +103,9 @@ function fingerprint(
     .digest("hex");
 }
 
-/**
- * A recurring record should be HIDDEN when it is a transfer category, is an
- * internal (matched-pair) transfer, and is NOT a credit-card payment.
- */
-function should_hide(
-  plaid_detailed_category: string,
-  transaction_ids: string[] | undefined,
-  internal_plaid_ids: Set<string>
-): boolean {
-  if (plaid_detailed_category === CC_PAYMENT_CATEGORY) return false;
-  if (!is_transfer_category(plaid_detailed_category)) return false;
-  return (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
-}
+// Old records: a recurring record is HIDDEN when it is a transfer category, is an internal
+// (matched-pair) transfer, and is NOT a credit-card payment (`should_hide_v1`). v2 records: the
+// majority rule with hysteresis + card-payment inflows always hidden (`should_hide_v2`, X7).
 
 export async function classify_internal_transfers_orchestrator(
   ctx: TraceContext,
@@ -153,19 +147,33 @@ export async function classify_internal_transfers_orchestrator(
   );
 
   // 3. Split each collection into hide / unhide (self-correcting).
-  const partition = (records: ClassifiableRecord[]): { hide: string[]; unhide: string[] } => {
+  // The Plaid ids loaded in the window: a v2 stream's majority is counted over these only (X7).
+  const window_plaid_ids = new Set(
+    txns.map((t) => t.data.transactionId as string | undefined).filter((x): x is string => !!x)
+  );
+  const partition = (kind: "o" | "i", records: ClassifiableRecord[]): { hide: string[]; unhide: string[] } => {
     const hide: string[] = [];
     const unhide: string[] = [];
     for (const r of records) {
-      const target = should_hide(r.plaid_detailed_category, r.transaction_ids, internal_plaid_ids);
+      const target = target_hidden(
+        {
+          kind,
+          plaid_detailed_category: r.plaid_detailed_category,
+          transaction_ids: r.transaction_ids,
+          is_hidden: r.is_hidden,
+          v2: r.capture_rules_version === CAPTURE_RULES_VERSION,
+        },
+        window_plaid_ids,
+        internal_plaid_ids
+      );
       if (target && !r.is_hidden) hide.push(r.id);
       else if (!target && r.is_hidden) unhide.push(r.id);
     }
     return { hide, unhide };
   };
 
-  const out = partition(outflows);
-  const inf = partition(inflows);
+  const out = partition("o", outflows);
+  const inf = partition("i", inflows);
 
   await Promise.all([
     outflow_repo.mark_hidden(ctx, out.hide, true, user_id),
