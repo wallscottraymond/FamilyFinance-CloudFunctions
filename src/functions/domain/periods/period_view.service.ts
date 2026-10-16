@@ -32,7 +32,10 @@ import {
   place_occurrences,
   PlacedOccurrenceGroup,
 } from "../recurring/occurrence_placement.service";
-import { is_suppressed_in_period } from "../recurring/recurring_suppression.service";
+import {
+  is_payment_suppressed,
+  is_suppressed_in_period,
+} from "../recurring/recurring_suppression.service";
 import { PeriodDerivationDeps } from "./period_derivation.types";
 
 /** Synthetic income id for the "Other Income" bucket (unmatched real INCOME_* credits). */
@@ -118,11 +121,23 @@ export function compute_period_view(
     // "Mark as paid / received": an occurrence no real payment settled but the user marked is
     // settled manually (the ONE rule stored reconcile applies too — never double-counted).
     const settled = apply_manual_settlements(reconciled, r.manual_settled_occurrences);
-    const groups = place_occurrences(settled, deps.placement_buckets);
-    // Suppress groups whose period is removed/paused for this item (per-period snap).
+    // Removed / paused / ended spans: an occurrence is dropped when its (UTC) MONTH is suppressed
+    // — the same month snap the engine and stored reconcile use to release a payment
+    // (is_payment_suppressed). Judging by the VIEW period's end instead dropped a week (or any
+    // bucket) straddling the boundary in full: a payment made before an "It ended" date then
+    // counted nowhere (not paid, not released). Monthly views are unchanged (bucket = month).
+    const kept = r.removal_intervals?.length
+      ? settled.filter((o) => !is_payment_suppressed(r.removal_intervals, o.due_date_ms))
+      : settled;
+    const groups = place_occurrences(kept, deps.placement_buckets);
+    // A suppressed period shows the item only for the occurrences it kept (none → hidden).
     const visible_groups = groups.filter((g) => {
       const end_ms = period_end_by_id.get(g.period_id);
-      return end_ms === undefined || !is_suppressed_in_period(r.removal_intervals, end_ms);
+      return (
+        end_ms === undefined ||
+        !is_suppressed_in_period(r.removal_intervals, end_ms) ||
+        g.count_in_period > 0
+      );
     });
     (r.kind === "outflow" ? bills : income).push({
       recurring_id: r.id,
