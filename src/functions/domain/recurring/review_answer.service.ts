@@ -94,12 +94,12 @@ export function plan_review_answer(
     record_action: null,
     resync_item_doc_id: null,
   };
-  // Plaid-sourced items carry Plaid ids (held out of fuzzy matching while unanswered).
-  const plaid_ids = item.source === "plaid" ? item.transaction_ids : [];
   switch (answer) {
     case "track":
     case "keep_separate":
-      plan.state_change = { remove_suppressed: plaid_ids };
+      // The item's payments stay held out of fuzzy matching until the bill actually EXISTS: the
+      // capture planner releases them when it creates the v2 record (create_v2), not here — in
+      // between, a merchant guess could still link them to an old bill.
       plan.resync_item_doc_id = item.plaid_item_doc_id;
       break;
     case "not_bill":

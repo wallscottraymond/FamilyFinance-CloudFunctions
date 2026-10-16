@@ -76,11 +76,13 @@ describe('answering review items (emulator)', () => {
     await expect(answer(ctx(), uid, { item_id: avant.id, answer: 'track' }, NOW_MS)).rejects.toThrow(/schedule/);
     const r = await answer(ctx(), uid, { item_id: avant.id, answer: 'track', frequency: 'monthly' }, NOW_MS);
     expect([r.status, r.no_op]).toEqual(['resolved', false]);
+    // Still held out until the bill exists (released by the planner at creation, not at answer).
     const state = (await db.collection('_recurring_review_state').doc(uid).get()).data()!;
-    expect(state.suppressedTxnIds).not.toContain(h.ids.txn('avant0'));
+    expect(state.suppressedTxnIds).toContain(h.ids.txn('avant0'));
     const jobs = await db.collection('_jobs').where('payload.user_id', '==', uid).where('job_type', '==', 'sync_item').get();
     expect(jobs.size).toBeGreaterThan(0); // the item re-sync was queued
     await h.sync('after_track'); // what that job runs
+    expect((await db.collection('_recurring_review_state').doc(uid).get()).data()!.suppressedTxnIds).not.toContain(h.ids.txn('avant0'));
     const rec = (await db.collection('outflows').doc(h.ids.streams.AVANT).get()).data()!;
     expect([rec.captureRulesVersion, rec.isActive, rec.frequency, rec.userFrequency]).toEqual([2, true, 'monthly', 'monthly']);
     expect((await h.txn('avant0'))?.splits[0].outflowId).toBe(h.ids.streams.AVANT); // history linked

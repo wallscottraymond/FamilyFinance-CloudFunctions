@@ -152,6 +152,22 @@ describe("plan_recurring_capture", () => {
     expect(p.state_change.add_suppressed).toEqual([]);
   });
 
+  it("answered track: the ITEM's held-out ids are released at creation too (not at answer time)", () => {
+    const s = stream("e", { raw_status: "EARLY_DETECTION" });
+    const subject = suggested_subject("outflow", stream_vendor(s));
+    const open = make_review_item({
+      user_id: U, kind: "suggested", direction: "outflow", source: "plaid", status: "open", answer: null,
+      subject_key: subject, vendor_key: stream_vendor(s), account_id: "chk", plaid_item_doc_id: "item", stream_id: "e",
+      record_id: null, name: "x", amount: 10, frequency: "monthly", plaid_status: "EARLY_DETECTION", category: null,
+      // An earlier payment Plaid no longer lists in the stream is still on the item (held out).
+      transaction_ids: ["e_old", "e_t1"], next_due_ms: null, user_frequency: null, resolved_at_ms: null,
+    }, NOW);
+    const tracked = resolve_review_item(open, "track", NOW, {});
+    const p = plan({ streams: [s], review_items: new Map([[tracked.id, tracked]]) });
+    expect(p.save_outflows).toHaveLength(1);
+    expect([...p.state_change.remove_suppressed!].sort()).toEqual(["e_old", "e_t1", "e_t2"]);
+  });
+
   it("an EARLY stream that matures resolves its open suggestion (matured) and is created", () => {
     const early = plan({ streams: [stream("e", { raw_status: "EARLY_DETECTION" })] });
     const item = early.review_items[0];

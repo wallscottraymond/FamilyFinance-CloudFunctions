@@ -390,6 +390,11 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       (same_bill && same_bill.answer === "keep_separate" && same_bill.status === "resolved");
     if (tracked) {
       create_v2(s, suggested?.answer === "track" ? suggested.user_frequency : null);
+      // The answered item's held-out payments are released now that the bill exists (not at
+      // answer time — fix round: the hold-out must cover the gap until creation).
+      for (const it of [suggested, same_bill]) {
+        if (it && it.status === "resolved" && it.source === "plaid") unsuppress(it.transaction_ids);
+      }
       continue;
     }
     if (is_tombstoned_stream(s.raw_status)) {
@@ -459,6 +464,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
 
   // Ids both suppressed and saved this round end saved (stream membership wins).
   const saved = new Set(plan.state_change.remove_suppressed);
+  plan.state_change.remove_suppressed = [...saved];
   plan.state_change.add_suppressed = plan.state_change.add_suppressed!.filter((id) => !saved.has(id));
   return plan;
 }

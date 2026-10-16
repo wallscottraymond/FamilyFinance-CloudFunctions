@@ -41,6 +41,7 @@ jest.mock('../src/utils/encryption', () => {
 let db: FirebaseFirestore.Firestore;
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any */
 let assign: (ctx: unknown, input: unknown) => Promise<any>;
+let answer: (ctx: any, uid: string, input: any, now: number) => Promise<any>;
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
   jest.useFakeTimers(FAKE_CLOCK);
@@ -48,6 +49,7 @@ beforeAll(async () => {
   require('../src/functions/orchestrators/plaid/sync_item.orchestrator');
   require('../src/functions/orchestrators/periods/derive_period.orchestrator');
   ({ assign_transaction_orchestrator: assign } = require('../src/functions/orchestrators/transactions/assign_transaction.orchestrator'));
+  ({ answer_recurring_review_item_orchestrator: answer } = require('../src/functions/orchestrators/recurring/answer_recurring_review_item.orchestrator'));
   db = admin.firestore();
   await seedMonths(db);
 }, 60000);
@@ -170,5 +172,44 @@ describe('X3 — held-out payments never fuzzy-link to an old bill (emulator)', 
     const d = startCounting();
     expect(await h.eeSpent(OCT)).toBe(ee_before);
     expect(d.stop().reads_by._recurring_review_state).toBe(1);
+  }, 180000);
+
+  it('Track: the payments stay held out between the answer and the bill being created', async () => {
+    const tag = 'qzhtrk';
+    const h = await makeHarness(db, tag, { mockSync, mockRecurring }, { flag: false });
+    h.setRecurring(scenarioRecurring(h.ids, { SUNBIT: { status: 'MATURE' } }));
+    await h.sync('link'); // an OLD Sunbit bill
+    const OLD = h.ids.streams.SUNBIT;
+    await setFlag(db, [h.ids.userId]);
+    h.ids.streams.SUNBIT2 = `${tag}_S_SUNBIT2`;
+    const rec = scenarioRecurring(h.ids, { SUNBIT: { status: 'MATURE' } });
+    rec.outflow_streams.push(plaidStream(h.ids, 'SUNBIT2', {
+      account: 'chk', keys: ['sunbitnew'], amount: 50, description: 'SUNBIT', merchant: 'Sunbit',
+      primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT', frequency: 'MONTHLY',
+      status: 'EARLY_DETECTION', is_active: true, first_days_ago: 0, last_days_ago: 0, next_days: 30,
+    }));
+    h.setRecurring(rec);
+    h.postTxns([plaidTxn(h.ids, { key: 'sunbitnew', account: 'chk', amount: 50, days_ago: 0, name: 'SUNBIT',
+      merchant: 'Sunbit', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT' })]);
+    await h.sync('new_stream');
+    const items = (await db.collection('recurring_review_items').where('userId', '==', h.ids.userId).get()).docs.map((d) => d.data());
+    const sug = items.find((i) => i.kind === 'suggested' && i.transactionIds?.includes(h.ids.txn('sunbitnew')))!;
+    expect(sug).toBeDefined();
+    await answer({ trace_id: 'trk', span_id: 's' }, h.ids.userId, { item_id: sug.id, answer: 'track', frequency: 'monthly' }, Date.now());
+
+    // Between the answer and the re-sync: still held out — a re-assign does NOT fuzzy-link it to OLD.
+    const held = (await db.collection('_recurring_review_state').doc(h.ids.userId).get()).data()?.suppressedTxnIds ?? [];
+    expect(held).toContain(h.ids.txn('sunbitnew'));
+    const ref = db.collection('transactions').doc(`plaid_${h.ids.txn('sunbitnew')}`);
+    await assign({ trace_id: 'gap', span_id: 's' }, { user_id: h.ids.userId, transaction_id: ref.id });
+    expect((await ref.get()).data()?.splits[0].outflowId ?? null).toBeNull();
+    expect((await ref.get()).data()?.splits[0].outflowId).not.toBe(OLD);
+
+    // The re-sync creates the v2 bill → released, and the payment pays the NEW bill.
+    await h.sync('after_track');
+    expect((await db.collection('outflows').doc(h.ids.streams.SUNBIT2).get()).data()?.captureRulesVersion).toBe(2);
+    const after = (await db.collection('_recurring_review_state').doc(h.ids.userId).get()).data()?.suppressedTxnIds ?? [];
+    expect(after).not.toContain(h.ids.txn('sunbitnew'));
+    expect((await ref.get()).data()?.splits[0].outflowId).toBe(h.ids.streams.SUNBIT2);
   }, 180000);
 });

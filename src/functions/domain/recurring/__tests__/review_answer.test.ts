@@ -10,12 +10,12 @@ const item = (o: Partial<ReviewItem> = {}): ReviewItem => make_review_item({
 }, NOW);
 
 describe("plan_review_answer", () => {
-  it("track a Plaid suggestion → resolved, ids released, re-sync the item", () => {
+  it("track a Plaid suggestion → resolved, re-sync the item; ids stay held out until the bill exists", () => {
     const r = plan_review_answer(item(), "track", NOW);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.plan.item).toMatchObject({ status: "resolved", answer: "track" });
-    expect(r.plan.state_change).toEqual({ remove_suppressed: ["p1", "p2"] });
+    expect(r.plan.state_change).toEqual({});
     expect(r.plan.resync_item_doc_id).toBe("item1");
   });
 
@@ -40,7 +40,7 @@ describe("plan_review_answer", () => {
     expect(b.ok && b.plan.record_action).toBe("end");
     const same = item({ kind: "same_bill", subject_key: "new_stream", record_id: "old" });
     const c = plan_review_answer(same, "keep_separate", NOW);
-    expect(c.ok && [c.plan.state_change, c.plan.resync_item_doc_id]).toEqual([{ remove_suppressed: ["p1", "p2"] }, "item1"]);
+    expect(c.ok && [c.plan.state_change, c.plan.resync_item_doc_id]).toEqual([{}, "item1"]);
   });
 
   it("Phase 2 answers and wrong answers are refused", () => {
