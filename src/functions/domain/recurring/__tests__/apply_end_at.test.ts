@@ -96,3 +96,39 @@ describe("apply_end_at never shortens a suppression already in effect (review ro
   });
 });
 
+describe("apply_end_at — UTC, leap and year edges (Top-25 #21)", () => {
+  const AT = (y: number, m: number, d: number, h = 12, mi = 0) => Date.UTC(y, m - 1, d, h, mi);
+  const NOV1 = AT(2026, 11, 1, 0);
+  it("last payment Jan 31 → ends Feb 1 (UTC month start)", () => {
+    const iv = apply_end_at([], AT(2040, 1, 31), AT(2040, 2, 10), AT(2040, 2, 1, 0));
+    expect(iv).toEqual([{ from_ms: AT(2040, 2, 1, 0), to_ms: null, mode: "going_forward" }]);
+  });
+  it("last payment Feb 29 2040 (leap day) → ends Mar 1 2040", () => {
+    const iv = apply_end_at([], AT(2040, 2, 29, 23, 59), AT(2040, 3, 5), AT(2040, 3, 1, 0));
+    expect(iv[0].from_ms).toBe(AT(2040, 3, 1, 0));
+    expect(is_payment_suppressed(iv, AT(2040, 2, 29, 23, 59))).toBe(false);
+    expect(is_payment_suppressed(iv, AT(2040, 3, 1, 0, 1))).toBe(true);
+  });
+  it("last payment Dec 31 → ends Jan 1 of the NEXT year", () => {
+    const iv = apply_end_at([], AT(2040, 12, 31, 18), AT(2041, 1, 3), AT(2041, 1, 1, 0));
+    expect(iv[0].from_ms).toBe(AT(2041, 1, 1, 0));
+    // The week straddling the year end (Sun Dec 30 2040 – Sat Jan 5 2041) keeps the Dec 31 payment.
+    const week_end = AT(2040, 12, 30, 0) + 7 * 86400000 - 1;
+    expect(is_suppressed_in_period(iv, week_end)).toBe(true);
+    expect(is_payment_suppressed(iv, AT(2040, 12, 31, 18))).toBe(false);
+    expect(is_payment_suppressed(iv, AT(2041, 1, 2))).toBe(true);
+  });
+  it("a payment at 23:30 local (UTC-7) on Oct 31 is stored as Nov 1 06:30Z → it is a NOVEMBER payment", () => {
+    // Plaid dates are UTC-day based; the app counts days in UTC (CLAUDE.md "UTC-normalized day
+    // counting"). So the end starts Dec 1, and November keeps the bill.
+    const paid = AT(2026, 11, 1, 6, 30);
+    const iv = apply_end_at([], paid, AT(2026, 11, 15), NOV1);
+    expect(iv[0].from_ms).toBe(AT(2026, 12, 1, 0));
+    expect(is_payment_suppressed(iv, paid)).toBe(false);
+  });
+  it("never later than next month: a payment dated after 'now' (clock skew) still ends next month", () => {
+    const iv = apply_end_at([], AT(2027, 3, 1), NOW, OCT1);
+    expect(iv[0].from_ms).toBe(d("2026-11-01T00:00:00Z"));
+  });
+});
+

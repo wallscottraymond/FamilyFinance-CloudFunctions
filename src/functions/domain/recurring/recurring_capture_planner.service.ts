@@ -79,6 +79,8 @@ export interface PlannerRecord {
   last_date_ms: number;
   removal_intervals: Array<{ from_ms: number; to_ms: number | null; mode: string }>;
   transaction_ids: string[];
+  /** The user's own name for it (wins over Plaid's merchant / description in `name`). */
+  custom_name?: string | null;
 }
 
 /** One Plaid stream of the response (identified; on an active account). */
@@ -239,6 +241,29 @@ const app_frequency = (raw: string): string | null => {
   }
 };
 
+/**
+ * The record as it will be AFTER this sync saves the stream's entity: a question built from the
+ * pre-save record changed again on the next identical sync (one extra item write each time Plaid
+ * changed a field — found by the planner property test, Top-25 #23).
+ */
+function as_saved(ex: PlannerRecord, s: PlannerStream, saved: OutflowForPersistence | InflowForPersistence): PlannerRecord {
+  const merchant =
+    s.direction === "outflow"
+      ? (saved as OutflowForPersistence).merchant_name ?? null
+      : (saved as InflowForPersistence).payer_name ?? null;
+  return {
+    ...ex,
+    merchant_name: merchant,
+    description: saved.description ?? null,
+    name: ex.custom_name || merchant || saved.description || (s.direction === "outflow" ? "Bill" : "Income"),
+    average_amount: saved.average_amount,
+    frequency: saved.frequency,
+    plaid_status: saved.plaid_status,
+    plaid_detailed_category: saved.plaid_detailed_category,
+    account_id: saved.account_id,
+  };
+}
+
 /** Is the record a bill the user currently sees (active, not hidden, not removed, not merged)? */
 function is_shown(r: PlannerRecord, now_ms: number): boolean {
   return (
@@ -385,7 +410,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   const item_at = (kind: ReviewItem["kind"], subject: string) =>
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
   const suggest_candidates: SuggestCandidate[] = [];
-  const matured_subjects = new Set<string>();
+  const matured = new Map<string, { item: ReviewItem; s: PlannerStream }>();
   const base_change: BaseChange = { add_suppressed: [], remove_suppressed: [], remove_pending_track_ids: [] };
   const effects = new Map<string, SaveEffect>();
   const effect = (s: PlannerStream): SaveEffect => {
@@ -424,13 +449,15 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     if (ex && ex.v2) {
       if (!s.entity) continue; // rejected: not saved (invalid), never stale-marked (X10)
       const unknown_freq = is_low_confidence_stream("MATURE", s.raw_frequency);
-      save(s, {
+      const saved_entity = {
         ...s.entity,
         is_active: ex.is_active,
         plaid_is_active: s.raw_is_active,
         // An UNKNOWN frequency would be invented as monthly by the transformer: keep ours.
         ...(unknown_freq ? { frequency: ex.frequency as OutflowForPersistence["frequency"] } : {}),
-      } as OutflowForPersistence | InflowForPersistence);
+      } as OutflowForPersistence | InflowForPersistence;
+      save(s, saved_entity);
+      const cur = as_saved(ex, s, saved_entity);
       const open = item_at("still_a_bill", ex.id);
       if (open?.status === "open" && !is_shown(ex, input.now_ms)) {
         // The user removed / paused / merged the bill meanwhile: the question is moot — closed,
@@ -439,9 +466,9 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       } else if (s.raw_is_active === false) {
         const changed = ex.plaid_is_active !== false;
         if (open?.status === "open") {
-          plan.review_items.push(still_a_bill_item(input, ex, open)); // keep (refresh) the question
+          plan.review_items.push(still_a_bill_item(input, cur, open)); // keep (refresh) the question
         } else if (changed && is_shown(ex, input.now_ms) && ex.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
-          plan.review_items.push(still_a_bill_item(input, ex, open));
+          plan.review_items.push(still_a_bill_item(input, cur, open));
         }
       } else if (open?.status === "open") {
         plan.review_items.push(resolve_review_item(open, "auto_active", input.now_ms)); // Plaid back on
@@ -509,11 +536,8 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     // Mature, known schedule, active → a v2 record.
     create_v2(s, null);
     if (suggested?.status === "open") {
-      const closed = resolve_review_item(suggested, "matured", input.now_ms);
-      plan.review_items.push(closed);
-      effect(s).item_ids.push(closed.id);
-      effect(s).release.push(...suggested.transaction_ids);
-      matured_subjects.add(suggested_subject(s.direction, vk));
+      // Closed after the loop — unless another low-confidence stream of the vendor keeps it.
+      matured.set(suggested_subject(s.direction, vk), { item: suggested, s });
     }
   }
 
@@ -521,7 +545,9 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   //    round 3 defect 2). Items are keyed per vendor but built from a single stream, so two Plaid
   //    items with an early stream of the same vendor (or a reordered stream list) overwrote each
   //    other on every sync. Now:
-  //      - a vendor that matured into a bill in this sync gets no tile (its item was just closed);
+  //      - a vendor whose stream matured into a bill this sync: its open tile is closed "matured"
+  //        — unless another of its streams is still low-confidence, which then keeps the tile
+  //        (closing it here only for the next sync to reopen it flip-flopped; Top-25 #23);
   //      - an OPEN tile owned by ANOTHER Plaid item's stream is left as it is (that item's sync
   //        maintains it; this sync can't see that stream);
   //      - otherwise the tile keeps its stored stream while that stream is in this response, else
@@ -531,8 +557,14 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     if (!by_subject.has(c.subject)) by_subject.set(c.subject, []);
     by_subject.get(c.subject)!.push(c);
   }
-  for (const [subject, group] of by_subject) {
-    if (matured_subjects.has(subject)) continue;
+  for (const [subject, m] of matured) {
+    if (by_subject.has(subject)) continue; // still suggested via another stream (below)
+    const closed = resolve_review_item(m.item, "matured", input.now_ms);
+    plan.review_items.push(closed);
+    effect(m.s).item_ids.push(closed.id);
+    effect(m.s).release.push(...m.item.transaction_ids);
+  }
+  for (const [, group] of by_subject) {
     const ex = group[0].existing;
     const other_item_owns =
       !!ex && ex.status === "open" && ex.source === "plaid" && !!ex.plaid_item_doc_id &&

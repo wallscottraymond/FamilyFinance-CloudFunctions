@@ -152,16 +152,22 @@ describe("review round 3 — defect 2 (one deterministic tile per vendor)", () =
     expect(plan({ streams: [a], review_items: by_id(closed) }).review_items[0]).toMatchObject({ status: "open", stream_id: "sa" });
   });
 
-  it("a vendor whose stream matures in this sync gets only the matured close, never a fresh tile", () => {
+  it("a vendor whose stream matures: the tile closes 'matured' — unless another of its streams is still early", () => {
     const e = early("sb");
     const open = plan({ streams: [e] }).review_items[0];
     const mature = stream("sa", { merchant_name: "Sunbit", description: "SUNBIT" });
-    for (const order of [[mature, e], [e, mature]]) {
-      const p = plan({ streams: order, review_items: by_id(open) });
+    // Only the maturing stream: closed as matured.
+    const alone = plan({ streams: [mature], review_items: by_id(open) });
+    expect(alone.review_items.map((i) => [i.id, i.status, i.answer])).toEqual([[open.id, "resolved", "matured"]]);
+    // With another early stream of the vendor: ONE content (both orders), the tile stays open —
+    // closing it now only for the next sync to reopen it would flip-flop (Top-25 #23).
+    const both = [[mature, e], [e, mature]].map((order) => plan({ streams: order, review_items: by_id(open) }));
+    for (const p of both) {
       const mine = p.review_items.filter((i) => i.id === open.id);
-      expect(new Set(mine.map((i) => i.status))).toEqual(new Set(["resolved"]));
-      expect(mine[0].answer).toBe("matured");
+      expect(mine.map((i) => i.status)).toEqual(["open"]);
+      expect(p.state_change.add_suppressed).toEqual(e.transaction_ids); // the early stream stays held out
     }
+    expect(both[0].review_items).toEqual(both[1].review_items);
   });
 });
 

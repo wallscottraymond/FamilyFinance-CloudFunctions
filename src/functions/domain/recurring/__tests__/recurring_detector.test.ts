@@ -121,3 +121,20 @@ describe("possible-bill detector", () => {
     expect(run(many.slice(0, 10)).capped).toBe(false);
   });
 });
+
+describe("detector rhythm — a monthly bill on the 31st (extra)", () => {
+  const at = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d, 12);
+  it("gaps of 28 and 30 days (Jan 31 → Feb 28 → Mar 30 → Apr 30) fit monthly", () => {
+    const dates = [at(2026, 1, 31), at(2026, 2, 28), at(2026, 3, 30), at(2026, 4, 30)];
+    expect(fit_cadence(dates)?.frequency).toBe("monthly");
+  });
+  it("the 31st, leap year included (Jan 31 → Feb 29 2028 → Mar 31 → Apr 30)", () => {
+    expect(fit_cadence([at(2028, 1, 31), at(2028, 2, 29), at(2028, 3, 31), at(2028, 4, 30)])?.frequency).toBe("monthly");
+  });
+  it("order doesn't matter; two on one day is not a rhythm", () => {
+    const dates = [at(2026, 4, 30), at(2026, 1, 31), at(2026, 3, 30), at(2026, 2, 28)];
+    expect(fit_cadence(dates)?.frequency).toBe("monthly");
+    expect(fit_cadence([...dates, at(2026, 4, 30)])).toBeNull();
+  });
+});
+

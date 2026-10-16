@@ -143,6 +143,8 @@ export interface CaptureRecordInfo {
   last_date_ms: number;
   removal_intervals: Array<{ from_ms: number; to_ms: number | null; mode: string }>;
   transaction_ids: string[];
+  /** The user's own name for it (wins over Plaid's merchant / description in `name`). */
+  custom_name?: string | null;
 }
 
 // ============================================================================
@@ -202,6 +204,7 @@ export function to_capture_record_info(
     last_date_ms: ms_of(r.last_date as { toMillis?: () => number }),
     removal_intervals: r.removal_intervals ?? [],
     transaction_ids: r.transaction_ids ?? [],
+    custom_name: r.user_custom_name ?? null,
   };
 }
 
