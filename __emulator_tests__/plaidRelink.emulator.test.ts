@@ -70,10 +70,11 @@ const getItem = async (docId: string) =>
   (await db.collection('plaid_items').doc(docId).get()).data();
 
 // The auto-retry resolver scans ALL transient items globally and probes each
-// (a real balance sync). Clear the collection so a retry pass processes exactly
-// the one item under test — deterministic counts + fast (no probing leftovers).
+// (a real balance sync). Clear the TRANSIENT items (exactly what it scans) so a retry pass
+// processes the one item under test — never the whole shared collection (that deleted other
+// parallel suites' items mid-sync).
 async function clearItems() {
-  const snap = await db.collection('plaid_items').get();
+  const snap = await db.collection('plaid_items').where('status', 'in', ['temporary_error', 'rate_limited']).get();
   const batch = db.batch();
   snap.docs.forEach((d) => batch.delete(d.ref));
   await batch.commit();
