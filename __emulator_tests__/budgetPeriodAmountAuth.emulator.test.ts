@@ -45,9 +45,11 @@ const period = (budgetId: string, userId: string, createdBy: string) => ({
 });
 
 beforeEach(async () => {
-  const cols = ["users", "groups", "budgets", "budget_periods"];
-  for (const c of cols) {
-    const snap = await db.collection(c).get();
+  // Only this suite's own docs (the emulator is shared by parallel suites — a collection-wide
+  // wipe deleted other suites' users / budgets / periods mid-run). Fixed-id docs are re-set below.
+  const OWNERS = ["alex", "sam", "mallory", "group:g1"];
+  for (const c of ["budgets", "budget_periods"]) {
+    const snap = await db.collection(c).where("userId", "in", OWNERS).get();
     await Promise.all(snap.docs.map((d) => d.ref.delete()));
   }
   await Promise.all([
