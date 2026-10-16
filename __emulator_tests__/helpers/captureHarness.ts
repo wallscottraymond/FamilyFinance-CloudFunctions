@@ -24,7 +24,11 @@ export const NOV = { start: Date.UTC(2037, 10, 1), end: Date.UTC(2037, 11, 1) - 
 export interface Harness {
   db: Firestore;
   ids: ScenarioIds;
+  /** One item sync; FAILS LOUDLY unless it ran (`status: "synced"`) — a wiped / inactive item or
+   *  a purging user must never pass silently as "nothing changed" (review round 3). */
   sync: (label: string) => Promise<any>;
+  /** The same sync, returning whatever status it ends with (for tests that expect a skip). */
+  syncRaw: (label: string) => Promise<any>;
   /** Next sync returns these new transactions (posted unless `pending`). */
   postTxns: (txns: any[]) => void;
   /** Next sync reports these Plaid transaction ids removed (pending → posted). */
@@ -100,11 +104,21 @@ export async function makeHarness(
   return {
     db,
     ids,
-    sync: async (label: string) => {
+    syncRaw: async (label: string) => {
       install();
       return sync_item_orchestrator({ trace_id: `${tag}_${label}`, span_id: 's' }, {
         item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test',
       });
+    },
+    sync: async (label: string) => {
+      install();
+      const r = await sync_item_orchestrator({ trace_id: `${tag}_${label}`, span_id: 's' }, {
+        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test',
+      });
+      if (r?.status !== 'synced') {
+        throw new Error(`harness sync "${label}" for ${ids.itemDocId} did not run: ${JSON.stringify(r)}`);
+      }
+      return r;
     },
     postTxns: (txns: any[]) => { pending = [...pending, ...txns]; },
     removeTxns: (plaid_ids: string[]) => { removed = [...removed, ...plaid_ids]; },

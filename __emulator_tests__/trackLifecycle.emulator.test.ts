@@ -158,10 +158,8 @@ describe('a tracked suggestion until its bill exists (emulator)', () => {
     expect((await db.collection('recurring_review_items').doc(avant.id).get()).data()).toMatchObject({ answer: 'track_unavailable' });
     // The Plaid item itself goes away: its sync is skipped, and nothing comes back.
     await db.collection('plaid_items').doc(h.ids.itemDocId).update({ isActive: false });
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { sync_item_orchestrator } = require('../src/functions/orchestrators/plaid/sync_item.orchestrator');
-    const r2 = await sync_item_orchestrator(ctx(), { item_doc_id: h.ids.itemDocId, user_id: uid, recurring: true, reason: 'test' });
-    expect(r2.status).toBe('skipped');
+    expect((await h.syncRaw('after_removal')).status).toBe('skipped');
+    await expect(h.sync('after_removal_loud')).rejects.toThrow(/did not run/); // the harness fails loudly
     await noOrphans(h, uid);
   }, 180000);
 });

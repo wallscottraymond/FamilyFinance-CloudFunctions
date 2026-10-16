@@ -66,8 +66,11 @@ describe('run_recurring_budget_period_extension (v2, emulator)', () => {
       /* eslint-enable @typescript-eslint/naming-convention */
     });
 
-    // Four bi_monthly source periods inside the rolling window (starts ~10 days out).
-    const base = addDays(new Date(), 10);
+    // Deterministic (review round 3): an injected clock in a year no other suite seeds (2046),
+    // and the run scoped to this budget — the shared emulator's other budgets / source periods
+    // never enter it. Four bi_monthly source periods inside the rolling window (~10 days out).
+    const NOW = new Date(Date.UTC(2046, 2, 10, 12));
+    const base = addDays(NOW, 10);
     const sourceIds: string[] = [];
     for (let i = 0; i < 4; i++) {
       const s = addDays(base, i * 15);
@@ -94,8 +97,9 @@ describe('run_recurring_budget_period_extension (v2, emulator)', () => {
       /* eslint-enable @typescript-eslint/naming-convention */
     });
 
-    const res = await run_recurring_budget_period_extension(db, Timestamp.now());
-    expect(res.totalPeriodsCreated).toBeGreaterThan(0);
+    const res = await run_recurring_budget_period_extension(db, Timestamp.fromDate(NOW), { budget_ids: [budgetId] });
+    expect(res.budgetsProcessed).toBe(1);
+    expect(res.totalPeriodsCreated).toBe(3);
 
     // (2) existing spend preserved — NOT reset to 0.
     const existing = (await db.collection('budget_periods').doc(existingId).get()).data()!;

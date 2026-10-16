@@ -51,18 +51,24 @@ export const extendRecurringBudgetPeriods = onSchedule({
  */
 export async function run_recurring_budget_period_extension(
   db: admin.firestore.Firestore,
-  now: Timestamp
+  now: Timestamp,
+  // Test-only scoping: the emulator is shared by parallel suites, so a test passes its own budget
+  // ids and the run never touches (or races) other suites' budgets. Production omits it.
+  opts: { budget_ids?: string[] } = {}
 ): Promise<{ budgetsProcessed: number; totalPeriodsCreated: number }> {
   console.log('🚀 Starting scheduled budget period extension (v2 generator)...');
   const ctx = { trace_id: uuid(), span_id: uuid() };
 
   try {
-    const recurringBudgetsSnapshot = await db
+    let budgetsQuery = db
       .collection('budgets')
       .where('budgetType', '==', 'recurring')
       .where('isOngoing', '==', true)
-      .where('isActive', '==', true)
-      .get();
+      .where('isActive', '==', true);
+    if (opts.budget_ids && opts.budget_ids.length > 0) {
+      budgetsQuery = budgetsQuery.where(admin.firestore.FieldPath.documentId(), 'in', opts.budget_ids.slice(0, 30));
+    }
+    const recurringBudgetsSnapshot = await budgetsQuery.get();
 
     if (recurringBudgetsSnapshot.empty) {
       console.log('✅ No recurring budgets found to maintain');
@@ -71,7 +77,8 @@ export async function run_recurring_budget_period_extension(
     console.log(`📊 Found ${recurringBudgetsSnapshot.size} recurring budgets to maintain`);
 
     // Rolling window: [today - lookback, today + horizon].
-    const today = new Date();
+    // The injected clock (production passes Timestamp.now(), so this is unchanged there).
+    const today = now.toDate();
     const windowStart = new Date(today);
     windowStart.setUTCDate(windowStart.getUTCDate() - WINDOW_LOOKBACK_DAYS);
     const windowEnd = new Date(today);

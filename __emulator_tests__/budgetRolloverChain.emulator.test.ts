@@ -200,7 +200,9 @@ describe('budget rollover chain (emulator)', () => {
   });
 
   it('DAILY ENTRY: recalculateRolloverForCurrentPeriods finds the current period and computes its chain', async () => {
-    const b = 'daily';
+    // The daily entry scans EVERY current period in the (shared) emulator: assert only on this
+    // budget — other suites' budgets may be mid-write and report their own errors (review round 3).
+    const b = `daily_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     await seedBudget(b, { enabled: true, strategy: 'immediate' });
     // Past period: underspend by 25 -> should roll +25 into the current period
     await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 75, startIso: '2020-01-01T00:00:00Z', endIso: '2020-01-31T23:59:59Z' });
@@ -208,7 +210,7 @@ describe('budget rollover chain (emulator)', () => {
     await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 10, startIso: '2020-02-01T00:00:00Z', endIso: '2999-12-31T23:59:59Z' });
 
     const res = await recalculateRolloverForCurrentPeriods(db);
-    expect(res.errors).toEqual([]);
+    expect(res.errors.filter((e) => e.includes(b))).toEqual([]);
     expect(res.budgetsProcessed).toBeGreaterThanOrEqual(1);
 
     const p2 = await getPeriod(`${b}_2`);

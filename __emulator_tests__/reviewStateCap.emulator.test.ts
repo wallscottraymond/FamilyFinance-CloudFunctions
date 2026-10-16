@@ -60,6 +60,13 @@ describe('held-out cap boundary (emulator, defect 6)', () => {
       const n = MAX + extra - at_link;
       const keys = ['sunbit0', 'sunbit1', ...Array.from({ length: n }, (_, i) => `cap${i}`)];
       h.setRecurring(scenarioRecurring(h.ids, { SUNBIT: { transaction_keys: keys } }));
+      // The ids were mostly held out already by earlier syncs (as an insertion-order cap would
+      // have left them: an arbitrary subset, 10 short). Seeding that keeps run 1's re-assign to a
+      // handful of ids — re-assigning ~5,000 fake ids costs ~170 'in' queries, which on a shared
+      // emulator full of other suites' transactions stalls every other suite.
+      const { recurring_review_repo } = require('../src/functions/repositories/recurring_review.repo');
+      const earlier = keys.slice(10).map(h.ids.txn).slice(-(MAX - at_link - 10));
+      await recurring_review_repo.apply_state_change({ trace_id: 't', span_id: 's' }, uid, { add_suppressed: earlier });
       const spy = jest.spyOn(transaction_repo, 'get_by_plaid_transaction_ids');
       const per_run: Array<{ state: number; bumps: number; reassigned: boolean }> = [];
       for (let run = 0; run < 5; run++) {
