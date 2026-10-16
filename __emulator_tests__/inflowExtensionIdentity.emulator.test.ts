@@ -5,7 +5,9 @@
  * and through the base 2ae62e6 body (helpers/legacyInflowExtension.ts, copied verbatim). Twin
  * records differ only in their id; the period docs they produce are compared field by field
  * (ids normalized, `createdAt` / `updatedAt` / `lastCalculated` are the injected `now` on both).
- *   - a plain income and a hidden income → byte-identical;
+ *   - a plain income → byte-identical;
+ *   - a hidden income (deliberate) → identical except `isHidden`, now copied from the income like
+ *     the outflow creator does since 2ae62e6 (base: hard-coded false);
  *   - a removed income (D27, deliberate) → identical except `isActive`, which now follows the
  *     month rule inside the removal window (base: every new period active).
  * Its own year (2044); source periods are passed in, never stored.
@@ -60,12 +62,20 @@ async function twinPeriods(name: string, o: Record<string, unknown>) {
 }
 
 describe('old inflow extension: HEAD == the 2ae62e6 body (emulator)', () => {
-  it('plain and hidden old income → byte-identical period docs', async () => {
-    for (const [name, o] of [['plain', {}], ['hidden', { isHidden: true }]] as const) {
-      const { head, base, n } = await twinPeriods(name, o);
-      expect(n).toBe(SOURCES.length);
-      expect([...head.keys()].sort()).toEqual([...base.keys()].sort());
-      for (const [k, doc] of head) expect({ k, doc }).toEqual({ k, doc: base.get(k) });
+  it('a plain old income → byte-identical period docs', async () => {
+    const { head, base, n } = await twinPeriods('plain', {});
+    expect(n).toBe(SOURCES.length);
+    expect([...head.keys()].sort()).toEqual([...base.keys()].sort());
+    for (const [k, doc] of head) expect({ k, doc }).toEqual({ k, doc: base.get(k) });
+  });
+
+  it('a hidden old income → identical except isHidden, which now copies the income (base: always false)', async () => {
+    const { head, base } = await twinPeriods('hidden', { isHidden: true });
+    for (const [k, doc] of head) {
+      const { isHidden: h1, ...r1 } = doc;
+      const { isHidden: h2, ...r2 } = base.get(k)!;
+      expect({ k, doc: r1 }).toEqual({ k, doc: r2 });
+      expect([k, h1, h2]).toEqual([k, true, false]);
     }
   });
 

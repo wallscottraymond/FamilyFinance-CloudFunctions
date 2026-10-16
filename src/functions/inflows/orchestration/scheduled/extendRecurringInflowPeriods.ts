@@ -322,7 +322,9 @@ export async function extendInflowPeriodsFor(
         sourcePeriod.endDate.toMillis(),
         (occurrences.occurrenceDueDates ?? []).map((t: Timestamp) => t.toMillis())
       ),
-      isHidden: false,
+      // A hidden income's periods are created hidden (as the outflow creator does since 2ae62e6):
+      // a hard-coded false resurfaced hidden card-payment credits / internal transfers in the picker.
+      isHidden: inflow.isHidden === true,
 
       // === MERCHANT INFO ===
       merchant: inflow.merchantName,
