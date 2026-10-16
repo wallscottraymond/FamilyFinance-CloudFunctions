@@ -206,4 +206,61 @@ describe('run_outflow_period_extension (emulator)', () => {
     expect(ids).not.toContain(`${outflowId}_2041M05`);
     expect(ids).toContain(`${outflowId}_2041M07`);
   });
+
+  it('creates periods hidden for a hidden bill and inactive inside a removal window', async () => {
+    const userId = `u_ext_flags_${Date.now()}`;
+    const base = {
+      userId,
+      ownerId: userId,
+      createdBy: userId,
+      accountId: 'acct_ext',
+      plaidItemId: 'item_ext',
+      groupId: null,
+      source: 'plaid',
+      type: 'outflow',
+      tags: [],
+      plaidPrimaryCategory: 'TRANSFER_OUT',
+      plaidDetailedCategory: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      internalPrimaryCategory: 'TRANSFER_OUT',
+      internalDetailedCategory: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      isActive: true,
+      description: 'Flags Bill',
+      merchantName: 'Flags',
+      averageAmount: 10,
+      lastAmount: 10,
+      frequency: 'MONTHLY',
+      firstDate: Timestamp.fromDate(utc(2041, 6, 3)),
+      lastDate: Timestamp.fromDate(utc(2041, 7, 3)),
+      predictedNextDate: Timestamp.fromDate(utc(2041, 8, 3)),
+      transactionIds: [],
+      groupIds: [],
+    };
+    const hiddenId = `of_ext_hidden_${Date.now()}`;
+    const removedId = `of_ext_removed_${Date.now()}`;
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection('outflows').doc(hiddenId).set({ ...base, isHidden: true });
+    // Removed going forward from Sept 1 2041 (open-ended).
+    await db.collection('outflows').doc(removedId).set({
+      ...base,
+      removedByUser: true,
+      removalIntervals: [{ fromMs: utc(2041, 9, 1).getTime(), toMs: null, mode: 'going_forward' }],
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    await seedExistingPeriod(hiddenId, '2041M07', 'monthly', utc(2041, 7, 1), endOfDay(2041, 7, 31));
+    await seedExistingPeriod(removedId, '2041M07', 'monthly', utc(2041, 7, 1), endOfDay(2041, 7, 31));
+
+    const run = await run_outflow_period_extension(db, utc(2041, 7, 10));
+    expect(run.errors).toBe(0);
+
+    const aug = (await db.collection('outflow_periods').doc(`${hiddenId}_2041M08`).get()).data();
+    expect(aug?.isHidden).toBe(true);
+
+    const removedAug = (await db.collection('outflow_periods').doc(`${removedId}_2041M08`).get()).data();
+    const removedSep = (await db.collection('outflow_periods').doc(`${removedId}_2041M09`).get()).data();
+    const removedOct = (await db.collection('outflow_periods').doc(`${removedId}_2041M10`).get()).data();
+    expect(removedAug?.isActive).toBe(true); // before the removal window
+    expect(removedSep?.isActive).toBe(false); // inside it
+    expect(removedOct?.isActive).toBe(false);
+    expect(removedAug?.isHidden).toBe(false);
+  });
 });
