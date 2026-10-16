@@ -82,6 +82,7 @@ import {
   build_match_budgets,
 } from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
+import { recurring_review_repo } from "../../repositories/recurring_review.repo";
 import {
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
@@ -146,6 +147,12 @@ export interface PeriodDerivationRaw {
   out_of_view_recurring: { ids: Set<string>; stream_txn_ids: Set<string> };
   /** The category collection (canon M7) — module-cached reference data, not a per-call read. */
   category_catalog: CategoryCatalog;
+  /**
+   * Plaid transaction ids held out of FUZZY bill / income links (Convert-To-Recurring X3), from
+   * each member's review state (one get per member). A stored link on one of these that the user
+   * didn't make (a merchant guess) is ignored on read; manual pins / detaches still win.
+   */
+  fuzzy_excluded_plaid_ids?: Set<string>;
 }
 
 export interface DerivationWindow {
@@ -255,6 +262,7 @@ export async function load_period_derivation_raw(
     all_inflows,
     goals_raw,
     category_catalog,
+    review_states,
   ] = await Promise.all([
       source_period_repo.get_overlapping(
         ctx,
@@ -272,7 +280,12 @@ export async function load_period_derivation_raw(
       per_member(scope, (m) => inflow_repo.get_by_user_id(ctx, m)),
       per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
       load_category_catalog(ctx),
+      per_member(scope, async (m) => {
+        const st = await recurring_review_repo.get_state(ctx, m);
+        return st ? [st] : [];
+      }),
     ]);
+  const fuzzy_excluded_plaid_ids = new Set(review_states.flatMap((st) => st.suppressed_txn_ids));
   // Bills / income / goals follow their account's view (an item with no account stays in Me).
   const outflows = all_outflows.filter((o) => account_in_scope(scope, o.account_id));
   const inflows = all_inflows.filter((i) => account_in_scope(scope, i.account_id));
@@ -349,6 +362,7 @@ export async function load_period_derivation_raw(
     scope,
     out_of_view_recurring,
     category_catalog,
+    fuzzy_excluded_plaid_ids,
   };
 }
 
@@ -363,6 +377,23 @@ function without_recurring_links(
 ): Array<Record<string, unknown>> {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   return splits.map((s) => ({ ...s, outflowId: null, inflowId: null }));
+}
+
+/**
+ * A held-out payment's (X3) bill / income links that the user didn't make are dropped: an auto
+ * `outflowId` (a merchant guess, or a stale one) and any `inflowId` (no manual income pin exists
+ * yet). A manual bill pin or a "remove from bill" detach is kept — the user's choice wins.
+ */
+function without_guessed_links(
+  splits: Array<Record<string, unknown>>
+): Array<Record<string, unknown>> {
+  /* eslint-disable @typescript-eslint/naming-convention */
+  return splits.map((s) => ({
+    ...s,
+    outflowId: s.outflowAssignmentSource === "manual" ? s.outflowId ?? null : null,
+    inflowId: null,
+  }));
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 /** Splits with links to out-of-view bills / income removed (same objects when nothing to do). */
@@ -398,6 +429,7 @@ export function shape_period_derivation_deps(
   // Group views tag each bill/income with its member (owner badge); Me stays unchanged.
   const owner_of = (user_id: string) => (raw.scope.kind === "group" ? { owner_user_id: user_id } : {});
   const out_of_view_recurring_ids = raw.out_of_view_recurring.ids;
+  const raw_excluded = raw.fuzzy_excluded_plaid_ids;
   const overlapping = overlapping_for_window(raw.overlapping, window_start_ms, window_end_ms);
 
   // Active, income-drawing goals contribute their planned per-period set-aside to
@@ -684,10 +716,13 @@ export function shape_period_derivation_deps(
     // one) isn't this view's bill payment: drop the link so the money counts here as ordinary
     // spending / money in, instead of vanishing (Account-Rooted-Sharing). No-op for Me with
     // nothing shared. Edge money drops every link.
+    const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
     const raw = is_edge
-      ? without_recurring_links((data.splits as Array<Record<string, unknown>>) ?? [])
+      ? without_recurring_links(stored_splits)
       : without_out_of_view_links(
-        (data.splits as Array<Record<string, unknown>>) ?? [],
+        plaid_txn_id && raw_excluded?.has(plaid_txn_id)
+          ? without_guessed_links(stored_splits)
+          : stored_splits,
         released.size
           ? new Set([...out_of_view_recurring_ids, ...released])
           : out_of_view_recurring_ids

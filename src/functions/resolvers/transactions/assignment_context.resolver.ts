@@ -33,6 +33,7 @@ import { transaction_repo } from "../../repositories/transaction.repo";
 import { category_repo } from "../../repositories/category.repo";
 import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
+import { recurring_review_repo } from "../../repositories/recurring_review.repo";
 import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
 import {
   RemovalInterval,
@@ -107,6 +108,13 @@ export interface SharedAssignmentContext {
   /** Bill / income id → its remove / pause spans (only items that have any). A payment in a
    *  removed / paused month is released to budgets (`is_payment_suppressed`). */
   removal_intervals_by_id: Map<string, RemovalInterval[]>;
+  /**
+   * Plaid transaction ids held out of FUZZY bill / income matching (Convert-To-Recurring X3): the
+   * payments of streams Plaid is unsure of (suggested, not saved) or the user said aren't a bill.
+   * They stay normal transactions — never linked to an old bill by a merchant guess. Stream
+   * membership and manual pins / detaches are unaffected. One read (the review state doc).
+   */
+  fuzzy_excluded_plaid_ids?: Set<string>;
 }
 
 /** One view's budgets, as the engine matches against them. */
@@ -127,11 +135,12 @@ export async function resolve_shared_assignment_context(
 ): Promise<SharedAssignmentContext> {
   // Budgets (per-user) and category rules (cached reference data) are
   // independent — fetch concurrently.
-  const [budgets, category_docs, outflows, inflows] = await Promise.all([
+  const [budgets, category_docs, outflows, inflows, review_state] = await Promise.all([
     budget_repo.get_by_user_id(ctx, user_id),
     category_repo.get_active_cached(ctx),
     outflow_repo.get_by_user_id(ctx, user_id),
     inflow_repo.get_by_user_id(ctx, user_id),
+    recurring_review_repo.get_state(ctx, user_id),
   ]);
 
   // Authoritative recurring-stream links: Plaid stream `transactionIds` → recurring id.
@@ -175,6 +184,7 @@ export async function resolve_shared_assignment_context(
     recurring_view_by_id,
     active_outflow_ids,
     removal_intervals_by_id,
+    fuzzy_excluded_plaid_ids: new Set(review_state?.suppressed_txn_ids ?? []),
   };
 }
 
@@ -297,6 +307,7 @@ export async function resolve_assignment_context(
       outflow_tx_to_id: resolved_shared.outflow_tx_to_id,
       inflow_tx_to_id: resolved_shared.inflow_tx_to_id,
       preloaded_candidates,
+      fuzzy_excluded_plaid_ids: resolved_shared.fuzzy_excluded_plaid_ids,
     }
   );
 

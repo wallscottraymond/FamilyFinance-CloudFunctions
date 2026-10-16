@@ -210,6 +210,8 @@ export async function resolve_recurring_matches(
     inflow_tx_to_id?: Map<string, string>;
     /** Batch-preloaded candidate periods (loaded once per batch) — avoids the per-txn query. */
     preloaded_candidates?: PreloadedRecurringCandidates;
+    /** Plaid ids held out of the FUZZY scorer (X3) — stream membership above still applies. */
+    fuzzy_excluded_plaid_ids?: Set<string>;
   } = {}
 ): Promise<RecurringBySplit> {
   const out: RecurringBySplit = {};
@@ -242,6 +244,13 @@ export async function resolve_recurring_matches(
       }
       return out;
     }
+  }
+
+  // Held out of fuzzy matching (Convert-To-Recurring X3): a payment of a stream Plaid is unsure of
+  // (or the user said isn't a bill) is never linked to an old bill by a merchant / amount guess —
+  // that would make the old bill read paid and drop the payment from budgets (a D13 leak).
+  if (opts.txn_plaid_id && opts.fuzzy_excluded_plaid_ids?.has(opts.txn_plaid_id)) {
+    return out;
   }
 
   const candidates = await candidates_for_txn(
