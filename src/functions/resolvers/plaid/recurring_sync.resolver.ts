@@ -107,11 +107,103 @@ export interface RecurringSyncDependencies {
    * the account removal soft-deleted (same rule as the transaction sync).
    */
   active_account_ids: Set<string>;
+
+  /** Plaid account id → account type (`depository` / `credit` / `loan` …) for this item's active
+   *  accounts — the capture rules' income gate (X17). Same read as `active_account_ids`. */
+  account_types: Map<string, string>;
+
+  /**
+   * The user's ACTIVE bills / income (already loaded above), as the capture planner needs them:
+   * v2 stamp, Plaid's flag, answers, vendor, dates. Nothing extra is read for this.
+   */
+  active_records: CaptureRecordInfo[];
+}
+
+/** A stored bill / income as the capture planner sees it (a lookup shape, no logic). */
+export interface CaptureRecordInfo {
+  id: string;
+  direction: "outflow" | "inflow";
+  is_active: boolean;
+  is_hidden: boolean;
+  v2: boolean;
+  plaid_is_active: boolean | null;
+  plaid_inactive_ack_ms: number | null;
+  merged_into_id: string | null;
+  account_id: string;
+  plaid_item_id: string;
+  source: string;
+  name: string;
+  merchant_name: string | null;
+  description: string | null;
+  average_amount: number;
+  frequency: string;
+  plaid_status: string;
+  plaid_detailed_category: string;
+  first_date_ms: number;
+  last_date_ms: number;
+  removal_intervals: Array<{ from_ms: number; to_ms: number | null; mode: string }>;
+  transaction_ids: string[];
 }
 
 // ============================================================================
 // Resolver Function
 // ============================================================================
+
+const ms_of = (t: { toMillis?: () => number } | null | undefined): number =>
+  (t && typeof t.toMillis === "function" ? t.toMillis() : 0);
+
+/** Map a loaded outflow / inflow entity → the planner's lookup shape (no reads). */
+export function to_capture_record_info(
+  r: {
+    id: string;
+    is_active: boolean;
+    is_hidden: boolean;
+    capture_rules_version: number | null;
+    plaid_is_active: boolean | null;
+    plaid_inactive_ack_at_ms: number | null;
+    merged_into_id: string | null;
+    account_id: string;
+    plaid_item_id: string;
+    source: string;
+    user_custom_name: string | null;
+    description: string | null;
+    average_amount: number;
+    frequency: string;
+    plaid_status: string;
+    plaid_detailed_category: string;
+    first_date: unknown;
+    last_date: unknown;
+    removal_intervals: Array<{ from_ms: number; to_ms: number | null; mode: string }>;
+    transaction_ids: string[];
+  },
+  direction: "outflow" | "inflow",
+  merchant_name: string | null
+): CaptureRecordInfo {
+  return {
+    id: r.id,
+    direction,
+    is_active: r.is_active,
+    is_hidden: r.is_hidden === true,
+    v2: r.capture_rules_version === 2,
+    plaid_is_active: r.plaid_is_active,
+    plaid_inactive_ack_ms: r.plaid_inactive_ack_at_ms,
+    merged_into_id: r.merged_into_id,
+    account_id: r.account_id,
+    plaid_item_id: r.plaid_item_id,
+    source: r.source,
+    name: r.user_custom_name || merchant_name || r.description || (direction === "outflow" ? "Bill" : "Income"),
+    merchant_name,
+    description: r.description,
+    average_amount: r.average_amount,
+    frequency: r.frequency,
+    plaid_status: r.plaid_status,
+    plaid_detailed_category: r.plaid_detailed_category,
+    first_date_ms: ms_of(r.first_date as { toMillis?: () => number }),
+    last_date_ms: ms_of(r.last_date as { toMillis?: () => number }),
+    removal_intervals: r.removal_intervals ?? [],
+    transaction_ids: r.transaction_ids ?? [],
+  };
+}
 
 /**
  * Resolves dependencies needed for the recurring sync orchestrator.
@@ -252,6 +344,13 @@ export async function resolve_recurring_sync_dependencies(
   const active_account_ids = new Set<string>(
     accounts_snapshot.docs.map((doc) => doc.data().accountId || doc.id)
   );
+  const account_types = new Map<string, string>(
+    accounts_snapshot.docs.map((doc) => [doc.data().accountId || doc.id, String(doc.data().type ?? "")])
+  );
+  const active_records: CaptureRecordInfo[] = [
+    ...all_outflows.map((o) => to_capture_record_info(o, "outflow", o.merchant_name)),
+    ...all_inflows.map((i) => to_capture_record_info(i, "inflow", i.payer_name)),
+  ];
 
   // Step 6: Identify affected cashflow projections
   const dependency_result = await resolve_affected_cashflow_projections(
@@ -287,6 +386,8 @@ export async function resolve_recurring_sync_dependencies(
     existing_plaid_outflow_ids,
     dependency_result,
     active_account_ids,
+    account_types,
+    active_records,
   };
 }
 

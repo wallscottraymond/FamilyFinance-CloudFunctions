@@ -152,6 +152,7 @@ async function run_round(
   const never_synced_recurring = !item.data.lastRecurringSyncAt;
   let follow_ups: SyncFollowUps = empty_follow_ups();
   const streams_written: RecurringWrittenDoc[] = [];
+  const newly_suppressed = new Set<string>();
 
   const sync_recurring = async (): Promise<boolean> => {
     const r = await sync_recurring_orchestrator(
@@ -164,6 +165,7 @@ async function run_round(
       { run_id }
     );
     streams_written.push(...r.written);
+    for (const id of r.newly_suppressed_plaid_ids ?? []) newly_suppressed.add(id);
     // A brand-new item's recurring data often isn't ready yet (PRODUCT_NOT_READY) — not an error.
     return r.success !== false;
   };
@@ -217,6 +219,14 @@ async function run_round(
       inflow_ids: streams_written.filter((s) => !is_outflow(s)).map((s) => s.id),
       recurring_changed: true,
     });
+  }
+
+  // 4b. Payments newly held out of fuzzy bill matching (a suggested / skipped new stream, X3):
+  //     re-assign the ones already stored so a merchant guess linking them to an OLD bill is
+  //     cleared now (the engine reads the held-out set). Usually none.
+  if (newly_suppressed.size > 0) {
+    const relinked = await assign_by_plaid_ids(ctx, input.user_id, run_id, [...newly_suppressed]);
+    follow_ups = merge_follow_ups(follow_ups, follow_ups_from_written(relinked));
   }
 
   // 5. ONE follow-up pass for everything this round wrote.
@@ -299,8 +309,18 @@ async function link_existing_transactions(
       if (!had.has(id)) plaid_ids.add(id);
     }
   }
-  if (plaid_ids.size === 0) return [];
-  const docs = await transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, [...plaid_ids]);
+  return assign_by_plaid_ids(ctx, user_id, run_id, [...plaid_ids]);
+}
+
+/** Re-assign the user's stored transactions with these Plaid ids in one batch (stamped run). */
+async function assign_by_plaid_ids(
+  ctx: TraceContext,
+  user_id: string,
+  run_id: string,
+  ids: string[]
+): Promise<SyncWrittenDoc[]> {
+  if (ids.length === 0) return [];
+  const docs = await transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, ids);
   // Ones already carrying the link (written after the stream existed) come back unchanged from
   // the engine and are not re-written (skip-if-unchanged).
   const doc_ids = docs.filter((d) => d.isActive !== false).map((d) => d.id);

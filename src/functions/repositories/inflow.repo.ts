@@ -727,6 +727,11 @@ export const inflow_repo = {
     return result;
   },
 
+  /** Map a raw stored doc (from `get_raw_by_ids`) to the entity — no read. */
+  entity_from_raw(raw: Record<string, unknown>) {
+    return map_to_entity(raw as unknown as LegacyInflowDoc);
+  },
+
   /**
    * The stored docs (raw camelCase, ANY state — active, inactive, stale) for the given ids, ONE
    * batched read. Missing ids are absent from the map. The recurring sync prefetches with this and
