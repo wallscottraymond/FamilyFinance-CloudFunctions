@@ -86,7 +86,8 @@ export async function run_detector_on_scan(
 
   // 3. Persist (never into a user being erased).
   if (await is_user_purging(user_id)) return none("purging");
-  const written = await recurring_review_repo.upsert_items(ctx, items);
+  // Guarded (defect 1): never reverts an item the user answered while the detector ran.
+  const written = (await recurring_review_repo.write_items_guarded(ctx, user_id, items, existing)).written;
   if (apply_review_state_change(state, user_id, { detector_last_run_day: today }).changed) {
     // Atomic against the fresh doc (a concurrent "Not a bill" / sync write is never lost).
     await recurring_review_repo.apply_state_change(ctx, user_id, { detector_last_run_day: today });

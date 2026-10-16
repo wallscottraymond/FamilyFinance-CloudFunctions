@@ -21,8 +21,14 @@ import {
   ReviewItem,
   ReviewStateChange,
   apply_review_state_change,
+  may_background_write,
   suppressed_hash,
 } from "../domain/recurring/review_item.service";
+import { PURGE_STATUS_COLLECTION } from "../infrastructure/purge_guard";
+
+/** Purge states that stop every background writer (mirrors `is_user_purging`). */
+const PURGING_STATES = new Set(["requested", "running", "done"]);
+const purge_ref = (user_id: string) => getFirestore().collection(PURGE_STATUS_COLLECTION).doc(user_id);
 
 export const REVIEW_ITEMS_COLLECTION = "recurring_review_items";
 export const REVIEW_STATE_COLLECTION = "_recurring_review_state";
@@ -186,9 +192,13 @@ export const recurring_review_repo = {
     const db = getFirestore();
     const ref = state_ref(user_id);
     const out = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
+      const [snap, purge] = await tx.getAll(ref, purge_ref(user_id));
       const previous = snap.exists ? state_from_doc(user_id, snap.data() as ReviewStateDoc) : null;
       const r = apply_review_state_change(previous, user_id, change);
+      // Never (re)create the state of a user being erased — checked inside the transaction, so a
+      // purge that starts after a writer's plan still wins (Top-25 #15).
+      const purging = purge.exists && PURGING_STATES.has(String(purge.data()?.state));
+      if (purging) return { previous, ...r, changed: false, suppressed_changed: false };
       if (r.changed) tx.set(ref, state_to_doc(r.next));
       return { previous, ...r };
     });
@@ -219,7 +229,59 @@ export const recurring_review_repo = {
     return snap.exists ? from_doc(snap.data() as ReviewItemDoc) : null;
   },
 
-  /** Upsert items (full replace — the domain built the whole item). Batched. Returns count. */
+  /**
+   * BACKGROUND writers (sync planner, detector, account removal): write items only where it is
+   * still safe, in a transaction against the fresh docs (review round 3 defect 1). `seen` is each
+   * item as the writer read it when planning (absent = it did not exist). An item that changed
+   * since (a user's answer, a racing writer), was created or deleted since, or carries a user's
+   * answer is SKIPPED — never reverted. Nothing is written for a user being erased (purge state
+   * read in the same transaction). Costs one read per item written + 1 (only when items changed).
+   * Returns the count written and the ids skipped.
+   */
+  async write_items_guarded(
+    ctx: TraceContext,
+    user_id: string,
+    list: ReviewItem[],
+    seen: Map<string, ReviewItem>
+  ): Promise<{ written: number; skipped: string[] }> {
+    if (list.length === 0) return { written: 0, skipped: [] };
+    const db = getFirestore();
+    let written = 0;
+    const skipped: string[] = [];
+    // Transactions hold at most 500 writes; review items per sync are a handful.
+    for (const chunk of chunk_for_batch(list, 400)) {
+      const r = await db.runTransaction(async (tx) => {
+        const snaps = await tx.getAll(purge_ref(user_id), ...chunk.map((i) => items().doc(i.id)));
+        const [purge, ...item_snaps] = snaps;
+        if (purge.exists && PURGING_STATES.has(String(purge.data()?.state))) {
+          return { written: 0, skipped: chunk.map((i) => i.id) };
+        }
+        let n = 0;
+        const skip: string[] = [];
+        chunk.forEach((item, k) => {
+          const snap = item_snaps[k];
+          const current = snap.exists ? from_doc(snap.data() as ReviewItemDoc) : null;
+          if (item.user_id !== user_id || !may_background_write(current, seen.get(item.id))) {
+            skip.push(item.id);
+            return;
+          }
+          tx.set(items().doc(item.id), to_doc(item));
+          n++;
+        });
+        return { written: n, skipped: skip };
+      });
+      written += r.written;
+      skipped.push(...r.skipped);
+    }
+    console.log(
+      `[${ctx.trace_id}] recurring_review_repo.write_items_guarded ${user_id}: wrote ${written}, skipped ${skipped.length}`
+    );
+    return { written, skipped };
+  },
+
+  /** Upsert items (full replace — the domain built the whole item). Batched. Returns count.
+   *  Only for the user's OWN answer (the answer callable) and tests — background writers use
+   *  `write_items_guarded`. */
   async upsert_items(ctx: TraceContext, list: ReviewItem[]): Promise<number> {
     if (list.length === 0) return 0;
     for (const chunk of chunk_for_batch(list)) {

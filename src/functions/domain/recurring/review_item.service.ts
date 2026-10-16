@@ -164,6 +164,34 @@ export function changed_items(next: ReviewItem[], existing: Map<string, ReviewIt
   return out;
 }
 
+/** Answers the system writes itself — an item closed this way may open again. */
+export const SYSTEM_CLOSE_ANSWERS: ReadonlySet<string> = new Set(["matured", "auto_active", "account_removed"]);
+
+/** Has the USER answered this item (closed with a user answer)? A background writer (sync,
+ *  detector, account removal) never overwrites such an item (review round 3 defect 1). */
+export function is_user_answered(item: ReviewItem | null | undefined): boolean {
+  return !!item && item.status !== "open" && !!item.answer && !SYSTEM_CLOSE_ANSWERS.has(item.answer);
+}
+
+/**
+ * Which of `next` a BACKGROUND writer may write, judged against the item as it is NOW (`current`,
+ * read in the writer's transaction) and as the writer saw it when it planned (`seen`):
+ *   - changed since it was read (another writer — an answer, a racing sync — got there first) →
+ *     skip; the next run plans from the fresh item;
+ *   - created since (not seen, now exists) or deleted since (seen, now gone — e.g. purged) → skip;
+ *   - answered by the user → never overwritten.
+ * PURE (review round 3 defect 1: a sync planned from an earlier read reverted "Not a bill" /
+ * "Track" to open).
+ */
+export function may_background_write(
+  current: ReviewItem | null,
+  seen: ReviewItem | undefined
+): boolean {
+  if (!current) return !seen;
+  if (!seen || seen.content_hash !== current.content_hash || seen.updated_at_ms !== current.updated_at_ms) return false;
+  return !is_user_answered(current);
+}
+
 /** Close an item with an answer (status from the answer). */
 export function resolve_review_item(
   item: ReviewItem,

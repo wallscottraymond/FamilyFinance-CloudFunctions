@@ -46,6 +46,7 @@ import {
   ReviewItem,
   ReviewStateChange,
   build_review_item_id,
+  is_user_answered,
   is_vendor_dismissed,
   make_review_item,
   resolve_review_item,
@@ -173,10 +174,6 @@ export function stream_vendor(s: { merchant_name: string | null; description: st
   return vendor_key({ merchant_name: s.merchant_name, name: s.description }) ?? `stream:${s.stream_id}`;
 }
 
-/** Answers the system writes itself — an item closed this way can open again. */
-const SYSTEM_CLOSE = new Set(["matured", "auto_active", "account_removed"]);
-const is_user_answered = (item: ReviewItem | undefined): boolean =>
-  !!item && item.status !== "open" && !!item.answer && !SYSTEM_CLOSE.has(item.answer);
 
 const app_frequency = (raw: string): string | null => {
   switch (String(raw).toUpperCase()) {
@@ -403,6 +400,9 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     }
     if (is_vendor_dismissed(input.state, s.direction, vk) || suggested?.answer === "not_bill") {
       suppress(s.transaction_ids); // "Not a bill" is remembered, maturity included (X14)
+      // A tile left OPEN for a vendor the user dismissed (written by a racing writer before the
+      // guard, or by the detector) is closed as dismissed — it would otherwise stay forever.
+      if (suggested?.status === "open") plan.review_items.push(resolve_review_item(suggested, "not_bill", input.now_ms));
       continue;
     }
     if (is_low_confidence_stream(s.raw_status, s.raw_frequency)) {

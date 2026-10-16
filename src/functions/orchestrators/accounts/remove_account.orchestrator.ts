@@ -363,10 +363,13 @@ export async function remove_account_orchestrator(
       perf.reads += Math.max(1, open_items.length);
       if (open_items.length > 0) {
         const now_ms = Date.now();
-        perf.writes += await recurring_review_repo.upsert_items(
+        // Guarded (defect 1): an item the user answered meanwhile is left as answered.
+        perf.writes += (await recurring_review_repo.write_items_guarded(
           ctx,
-          open_items.map((item) => resolve_review_item(item, "account_removed", now_ms))
-        );
+          user_id,
+          open_items.map((item) => resolve_review_item(item, "account_removed", now_ms)),
+          new Map(open_items.map((item) => [item.id, item]))
+        )).written;
       }
     } catch (error) {
       console.error(`[${ctx.trace_id}] closing review items for ${account.account_id} failed:`, error);

@@ -464,10 +464,15 @@ export async function sync_recurring_orchestrator(
         outflow_repo.set_plaid_is_active(create_child_span(ctx), plan.plaid_inactive_outflow_ids, false, ctx.user_id, opts?.run_id),
         inflow_repo.set_plaid_is_active(create_child_span(ctx), plan.plaid_inactive_inflow_ids, false, ctx.user_id, opts?.run_id),
       ]);
-      review_items_written = await recurring_review_repo.upsert_items(
+      // Guarded (defect 1): written in a transaction against the fresh items, skipping any the
+      // user answered (or anyone changed) since the planner read them, and nothing at all for a
+      // user being erased (Top-25 #15) — a plan from an earlier read never reverts an answer.
+      review_items_written = (await recurring_review_repo.write_items_guarded(
         create_child_span(ctx),
-        changed_items(plan.review_items, review_context.items)
-      );
+        ctx.user_id,
+        changed_items(plan.review_items, review_context.items),
+        review_context.items
+      )).written;
       // Checked against the state already read (no extra read when nothing changes); written in a
       // transaction against the FRESH doc so a concurrent answer / detector write isn't lost.
       if (apply_review_state_change(review_context.state, ctx.user_id, plan.state_change).changed) {
