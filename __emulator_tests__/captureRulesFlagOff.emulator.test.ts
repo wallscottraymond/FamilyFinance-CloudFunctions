@@ -146,15 +146,16 @@ describe('capture rules — flag off equals today (emulator)', () => {
     const { out, counts } = await runScenario('qzoffa', { counted: true });
     const { counts: golden_counts, ...golden_out } = golden;
     expect(out).toEqual(golden_out);
-    // R4: identical writes to the base, and identical reads apart from ONE review-state `get` per
-    // assignment batch (X8: the engine holds suggested payments out of fuzzy matching — the only
-    // new read on a flag-off sync; the capture planner itself doesn't run and reads nothing).
+    // R4 / X11: identical writes AND reads to the base — a flag-off user with no v2 records never
+    // reads the review state doc (the hold-out loads only for flag-on / v2 users), and the capture
+    // planner doesn't run.
     const state_reads = counts.map((c) => c!.reads_by._recurring_review_state ?? 0);
+    expect(state_reads).toEqual(counts.map(() => 0));
     expect(counts.map((c, i) => c && { reads: c.reads - state_reads[i], writes: c.writes, audit: c.audit_writes })).toEqual(
       golden_counts.map((c: { reads: number; writes: number; audit_writes: number }) =>
         ({ reads: c.reads, writes: c.writes, audit: c.audit_writes }))
     );
-    expect(Object.keys(counts[0]!.reads_by).filter((k) => !(k in golden_counts[0].reads_by))).toEqual(['_recurring_review_state']);
+    expect(Object.keys(counts[0]!.reads_by).filter((k) => !(k in golden_counts[0].reads_by))).toEqual([]);
     console.log('[R4] flag-off sync counts (run1, run2):', JSON.stringify(counts.map((c, i) => c && {
       reads: c.reads, review_state_reads: state_reads[i], writes: c.writes, audit: c.audit_writes,
     })), 'base:', JSON.stringify(golden_counts.map((c: { reads: number; writes: number }) => ({ reads: c.reads, writes: c.writes }))));
