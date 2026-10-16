@@ -88,8 +88,15 @@ export async function enqueue_item_sync(input: {
       attempt: input.attempt ?? 1,
       reason: input.reason ?? "request",
     },
-    // No delay → `on_job_created` runs it immediately (delayed jobs wait for the 5-min sweep).
-    { delay_seconds: input.delay_seconds ?? 0, trace_id: input.trace_id }
+    {
+      // No delay → `on_job_created` runs it immediately (delayed jobs wait for the 5-min sweep).
+      delay_seconds: input.delay_seconds ?? 0,
+      trace_id: input.trace_id,
+      // A recurring request never merges into a pending NON-recurring run (it would drop the
+      // recurring refresh — e.g. "Track" on a review item would never create the bill). Anything
+      // else merges as before.
+      can_merge_into: async (pending) => !!pending.recurring || !input.recurring,
+    }
   );
 }
 
