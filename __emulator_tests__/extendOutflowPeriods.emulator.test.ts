@@ -249,7 +249,7 @@ describe('run_outflow_period_extension (emulator)', () => {
     await seedExistingPeriod(hiddenId, '2041M07', 'monthly', utc(2041, 7, 1), endOfDay(2041, 7, 31));
     await seedExistingPeriod(removedId, '2041M07', 'monthly', utc(2041, 7, 1), endOfDay(2041, 7, 31));
 
-    const run = await run_outflow_period_extension(db, utc(2041, 7, 10));
+    const run = await run_outflow_period_extension(db, utc(2041, 7, 10), { owner_id: userId });
     expect(run.errors).toBe(0);
 
     const aug = (await db.collection('outflow_periods').doc(`${hiddenId}_2041M08`).get()).data();
