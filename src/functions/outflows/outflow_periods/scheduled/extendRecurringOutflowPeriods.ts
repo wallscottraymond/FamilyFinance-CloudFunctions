@@ -20,9 +20,6 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import { RecurringOutflow } from "../../../../types";
 import { createOutflowPeriodsFromSource } from "../crud/createOutflowPeriods";
-import { outflow_repo } from "../../../repositories/outflow.repo";
-import { is_v2_record } from "../../../domain/recurring/capture_rules";
-import { RemovalMode } from "../../../domain/recurring/recurring_suppression.service";
 
 /** How far ahead to keep outflow periods materialized (matches onOutflowCreated's horizon). */
 const MONTHS_FORWARD = 15;
@@ -123,11 +120,11 @@ export const extendRecurringOutflowPeriods = onSchedule(
  * date) and skips periods that already exist (`skip_existing`), so existing paid periods are never
  * overwritten.
  *
- * Convert-To-Recurring X20: a v2 bill can be kept active while it is ENDED going forward ("It
- * ended" = a removal interval). New periods are generated `isActive: true`, so for a v2 record with
- * removal intervals the new periods are then flipped to match them (the same
- * `apply_period_suppression` remove / restore uses) — the stored periods never drift from the
- * derive. Old records keep today's behavior (D13: no new writes to them).
+ * Removal windows (Convert-To-Recurring X20 / D27): a bill can be kept active while it is removed,
+ * paused or ENDED going forward ("It ended" = a removal interval). `createOutflowPeriodsFromSource`
+ * creates every new period with the intervals already applied (the same month rule
+ * `apply_period_suppression` and the derive use, old and v2 records alike), so nothing is flipped
+ * afterwards — the stored periods never drift from the derive.
  */
 export async function extendOutflowPeriodsFor(
   db: admin.firestore.Firestore,
@@ -161,6 +158,7 @@ export async function extendOutflowPeriodsFor(
     return 0;
   }
 
+  // Creation applies the removal windows itself (no second pass over the bill's periods).
   const result = await createOutflowPeriodsFromSource(
     db,
     outflowDoc.id,
@@ -169,19 +167,5 @@ export async function extendOutflowPeriodsFor(
     endDate,
     { skip_existing: true }
   );
-
-  const raw = outflow as unknown as {
-    captureRulesVersion?: number;
-    removalIntervals?: Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>;
-    ownerId?: string;
-  };
-  if (is_v2_record(raw) && (raw.removalIntervals?.length ?? 0) > 0 && result.periodsCreated > 0) {
-    await outflow_repo.apply_period_suppression(
-      { trace_id: "extend_outflow_periods", span_id: outflowDoc.id },
-      outflowDoc.id,
-      (raw.removalIntervals ?? []).map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode })),
-      raw.ownerId ?? ""
-    );
-  }
   return result.periodsCreated;
 }

@@ -263,4 +263,36 @@ describe('run_outflow_period_extension (emulator)', () => {
     expect(removedOct?.isActive).toBe(false);
     expect(removedAug?.isHidden).toBe(false);
   });
+
+  it('v2 removed / ended bill: creation alone applies the window (month rule) — no second suppression pass', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { outflow_repo } = require('../src/functions/repositories/outflow.repo');
+    const spy = jest.spyOn(outflow_repo, 'apply_period_suppression');
+    const userId = `u_ext_v2_${Date.now()}`;
+    const id = `of_ext_v2_${Date.now()}`;
+    // Weekly source periods around the Nov 1 2041 end (Fri): Oct 27 – Nov 2 straddles it.
+    const straddle = await seedWeeklySource(`ext_v2_w_${Date.now()}`, utc(2041, 10, 27));
+    const after = await seedWeeklySource(`ext_v2_w2_${Date.now()}`, utc(2041, 11, 3));
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection('outflows').doc(id).set({
+      userId, ownerId: userId, createdBy: userId, accountId: 'acct_ext', plaidItemId: 'item_ext', groupId: null, groupIds: [],
+      source: 'plaid', type: 'outflow', tags: [], plaidPrimaryCategory: 'RENT_AND_UTILITIES', plaidDetailedCategory: 'RENT_AND_UTILITIES_RENT',
+      isActive: true, isHidden: false, description: 'V2 Ended', merchantName: 'V2', averageAmount: 50, lastAmount: 50, frequency: 'MONTHLY',
+      firstDate: Timestamp.fromDate(utc(2041, 6, 29)), lastDate: Timestamp.fromDate(utc(2041, 10, 29)),
+      predictedNextDate: Timestamp.fromDate(utc(2041, 11, 29)), transactionIds: [],
+      captureRulesVersion: 2, removalIntervals: [{ fromMs: utc(2041, 11, 1).getTime(), toMs: null, mode: 'going_forward' }],
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    await seedExistingPeriod(id, '2041M09', 'monthly', utc(2041, 9, 1), endOfDay(2041, 9, 30));
+    const run = await run_outflow_period_extension(db, utc(2041, 10, 5), { owner_id: userId });
+    expect(run.errors).toBe(0);
+    expect(spy).not.toHaveBeenCalled(); // creation applied the window; nothing re-reads + flips
+    spy.mockRestore();
+    const get = async (sp: string) => (await db.collection('outflow_periods').doc(`${id}_${sp}`).get()).data();
+    expect((await get('2041M10'))?.isActive).toBe(true); // Oct 29 paid month: kept
+    expect((await get('2041M11'))?.isActive).toBe(false); // ended
+    expect((await get(straddle.id))?.isActive).toBe(true); // its Oct 29 occurrence is before the end (D27)
+    expect((await get(after.id))?.isActive).toBe(false);
+  });
 });
+
