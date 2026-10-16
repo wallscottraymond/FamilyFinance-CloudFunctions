@@ -277,6 +277,10 @@ service cloud.firestore {
                        isValidUserData() &&
                        // groupIds is server-written (Account-Rooted-Sharing)
                        (!('groupIds' in request.resource.data) || request.resource.data.groupIds.size() == 0) &&
+                       // systemRole / familyId are privilege fields (isAdmin(), inSameFamily()):
+                       // only functions set them. A client can never create its own profile with them.
+                       !('systemRole' in request.resource.data) &&
+                       !('familyId' in request.resource.data) &&
                        request.resource.data.role == 'viewer'; // New users start as viewers
       
       // Allow users to update their own profile
@@ -299,6 +303,10 @@ service cloud.firestore {
                          // (Account-Rooted-Sharing): only functions change it.
                          (isAdmin() ||
                            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupIds'])) &&
+                         // systemRole grants isAdmin(); familyId grants inSameFamily() reads. Only an
+                         // admin (or a function) may change them — never the user on their own doc.
+                         (isAdmin() ||
+                           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['systemRole', 'familyId'])) &&
                          // Users cannot change their own role unless they're admin
                          (isOwner(userId) ?
                            (request.resource.data.role == resource.data.role || isAdmin()) :
