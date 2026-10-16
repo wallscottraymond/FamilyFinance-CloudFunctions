@@ -195,3 +195,39 @@ export function is_payment_suppressed(
   const month_end_ms = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) - 1;
   return is_suppressed_in_period(intervals, month_end_ms);
 }
+
+/**
+ * Is a STORED (materialized) period active under the removal intervals? (D27 — the same month
+ * rule as the derive, b6a8281.) A period is active when it isn't suppressed as a whole (judged by
+ * its END, the whole-period snap), OR when ANY of its occurrences falls in a (UTC) month that isn't
+ * suppressed — the derive shows such a bucket with the occurrences it keeps. Monthly periods are
+ * unchanged (an occurrence's month IS the period); a week straddling a removal start, or the part
+ * of a month restored after a restore day, now matches the period page and the engine.
+ * Periods with no intervals are always active.
+ */
+export function is_stored_period_active(
+  intervals: RemovalInterval[] | undefined,
+  period_end_ms: number,
+  occurrence_due_ms: number[]
+): boolean {
+  if (!intervals || intervals.length === 0) return true;
+  if (!is_suppressed_in_period(intervals, period_end_ms)) return true;
+  return occurrence_due_ms.some((ms) => !is_payment_suppressed(intervals, ms));
+}
+
+/** The occurrence due dates a stored period doc carries (ms) — the legacy parallel array
+ *  `occurrenceDueDates` or the `occurrences` objects' `dueDate`, whichever it has. PURE. */
+export function stored_occurrence_due_ms(doc: {
+  occurrenceDueDates?: unknown;
+  occurrences?: unknown;
+}): number[] {
+  const ms = (t: unknown): number | null => {
+    const v = t as { toMillis?: () => number } | null;
+    return v && typeof v.toMillis === "function" ? v.toMillis() : null;
+  };
+  const from_array = Array.isArray(doc.occurrenceDueDates) ? doc.occurrenceDueDates.map(ms) : [];
+  const from_objects = Array.isArray(doc.occurrences)
+    ? (doc.occurrences as Array<{ dueDate?: unknown }>).map((o) => ms(o?.dueDate))
+    : [];
+  return [...new Set([...from_array, ...from_objects].filter((x): x is number => x !== null))];
+}

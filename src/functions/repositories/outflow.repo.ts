@@ -24,7 +24,8 @@ import { OutflowForPersistence } from "../integrations/plaid/plaid_recurring_tra
 import {
   RemovalInterval,
   RemovalMode,
-  is_suppressed_in_period,
+  is_stored_period_active,
+  stored_occurrence_due_ms,
 } from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
 import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
@@ -489,7 +490,8 @@ export const outflow_repo = {
     ctx: TraceContext,
     id: string,
     intervals: RemovalInterval[],
-    user_id: string
+    user_id: string,
+    opts: { dry_run?: boolean; touch_updated_at?: boolean } = {}
   ): Promise<number> {
     const db = getFirestore();
     const snap = await db.collection("outflow_periods").where("outflowId", "==", id).get();
@@ -501,11 +503,15 @@ export const outflow_repo = {
       const p = doc.data();
       const end_ms = (p.periodEndDate as Timestamp | undefined)?.toMillis();
       if (end_ms === undefined) continue;
-      const next_active = !is_suppressed_in_period(intervals, end_ms);
+      // D27: the derive's month rule (a sub-month period stays active while any of its
+      // occurrences is in a month that isn't suppressed) — the picker matches the period page.
+      const next_active = is_stored_period_active(intervals, end_ms, stored_occurrence_due_ms(p));
       if ((p.isActive !== false) === next_active) continue; // already in the right state
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      batch.update(doc.ref, { isActive: next_active, updatedAt: now });
       flipped++;
+      if (opts.dry_run) continue;
+      // The one-off re-snap writes ONLY the flag (`touch_updated_at: false`).
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      batch.update(doc.ref, opts.touch_updated_at === false ? { isActive: next_active } : { isActive: next_active, updatedAt: now });
       if (++batched >= 450) {
         await batch.commit();
         batch = db.batch();
@@ -514,7 +520,7 @@ export const outflow_repo = {
     }
     if (batched > 0) await batch.commit();
     console.log(
-      `[${ctx.trace_id}] outflow_repo.apply_period_suppression ${id}: flipped ${flipped}/${snap.size} periods (user ${user_id})`
+      `[${ctx.trace_id}] outflow_repo.apply_period_suppression ${id}: ${opts.dry_run ? "would flip" : "flipped"} ${flipped}/${snap.size} periods (user ${user_id})`
     );
     return flipped;
   },
@@ -750,6 +756,27 @@ export const outflow_repo = {
 
   /** A user's INACTIVE records (stopped / stale / soft-deleted) — loaded lazily by the capture
    *  planner only when a new v2 stream needs a same-bill candidate (X9). */
+  /**
+   * ACTIVE records that carry removal intervals (the D27 one-off re-snap's input): id, owner and
+   * intervals only (`select`). All users unless `user_id`. Read-only.
+   */
+  async list_active_with_removal_intervals(
+    _ctx: TraceContext,
+    user_id?: string
+  ): Promise<Array<{ id: string; owner_id: string; removal_intervals: RemovalInterval[] }>> {
+    let q = getFirestore().collection(COLLECTION).where("isActive", "==", true);
+    if (user_id) q = q.where("ownerId", "==", user_id);
+    const snap = await q.select("ownerId", "removalIntervals").get();
+    return snap.docs
+      .map((d) => ({
+        id: d.id,
+        owner_id: String(d.get("ownerId") ?? ""),
+        removal_intervals: ((d.get("removalIntervals") ?? []) as Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>)
+          .map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode })),
+      }))
+      .filter((r) => r.removal_intervals.length > 0);
+  },
+
   async get_inactive_by_user_id(_ctx: TraceContext, user_id: string): Promise<Outflow[]> {
     const snapshot = await getFirestore()
       .collection(COLLECTION)

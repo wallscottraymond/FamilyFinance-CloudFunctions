@@ -8,7 +8,7 @@
  */
 
 import * as admin from 'firebase-admin';
-import { is_suppressed_in_period } from '../../../domain/recurring/recurring_suppression.service';
+import { is_stored_period_active } from '../../../domain/recurring/recurring_suppression.service';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   OutflowPeriod,
@@ -187,8 +187,8 @@ export async function createOutflowPeriodsFromSource(
     return { periodsCreated: 0, periodIds: [] };
   }
 
-  // A removed bill's periods inside its removal window are created inactive (the same rule
-  // apply_period_suppression applies to existing ones), and a hidden bill's periods are created
+  // A removed bill's periods inside its removal window are created inactive (the same month rule
+  // apply_period_suppression applies to existing ones, D27), and a hidden bill's periods are created
   // hidden — otherwise newly extended periods resurface removed bills and internal transfers
   // (the assign-to-bill picker filters on these per-period flags).
   const removalIntervals = ((outflow.removalIntervals ?? []) as Array<{ fromMs: number; toMs: number | null; mode: any }>)
@@ -300,7 +300,13 @@ export async function createOutflowPeriodsFromSource(
       plaidDetailedCategory: outflow.plaidDetailedCategory || '',
 
       // === STATUS & CONTROL ===
-      isActive: !is_suppressed_in_period(removalIntervals, sourcePeriod.endDate.toMillis()),
+      // D27: the derive's month rule — a period straddling a removal boundary stays active while
+      // any of its occurrences is in a month that isn't suppressed.
+      isActive: is_stored_period_active(
+        removalIntervals,
+        sourcePeriod.endDate.toMillis(),
+        occurrences.occurrenceDueDates.map((t) => t.toMillis())
+      ),
       isHidden: outflowHidden,
 
       // === MERCHANT INFO ===

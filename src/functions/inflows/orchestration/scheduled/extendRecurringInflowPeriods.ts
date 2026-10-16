@@ -22,9 +22,7 @@ import {
   PlaidRecurringFrequency
 } from '../../../../types';
 import { calculateAllOccurrencesInPeriod } from '../../inflow_periods/utils/calculateAllOccurrencesInPeriod';
-import { inflow_repo } from '../../../repositories/inflow.repo';
-import { is_v2_record } from '../../../domain/recurring/capture_rules';
-import { RemovalMode } from '../../../domain/recurring/recurring_suppression.service';
+import { RemovalMode, is_stored_period_active } from '../../../domain/recurring/recurring_suppression.service';
 
 /**
  * Scheduled function to extend recurring inflow periods
@@ -200,9 +198,10 @@ async function batchCreateInflowPeriods(
  * Extend ONE inflow's materialized periods over `allSourcePeriods` (the per-inflow body of the
  * monthly job; exported for tests). Returns the number of periods created.
  *
- * Convert-To-Recurring X20: for a v2 record with removal intervals ("It ended" keeps it active),
- * the new periods are flipped to match the intervals (`apply_period_suppression`), so stored
- * periods never drift from the derive. Old records keep today's behavior (D13).
+ * Removal windows (Convert-To-Recurring X20 / D27): new periods are CREATED with the removal
+ * intervals applied — the same month rule `apply_period_suppression` and the derive use — so a
+ * removed / ended income never gets active periods inside its window (old and v2 records alike;
+ * before, every new period was hard-coded active and only v2 records were flipped afterwards).
  */
 export async function extendInflowPeriodsFor(
   db: admin.firestore.Firestore,
@@ -225,6 +224,8 @@ export async function extendInflowPeriodsFor(
 
   // Calculate payment cycle info
   const cycleInfo = calculatePaymentCycle(inflow);
+  const removalIntervals = ((inflow.removalIntervals ?? []) as Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>)
+    .map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode }));
 
   // Find missing source periods and create inflow periods
   const newInflowPeriods: InflowPeriod[] = [];
@@ -316,7 +317,11 @@ export async function extendInflowPeriodsFor(
       plaidDetailedCategory: inflow.plaidDetailedCategory || '',
 
       // === STATUS & CONTROL ===
-      isActive: true,
+      isActive: is_stored_period_active(
+        removalIntervals,
+        sourcePeriod.endDate.toMillis(),
+        (occurrences.occurrenceDueDates ?? []).map((t: Timestamp) => t.toMillis())
+      ),
       isHidden: false,
 
       // === MERCHANT INFO ===
@@ -378,20 +383,5 @@ export async function extendInflowPeriodsFor(
     console.log(`[extendRecurringInflowPeriods] No new periods needed for inflow ${inflow.id}`);
   }
 
-
-  if (
-    is_v2_record(inflow) &&
-    (inflow.removalIntervals?.length ?? 0) > 0 &&
-    totalPeriodsCreated > 0
-  ) {
-    await inflow_repo.apply_period_suppression(
-      { trace_id: "extend_inflow_periods", span_id: inflowDoc.id },
-      inflowDoc.id,
-      (inflow.removalIntervals as Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>).map(
-        (i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode })
-      ),
-      inflow.ownerId ?? ""
-    );
-  }
   return totalPeriodsCreated;
 }
