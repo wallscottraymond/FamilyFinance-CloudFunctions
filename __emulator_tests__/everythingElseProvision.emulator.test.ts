@@ -23,7 +23,12 @@ const uid = () => `u_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 /* eslint-disable @typescript-eslint/naming-convention */
 async function seedCategories() {
   // getActiveCategories() reads the `categories` collection (isActive === true).
-  await db.collection('categories').doc('FOOD_AND_DRINK_GROCERIES').set({ isActive: true, name: 'Groceries' });
+  // Shared global doc: write the SAME canonical shape the other suites seed (sharingDerive,
+  // sameNameBudgetsAcrossViews) — a partial set() here wiped their firstCategoryId mid-run.
+  await db.collection('categories').doc('FOOD_AND_DRINK_GROCERIES').set({
+    name: 'Groceries', type: 'Outflow', isActive: true, overallCategoryId: 'food_and_drink',
+    firstCategoryId: 'groceries', first_category: 'Groceries', overall_category: 'Food and Drink',
+  });
   await db.collection('categories').doc('TRAVEL_FLIGHTS').set({ isActive: true, name: 'Flights' });
 }
 
