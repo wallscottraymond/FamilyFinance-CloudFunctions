@@ -294,6 +294,22 @@ describe("review round 3 — defect 5 (no \"Still a bill?\" for a bill that isn'
     }
   });
 
+  it("back in sight (account / bill restored) with Plaid still off → the system-closed question reopens once", () => {
+    for (const answer of ["not_shown", "account_removed"] as const) {
+      const r = record("b", { v2: true, plaid_is_active: false });
+      const closed = resolve_review_item(still(r), answer, NOW - 10);
+      const p = plan({ streams: [stream("b", { raw_is_active: false })], existing: new Map([["b", r]]), review_items: by_id(closed) });
+      expect(p.review_items.map((i) => [i.status, i.answer])).toEqual([["open", null]]);
+      // Stopped returning entirely: the same.
+      expect(plan({ streams: [], stale_candidates: [r], review_items: by_id(closed) }).review_items.map((i) => i.status)).toEqual(["open"]);
+      // Still out of sight → stays closed; the user's own answer never reopens.
+      const hidden = record("b", { v2: true, plaid_is_active: false, removal_intervals: removed });
+      expect(plan({ streams: [stream("b", { raw_is_active: false })], existing: new Map([["b", hidden]]), review_items: by_id(closed) }).review_items).toEqual([]);
+      const answered = resolve_review_item(still(r), "still_a_bill", NOW - 10);
+      expect(plan({ streams: [stream("b", { raw_is_active: false })], existing: new Map([["b", r]]), review_items: by_id(answered) }).review_items).toEqual([]);
+    }
+  });
+
   it("a shown bill keeps its open question (refreshed as before)", () => {
     const r = record("b", { v2: true, plaid_is_active: false });
     const q = still(r);

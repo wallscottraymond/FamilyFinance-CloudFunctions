@@ -264,6 +264,15 @@ function as_saved(ex: PlannerRecord, s: PlannerStream, saved: OutflowForPersiste
   };
 }
 
+/**
+ * A "Still a bill?" the system closed only because the bill went out of sight (its account was
+ * removed, or the user removed / paused it) is asked again once the bill is back in sight and
+ * Plaid still has it off — otherwise restoring the account (or the bill) silently drops the
+ * question (Top-25 #16). Never one the user answered (that is `is_user_answered`).
+ */
+const reopens = (item: ReviewItem | undefined): boolean =>
+  !!item && item.status !== "open" && (item.answer === "account_removed" || item.answer === "not_shown");
+
 /** Is the record a bill the user currently sees (active, not hidden, not removed, not merged)? */
 function is_shown(r: PlannerRecord, now_ms: number): boolean {
   return (
@@ -467,7 +476,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
         const changed = ex.plaid_is_active !== false;
         if (open?.status === "open") {
           plan.review_items.push(still_a_bill_item(input, cur, open)); // keep (refresh) the question
-        } else if (changed && is_shown(ex, input.now_ms) && ex.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
+        } else if ((changed || reopens(open)) && is_shown(ex, input.now_ms) && ex.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
           plan.review_items.push(still_a_bill_item(input, cur, open));
         }
       } else if (open?.status === "open") {
@@ -604,7 +613,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       plan.review_items.push(resolve_review_item(open, "not_shown", input.now_ms)); // moot (defect 5)
     } else if (open?.status === "open") {
       plan.review_items.push(still_a_bill_item(input, r, open));
-    } else if (r.plaid_is_active !== false && is_shown(r, input.now_ms) && r.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
+    } else if ((r.plaid_is_active !== false || reopens(open)) && is_shown(r, input.now_ms) && r.plaid_inactive_ack_ms === null && !is_user_answered(open)) {
       plan.review_items.push(still_a_bill_item(input, r, open));
     }
   }
