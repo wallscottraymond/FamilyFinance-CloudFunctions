@@ -301,4 +301,56 @@ describe('capture rules — flag off equals today (emulator)', () => {
     expect(out.after_second.review_state_exists).toBe(false);
     expect(out.after_second.job_types).not.toContain('detect_possible_recurring');
   }, 120000);
+
+  it('#9 honest R4: flag doc present + COLD cache → sync = base + 1 _feature_flags read; warm → base + 0; assign + derive the same', async () => {
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
+      enabled: true, enabled_user_ids: ['someone_else'], enabled_group_ids: [], rollout_percentage: 0,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ff = require('../src/functions/infrastructure/feature_flags');
+    ff.invalidate_flag_cache();
+    const tag = 'qzoffr4';
+    const ids = scenarioIds(tag);
+    await seedScenario(db, ids);
+    const mocks = scenarioMocks(ids, NOW_MS, { removals: true });
+    mockSync.mockReset();
+    mockSync.mockImplementation(mocks.sync);
+    mockRecurring.mockReset();
+    mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
+    const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: 's' });
+    const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test' });
+    await sync('run1');
+    await sync('run2');
+    await new Promise((r) => setTimeout(r, 400));
+    const measured = async (fn: () => Promise<unknown>) => {
+      const c = startCounting();
+      await fn();
+      await new Promise((r) => setTimeout(r, 400));
+      const k = c.stop();
+      return { reads: k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0), writes: k.writes - (k.writes_by._audit ?? 0),
+        ff: k.reads_by[process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags'] ?? 0, state: k.reads_by._recurring_review_state ?? 0 };
+    };
+    ff.invalidate_flag_cache();
+    const cold = await measured(() => sync('cold'));
+    const warm = await measured(() => sync('warm'));
+    expect([cold.ff, warm.ff, cold.state, warm.state]).toEqual([1, 0, 0, 0]);
+    expect(cold.reads).toBe(warm.reads + 1);
+    // Warm = exactly the base's identical re-sync (golden run 2, measured on 2ae62e6).
+    expect({ reads: warm.reads, writes: warm.writes }).toEqual({ reads: golden.counts[1].reads, writes: golden.counts[1].writes });
+
+    // Assignment batch + derive: cold = warm + 1 flag read, and no review-state read.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { assign_transactions_batch_orchestrator } = require('../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator');
+    const assign_and_derive = async () => {
+      await assign_transactions_batch_orchestrator(ctx('assign'), { user_id: ids.userId, transaction_ids: [`plaid_${ids.txn('spot0')}`, `plaid_${ids.txn('groc0')}`] });
+      await derive_period_orchestrator(ctx('derive'), ids.userId, { view_cadence: 'monthly', window_start_ms: OCT.start, window_end_ms: OCT.end, force: true });
+    };
+    ff.invalidate_flag_cache();
+    const a_cold = await measured(assign_and_derive);
+    const a_warm = await measured(assign_and_derive);
+    expect([a_cold.ff, a_warm.ff, a_cold.state, a_warm.state]).toEqual([1, 0, 0, 0]);
+    expect(a_cold.reads).toBe(a_warm.reads + 1);
+    console.log('[R4 honest] sync cold/warm/base:', cold.reads, warm.reads, golden.counts[1].reads, ' assign+derive cold/warm:', a_cold.reads, a_warm.reads);
+  }, 180000);
 });
+
