@@ -173,7 +173,7 @@ describe('answering review items (emulator)', () => {
     const { make_review_item } = require('../src/functions/domain/recurring/review_item.service');
     /* eslint-enable @typescript-eslint/no-var-requires */
     const uid = `rs_${Date.now()}`;
-    await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
       enabled: true, enabled_user_ids: [uid], enabled_group_ids: [], rollout_percentage: 0,
     });
     ff.invalidate_flag_cache();

@@ -11,9 +11,11 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { CONVERT_TO_RECURRING_FLAG } from "../domain/recurring/capture_rules";
 
 /**
- * Collection for feature flags.
+ * Collection for feature flags. The override exists ONLY for the emulator suites (each test file
+ * gets its own flag collection, so parallel suites can't clobber one global flag doc); it is never
+ * set in deployed functions.
  */
-const COLLECTION = "_feature_flags";
+const COLLECTION = process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE || "_feature_flags";
 
 /**
  * Feature flag definition.

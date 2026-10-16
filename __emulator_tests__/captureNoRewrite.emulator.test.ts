@@ -69,7 +69,7 @@ describe('T1 — repeated syncs rewrite nothing (emulator)', () => {
     const mocks = scenarioMocks(ids);
     mockSync.mockImplementation(mocks.sync);
     mockRecurring.mockResolvedValue(scenarioRecurring(ids));
-    await db.collection('_feature_flags').doc('convert_to_recurring_v1').delete();
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').delete();
     invalidate_flag_cache();
     const sync = (n: string) =>
       sync_item_orchestrator({ trace_id: `qznorw_${n}`, span_id: 's' }, {
@@ -118,7 +118,7 @@ describe('T1 — repeated syncs rewrite nothing (emulator)', () => {
     };
     for (let n = 0; n < 5; n++) await run(`off${n}`);
 
-    await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
       enabled: true, enabled_user_ids: [ids.userId], enabled_group_ids: [], rollout_percentage: 0,
     });
     invalidate_flag_cache();

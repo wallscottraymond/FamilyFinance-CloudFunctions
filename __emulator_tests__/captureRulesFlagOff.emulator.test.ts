@@ -140,7 +140,7 @@ describe('capture rules — flag off equals today (emulator)', () => {
   });
 
   it('no flag doc → every doc, period, transaction, the period page and the queue equal the base', async () => {
-    await db.collection('_feature_flags').doc('convert_to_recurring_v1').delete();
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').delete();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     require('../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
     const { out, counts } = await runScenario('qzoffa', { counted: true });
@@ -161,7 +161,7 @@ describe('capture rules — flag off equals today (emulator)', () => {
   }, 120000);
 
   it('flag doc present but the user not on it → same as the base; 0 review items; no detector job', async () => {
-    await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
       enabled: true, enabled_user_ids: ['someone_else'], enabled_group_ids: [], rollout_percentage: 0,
     });
     // eslint-disable-next-line @typescript-eslint/no-var-requires

@@ -3,7 +3,7 @@
  * The suite owns the jest.mock() of Plaid (hoisted); it hands its mock fns here.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires */
-import { Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Firestore } from 'firebase-admin/firestore';
 import {
   NOW_MS, ScenarioIds, plaidTxn, scenarioIds, scenarioMocks, scenarioRecurring, seedMonthlySourcePeriods, seedScenario,
 } from './captureScenario';
@@ -37,19 +37,21 @@ export interface Harness {
   txn: (key: string) => Promise<any>;
 }
 
+// The flag doc is GLOBAL and parallel suites add/remove their own users: field-level
+// arrayUnion/arrayRemove, never read-modify-write (a lost update silently turned another suite's
+// user flag-off mid-run).
 export async function setFlag(db: Firestore, user_ids: string[]): Promise<void> {
-  const ref = db.collection('_feature_flags').doc('convert_to_recurring_v1');
-  const cur = (await ref.get()).data();
-  const all = new Set<string>([...(((cur?.enabled_user_ids as string[]) ?? [])), ...user_ids]);
-  await ref.set({ enabled: true, enabled_user_ids: [...all], enabled_group_ids: [], rollout_percentage: 0, description: 'test' });
+  const ref = db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1');
+  await ref.set({
+    enabled: true, enabled_user_ids: FieldValue.arrayUnion(...user_ids), enabled_group_ids: [], rollout_percentage: 0,
+    description: 'test',
+  }, { merge: true });
   require('../../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
 }
 
 export async function clearFlagFor(db: Firestore, user_id: string): Promise<void> {
-  const ref = db.collection('_feature_flags').doc('convert_to_recurring_v1');
-  const cur = (await ref.get()).data();
-  const left = (((cur?.enabled_user_ids as string[]) ?? [])).filter((u) => u !== user_id);
-  await ref.set({ enabled: true, enabled_user_ids: left, enabled_group_ids: [], rollout_percentage: 0 });
+  const ref = db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1');
+  await ref.set({ enabled: true, enabled_user_ids: FieldValue.arrayRemove(user_id) }, { merge: true });
   require('../../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
 }
 

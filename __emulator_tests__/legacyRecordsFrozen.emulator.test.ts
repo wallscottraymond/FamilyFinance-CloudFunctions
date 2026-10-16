@@ -79,10 +79,10 @@ async function twin(tag: string, flag_on_after_link: boolean) {
   });
   await sync('link'); // flag off for everyone at link time → old records
 
-  const flags = (await db.collection('_feature_flags').doc('convert_to_recurring_v1').get()).data();
+  const flags = (await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').get()).data();
   const allow = new Set<string>((flags?.enabled_user_ids as string[]) ?? []);
   if (flag_on_after_link) allow.add(ids.userId);
-  await db.collection('_feature_flags').doc('convert_to_recurring_v1').set({
+  await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
     enabled: true, enabled_user_ids: [...allow], enabled_group_ids: [], rollout_percentage: 0,
   });
   invalidate_flag_cache();

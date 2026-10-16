@@ -252,15 +252,39 @@ export const SCENARIO_CATEGORY_CODES = [
   'LOAN_PAYMENTS_CAR_PAYMENT', 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES',
 ];
 
+/**
+ * Isolation from other suites WITHOUT touching shared data: `categories` is global reference data
+ * other suites seed (and need) in parallel, so the scenario never deletes it. Instead this suite's
+ * own module instance of `category_repo` (jest gives each test file its own registry) is wrapped
+ * so the scenario's codes read as unmapped — exactly the state the golden was captured in. Every
+ * category read on the paths the scenarios exercise goes through `category_repo`. Idempotent.
+ */
+function isolate_scenario_categories(): void {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const mod = require('../../src/functions/repositories/category.repo');
+  const repo = mod.category_repo as Record<string, unknown> & { __scenarioIsolated?: boolean };
+  if (repo.__scenarioIsolated) return;
+  const hidden = new Set(SCENARIO_CATEGORY_CODES);
+  // Keyed by the source array so the catalog resolver's identity cache still hits.
+  const memo = new WeakMap<object, unknown[]>();
+  const filter = (docs: Array<{ id: string }>) => {
+    let out = memo.get(docs);
+    if (!out) { out = docs.filter((d) => !hidden.has(d.id)); memo.set(docs, out); }
+    return out;
+  };
+  for (const name of ['get_active', 'get_active_cached']) {
+    const orig = repo[name] as (...a: unknown[]) => Promise<Array<{ id: string }>>;
+    if (typeof orig !== 'function') continue;
+    repo[name] = async (...a: unknown[]) => filter(await orig.apply(repo, a));
+  }
+  repo.__scenarioIsolated = true;
+  mod.invalidate_category_cache?.();
+}
+
 /** Seed the user, item, accounts, Everything-Else budgets and the current month source periods. */
 export async function seedScenario(db: Firestore, ids: ScenarioIds): Promise<void> {
   const now = Timestamp.fromMillis(NOW_MS);
-  // Isolation from other suites in the same emulator run: the scenario's category codes unmapped.
-  const del = db.batch();
-  for (const code of SCENARIO_CATEGORY_CODES) del.delete(db.collection('categories').doc(code));
-  await del.commit();
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  require('../../src/functions/repositories/category.repo').invalidate_category_cache();
+  isolate_scenario_categories();
   const batch = db.batch();
   batch.set(db.collection('plaid_items').doc(ids.itemDocId), {
     id: ids.itemDocId, plaidItemId: ids.itemDocId, userId: ids.userId, groupIds: [],
