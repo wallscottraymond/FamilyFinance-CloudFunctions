@@ -44,6 +44,7 @@ import {
   set_transfer_classification_state,
 } from "../../repositories/transfer_classification_state.repo";
 import { createHash } from "crypto";
+import { run_detector_on_scan } from "../recurring/detect_possible_recurring.orchestrator";
 
 /** Window of transactions loaded for matched-pair detection. */
 const PAIRING_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
@@ -141,7 +142,7 @@ export async function classify_internal_transfers_orchestrator(
   );
 
   // 2. Matched-pair internal-transfer detection over the window's transfers.
-  const { internal_plaid_ids } = detect_internal_transfers_from_txns(
+  const { internal_ids, internal_plaid_ids } = detect_internal_transfers_from_txns(
     txns,
     await load_category_catalog(ctx)
   );
@@ -244,6 +245,21 @@ export async function classify_internal_transfers_orchestrator(
     fingerprint: fingerprint(outflows, inflows, hidden_after),
     classified_at_ms: now_ms,
   });
+
+  // 5. The possible-bill detector rides this scan (Convert-To-Recurring X12: no extra transaction
+  //    read) — flag-on users only, at most once per UTC day, non-fatal.
+  try {
+    await run_detector_on_scan(ctx, user_id, now_ms, {
+      txns,
+      internal_txn_ids: internal_ids,
+      records: [
+        ...outflows.map((o) => ({ kind: "outflow" as const, transaction_ids: o.transaction_ids ?? [], merchant_name: o.merchant_name, description: o.description })),
+        ...inflows.map((i) => ({ kind: "inflow" as const, transaction_ids: i.transaction_ids ?? [], merchant_name: i.payer_name, description: i.description })),
+      ],
+    });
+  } catch (error) {
+    console.error(`[${ctx.trace_id}] possible-bill detector failed (non-fatal):`, error);
+  }
 
   return { hidden_outflows: out.hide.length, hidden_inflows: inf.hide.length, skipped: false };
 }

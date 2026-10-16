@@ -175,7 +175,9 @@ describe('same bill? — replacement only (emulator)', () => {
 
   it('E (X9): inactive records load only for a NEW v2 stream without a candidate; never on a steady re-sync', async () => {
     const h = await makeHarness(db, 'qzlazy', mocks, { flag: true });
-    const spy_o = jest.spyOn(outflow_repo, 'get_inactive_by_user_id');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const capture_resolver = require('../src/functions/resolvers/recurring/recurring_capture.resolver');
+    const spy_o = jest.spyOn(capture_resolver, 'resolve_inactive_capture_records'); // the planner's lazy load
     await h.sync('link'); // new mature streams with no candidate → one lazy load
     const first = spy_o.mock.calls.length;
     expect(first).toBe(1);

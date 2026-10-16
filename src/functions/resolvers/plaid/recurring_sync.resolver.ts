@@ -345,7 +345,10 @@ export async function resolve_recurring_sync_dependencies(
     accounts_snapshot.docs.map((doc) => doc.data().accountId || doc.id)
   );
   const account_types = new Map<string, string>(
-    accounts_snapshot.docs.map((doc) => [doc.data().accountId || doc.id, String(doc.data().type ?? "")])
+    accounts_snapshot.docs.map((doc) => [
+      doc.data().accountId || doc.id,
+      String(doc.data().accountType ?? doc.data().type ?? ""),
+    ])
   );
   const active_records: CaptureRecordInfo[] = [
     ...all_outflows.map((o) => to_capture_record_info(o, "outflow", o.merchant_name)),

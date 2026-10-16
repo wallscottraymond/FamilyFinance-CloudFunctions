@@ -135,7 +135,10 @@ describe('X2 — first link with 20 ended streams', () => {
     expect(recs.size).toBe(20);
     expect(recs.docs.filter((d) => d.data().isActive).length).toBe(0);
     expect(recs.docs.filter((d) => d.data().captureRulesVersion).length).toBe(0);
-    expect((await items_of(h.ids.userId)).length).toBe(0);
+    // No question and no Plaid tile about the 20 ended streams (the detector may still suggest the
+    // scenario's other payments, which no stream covers here).
+    const items = await items_of(h.ids.userId);
+    expect(items.filter((i) => i.kind === 'still_a_bill' || i.source === 'plaid')).toEqual([]);
   }, 120000);
 });
 

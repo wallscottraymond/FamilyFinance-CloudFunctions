@@ -257,6 +257,7 @@ export async function seedScenario(db: Firestore, ids: ScenarioIds): Promise<voi
     batch.set(db.collection('accounts').doc(accountId), {
       id: accountId, accountId, userId: ids.userId, itemId: ids.itemDocId, plaidItemId: ids.itemDocId,
       institutionId: 'ins_1', institutionName: 'Test Bank', accountName: key, name: key, type, subtype,
+      accountType: type, accountSubtype: subtype,
       currentBalance: 1000, isActive: true, isDeleted: false, createdAt: now, updatedAt: now,
       access: { ownerId: ids.userId, createdBy: ids.userId, groupIds: [], isPrivate: true },
     });

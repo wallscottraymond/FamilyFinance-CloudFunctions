@@ -20375,26 +20375,26 @@
  },
  "counts": [
   {
-   "reads": 614,
+   "reads": 539,
    "writes": 163,
    "audit_writes": 55,
    "reads_by": {
-    "purge_status": 2,
+    "purge_status": 1,
     "_item_sync_leases": 2,
-    "plaid_items": 6,
-    "users": 12,
-    "inflows": 15,
-    "outflows": 50,
+    "plaid_items": 3,
+    "users": 6,
+    "inflows": 13,
+    "outflows": 41,
     "accounts": 9,
     "transactions": 180,
     "rules": 1,
     "categories": 1,
-    "budgets": 15,
-    "inflow_periods": 54,
-    "outflow_periods": 186,
+    "budgets": 12,
+    "outflow_periods": 147,
+    "inflow_periods": 43,
     "source_periods": 76,
     "budget_periods": 3,
-    "_transfer_classification_state": 2
+    "_transfer_classification_state": 1
    },
    "writes_by": {
     "_item_sync_leases": 2,
@@ -20411,14 +20411,14 @@
    }
   },
   {
-   "reads": 40,
+   "reads": 34,
    "writes": 4,
    "audit_writes": 0,
    "reads_by": {
-    "purge_status": 2,
+    "purge_status": 1,
     "_item_sync_leases": 2,
-    "plaid_items": 6,
-    "users": 4,
+    "plaid_items": 3,
+    "users": 2,
     "inflows": 4,
     "outflows": 13,
     "accounts": 6,

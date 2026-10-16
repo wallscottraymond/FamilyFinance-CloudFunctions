@@ -154,6 +154,45 @@ export async function create_job<TPayload>(
 }
 
 /**
+ * Create a job at a DETERMINISTIC id with `.create()` (CLAUDE.md write rule 4): the first caller
+ * creates it, every later caller with the same id is a no-op — no "does one exist?" read. Returns
+ * true when this call created it. Used for once-per-day work (`detect:{uid}:{UTCday}`); the id is
+ * also the job_id the queue claims by.
+ */
+export async function create_job_with_id<TPayload>(
+  job_id: string,
+  job_type: string,
+  payload: TPayload,
+  options?: { max_retries?: number; delay_seconds?: number; trace_id?: string }
+): Promise<boolean> {
+  const now = Timestamp.now();
+  const job: Job<TPayload> = {
+    job_id,
+    job_type,
+    payload,
+    status: "pending",
+    retry_count: 0,
+    max_retries: options?.max_retries ?? DEFAULT_CONFIG.default_max_retries,
+    created_at: now,
+    updated_at: now,
+    ...(options?.trace_id ? { trace_id: options.trace_id } : {}),
+    ...(options?.delay_seconds
+      ? { scheduled_for: Timestamp.fromMillis(now.toMillis() + options.delay_seconds * 1000) }
+      : {}),
+  };
+  try {
+    await getFirestore().collection(COLLECTIONS.JOBS).doc(job_id).create(job);
+    return true;
+  } catch (error) {
+    const code = (error as { code?: unknown })?.code;
+    if (code === 6 || code === "already-exists" || /ALREADY_EXISTS/.test(String((error as Error)?.message))) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
  * Gets a job by ID.
  *
  * @param job_id - Job ID

@@ -3,7 +3,7 @@
  *
  * Patches the shared `@google-cloud/firestore` prototypes (firebase-admin re-exports the same
  * classes) once, and attributes every operation to every active counter:
- *   reads:  DocumentReference.get = 1, getAll = refs.length, Query.get = max(1, docs returned)
+ *   reads:  getAll = refs.length (DocumentReference.get delegates to it = 1), Query.get = max(1, docs returned)
  *           (an empty query is billed 1 read), Transaction.get likewise;
  *   writes: every set / update / delete / create queued on a WriteBatch (DocumentReference writes,
  *           transactions and BulkWriter all go through WriteBatch).
@@ -49,12 +49,7 @@ function patch(): void {
   if (patched) return;
   patched = true;
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  const dr = DocumentReference.prototype as any;
-  const orig_dr_get = dr.get;
-  dr.get = function (...a: unknown[]) {
-    add('reads', coll_of_ref(this), 1);
-    return orig_dr_get.apply(this, a);
-  };
+  // DocumentReference.get() delegates to Firestore.getAll(ref) — counted there (once).
   const fs = Firestore.prototype as any;
   const orig_get_all = fs.getAll;
   fs.getAll = function (...refs: unknown[]) {
