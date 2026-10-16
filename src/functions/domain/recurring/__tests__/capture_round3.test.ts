@@ -318,4 +318,18 @@ describe("review round 3 — defect 5 (no \"Still a bill?\" for a bill that isn'
   });
 });
 
+
+describe("the stream-id vendor fallback never collides (extra)", () => {
+  it("no merchant / description → STREAM:<id>; a vendor literally named 'stream:<id>' stays distinct", () => {
+    const a = stream("abc", { merchant_name: null, description: null });
+    const b = stream("abd", { merchant_name: "", description: "  " });
+    const named = stream("zzz", { merchant_name: "stream:abc", description: null });
+    expect(stream_vendor(a)).toBe("STREAM:abc");
+    expect(stream_vendor(b)).toBe("STREAM:abd");
+    expect(stream_vendor(named)).toBe("stream:abc"); // lower-cased: never equal to a fallback
+    const p = plan({ streams: [a, b, named].map((s) => ({ ...s, raw_status: "EARLY_DETECTION" })) });
+    expect(new Set(p.review_items.map((i) => i.id)).size).toBe(3);
+  });
+});
+
 void [review_ids_for_sync, build_review_item_id, record, ids]; // shared helpers (used by later sections)

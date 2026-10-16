@@ -224,9 +224,15 @@ export function review_ids_for_sync(
   return [...ids];
 }
 
-/** The vendor key a stream is suggested under (falls back to the stream id). */
+/**
+ * The vendor key a stream is suggested under; a stream with no merchant / description falls back
+ * to its stream id under an UPPER-CASE prefix. Real vendor keys are always lower-cased
+ * (`vendor_key_from_name`), so the fallback can never collide with a vendor — not even one named
+ * "stream:<id>" (it used `stream:<id>`, which such a merchant would produce; extra test).
+ */
+export const STREAM_VENDOR_PREFIX = "STREAM:";
 export function stream_vendor(s: { merchant_name: string | null; description: string | null; stream_id: string }): string {
-  return vendor_key({ merchant_name: s.merchant_name, name: s.description }) ?? `stream:${s.stream_id}`;
+  return vendor_key({ merchant_name: s.merchant_name, name: s.description }) ?? `${STREAM_VENDOR_PREFIX}${s.stream_id}`;
 }
 
 
