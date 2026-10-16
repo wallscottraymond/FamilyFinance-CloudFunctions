@@ -33,7 +33,8 @@ import { transaction_repo } from "../../repositories/transaction.repo";
 import { category_repo } from "../../repositories/category.repo";
 import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
-import { recurring_review_repo } from "../../repositories/recurring_review.repo";
+import { feature_flag_repo } from "../../repositories/feature_flag.repo";
+import { load_review_state_if_relevant } from "../recurring/review_holdout.resolver";
 import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
 import {
   RemovalInterval,
@@ -135,13 +136,16 @@ export async function resolve_shared_assignment_context(
 ): Promise<SharedAssignmentContext> {
   // Budgets (per-user) and category rules (cached reference data) are
   // independent — fetch concurrently.
-  const [budgets, category_docs, outflows, inflows, review_state] = await Promise.all([
+  // The flag check (cached per instance) runs alongside the reads; the review state doc is read
+  // only for a flag-on user or one with v2 records (X11: no extra read for anyone else).
+  const flag_on = feature_flag_repo.is_convert_to_recurring_enabled(user_id);
+  const [budgets, category_docs, outflows, inflows] = await Promise.all([
     budget_repo.get_by_user_id(ctx, user_id),
     category_repo.get_active_cached(ctx),
     outflow_repo.get_by_user_id(ctx, user_id),
     inflow_repo.get_by_user_id(ctx, user_id),
-    recurring_review_repo.get_state(ctx, user_id),
   ]);
+  const review_state = await load_review_state_if_relevant(ctx, user_id, [...outflows, ...inflows], flag_on);
 
   // Authoritative recurring-stream links: Plaid stream `transactionIds` → recurring id.
   // Only ACTIVE, non-hidden defs (hidden = classified internal transfer) contribute, so

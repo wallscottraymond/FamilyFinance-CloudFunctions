@@ -16,8 +16,9 @@
  */
 import * as admin from 'firebase-admin';
 import {
-  FAKE_CLOCK, OCT, makeHarness, paidTotal, plaidTxn, scenarioRecurring, seedMonths, setFlag,
+  FAKE_CLOCK, OCT, clearFlagFor, makeHarness, paidTotal, plaidTxn, scenarioRecurring, seedMonths, setFlag,
 } from './helpers/captureHarness';
+import { startCounting } from './helpers/firestoreCounter';
 import { plaidStream } from './helpers/captureScenario';
 
 const mockSync = jest.fn();
@@ -109,5 +110,65 @@ describe('X3 — held-out payments never fuzzy-link to an old bill (emulator)', 
     await db.collection('_recurring_review_state').doc(h.ids.userId).update({ suppressedTxnIds: [] });
     await assign({ trace_id: 'ctl', span_id: 's' }, { user_id: h.ids.userId, transaction_id: ref.id });
     expect((await ref.get()).data()?.splits[0].outflowId).toBe(OLD);
+  }, 180000);
+
+  it('X11: a flag-off user with no v2 records never reads the review state doc (assignment batch + derive)', async () => {
+    const h = await makeHarness(db, 'qzhoff', { mockSync, mockRecurring }, { flag: false });
+    await h.sync('link');
+    // Even if a state doc exists (e.g. a stale one), a flag-off, all-old user never reads it.
+    await db.collection('_recurring_review_state').doc(h.ids.userId).set({ suppressedTxnIds: ['x'] });
+    // Warm the per-instance flag cache (it is shared with every other flag check on the instance).
+    require('../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
+    const txn_id = `plaid_${h.ids.txn('spot0')}`;
+    await assign({ trace_id: 'warm', span_id: 's' }, { user_id: h.ids.userId, transaction_id: txn_id });
+
+    const a = startCounting();
+    await assign({ trace_id: 'off', span_id: 's' }, { user_id: h.ids.userId, transaction_id: txn_id });
+    const ac = a.stop();
+    const d = startCounting();
+    await h.derive(OCT); // force: true → a derive cache miss
+    const dc = d.stop();
+    // eslint-disable-next-line no-console
+    console.info(`[X11 measured] assignment batch reads=${ac.reads} derive reads=${dc.reads} state-doc reads=${(ac.reads_by._recurring_review_state ?? 0) + (dc.reads_by._recurring_review_state ?? 0)}`);
+    expect(ac.reads_by._recurring_review_state ?? 0).toBe(0);
+    expect(dc.reads_by._recurring_review_state ?? 0).toBe(0);
+    expect(ac.reads_by._feature_flags ?? 0).toBe(0); // cached per instance
+  }, 180000);
+
+  it('D16: v2 records keep the hold-out even after the flag is turned off (one state read each)', async () => {
+    const tag = 'qzhv2';
+    const h = await makeHarness(db, tag, { mockSync, mockRecurring }, { flag: true });
+    await h.sync('link'); // v2 records
+    h.ids.streams.SUNBIT2 = `${tag}_S_SUNBIT2`;
+    const rec = scenarioRecurring(h.ids);
+    rec.outflow_streams.push(plaidStream(h.ids, 'SUNBIT2', {
+      account: 'chk', keys: ['sunbitnew'], amount: 50, description: 'SUNBIT', merchant: 'Sunbit',
+      primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT', frequency: 'MONTHLY',
+      status: 'EARLY_DETECTION', is_active: true, first_days_ago: 0, last_days_ago: 0, next_days: 30,
+    }));
+    h.setRecurring(rec);
+    h.postTxns([plaidTxn(h.ids, { key: 'sunbitnew', account: 'chk', amount: 50, days_ago: 0, name: 'SUNBIT',
+      merchant: 'Sunbit', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT' })]);
+    await h.sync('new_stream');
+    const held = (await db.collection('_recurring_review_state').doc(h.ids.userId).get()).data()?.suppressedTxnIds ?? [];
+    expect(held).toContain(h.ids.txn('sunbitnew'));
+
+    await clearFlagFor(db, h.ids.userId);
+    const ref = db.collection('transactions').doc(`plaid_${h.ids.txn('sunbitnew')}`);
+    const a = startCounting();
+    await assign({ trace_id: 'v2off', span_id: 's' }, { user_id: h.ids.userId, transaction_id: ref.id });
+    const ac = a.stop();
+    expect(ac.reads_by._recurring_review_state).toBe(1);
+    expect((await ref.get()).data()?.splits[0].outflowId ?? null).toBeNull();
+    // Derive: a stale auto link to the (v2) Sunbit bill is still ignored on read.
+    const t = (await ref.get()).data()!;
+    const ee_before = await h.eeSpent(OCT);
+    await ref.update({
+      splits: t.splits.map((sp: Record<string, unknown>) => ({ ...sp, outflowId: h.ids.streams.SUNBIT, outflowAssignmentSource: 'auto' })),
+      splitOutflowIds: [h.ids.streams.SUNBIT],
+    });
+    const d = startCounting();
+    expect(await h.eeSpent(OCT)).toBe(ee_before);
+    expect(d.stop().reads_by._recurring_review_state).toBe(1);
   }, 180000);
 });

@@ -82,7 +82,8 @@ import {
   build_match_budgets,
 } from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
-import { recurring_review_repo } from "../../repositories/recurring_review.repo";
+import { feature_flag_repo } from "../../repositories/feature_flag.repo";
+import { load_review_state_if_relevant } from "../recurring/review_holdout.resolver";
 import {
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
@@ -258,11 +259,9 @@ export async function load_period_derivation_raw(
     overlapping,
     budget_entities,
     monthly_period_docs,
-    all_outflows,
-    all_inflows,
+    member_recurring,
     goals_raw,
     category_catalog,
-    review_states,
   ] = await Promise.all([
       source_period_repo.get_overlapping(
         ctx,
@@ -276,15 +275,23 @@ export async function load_period_derivation_raw(
         "monthly",
         ...monthly_period_load_bounds(range_start_ms, range_end_ms)
       ),
-      per_member(scope, (m) => outflow_repo.get_by_user_id(ctx, m)),
-      per_member(scope, (m) => inflow_repo.get_by_user_id(ctx, m)),
+      // Per member: bills + income, then — chained, only if the member is flag-on or has a v2
+      // record — their review state (the fuzzy hold-out). X11: no extra read otherwise.
+      per_member(scope, async (m) => {
+        const flag_on = feature_flag_repo.is_convert_to_recurring_enabled(m);
+        const [outs, ins] = await Promise.all([
+          outflow_repo.get_by_user_id(ctx, m),
+          inflow_repo.get_by_user_id(ctx, m),
+        ]);
+        const st = await load_review_state_if_relevant(ctx, m, [...outs, ...ins], flag_on);
+        return [{ outs, ins, st }];
+      }),
       per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
       load_category_catalog(ctx),
-      per_member(scope, async (m) => {
-        const st = await recurring_review_repo.get_state(ctx, m);
-        return st ? [st] : [];
-      }),
     ]);
+  const all_outflows = member_recurring.flatMap((r) => r.outs);
+  const all_inflows = member_recurring.flatMap((r) => r.ins);
+  const review_states = member_recurring.flatMap((r) => (r.st ? [r.st] : []));
   const fuzzy_excluded_plaid_ids = new Set(review_states.flatMap((st) => st.suppressed_txn_ids));
   // Bills / income / goals follow their account's view (an item with no account stays in Me).
   const outflows = all_outflows.filter((o) => account_in_scope(scope, o.account_id));
