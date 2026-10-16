@@ -301,6 +301,13 @@ function same_bill_item(
   );
 }
 
+/** A low-confidence stream that may become its vendor's suggested tile (defect 2). */
+interface SuggestCandidate {
+  s: PlannerStream;
+  subject: string;
+  existing: ReviewItem | undefined;
+}
+
 /** Plan one recurring sync under the capture rules. PURE. */
 export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   const plan: CapturePlan = {
@@ -319,6 +326,8 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   };
   const item_at = (kind: ReviewItem["kind"], subject: string) =>
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
+  const suggest_candidates: SuggestCandidate[] = [];
+  const matured_subjects = new Set<string>();
   const suppress = (ids: string[]) => plan.state_change.add_suppressed!.push(...ids);
   const unsuppress = (ids: string[]) => plan.state_change.remove_suppressed!.push(...ids);
 
@@ -408,7 +417,8 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     if (is_low_confidence_stream(s.raw_status, s.raw_frequency)) {
       suppress(s.transaction_ids);
       if (may_suggest_stream(s.direction, s.detailed_category, s.account_type)) {
-        plan.review_items.push(suggested_item(input, s, suggested));
+        // Built after the loop, ONE stream per vendor chosen deterministically (defect 2).
+        suggest_candidates.push({ s, subject: suggested_subject(s.direction, vk), existing: suggested });
       }
       continue;
     }
@@ -426,7 +436,34 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     if (suggested?.status === "open") {
       plan.review_items.push(resolve_review_item(suggested, "matured", input.now_ms));
       unsuppress(suggested.transaction_ids);
+      matured_subjects.add(suggested_subject(s.direction, vk));
     }
+  }
+
+  // ── Suggested tiles: one per vendor, built from ONE stream chosen deterministically (review
+  //    round 3 defect 2). Items are keyed per vendor but built from a single stream, so two Plaid
+  //    items with an early stream of the same vendor (or a reordered stream list) overwrote each
+  //    other on every sync. Now:
+  //      - a vendor that matured into a bill in this sync gets no tile (its item was just closed);
+  //      - an OPEN tile owned by ANOTHER Plaid item's stream is left as it is (that item's sync
+  //        maintains it; this sync can't see that stream);
+  //      - otherwise the tile keeps its stored stream while that stream is in this response, else
+  //        takes the smallest stream id — the same input always builds the same item.
+  const by_subject = new Map<string, SuggestCandidate[]>();
+  for (const c of suggest_candidates) {
+    if (!by_subject.has(c.subject)) by_subject.set(c.subject, []);
+    by_subject.get(c.subject)!.push(c);
+  }
+  for (const [subject, group] of by_subject) {
+    if (matured_subjects.has(subject)) continue;
+    const ex = group[0].existing;
+    const other_item_owns =
+      !!ex && ex.status === "open" && ex.source === "plaid" && !!ex.plaid_item_doc_id &&
+      ex.plaid_item_doc_id !== input.plaid_item_doc_id;
+    if (other_item_owns) continue;
+    const sorted = [...group].sort((a, b) => (a.s.stream_id < b.s.stream_id ? -1 : a.s.stream_id > b.s.stream_id ? 1 : 0));
+    const pick = (ex?.stream_id && sorted.find((c) => c.s.stream_id === ex.stream_id)) || sorted[0];
+    plan.review_items.push(suggested_item(input, pick.s, ex));
   }
 
   function create_v2(s: PlannerStream, user_frequency: string | null): void {

@@ -106,4 +106,62 @@ describe("review round 3 — defect 1 (answers are never reverted)", () => {
     expect(again.review_items).toEqual([]);
   });
 });
+
+describe("review round 3 — defect 2 (one deterministic tile per vendor)", () => {
+  const early = (id: string, o: Partial<PlannerStream> = {}) =>
+    stream(id, { raw_status: "EARLY_DETECTION", merchant_name: "Sunbit", description: "SUNBIT", ...o });
+
+  it("two early streams of one vendor in any order build the identical item", () => {
+    const a = early("sa", { transaction_ids: ["a1"] });
+    const b = early("sb", { transaction_ids: ["b1", "b2"], account_id: "chk2" });
+    const p1 = plan({ streams: [a, b] });
+    const p2 = plan({ streams: [b, a] });
+    expect(p1.review_items).toHaveLength(1);
+    expect(p2.review_items).toEqual(p1.review_items);
+    expect(p1.review_items[0].stream_id).toBe("sa"); // smallest stream id
+    // Both streams' payments are held out either way.
+    expect([...p1.state_change.add_suppressed!].sort()).toEqual(["a1", "b1", "b2"]);
+    // Re-planned against the item it wrote → identical content (no write).
+    const stored = p1.review_items[0];
+    const p3 = plan({ streams: [b, a], review_items: by_id(stored) });
+    expect(p3.review_items.map((i) => i.content_hash)).toEqual([stored.content_hash]);
+  });
+
+  it("the stored stream is kept while it is still in the response", () => {
+    const a = early("sa");
+    const b = early("sb");
+    const stored = plan({ streams: [b] }).review_items[0];
+    expect(stored.stream_id).toBe("sb");
+    const p = plan({ streams: [a, b], review_items: by_id(stored) });
+    expect(p.review_items[0].stream_id).toBe("sb");
+    expect(p.review_items[0].content_hash).toBe(stored.content_hash);
+    // Gone from the response → falls to the smallest remaining stream.
+    expect(plan({ streams: [a], review_items: by_id(stored) }).review_items[0].stream_id).toBe("sa");
+  });
+
+  it("an open tile owned by ANOTHER Plaid item's stream is left alone (no flip-flop across items)", () => {
+    const a = early("sa");
+    const other = plan({ plaid_item_doc_id: "itemB", streams: [early("sx", { account_id: "chkB" })] }).review_items[0];
+    expect(other.plaid_item_doc_id).toBe("itemB");
+    const p = plan({ plaid_item_doc_id: "item", streams: [a], review_items: by_id(other) });
+    expect(p.review_items).toEqual([]);
+    expect(p.state_change.add_suppressed).toEqual(a.transaction_ids); // still held out
+    // A system-closed tile from the other item (e.g. its account was removed) can be taken over.
+    const closed = resolve_review_item(other, "account_removed", NOW);
+    expect(plan({ streams: [a], review_items: by_id(closed) }).review_items[0]).toMatchObject({ status: "open", stream_id: "sa" });
+  });
+
+  it("a vendor whose stream matures in this sync gets only the matured close, never a fresh tile", () => {
+    const e = early("sb");
+    const open = plan({ streams: [e] }).review_items[0];
+    const mature = stream("sa", { merchant_name: "Sunbit", description: "SUNBIT" });
+    for (const order of [[mature, e], [e, mature]]) {
+      const p = plan({ streams: order, review_items: by_id(open) });
+      const mine = p.review_items.filter((i) => i.id === open.id);
+      expect(new Set(mine.map((i) => i.status))).toEqual(new Set(["resolved"]));
+      expect(mine[0].answer).toBe("matured");
+    }
+  });
+});
+
 void [review_ids_for_sync, build_review_item_id, record, ids]; // shared helpers (used by later sections)
