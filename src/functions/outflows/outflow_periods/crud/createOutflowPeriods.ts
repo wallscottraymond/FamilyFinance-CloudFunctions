@@ -53,7 +53,8 @@ export async function createOutflowPeriodsFromSource(
   outflowId: string,
   outflow: any, // Accept flat outflow structure
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  options: { skip_existing?: boolean } = {}
 ): Promise<CreateOutflowPeriodsResult> {
   const now = Timestamp.now();
 
@@ -338,15 +339,28 @@ export async function createOutflowPeriodsFromSource(
     periodIds.push(periodId);
   }
 
-  console.log(`[createOutflowPeriodsFromSource] Creating ${outflowPeriods.length} FLAT outflow periods`);
+  // The scheduled extender re-covers a look-back window; batchCreateOutflowPeriods is a set(), so
+  // a period that already exists (with its paid occurrences / suppression) must be skipped, never
+  // overwritten. One getAll for the candidate ids.
+  let toWrite = outflowPeriods;
+  if (options.skip_existing && outflowPeriods.length > 0) {
+    const refs = outflowPeriods.map((p) => db.collection('outflow_periods').doc(p.id!));
+    const snaps = await db.getAll(...refs);
+    const existing = new Set(snaps.filter((s) => s.exists).map((s) => s.id));
+    toWrite = outflowPeriods.filter((p) => !existing.has(p.id!));
+    console.log(`[createOutflowPeriodsFromSource] Skipping ${existing.size} existing periods`);
+  }
+  const writtenIds = toWrite.map((p) => p.id!);
+
+  console.log(`[createOutflowPeriodsFromSource] Creating ${toWrite.length} FLAT outflow periods`);
 
   // Batch create all outflow_periods
-  await batchCreateOutflowPeriods(db, outflowPeriods);
+  if (toWrite.length > 0) await batchCreateOutflowPeriods(db, toWrite);
 
-  console.log(`[createOutflowPeriodsFromSource] Successfully created ${outflowPeriods.length} FLAT outflow periods`);
+  console.log(`[createOutflowPeriodsFromSource] Successfully created ${toWrite.length} FLAT outflow periods`);
 
   return {
-    periodsCreated: outflowPeriods.length,
-    periodIds
+    periodsCreated: toWrite.length,
+    periodIds: options.skip_existing ? writtenIds : periodIds
   };
 }

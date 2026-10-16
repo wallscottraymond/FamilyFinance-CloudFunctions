@@ -243,11 +243,9 @@ export const extendRecurringInflowPeriods = onSchedule({
         if (newInflowPeriods.length > 0) {
           console.log(`[extendRecurringInflowPeriods] Creating ${newInflowPeriods.length} new inflow periods for ${inflow.id}`);
           await batchCreateInflowPeriods(db, newInflowPeriods);
-
-          // Update inflow metadata
-          await db.collection('inflows').doc(inflow.id!).update({
-            lastExtended: now,
-          });
+          // No `lastExtended` stamp on the inflow: nothing reads it, the Plaid sync doesn't keep
+          // it (so each stamp cost one extra inflow rewrite + trigger on the next sync), and the
+          // write itself fired on_inflow_updated.
 
           totalPeriodsCreated += newInflowPeriods.length;
         } else {
