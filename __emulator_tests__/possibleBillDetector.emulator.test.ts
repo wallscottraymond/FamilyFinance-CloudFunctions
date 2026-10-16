@@ -42,9 +42,8 @@ jest.mock('../src/utils/encryption', () => {
 
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any */
 let db: FirebaseFirestore.Firestore;
-let jobq: any;
 let det: any;
-let job: any;
+let classify: any;
 let purge: any;
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
@@ -52,9 +51,8 @@ beforeAll(async () => {
   if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
   require('../src/functions/orchestrators/plaid/sync_item.orchestrator');
   require('../src/functions/orchestrators/periods/derive_period.orchestrator');
-  jobq = require('../src/functions/infrastructure/job_queue');
   det = require('../src/functions/orchestrators/recurring/detect_possible_recurring.orchestrator');
-  job = require('../src/functions/orchestrators/recurring/detect_possible_recurring.job');
+  ({ classify_internal_transfers_orchestrator: classify } = require('../src/functions/orchestrators/plaid/classify_internal_transfers.orchestrator'));
   ({ purge_user_data_orchestrator: purge } = require('../src/functions/orchestrators/users/purge_user_data.orchestrator'));
   db = admin.firestore();
   await seedMonths(db);
@@ -100,60 +98,55 @@ describe('possible-bill detector (emulator)', () => {
     expect(state.dismissedVendorKeys).toEqual([]); // R11: the detector never writes "Not a bill"
   }, 180000);
 
-  it('R2 / R3: 10 syncs + 20 enqueues in a day → one job doc; a throttled run costs 1 state read (+purge guard)', async () => {
+  it('X12 throttle: 10 syncs in a day → the detector runs once; a throttled inline run = 1 state read, 0 writes', async () => {
     const h = await makeHarness(db, 'qzthr', mocks, { flag: true });
-    await h.sync('link'); // the detector ran inline today
-    const job_id = det.detector_job_id(h.ids.userId, NOW_MS);
-    const creates: number[] = [];
+    await h.sync('link'); // the detector ran inline today (on the classifier's own full scan)
+    const runs: string[] = [];
+    const spy = jest.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
+      const m = String(a[0]);
+      if (m.includes(`detector ${h.ids.userId}:`)) runs.push(m);
+    });
     for (let n = 0; n < 10; n++) {
       h.postTxns([plaidTxn(h.ids, { key: `more${n}`, account: 'chk', amount: 9 + n, days_ago: 0, name: 'SHOP', merchant: 'Shop',
         primary: 'GENERAL_MERCHANDISE', detailed: 'GENERAL_MERCHANDISE_OTHER' })]);
-      const c = startCounting();
       await h.sync(`s${n}`);
-      creates.push(c.stop().writes_by._jobs ?? 0);
     }
-    for (let n = 0; n < 20; n++) await det.enqueue_detector_job(ctx(), h.ids.userId, NOW_MS + n * 30000); // a webhook burst
+    spy.mockRestore();
+    expect(runs).toEqual([]); // already ran today
+    // No fallback job exists any more (it forced a full classifier scan — X12 says 0 extra reads).
     const jobs = await db.collection('_jobs').where('payload.user_id', '==', h.ids.userId).where('job_type', '==', 'detect_possible_recurring').get();
-    expect(jobs.docs.map((d) => d.id)).toEqual([job_id]);
-    expect(jobs.docs[0].data().scheduled_for.toMillis()).toBeGreaterThan(NOW_MS); // delayed (coalescing)
-    // Throttled run: full cost.
+    expect(jobs.size).toBe(0);
+    for (const f of ['../src/functions/entry/triggers/on_job_created.trigger.ts', '../src/functions/entry/scheduled/process_job_queue.scheduled.ts']) {
+      expect(fs.readFileSync(path.join(__dirname, f), 'utf8')).not.toMatch(/detect_possible_recurring/);
+    }
+    expect(fs.existsSync(path.join(__dirname, '../src/functions/orchestrators/recurring/detect_possible_recurring.job.ts'))).toBe(false);
+    // Throttled inline run: full cost.
     const c = startCounting();
-    const r = await job.run_detect_possible_recurring_job(ctx(), { user_id: h.ids.userId });
+    const r = await det.run_detector_on_scan(ctx(), h.ids.userId, NOW_MS, { txns: [], internal_txn_ids: new Set(), records: [] });
     const k = c.stop();
-    expect(r).toEqual({ ran: false, reason: 'already_today' });
-    console.log('[R2] create attempts per sync:', JSON.stringify(creates), 'throttled job run:', JSON.stringify({ reads: k.reads, writes: k.writes, reads_by: k.reads_by }));
+    expect([r.ran, r.reason]).toEqual([false, 'already_today']);
+    console.log('[X12] throttled inline detector run:', JSON.stringify({ reads: k.reads, writes: k.writes, reads_by: k.reads_by }));
     expect(k.writes).toBe(0);
     expect(k.reads_by._recurring_review_state).toBe(1);
-    expect(k.reads).toBeLessThanOrEqual(2); // state + purge guard (flag is cached)
+    expect(k.reads).toBe(1); // flag cached
   }, 180000);
 
-  it('a DELAYED detector job is processed by the sweep (registered in both job maps)', async () => {
-    for (const f of ['../src/functions/entry/triggers/on_job_created.trigger.ts', '../src/functions/entry/scheduled/process_job_queue.scheduled.ts']) {
-      const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
-      expect(src).toMatch(/detect_possible_recurring: async \(ctx, payload\) => \{\s*await run_detect_possible_recurring_job\(ctx, payload/);
-    }
+  it('next UTC day: the detector rides the next full classifier scan again (no job needed)', async () => {
     const h = await makeHarness(db, 'qzsweep', mocks, { flag: true });
     await h.sync('link');
-    // Next day: a sync adds water bills; the detector job is created delayed.
     const tomorrow = NOW_MS + DAY;
     jest.setSystemTime(tomorrow);
-    h.postTxns(extras(h.ids).filter((t) => String(t.transaction_id).includes('water')));
-    await h.sync('next_day');
-    const job_id = det.detector_job_id(h.ids.userId, tomorrow);
-    expect((await db.collection('_jobs').doc(job_id).get()).data()?.status).toBe('pending');
-    // The sweep, 16 minutes later: pending + due → claimed → handler → completed.
-    jest.setSystemTime(tomorrow + 16 * 60 * 1000);
-    const pending = await jobq.get_pending_jobs(undefined, 300);
-    const mine = pending.find((j: { job_id: string }) => j.job_id === job_id);
-    expect(mine).toBeDefined();
-    const claimed = await jobq.claim_job(job_id);
-    expect(claimed?.status).toBe('processing');
-    const out = await job.run_detect_possible_recurring_job(ctx(), claimed.payload);
-    await jobq.mark_job_completed(job_id);
-    expect(out.ran).toBe(true);
-    expect((await db.collection('_jobs').doc(job_id).get()).data()?.status).toBe('completed');
-    expect((await items_of(h.ids.userId)).some((i) => i.name === 'City Water' && i.source === 'detector')).toBe(true);
-    jest.setSystemTime(NOW_MS);
+    try {
+      h.postTxns(extras(h.ids).filter((t) => String(t.transaction_id).includes('water')));
+      await h.sync('next_day');
+      // Whatever the sync did, the next full scan of the day runs the detector once.
+      await classify(ctx(), h.ids.userId, tomorrow, { force: true });
+      expect((await items_of(h.ids.userId)).some((i) => i.name === 'City Water' && i.source === 'detector')).toBe(true);
+      const state = (await db.collection('_recurring_review_state').doc(h.ids.userId).get()).data()!;
+      expect(state.detectorLastRunDay).toBe('2037-10-16');
+    } finally {
+      jest.setSystemTime(NOW_MS);
+    }
   }, 180000);
 
   it('R1: a 5,050-transaction user — one transaction read, bounded reads, cap logged', async () => {
@@ -174,11 +167,12 @@ describe('possible-bill detector (emulator)', () => {
     await db.collection('_recurring_review_state').doc(h.ids.userId).update({ detectorLastRunDay: '2037-10-14' });
     const warn = jest.spyOn(console, 'warn');
     const c = startCounting();
-    const r = await job.run_detect_possible_recurring_job(ctx(), { user_id: h.ids.userId });
+    const r = await classify(ctx(), h.ids.userId, NOW_MS, { force: true }); // a full scan; the detector rides it
     await new Promise((res) => setTimeout(res, 300));
     const k = c.stop();
-    expect(r.ran).toBe(true);
-    console.log('[R1] full detector run (forced classifier scan + detector):', JSON.stringify({ reads: k.reads, writes: k.writes, reads_by: k.reads_by, writes_by: k.writes_by }));
+    expect(r.skipped).toBe(false);
+    expect((await db.collection('_recurring_review_state').doc(h.ids.userId).get()).data()?.detectorLastRunDay).toBe('2037-10-15');
+    console.log('[R1] full classifier scan + inline detector:', JSON.stringify({ reads: k.reads, writes: k.writes, reads_by: k.reads_by, writes_by: k.writes_by }));
     expect(warn.mock.calls.some((a) => String(a[0]).includes('detector:') && String(a[0]).includes('cap'))).toBe(true);
     warn.mockRestore();
     const txn_reads = k.reads_by.transactions ?? 0;
@@ -187,11 +181,10 @@ describe('possible-bill detector (emulator)', () => {
     expect(k.reads - txn_reads).toBeLessThan(200); // everything else is small
   }, 240000);
 
-  it('R13: flag off → never enqueued; the detector reads nothing', async () => {
+  it('R13: flag off → the detector reads nothing', async () => {
     const h = await makeHarness(db, 'qzdoff', mocks, { flag: false });
     h.postTxns(extras(h.ids));
     await h.sync('link');
-    expect((await db.collection('_jobs').doc(det.detector_job_id(h.ids.userId, NOW_MS)).get()).exists).toBe(false);
     expect(await items_of(h.ids.userId)).toEqual([]);
     const c = startCounting();
     const r = await det.run_detector_on_scan(ctx(), h.ids.userId, NOW_MS, { txns: [], internal_txn_ids: new Set(), records: [] });
@@ -199,20 +192,18 @@ describe('possible-bill detector (emulator)', () => {
     expect([r.ran, r.reason, k.reads, k.writes]).toEqual([false, 'flag_off', 0, 0]);
   }, 180000);
 
-  it('purge with open items + state + a pending detector job → all gone; a late job re-creates nothing', async () => {
+  it('purge with open items + state → all gone; a late detector run re-creates nothing', async () => {
     const h = await makeHarness(db, 'qzpurge', mocks, { flag: true });
     h.postTxns(extras(h.ids));
     await h.sync('link');
     const uid = h.ids.userId;
-    await det.enqueue_detector_job(ctx(), uid, NOW_MS + DAY); // tomorrow's job, pending
     expect((await items_of(uid)).length).toBeGreaterThan(0);
     await purge(ctx(), { user_id: uid, initiated_by: uid, trace_id: 't_purge' });
     expect(await items_of(uid)).toEqual([]);
     expect((await db.collection('_recurring_review_state').doc(uid).get()).exists).toBe(false);
-    const j = (await db.collection('_jobs').doc(det.detector_job_id(uid, NOW_MS + DAY)).get()).data();
-    expect(j?.status).not.toBe('pending'); // cancelled by payload.user_id
-    const late = await job.run_detect_possible_recurring_job(ctx(), { user_id: uid });
-    expect(late).toEqual({ ran: false, reason: 'purging' });
+    // A classifier scan still in flight when the purge lands: the detector writes nothing.
+    const late = await det.run_detector_on_scan(ctx(), uid, NOW_MS + DAY, { txns: [], internal_txn_ids: new Set(), records: [] });
+    expect([late.ran, late.reason]).toEqual([false, 'purging']);
     expect(await items_of(uid)).toEqual([]);
     expect((await db.collection('_recurring_review_state').doc(uid).get()).exists).toBe(false);
   }, 180000);

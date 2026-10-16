@@ -8,7 +8,6 @@
  */
 
 import { sync_item_orchestrator, SyncItemInput } from "../../orchestrators/plaid/sync_item.orchestrator";
-import { run_detect_possible_recurring_job } from "../../orchestrators/recurring/detect_possible_recurring.job";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import {
@@ -279,12 +278,6 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   // transaction written once, one follow-up pass. See orchestrators/plaid/sync_item.
   sync_item: async (ctx, payload) => {
     await sync_item_orchestrator(ctx, payload as SyncItemInput);
-  },
-
-  // Convert-To-Recurring: the once-a-day possible-bill detector (`_jobs/detect:{uid}:{UTCday}`).
-  // Delayed jobs only run on the sweep, so it's registered in BOTH runners (X12).
-  detect_possible_recurring: async (ctx, payload) => {
-    await run_detect_possible_recurring_job(ctx, payload as { user_id?: string });
   },
 };
 

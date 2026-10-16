@@ -118,14 +118,14 @@ describe('legacy records are frozen with the flag on (emulator)', () => {
   it('flag-on twin equals flag-off twin on every path; no review items about old records', async () => {
     const a = await twin('qzfrza', true);
     const b = await twin('qzfrzb', false);
-    // The flag-on twin's ONLY extras are new-feature bookkeeping, not record changes: today's
-    // possible-bill detector job and its throttle (the state doc). Every record, period and
+    // The flag-on twin's ONLY extra is new-feature bookkeeping, not a record change: the
+    // detector's throttle (the state doc; no detector job exists — X12). Every record, period and
     // transaction — and the derived page — is identical.
     const { job_types: ja, review_state_exists: sa, ...ra } = a.dump;
     const { job_types: jb, review_state_exists: sb, ...rb } = b.dump;
     expect(ra).toEqual(rb);
     expect(a.derive).toEqual(b.derive);
-    expect([ja, sa, jb, sb]).toEqual([['detect_possible_recurring'], true, [], false]);
+    expect([ja, sa, jb, sb]).toEqual([[], true, [], false]);
     expect(a.dump.review_items).toBe(0);
     // Sanity: today's behavior really happened on both (the gym, saved inactive at link, isn't a
     // stale candidate; Spotify follows Plaid to inactive; rejected Avant is stale-marked; no v2

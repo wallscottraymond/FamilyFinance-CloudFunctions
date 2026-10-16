@@ -40,7 +40,6 @@ import {
 import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
 import { generate_outflow_periods_orchestrator } from "../outflows/generate_outflow_periods.orchestrator";
 import { generate_inflow_periods_orchestrator } from "../inflows/generate_inflow_periods.orchestrator";
-import { enqueue_detector_job } from "../recurring/detect_possible_recurring.orchestrator";
 
 export interface SyncItemInput {
   /** plaid_items document id. */
@@ -233,12 +232,6 @@ async function run_round(
   // 5. ONE follow-up pass for everything this round wrote.
   if (follow_ups.transactions_changed || follow_ups.recurring_changed) {
     await run_sync_follow_ups(ctx, input.user_id, follow_ups);
-  }
-
-  // 5b. New transactions → make sure today's possible-bill detector job exists (flag-on users;
-  //     one deterministic `.create()`, a no-op after the first of the day — X12 / R2 / R3).
-  if (tx.added_count > 0) {
-    await enqueue_detector_job(ctx, input.user_id, Date.now());
   }
 
   // 6. Plaid's first pull not ready yet → try again shortly (its webhook usually arrives first).
