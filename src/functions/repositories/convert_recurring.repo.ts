@@ -32,7 +32,9 @@ export type CreateConvertedResult =
     source_before: Record<string, unknown>;
     source_after: Record<string, unknown>;
   }
-  | { status: "already_tracked"; existing_id: string; existing_name: string };
+  | { status: "already_tracked"; existing_id: string; existing_name: string }
+  /** A simultaneous tap of the SAME transaction/split(s): its record exists (still being finished while the lease is live). */
+  | { status: "already_converted"; existing_id: string; in_progress: boolean };
 
 const live = (d: Record<string, unknown> | undefined): boolean =>
   !!d && d.isActive !== false && d.isHidden !== true && !d.mergedIntoId &&
@@ -79,6 +81,12 @@ export const convert_recurring_repo = {
         const other = await tx.get(db.collection(coll).doc(id));
         const d = other.exists ? (other.data() as Record<string, unknown>) : undefined;
         if (live(d)) {
+          const same_source = d?.convertedFromTxnId === args.source_txn_doc_id &&
+            ((d?.convertedFromSplitIds as string[] | undefined) ?? []).some((x) => args.source_split_ids.includes(x));
+          if (same_source) {
+            const lease = (d?.resumeLeaseMs as number | undefined) ?? 0;
+            return { status: "already_converted", existing_id: id, in_progress: lease > Date.now() && d?.retroLinkedAtMs === undefined };
+          }
           return {
             status: "already_tracked",
             existing_id: id,
@@ -105,7 +113,13 @@ export const convert_recurring_repo = {
       };
       /* eslint-enable @typescript-eslint/naming-convention */
       // The convert is in progress: a tap during it (or until the lease runs out) resumes nothing.
-      tx.create(built.ref, { ...built.data, resumeLeaseMs: Date.now() + RESUME_LEASE_MS });
+      const source_budgets = [...new Set(targets.flatMap((s) => [s.budgetId as string | undefined, ...(((s.budgetIds as string[] | undefined) ?? []))])
+        .filter((b): b is string => !!b && b !== "unassigned"))];
+      tx.create(built.ref, {
+        ...built.data,
+        resumeLeaseMs: Date.now() + RESUME_LEASE_MS,
+        ...(source_budgets.length ? { convertedSourceBudgetIds: source_budgets } : {}),
+      });
       tx.update(txn_ref, update);
       return {
         status: "created",

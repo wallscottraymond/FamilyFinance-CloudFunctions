@@ -1148,6 +1148,20 @@ export const outflow_repo = {
     return !snap.empty;
   },
 
+  /** The convert's periods + follow-up pass finished: a resume may skip them. Stamped (no trigger fan-out). */
+  async mark_follow_ups_done(_ctx: TraceContext, id: string, at_ms: number, run_id: string): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({ followUpsDoneAtMs: at_ms, syncRunId: run_id, lastWriteSource: "convert", updatedAt: Timestamp.now() });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /** Give the resume lease back (a convert that could not finish: the next tap resumes at once). */
+  async release_resume_lease(_ctx: TraceContext, id: string, run_id: string): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({ resumeLeaseMs: 0, syncRunId: run_id, lastWriteSource: "convert" });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
   /**
    * Stamp "the convert's retro-link finished" on a converted record. Stamped with the creator's run
    * id so the update trigger leaves the bump to the creator (no second bump, no reconcile).

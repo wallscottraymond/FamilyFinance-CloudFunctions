@@ -21,29 +21,34 @@ export async function generate_periods_inline(
   ctx: TraceContext,
   user_id: string,
   created: RecurringWrittenDoc[]
-): Promise<void> {
+): Promise<string[]> {
+  const failed: string[] = [];
   for (let i = 0; i < created.length; i += PERIOD_CONCURRENCY) {
     await Promise.all(
       created.slice(i, i + PERIOD_CONCURRENCY).map(async (s) => {
         const trace = create_child_span(ctx);
         try {
           if (is_outflow(s)) {
-            await generate_outflow_periods_orchestrator({
+            const r = await generate_outflow_periods_orchestrator({
               ...trace,
               input: { outflow_id: s.id, outflow_data: s.after, user_id },
               idempotency_key: `sync_periods:${s.id}`,
             });
+            if (!r.success) failed.push(s.id);
           } else {
-            await generate_inflow_periods_orchestrator({
+            const r = await generate_inflow_periods_orchestrator({
               ...trace,
               input: { inflow_id: s.id, inflow_data: s.after, user_id },
               idempotency_key: `sync_periods:${s.id}`,
             });
+            if (!r.success) failed.push(s.id);
           }
         } catch (error) {
+          failed.push(s.id);
           console.error(`[${ctx.trace_id}] period generation failed for ${s.id}:`, error);
         }
       })
     );
   }
+  return failed;
 }

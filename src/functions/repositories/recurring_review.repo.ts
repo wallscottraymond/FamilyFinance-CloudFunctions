@@ -245,6 +245,38 @@ export const recurring_review_repo = {
     return out;
   },
 
+  /**
+   * Undo a user's answer whose re-sync could not be queued — GUARDED, in one transaction: re-open
+   * the item only if it still equals what the answer wrote AND the review state still holds its
+   * pending track (a racing sync that already consumed the track, or a newer answer, wins), and
+   * never for a user being erased. Removes the pending track in the same write. Returns whether
+   * it rolled back, and whether the suppressed set changed (the caller bumps).
+   */
+  async rollback_answer(
+    _ctx: TraceContext,
+    user_id: string,
+    args: { answered: ReviewItem; original: ReviewItem }
+  ): Promise<{ rolled_back: boolean }> {
+    const db = getFirestore();
+    const ref = items().doc(args.answered.id);
+    return db.runTransaction(async (tx) => {
+      const [item_snap, state_snap, purge] = await tx.getAll(ref, state_ref(user_id), purge_ref(user_id));
+      if (purge.exists && PURGING_STATES.has(String(purge.data()?.state))) return { rolled_back: false };
+      if (!item_snap.exists) return { rolled_back: false };
+      const current = from_doc(item_snap.data() as ReviewItemDoc);
+      const same = current.status === args.answered.status && current.answer === args.answered.answer &&
+        current.updated_at_ms === args.answered.updated_at_ms && current.resolved_at_ms === args.answered.resolved_at_ms &&
+        current.content_hash === args.answered.content_hash && current.user_frequency === args.answered.user_frequency;
+      const state = state_snap.exists ? state_from_doc(user_id, state_snap.data() as ReviewStateDoc) : null;
+      const holds_track = !!state && (state.pending_tracks ?? []).some((p) => p.item_id === args.answered.id);
+      if (!same || !holds_track) return { rolled_back: false };
+      const r = apply_review_state_change(state, user_id, { remove_pending_track_ids: [args.answered.id] });
+      tx.set(ref, to_doc(args.original));
+      if (r.changed) tx.set(state_ref(user_id), state_to_doc(r.next));
+      return { rolled_back: true };
+    });
+  },
+
   /** The items at these (deterministic) ids — one batched read; missing ids are absent (X8). */
   async get_items_by_ids(_ctx: TraceContext, ids: string[]): Promise<Map<string, ReviewItem>> {
     const out = new Map<string, ReviewItem>();

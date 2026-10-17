@@ -179,14 +179,16 @@ export async function answer_recurring_review_item_orchestrator(
         // The new bill can't be made: the answer is undone — the item back to open and its pending
         // track removed (a later sync must not create a bill from it) — and a "same bill" merge
         // written above must not strand the old one.
+        let rolled_back = false;
         try {
-          await recurring_review_repo.upsert_items(ctx, [context.item]);
-          const undone = await recurring_review_repo.apply_state_change(ctx, user_id, { remove_pending_track_ids: [input.item_id] });
-          if (undone.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
+          const undone = await recurring_review_repo.rollback_answer(ctx, user_id, { answered: plan.item!, original: context.item });
+          rolled_back = undone.rolled_back;
+          if (undone.rolled_back) await bump_derive_version(user_id).catch(() => {});
         } catch (rollback_error) {
           console.error(`[${ctx.trace_id}] review answer rollback failed:`, rollback_error);
         }
-        if (plan.merge) {
+        // The merge is undone only with the answer: a racing sync that consumed the track owns it now.
+        if (plan.merge && rolled_back) {
           const repo = context.item.direction === "outflow" ? outflow_repo : inflow_repo;
           const old = await repo.get_by_id(ctx, plan.merge.old_record_id, { include_deleted: true });
           const log = old?.merge_log;

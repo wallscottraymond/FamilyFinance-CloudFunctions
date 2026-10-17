@@ -55,6 +55,10 @@ export interface ConvertDocFields {
   resumeLeaseMs?: number;
   /** When the convert's retro-link finished (ms). Absent = a convert that died: the next tap resumes it. */
   retroLinkedAtMs?: number;
+  /** The convert's periods + follow-up pass finished (ms). Absent = a resume must redo them. */
+  followUpsDoneAtMs?: number;
+  /** Budgets the source split(s) belonged to when converted (the resume recomputes them). */
+  convertedSourceBudgetIds?: string[];
   /** Set on a record that was merged into another (D7 / D22 / D41), so the merge can be undone. */
   mergeLog?: MergeLogDoc;
 }
@@ -89,6 +93,8 @@ export function carried_convert_fields(
     ...(existing?.convertedFromSplitIds !== undefined ? { convertedFromSplitIds: existing.convertedFromSplitIds } : (!existing && entity.converted_from_split_ids?.length ? { convertedFromSplitIds: entity.converted_from_split_ids } : {})),
     ...(existing?.resumeLeaseMs !== undefined ? { resumeLeaseMs: existing.resumeLeaseMs } : {}),
     ...(existing?.retroLinkedAtMs !== undefined ? { retroLinkedAtMs: existing.retroLinkedAtMs } : {}),
+    ...(existing?.followUpsDoneAtMs !== undefined ? { followUpsDoneAtMs: existing.followUpsDoneAtMs } : {}),
+    ...(existing?.convertedSourceBudgetIds !== undefined ? { convertedSourceBudgetIds: existing.convertedSourceBudgetIds } : {}),
     ...(existing?.mergeLog !== undefined ? { mergeLog: existing.mergeLog } : {}),
   };
 }

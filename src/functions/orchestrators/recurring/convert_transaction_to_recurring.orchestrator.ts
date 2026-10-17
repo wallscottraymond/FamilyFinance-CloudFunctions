@@ -43,7 +43,8 @@ import { is_own_review_item_id, plan_convert_review, suggested_item_id } from ".
 import { apply_review_state_change } from "../../domain/recurring/review_item.service";
 import { generate_periods_inline } from "./generate_periods_inline";
 import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
-import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
+import { empty_follow_ups, follow_ups_from_written, merge_follow_ups, run_sync_follow_ups } from "../plaid/sync_follow_ups";
+import type { SyncFollowUps } from "../plaid/sync_follow_ups";
 import { plan_merge_old_into_new } from "../../domain/recurring/merge.service";
 import { resolve_last_payment_ms } from "../../resolvers/recurring/last_payment.resolver";
 import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
@@ -119,6 +120,11 @@ export async function convert_transaction_to_recurring_orchestrator(
         }
         const resumed = await complete_convert(ctx, user_id, direction, r.existing_conversion.id, now_ms, null);
         follow_up_done = true;
+        if (resumed.in_progress) {
+          // Periods could not all be generated: no marker, the lease goes back for an immediate retry.
+          await repo.release_resume_lease(ctx, r.existing_conversion.id, `convert_release_${randomUUID()}`).catch(() => {});
+          return { ...resumed, already: true };
+        }
         const rec = (await repo.get_raw_by_ids(ctx, [r.existing_conversion.id])).get(r.existing_conversion.id);
         await finish_convert(ctx, user_id, direction, r.existing_conversion.id, (rec?.vendorKey as string | undefined) ?? r.facts.txn.vendor_key ?? "",
           (rec?.accountId as string | undefined) ?? r.facts.txn.account_id, r.old_bills, input.review_item_id, now_ms, `convert_resume_${randomUUID()}`);
@@ -163,6 +169,11 @@ export async function convert_transaction_to_recurring_orchestrator(
       direction: plan.direction, entity, user_id, run_id,
       source_txn_doc_id: input.transaction_id, source_split_ids: plan.source_split_ids,
     });
+    if (result.status === "already_converted") {
+      // A simultaneous tap of the same transaction made the record: this tap does nothing.
+      follow_up_done = true;
+      return { id: result.existing_id, direction: plan.direction, already: true, ...(result.in_progress ? { in_progress: true } : {}), linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
+    }
     if (result.status === "already_tracked") {
       throw new ConvertRefusedError("ALREADY_TRACKED", `This is already part of ${result.existing_name || "a bill"}`, {
         id: result.existing_id, name: result.existing_name,
@@ -171,11 +182,16 @@ export async function convert_transaction_to_recurring_orchestrator(
     created = { id, direction: plan.direction };
 
     // 4–6. Periods, the chosen past payments, the single follow-up pass, the marker.
-    await complete_convert(ctx, user_id, plan.direction, id, now_ms, {
+    const completed = await complete_convert(ctx, user_id, plan.direction, id, now_ms, {
       run_id, record: result.record, source: { doc_id: input.transaction_id, before: result.source_before, after: result.source_after },
       retro_doc_ids: plan.retro_doc_ids,
     });
     follow_up_done = true;
+    if (completed.in_progress) {
+      const repo = plan.direction === "outflow" ? outflow_repo : inflow_repo;
+      await repo.release_resume_lease(ctx, id, `convert_release_${randomUUID()}`).catch(() => {});
+      return completed;
+    }
 
     await finish_convert(ctx, user_id, plan.direction, id, plan.vendor_key, plan.entity.account_id, r.old_bills, input.review_item_id, now_ms, run_id);
 
@@ -218,15 +234,20 @@ async function complete_convert(
   const stored = fresh ? null : await repo.get_raw_by_ids(ctx, [id]).then((m) => m.get(id) ?? null);
   const record = fresh?.record ?? stored;
   if (!record) throw new NotFoundError(direction, id);
-  const retro_doc_ids = fresh
-    ? fresh.retro_doc_ids
+  const retro_docs = fresh
+    ? []
     : (await transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, (record.retroTxnIds as string[] | undefined) ?? []))
-      .filter((t) => t.isActive !== false).map((t) => t.id);
+      .filter((t) => t.isActive !== false);
+  const retro_doc_ids = fresh ? fresh.retro_doc_ids : retro_docs.map((t) => t.id);
+  // A resume of a convert whose periods + follow-ups already finished has nothing to redo there.
+  const done_before = !fresh && typeof record.followUpsDoneAtMs === "number";
 
-  // 4. Stored periods (the create trigger skips a stamped record).
-  const has_periods = fresh ? false : await repo.has_periods(ctx, id);
-  if (!has_periods) {
-    await generate_periods_inline(ctx, user_id, [{ id, kind: direction, created: true, before: null, after: record }]);
+  // 4. Stored periods (the create trigger skips a stamped record). Generation is idempotent
+  //    (deterministic ids), so a resume regenerates ALL of them: a partial set is filled in.
+  let periods_ok = true;
+  if (!done_before) {
+    const failed = await generate_periods_inline(ctx, user_id, [{ id, kind: direction, created: true, before: null, after: record }]);
+    periods_ok = failed.length === 0;
   }
 
   // 5. The chosen past payments: assigned IN MEMORY by the engine (D1 links them), written once,
@@ -244,25 +265,62 @@ async function complete_convert(
 
   // 6. ONE follow-up pass: reconcile the record, recompute only the touched budget periods, one
   //    derive bump. No transfer re-check (a loan vendor must not force a 180-day classifier scan).
-  const f = follow_ups_from_written(written);
-  // A resume that finds nothing left to do (periods exist, the engine wrote nothing) skips the
-  // reconcile, the recompute and the bump.
-  const nothing_to_do = !fresh && has_periods && written.length === 0;
-  if (!nothing_to_do) await run_sync_follow_ups(ctx, user_id, {
-    ...f,
-    outflow_ids: direction === "outflow" ? [...new Set([...f.outflow_ids, id])] : f.outflow_ids,
-    inflow_ids: direction === "inflow" ? [...new Set([...f.inflow_ids, id])] : f.inflow_ids,
-    transactions_changed: true,
-    recurring_changed: false,
-    transfers_changed: false,
-  }, { preload_budget_window: true });
+  //    A resume that finds everything finished and the engine writing nothing skips it.
+  if (!(done_before && written.length === 0)) {
+    let f = follow_ups_from_written(written);
+    if (!fresh) f = merge_follow_ups(f, await resume_budget_seed(ctx, record, retro_docs as unknown as Array<Record<string, unknown>>));
+    await run_sync_follow_ups(ctx, user_id, {
+      ...f,
+      outflow_ids: direction === "outflow" ? [...new Set([...f.outflow_ids, id])] : f.outflow_ids,
+      inflow_ids: direction === "inflow" ? [...new Set([...f.inflow_ids, id])] : f.inflow_ids,
+      transactions_changed: true,
+      recurring_changed: false,
+      transfers_changed: false,
+    }, { preload_budget_window: true });
+    // Stamped only once the pass succeeded AND every period was generated.
+    if (periods_ok) await repo.mark_follow_ups_done(ctx, id, now_ms, `convert_fu_${randomUUID()}`);
+  }
 
   return {
     id, direction, already: false, linked_past_count: retro_doc_ids.length,
+    ...(periods_ok ? {} : { in_progress: true }),
     first_date_ms: (record.firstDate as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null,
     next_due_ms: (record.predictedNextDate as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null,
     next_due_clamped: false,
   };
+}
+
+/**
+ * What a RESUMED convert must recompute, from the stored record: the source split's budget(s) — it
+ * left them when it was linked — and the budgets the listed past payments sit in, on the dates of
+ * the source and those payments. (The first run's before/after is gone; the budgets the split was
+ * in were stored with the record.)
+ */
+async function resume_budget_seed(
+  ctx: TraceContext,
+  record: Record<string, unknown>,
+  retro_docs: Array<Record<string, unknown>>
+): Promise<SyncFollowUps> {
+  const date_of = (d: Record<string, unknown>): number | null => {
+    const t = d.transactionDate as { toMillis?: () => number } | undefined;
+    return t?.toMillis?.() ?? null;
+  };
+  const budgets_of = (d: Record<string, unknown>): string[] => {
+    const denorm = d.splitBudgetIds as string[] | undefined;
+    const from_splits = ((d.splits as Array<Record<string, unknown>> | undefined) ?? []).map((x) => x.budgetId as string | undefined);
+    return [...(denorm ?? []), ...from_splits].filter((b): b is string => !!b && b !== "unassigned");
+  };
+  const docs: Array<Record<string, unknown>> = [...retro_docs];
+  const source_id = record.convertedFromTxnId as string | undefined;
+  if (source_id) docs.push(...(await transaction_repo.get_raw_by_ids(ctx, [source_id])).map((x) => x.data));
+  const dates = [...new Set(docs.map(date_of).filter((x): x is number => x !== null))];
+  const budgets = new Set<string>([
+    ...((record.convertedSourceBudgetIds as string[] | undefined) ?? []),
+    ...docs.flatMap(budgets_of),
+  ]);
+  const out = empty_follow_ups();
+  for (const b of budgets) out.budget_dates[b] = dates;
+  return out;
 }
 
 /**
