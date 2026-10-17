@@ -118,6 +118,16 @@ export interface InflowForPersistence {
   plaid_is_active?: boolean;
   /** A schedule the user picked when tracking a suggestion (D8). */
   user_frequency?: AppFrequency;
+  // Convert-To-Recurring Phase 2 — set only by `build_converted_recurring` (convert / Add Bill /
+  // Add Income); the Plaid mapping never sets them. Written only when present.
+  /** The stored vendor key payments are matched by (D1) — with the account, the D1 key. */
+  vendor_key?: string;
+  /** The transaction the user converted this record from. */
+  converted_from_txn_id?: string;
+  /** UTC day the record was created by the new path (D1 links payments from this day on). */
+  converted_at_ms?: number;
+  /** The expected amount, written at creation (a Plaid average never drifts it). */
+  expected_amount_override?: number | null;
 }
 
 /**
@@ -189,6 +199,16 @@ export interface OutflowForPersistence {
   plaid_is_active?: boolean;
   /** A schedule the user picked when tracking a suggestion (D8). */
   user_frequency?: AppFrequency;
+  // Convert-To-Recurring Phase 2 — set only by `build_converted_recurring` (convert / Add Bill /
+  // Add Income); the Plaid mapping never sets them. Written only when present.
+  /** The stored vendor key payments are matched by (D1) — with the account, the D1 key. */
+  vendor_key?: string;
+  /** The transaction the user converted this record from. */
+  converted_from_txn_id?: string;
+  /** UTC day the record was created by the new path (D1 links payments from this day on). */
+  converted_at_ms?: number;
+  /** The expected amount, written at creation (a Plaid average never drifts it). */
+  expected_amount_override?: number | null;
 }
 
 // ============================================================================

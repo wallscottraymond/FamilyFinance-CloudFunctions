@@ -38,8 +38,7 @@ import {
   SyncFollowUps,
 } from "./sync_follow_ups";
 import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
-import { generate_outflow_periods_orchestrator } from "../outflows/generate_outflow_periods.orchestrator";
-import { generate_inflow_periods_orchestrator } from "../inflows/generate_inflow_periods.orchestrator";
+import { generate_periods_inline } from "../recurring/generate_periods_inline";
 
 export interface SyncItemInput {
   /** plaid_items document id. */
@@ -66,7 +65,6 @@ export interface SyncItemResult {
 const NOT_READY_RETRY_SECONDS = 60;
 const MAX_NOT_READY_ATTEMPTS = 10;
 const MAX_ROUNDS = 3;
-const PERIOD_CONCURRENCY = 4;
 
 /** Enqueue a sync for an item — every entry point uses this (webhook, link, cron, retry). */
 export async function enqueue_item_sync(input: {
@@ -272,38 +270,6 @@ async function run_round(
 }
 
 const is_outflow = (s: RecurringWrittenDoc): boolean => s.kind === "outflow";
-
-/** Generate periods for streams the sync just created (their create trigger skips them). */
-async function generate_periods_inline(
-  ctx: TraceContext,
-  user_id: string,
-  created: RecurringWrittenDoc[]
-): Promise<void> {
-  for (let i = 0; i < created.length; i += PERIOD_CONCURRENCY) {
-    await Promise.all(
-      created.slice(i, i + PERIOD_CONCURRENCY).map(async (s) => {
-        const trace = create_child_span(ctx);
-        try {
-          if (is_outflow(s)) {
-            await generate_outflow_periods_orchestrator({
-              ...trace,
-              input: { outflow_id: s.id, outflow_data: s.after, user_id },
-              idempotency_key: `sync_periods:${s.id}`,
-            });
-          } else {
-            await generate_inflow_periods_orchestrator({
-              ...trace,
-              input: { inflow_id: s.id, inflow_data: s.after, user_id },
-              idempotency_key: `sync_periods:${s.id}`,
-            });
-          }
-        } catch (error) {
-          console.error(`[${ctx.trace_id}] period generation failed for ${s.id}:`, error);
-        }
-      })
-    );
-  }
-}
 
 /**
  * Transactions a NEW or changed stream claims that may have been written before it existed (an

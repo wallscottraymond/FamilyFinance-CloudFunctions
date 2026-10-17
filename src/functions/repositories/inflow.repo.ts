@@ -29,6 +29,12 @@ import {
   stored_occurrence_due_ms,
 } from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
+import {
+  ConvertDocFields,
+  ConvertEntityView,
+  carried_convert_fields,
+  map_convert_fields_to_entity,
+} from "./convert_doc_fields";
 import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
 import {
   ManualSettledOccurrences,
@@ -130,6 +136,17 @@ export interface Inflow {
   /** Set when this record was merged into another (Phase 2) — hidden from Removed / no Restore. */
   merged_into_id: string | null;
 
+  // Convert-To-Recurring Phase 2 (all server-only; absent on every record that predates it).
+  /** Vendor key (D1), the converting transaction, the day it was created by the new path. */
+  vendor_key?: string | null;
+  converted_from_txn_id?: string | null;
+  converted_at_ms?: number | null;
+  /** Plaid streams absorbed into this record (D42) and the Plaid payment ids it claims. */
+  absorbed_streams?: ConvertEntityView["absorbed_streams"];
+  absorbed_txn_ids?: string[];
+  /** Set on a record merged into another (D7 / D22 / D41): what undo needs. */
+  merge_log?: ConvertEntityView["merge_log"];
+
   // Sync tracking
   last_synced_at?: Timestamp;
 }
@@ -148,7 +165,7 @@ interface RemovalIntervalDoc {
  * Used for reading/writing to maintain backwards compatibility.
  */
 /* eslint-disable @typescript-eslint/naming-convention */
-interface LegacyInflowDoc {
+interface LegacyInflowDoc extends ConvertDocFields {
   id: string;
   ownerId: string;
   createdBy: string;
@@ -300,6 +317,7 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
     plaid_is_active: doc.plaidIsActive ?? null,
     plaid_inactive_ack_at_ms: doc.plaidInactiveAckAt?.toMillis?.() ?? null,
     merged_into_id: doc.mergedIntoId ?? null,
+    ...map_convert_fields_to_entity(doc),
 
     last_synced_at: doc.lastSyncedAt,
   };
@@ -332,7 +350,7 @@ function map_persistence_to_doc(
     averageAmount: entity.average_amount,
     // Preserve the user's expected-amount override across Plaid re-sync (Plaid
     // refreshes averageAmount, but the override keeps driving the expected value).
-    expectedAmountOverride: existing?.expectedAmountOverride ?? null,
+    expectedAmountOverride: existing?.expectedAmountOverride ?? entity.expected_amount_override ?? null,
     // Sticky across Plaid re-sync — Plaid never sets per-occurrence overrides.
     occurrenceAmountOverrides: existing?.occurrenceAmountOverrides ?? {},
     currency: entity.currency,
@@ -398,6 +416,8 @@ function map_persistence_to_doc(
       : entity.user_frequency
         ? { userFrequency: entity.user_frequency }
         : {}),
+    // Convert-To-Recurring Phase 2: carried through this full-document set (conditional keys only).
+    ...carried_convert_fields(existing, entity),
 
     lastSyncedAt: now,
   };
@@ -997,6 +1017,26 @@ export const inflow_repo = {
       success: true,
       written,
     };
+  },
+
+  /**
+   * A brand-new inflow document (and its ref), built by the SAME mapper `save_batch` uses, for a
+   * caller that creates it inside its own Firestore transaction (Convert-To-Recurring: the record
+   * and the converted split's pin land together). Stamped with the creator's run id so the
+   * create / update triggers skip it — the creator generates the periods and runs the single
+   * follow-up itself.
+   */
+  build_new_doc(
+    entity: InflowForPersistence,
+    run_id: string
+  ): { ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> } {
+    const doc = map_persistence_to_doc(entity, Timestamp.now(), null);
+    /* eslint-disable @typescript-eslint/naming-convention */
+    return {
+      ref: doc_ref(entity.id),
+      data: { ...doc, syncRunId: run_id, lastWriteSource: "convert" } as unknown as Record<string, unknown>,
+    };
+    /* eslint-enable @typescript-eslint/naming-convention */
   },
 
   /**

@@ -1,0 +1,433 @@
+{
+ "docs": {
+  "ID0": {
+   "accountId": "",
+   "averageAmount": 1200,
+   "createdBy": "TAG_u",
+   "currency": "USD",
+   "description": "Rent",
+   "expectedAmountOverride": null,
+   "expenseType": "housing",
+   "firstDate": {
+    "__ts": 2139609600000
+   },
+   "frequency": "monthly",
+   "groupId": null,
+   "groupIds": [],
+   "id": "ID0",
+   "internalDetailedCategory": null,
+   "internalPrimaryCategory": null,
+   "isActive": true,
+   "isEssential": true,
+   "isHidden": false,
+   "isUserModified": true,
+   "lastAmount": 1200,
+   "lastDate": {
+    "__ts": 2139609600000
+   },
+   "merchantName": "Rent",
+   "ownerId": "TAG_u",
+   "plaidConfidenceLevel": null,
+   "plaidDetailedCategory": "GENERAL_SERVICES_OTHER_GENERAL_SERVICES",
+   "plaidItemId": "",
+   "plaidPrimaryCategory": "GENERAL_SERVICES",
+   "plaidStatus": "MANUAL",
+   "predictedNextDate": {
+    "__ts": 2139609600000
+   },
+   "removalIntervals": [],
+   "removedByUser": false,
+   "rules": [],
+   "source": "manual",
+   "tags": [],
+   "transactionIds": [],
+   "type": "recurring",
+   "updatedBy": "TAG_u",
+   "userCustomName": "Rent"
+  },
+  "ID1": {
+   "accountId": "",
+   "averageAmount": 40,
+   "createdBy": "TAG_u",
+   "currency": "USD",
+   "description": "Dog sitter",
+   "expectedAmountOverride": null,
+   "expenseType": "other",
+   "firstDate": {
+    "__ts": 2139177600000
+   },
+   "frequency": "weekly",
+   "groupId": null,
+   "groupIds": [],
+   "id": "ID1",
+   "internalDetailedCategory": null,
+   "internalPrimaryCategory": null,
+   "isActive": true,
+   "isEssential": false,
+   "isHidden": false,
+   "isUserModified": true,
+   "lastAmount": 40,
+   "lastDate": {
+    "__ts": 2139177600000
+   },
+   "merchantName": "Rover",
+   "ownerId": "TAG_u",
+   "plaidConfidenceLevel": null,
+   "plaidDetailedCategory": "GENERAL_SERVICES_OTHER_GENERAL_SERVICES",
+   "plaidItemId": "",
+   "plaidPrimaryCategory": "GENERAL_SERVICES",
+   "plaidStatus": "MANUAL",
+   "predictedNextDate": {
+    "__ts": 2139177600000
+   },
+   "removalIntervals": [],
+   "removedByUser": false,
+   "rules": [],
+   "source": "manual",
+   "tags": [],
+   "transactionIds": [],
+   "type": "recurring",
+   "updatedBy": "TAG_u",
+   "userCustomName": "Dog sitter"
+  },
+  "ID2": {
+   "accountId": "",
+   "averageAmount": 25,
+   "createdBy": "TAG_u",
+   "currency": "USD",
+   "description": "Gym",
+   "expectedAmountOverride": null,
+   "expenseType": "other",
+   "firstDate": {
+    "__ts": 2139177600000
+   },
+   "frequency": "biweekly",
+   "groupId": null,
+   "groupIds": [],
+   "id": "ID2",
+   "internalDetailedCategory": null,
+   "internalPrimaryCategory": null,
+   "isActive": true,
+   "isEssential": false,
+   "isHidden": false,
+   "isUserModified": true,
+   "lastAmount": 25,
+   "lastDate": {
+    "__ts": 2139177600000
+   },
+   "merchantName": "Gym",
+   "ownerId": "TAG_u",
+   "plaidConfidenceLevel": null,
+   "plaidDetailedCategory": "GENERAL_SERVICES_OTHER_GENERAL_SERVICES",
+   "plaidItemId": "",
+   "plaidPrimaryCategory": "GENERAL_SERVICES",
+   "plaidStatus": "MANUAL",
+   "predictedNextDate": {
+    "__ts": 2139177600000
+   },
+   "removalIntervals": [],
+   "removedByUser": false,
+   "rules": [],
+   "source": "manual",
+   "tags": [],
+   "transactionIds": [],
+   "type": "recurring",
+   "updatedBy": "TAG_u",
+   "userCustomName": "Gym"
+  },
+  "ID3": {
+   "accountId": "TAG_chk",
+   "averageAmount": 2000,
+   "bonusConfig": null,
+   "commissionConfig": null,
+   "createdBy": "TAG_u",
+   "currency": "USD",
+   "description": "Day job",
+   "firstDate": {
+    "__ts": 2139609600000
+   },
+   "frequency": "MONTHLY",
+   "groupId": null,
+   "groupIds": [],
+   "hourlyConfig": null,
+   "id": "ID3",
+   "incomeType": "salary",
+   "incomeVariability": "fixed",
+   "internalDetailedCategory": null,
+   "internalPrimaryCategory": null,
+   "isActive": true,
+   "isHidden": false,
+   "isPrivate": true,
+   "isRegularSalary": true,
+   "isUserClassified": true,
+   "isUserModified": false,
+   "lastAmount": 2000,
+   "lastDate": {
+    "__ts": 2139609600000
+   },
+   "merchantName": "Day job",
+   "ownerId": "TAG_u",
+   "plaidCategoryId": null,
+   "plaidConfidenceLevel": null,
+   "plaidDetailedCategory": "INCOME_OTHER",
+   "plaidItemId": "",
+   "plaidPrimaryCategory": "INCOME",
+   "plaidStatus": "MANUAL",
+   "predictedNextDate": {
+    "__ts": 2139609600000
+   },
+   "rules": [],
+   "source": "manual",
+   "tags": [],
+   "transactionIds": [],
+   "unofficialCurrency": null,
+   "updatedBy": "TAG_u",
+   "userCustomName": "Day job",
+   "variableConfig": null
+  },
+  "ID4": {
+   "accountId": "",
+   "averageAmount": 300,
+   "bonusConfig": null,
+   "commissionConfig": null,
+   "createdBy": "TAG_u",
+   "currency": "USD",
+   "description": "Tutoring",
+   "firstDate": {
+    "__ts": 2139264000000
+   },
+   "frequency": "WEEKLY",
+   "groupId": null,
+   "groupIds": [],
+   "hourlyConfig": {
+    "hours": 10,
+    "rate": 30
+   },
+   "id": "ID4",
+   "incomeType": "hourly",
+   "incomeVariability": "high",
+   "internalDetailedCategory": null,
+   "internalPrimaryCategory": null,
+   "isActive": true,
+   "isHidden": false,
+   "isPrivate": true,
+   "isRegularSalary": false,
+   "isUserClassified": true,
+   "isUserModified": false,
+   "lastAmount": 300,
+   "lastDate": {
+    "__ts": 2139264000000
+   },
+   "merchantName": "Tutoring",
+   "ownerId": "TAG_u",
+   "plaidCategoryId": null,
+   "plaidConfidenceLevel": null,
+   "plaidDetailedCategory": "INCOME_OTHER",
+   "plaidItemId": "",
+   "plaidPrimaryCategory": "INCOME",
+   "plaidStatus": "MANUAL",
+   "predictedNextDate": {
+    "__ts": 2139264000000
+   },
+   "rules": [],
+   "source": "manual",
+   "tags": [],
+   "transactionIds": [],
+   "unofficialCurrency": null,
+   "updatedBy": "TAG_u",
+   "userCustomName": "Tutoring",
+   "variableConfig": null
+  }
+ },
+ "rows": {
+  "bills": [
+   {
+    "groups": [
+     {
+      "count_in_period": 3,
+      "count_paid": 0,
+      "count_unpaid": 3,
+      "first_due_ms": 2139177600000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2139177600000,
+      "occurrence_ids": [
+       "ID1_2139177600000",
+       "ID1_2139782400000",
+       "ID1_2140387200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 40,
+        "due_ms": 2139177600000,
+        "paid": false
+       },
+       {
+        "amount": 40,
+        "due_ms": 2139782400000,
+        "paid": false
+       },
+       {
+        "amount": 40,
+        "due_ms": 2140387200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 120,
+      "total_paid": 0,
+      "total_unpaid": 120
+     }
+    ],
+    "name": "Dog sitter",
+    "recurring_id": "ID1"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 2,
+      "count_paid": 0,
+      "count_unpaid": 2,
+      "first_due_ms": 2139177600000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2139177600000,
+      "occurrence_ids": [
+       "ID2_2139177600000",
+       "ID2_2140387200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 25,
+        "due_ms": 2139177600000,
+        "paid": false
+       },
+       {
+        "amount": 25,
+        "due_ms": 2140387200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 50,
+      "total_paid": 0,
+      "total_unpaid": 50
+     }
+    ],
+    "name": "Gym",
+    "recurring_id": "ID2"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2139609600000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2139609600000,
+      "occurrence_ids": [
+       "ID0_2139609600000"
+      ],
+      "occurrences": [
+       {
+        "amount": 1200,
+        "due_ms": 2139609600000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 1200,
+      "total_paid": 0,
+      "total_unpaid": 1200
+     }
+    ],
+    "name": "Rent",
+    "recurring_id": "ID0"
+   }
+  ],
+  "income": [
+   {
+    "groups": [
+     {
+      "count_in_period": 3,
+      "count_paid": 0,
+      "count_unpaid": 3,
+      "first_due_ms": 2139264000000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2139264000000,
+      "occurrence_ids": [
+       "ID4_2139264000000",
+       "ID4_2139868800000",
+       "ID4_2140473600000"
+      ],
+      "occurrences": [
+       {
+        "amount": 300,
+        "due_ms": 2139264000000,
+        "paid": false
+       },
+       {
+        "amount": 300,
+        "due_ms": 2139868800000,
+        "paid": false
+       },
+       {
+        "amount": 300,
+        "due_ms": 2140473600000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 900,
+      "total_paid": 0,
+      "total_unpaid": 900
+     }
+    ],
+    "name": "Tutoring",
+    "recurring_id": "ID4"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2139609600000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2139609600000,
+      "occurrence_ids": [
+       "ID3_2139609600000"
+      ],
+      "occurrences": [
+       {
+        "amount": 2000,
+        "due_ms": 2139609600000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 2000,
+      "total_paid": 0,
+      "total_unpaid": 2000
+     }
+    ],
+    "name": "Day job",
+    "recurring_id": "ID3"
+   }
+  ]
+ }
+}
