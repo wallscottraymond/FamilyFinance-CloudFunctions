@@ -38,7 +38,14 @@ import { feature_flag_repo } from "../../repositories/feature_flag.repo";
 import { load_review_state_if_relevant } from "../recurring/review_holdout.resolver";
 import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
 import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
-import { bill_release_schedule, is_payment_released } from "../../domain/recurring/late_payment.service";
+import {
+  BillPaymentForRelease,
+  bill_release_schedule,
+  is_late_payment_candidate,
+  is_payment_released,
+} from "../../domain/recurring/late_payment.service";
+import { is_edge_money, splits_paying_recurring } from "../../domain/recurring/stream_membership";
+import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
 import type { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import {
   BudgetForMatch,
@@ -112,6 +119,11 @@ export interface SharedAssignmentContext {
   /** D31: a removed BILL's schedule — its late payment of the last occurrence before the cut-off
    *  is not released (`is_payment_released`). Only bills that have removal intervals. */
   release_schedule_by_id?: Map<string, RecurringScheduleForGeneration>;
+  /** D37: a removed BILL's stored payments (its split-linked + Plaid-stream transactions, as
+   *  stored reconcile reads them), loaded at most once per batch and only for a transaction that
+   *  may be its late payment — the release rule keeps a late payment only while the occurrence it
+   *  pays is still unpaid. */
+  load_bill_payments_for_release?: (recurring_id: string) => Promise<BillPaymentForRelease[]>;
   /**
    * Plaid transaction ids held out of FUZZY bill / income matching (Convert-To-Recurring X3): the
    * payments of streams Plaid is unsure of (suggested, not saved) or the user said aren't a bill.
@@ -190,6 +202,15 @@ export async function resolve_shared_assignment_context(
   for (const o of outflows) {
     if (o.removal_intervals?.length) release_schedule_by_id.set(o.id, bill_release_schedule(o));
   }
+  const bill_payments_memo = new Map<string, Promise<BillPaymentForRelease[]>>();
+  const load_bill_payments_for_release = (recurring_id: string): Promise<BillPaymentForRelease[]> => {
+    const hit = bill_payments_memo.get(recurring_id);
+    if (hit) return hit;
+    const o = outflows.find((x) => x.id === recurring_id);
+    const p = load_bill_payments(ctx, user_id, recurring_id, o?.transaction_ids ?? []);
+    bill_payments_memo.set(recurring_id, p);
+    return p;
+  };
   const v2_account_by_recurring_id = new Map<string, string>();
   for (const r of [...outflows, ...inflows]) {
     if (is_v2_record(r) && r.account_id) v2_account_by_recurring_id.set(r.id, r.account_id);
@@ -207,9 +228,43 @@ export async function resolve_shared_assignment_context(
     active_outflow_ids,
     removal_intervals_by_id,
     release_schedule_by_id,
+    load_bill_payments_for_release,
     fuzzy_excluded_plaid_ids: new Set(review_state?.suppressed_txn_ids ?? []),
     v2_account_by_recurring_id,
   };
+}
+
+/**
+ * D37: a bill's stored payments — the transactions linked to it by split (`splitOutflowIds`) plus
+ * its Plaid stream's, each the net of the splits paying it (stored reconcile's sources and rule).
+ */
+async function load_bill_payments(
+  ctx: TraceContext,
+  user_id: string,
+  recurring_id: string,
+  stream_plaid_ids: string[]
+): Promise<BillPaymentForRelease[]> {
+  const [link_txns, stream_txns] = await Promise.all([
+    transaction_repo.get_by_split_recurring_link(ctx, user_id, "outflow", recurring_id),
+    transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, stream_plaid_ids),
+  ]);
+  const stream_ids = new Set(stream_txns.map((t) => t.id));
+  const seen = new Set<string>();
+  const out: BillPaymentForRelease[] = [];
+  for (const t of [...link_txns, ...stream_txns]) {
+    if (!t.id || seen.has(t.id) || t.isActive === false) continue;
+    seen.add(t.id);
+    const paying = is_edge_money((t as { transferRole?: unknown }).transferRole)
+      ? []
+      : splits_paying_recurring(t.splits ?? [], "outflow", recurring_id, stream_ids.has(t.id));
+    if (paying.length === 0) continue;
+    out.push({
+      id: t.id,
+      date_ms: (t.transactionDate as Timestamp | undefined)?.toMillis?.() ?? 0,
+      amount: compute_countable_split_net(paying as Parameters<typeof compute_countable_split_net>[0], t.id).amount,
+    });
+  }
+  return out;
 }
 
 /**
@@ -361,13 +416,23 @@ export async function resolve_assignment_context(
   // money counts as ordinary spending / money in (the period page applies the same rule).
   const of_view = (recurring_id: string): boolean =>
     (resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id;
-  // D31: a bill's late payment of its last occurrence before the cut-off is not released.
-  const released = (recurring_id: string): boolean =>
-    is_payment_released(
+  // D31 / D37: a bill's late payment of its last occurrence before the cut-off is not released
+  // while that occurrence is still unpaid — judged by the bill's stored payments, loaded only for
+  // a transaction that may be such a late payment.
+  const release_payments = new Map<string, BillPaymentForRelease[]>();
+  for (const [rid, schedule] of resolved_shared.release_schedule_by_id ?? []) {
+    const intervals = resolved_shared.removal_intervals_by_id?.get(rid);
+    if (!is_late_payment_candidate(intervals, txn_date_ms, schedule)) continue;
+    release_payments.set(rid, (await resolved_shared.load_bill_payments_for_release?.(rid)) ?? []);
+  }
+  const released = (recurring_id: string): boolean => {
+    const schedule = resolved_shared.release_schedule_by_id?.get(recurring_id);
+    return is_payment_released(
       resolved_shared.removal_intervals_by_id?.get(recurring_id),
-      txn_date_ms,
-      resolved_shared.release_schedule_by_id?.get(recurring_id)
+      { id: txn.id, date_ms: txn_date_ms },
+      schedule ? { schedule, payments: release_payments.get(recurring_id) ?? [] } : null
     );
+  };
   const in_view = (recurring_id: string | null): boolean =>
     !recurring_id || (of_view(recurring_id) && !released(recurring_id));
 

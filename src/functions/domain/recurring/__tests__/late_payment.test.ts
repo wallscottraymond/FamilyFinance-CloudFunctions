@@ -28,12 +28,44 @@ describe("late_paid_due_ms", () => {
 });
 
 describe("is_payment_released", () => {
-  it("monthly due the 29th: Oct 2 kept (late), Oct 9 released; income (no schedule) always released", () => {
+  const P = (id: string, day: string, amount = 10) => ({ id, date_ms: D(day), amount });
+  const bill = (s: ReturnType<typeof sched>, payments: ReturnType<typeof P>[]) => ({ schedule: s, payments });
+  it("monthly due the 29th: Oct 2 kept (late), Oct 9 released; income (no bill) always released", () => {
     const s = sched("monthly", "2026-11-29");
-    expect(is_payment_released(iv, D("2026-10-02"), s)).toBe(false);
-    expect(is_payment_released(iv, D("2026-10-09"), s)).toBe(true);
-    expect(is_payment_released(iv, D("2026-10-02"))).toBe(true);
-    expect(is_payment_released(iv, D("2026-09-20"), s)).toBe(false); // not a suppressed month at all
+    expect(is_payment_released(iv, P("oct2", "2026-10-02"), bill(s, []))).toBe(false);
+    expect(is_payment_released(iv, P("oct9", "2026-10-09"), bill(s, []))).toBe(true);
+    expect(is_payment_released(iv, P("oct2", "2026-10-02"))).toBe(true);
+    expect(is_payment_released(iv, P("sep20", "2026-09-20"), bill(s, []))).toBe(false); // not a suppressed month at all
+  });
+
+  it("D37: only while the occurrence is still unpaid — an extra charge or a second late payment is released", () => {
+    const s = sched("monthly", "2026-11-29");
+    // Paid on time Sep 29, then an extra charge Oct 2 → released (normal spending, as before D31).
+    const on_time = [P("sep29", "2026-09-29"), P("oct2", "2026-10-02")];
+    expect(is_payment_released(iv, P("oct2", "2026-10-02"), bill(s, on_time))).toBe(true);
+    // Paid early Sep 25 (within 7 days) → Sep 29 is paid; Oct 2 released.
+    expect(is_payment_released(iv, P("oct2", "2026-10-02"), bill(s, [P("sep25", "2026-09-25"), P("oct2", "2026-10-02")]))).toBe(true);
+    // Two late payments: the first pays it, the second is spending.
+    const two_late = [P("oct1", "2026-10-01"), P("oct3", "2026-10-03")];
+    expect(is_payment_released(iv, P("oct1", "2026-10-01"), bill(s, two_late))).toBe(false);
+    expect(is_payment_released(iv, P("oct3", "2026-10-03"), bill(s, two_late))).toBe(true);
+    // Same day: the lower transaction id pays it.
+    const same_day = [P("b", "2026-10-02"), P("a", "2026-10-02")];
+    expect(is_payment_released(iv, P("a", "2026-10-02"), bill(s, same_day))).toBe(false);
+    expect(is_payment_released(iv, P("b", "2026-10-02"), bill(s, same_day))).toBe(true);
+    // A payment at or below a cent isn't one; an older payment (Aug 29, the previous occurrence) isn't either.
+    expect(is_payment_released(iv, P("oct2", "2026-10-02"), bill(s, [P("tiny", "2026-09-29", 0.004), P("aug29", "2026-08-29")]))).toBe(false);
+    // A released charge (Oct 9: > 7 days) doesn't take the occurrence from a later late payment's rule.
+    expect(is_payment_released(iv, P("oct2", "2026-10-02"), bill(s, [P("oct2", "2026-10-02")]))).toBe(false);
+  });
+
+  it("D37 weekly: a kept-month payment that the matcher gives an EARLIER occurrence doesn't pay the last one", () => {
+    // Weekly on Wednesdays: Sep 16, 23, 30 (kept); Oct 7 removed. Sep 22 pays Sep 23, Sep 29 pays Sep 30 → Oct 2 released.
+    const s = sched("weekly", "2026-10-14");
+    const paid = [P("s22", "2026-09-22"), P("s29", "2026-09-29"), P("o2", "2026-10-02")];
+    expect(is_payment_released(iv, P("o2", "2026-10-02"), bill(s, paid))).toBe(true);
+    // Sep 23 paid on Sep 22, Sep 30 unpaid → Oct 2 pays Sep 30.
+    expect(is_payment_released(iv, P("o2", "2026-10-02"), bill(s, [P("s22", "2026-09-22"), P("o2", "2026-10-02")]))).toBe(false);
   });
 
   it("the ±7-day window generates the same occurrences as a wide window (every frequency)", () => {

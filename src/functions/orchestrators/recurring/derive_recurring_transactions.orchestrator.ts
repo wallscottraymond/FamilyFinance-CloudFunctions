@@ -84,20 +84,8 @@ export async function derive_recurring_transactions_orchestrator(
   const txns = Array.from(by_doc_id.values());
 
   // 3. Map + flag in-period.
-  const rows: DerivedRecurringTransaction[] = txns
+  const paying_rows = txns
     .filter((data) => (data as { isActive?: boolean }).isActive !== false)
-    // A payment in a month this bill / income is removed / paused for pays nothing (X9 — as the
-    // period page, the engine and reconcile).
-    // D31: except a bill's LATE payment of its last occurrence before the cut-off.
-    .filter(
-      (data) =>
-        !is_payment_released(
-          record.removal_intervals,
-          ((data as unknown as Record<string, Timestamp | undefined>).transactionDate
-            ?.toMillis?.() ?? 0),
-          release_schedule
-        )
-    )
     // Per SPLIT (the period page's rule): the splits paying this recurring — a "remove from bill"
     // or a budget pin takes only THAT split off; no paying split → not one of its payments. A
     // transaction outside the Plaid stream pays only through splits explicitly linked to it.
@@ -121,7 +109,20 @@ export async function derive_recurring_transactions_orchestrator(
       ...row,
       net: compute_countable_split_net(row.splits as CountableSplitInput[], "").amount,
     }))
-    .filter(({ splits, net }) => splits.length > 0 && net > 0)
+    .filter(({ splits, net }) => splits.length > 0 && net > 0);
+  const date_of = (data: unknown): number =>
+    (data as Record<string, Timestamp | undefined>).transactionDate?.toMillis?.() ?? 0;
+  const id_of = (data: unknown): string => ((data as Record<string, unknown>).id as string) ?? "";
+  // D31 / D37: the bill's payments, as the release rule judges a late payment by them.
+  const release_bill = release_schedule
+    ? { schedule: release_schedule, payments: paying_rows.map((r) => ({ id: id_of(r.data), date_ms: date_of(r.data), amount: r.net })) }
+    : null;
+  const rows: DerivedRecurringTransaction[] = paying_rows
+    // A payment in a month this bill / income is removed / paused for pays nothing (X9 — as the
+    // period page, the engine and reconcile). D31 / D37: except a bill's LATE payment of its last
+    // occurrence before the cut-off while that occurrence is still unpaid.
+    .filter(({ data }) =>
+      !is_payment_released(record.removal_intervals, { id: id_of(data), date_ms: date_of(data) }, release_bill))
     .map(({ data, splits, net }) => {
       const d = data as unknown as Record<string, unknown>;
       const doc_id = d.id as string;

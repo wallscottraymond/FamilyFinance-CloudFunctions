@@ -9,7 +9,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { compute_period_view, DerivePeriodResult } from "../period_view.service";
 import { PeriodDerivationDeps } from "../period_derivation.types";
-import { RemovalInterval } from "../../recurring/recurring_suppression.service";
+import { RemovalInterval, is_payment_suppressed } from "../../recurring/recurring_suppression.service";
 import { is_payment_released } from "../../recurring/late_payment.service";
 
 export const DAY = 86400000;
@@ -54,12 +54,26 @@ export const schedule_of = (bill: BillSpec) => ({
   frequency: bill.frequency, average_amount: bill.amount, first_date: Timestamp.fromMillis(bill.first_ms),
   last_date: Timestamp.fromMillis(bill.anchor_ms), predicted_next_date: Timestamp.fromMillis(bill.anchor_ms),
 });
-/** The engine's routing: is this payment released from the bill (→ Everything Else)? */
-export const is_released = (bill: BillSpec, date_ms: number) =>
-  is_payment_released(bill.removal_intervals, date_ms, schedule_of(bill));
+/** The engine's routing: is this payment released from the bill (→ Everything Else)? Judged
+ *  (D37) with every payment of the bill, as the engine / stored reconcile / the derive see them. */
+export const is_released = (bill: BillSpec, p: { id: string; date_ms: number }) =>
+  is_payment_released(bill.removal_intervals, p, { schedule: schedule_of(bill), payments: bill.payments });
 
-export function derive(bills: BillSpec[], cadence: Cadence, window: { start: number; end: number }): DerivePeriodResult {
+/**
+ * `span_limited` models the period page's RESOLVER loading (D37): the matcher gets only the
+ * payments inside the view's span, plus — the D31 late block — a payment up to 7 days past the
+ * span made in a month suppressed for the bill that the release rule keeps; only the span's
+ * payments are counted as spend. Without it every payment of the bill is passed (a whole-year view).
+ */
+export function derive(
+  bills: BillSpec[], cadence: Cadence, window: { start: number; end: number }, opts: { span_limited?: boolean } = {}
+): DerivePeriodResult {
   const b = buckets(cadence, window.start, window.end + 1);
+  const span_start = b[0].start_ms;
+  const span_end = b[b.length - 1].end_ms;
+  const in_span = (ms: number) => !opts.span_limited || (ms >= span_start && ms <= span_end);
+  const late_reach = (bill: BillSpec, ms: number) =>
+    !!opts.span_limited && ms > span_end && ms <= span_end + 7 * DAY && is_payment_suppressed(bill.removal_intervals, ms);
   const deps: PeriodDerivationDeps = {
     view_buckets: b.map((x) => ({ ...x, period_type: cadence })),
     placement_buckets: b,
@@ -67,8 +81,8 @@ export function derive(bills: BillSpec[], cadence: Cadence, window: { start: num
     real_budgets: [],
     monthly_ee_id: "ee",
     any_ee_id: "ee",
-    splits_for_match: bills.flatMap((bill) => bill.payments.map((p) => {
-      const released = is_released(bill, p.date_ms);
+    splits_for_match: bills.flatMap((bill) => bill.payments.filter((p) => in_span(p.date_ms)).map((p) => {
+      const released = is_released(bill, p);
       return {
         amount: p.amount, txn_date_ms: p.date_ms, is_pending: false, is_transfer: false, is_income: false,
         spend_status: "counted" as const, outflow_id: released ? null : bill.id, inflow_id: null,
@@ -81,7 +95,7 @@ export function derive(bills: BillSpec[], cadence: Cadence, window: { start: num
       kind: "outflow" as const,
       schedule: schedule_of(bill),
       payments: bill.payments
-        .filter((p) => !is_released(bill, p.date_ms))
+        .filter((p) => (in_span(p.date_ms) || late_reach(bill, p.date_ms)) && !is_released(bill, p))
         .map((p) => ({ transaction_id: p.id, split_id: null, date_ms: p.date_ms, amount: p.amount })),
       removal_intervals: bill.removal_intervals,
     })),

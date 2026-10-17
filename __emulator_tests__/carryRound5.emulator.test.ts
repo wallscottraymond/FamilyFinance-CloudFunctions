@@ -276,4 +276,87 @@ describe('round 5 — stored periods carry what the page\'s matcher assigns (emu
     expect(stored_counts(await period(paused.bill, '2042M09'))).toEqual(derived_counts(await view(paused.uid, 'monthly', SEP), paused.bill, '2042M09'));
     expect(stored_counts(await period(paused.bill, '2042M09'))).toEqual([1, 0]);
   }, 240000);
+
+  // ── Test 11 (D37 defect 2): the late rule applies only while the last kept occurrence is still
+  // UNPAID (the matcher's judgement). A charge the matcher leaves unmatched is RELEASED — normal
+  // spending, as before D31 — in the engine, the derive, stored reconcile and the bill's list.
+  const XTRA = 555.55;
+  async function extraCase(tag: string, flag: boolean, paid: number[], later: Array<[string, number]>) {
+    const h = await makeHarness(db, tag, mocks, { flag });
+    h.ids.streams.B = `${tag}_S_B`;
+    const keys = paid.map((_, i) => `b${i}`);
+    const txn = (key: string, ms: number) => plaidTxn(h.ids, { key, account: 'chk', amount: XTRA, days_ago: days_ago(ms),
+      name: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT' }, T);
+    const stream = (ks: string[], last_ms: number) => ({ ...scenarioRecurring(h.ids, {}, T), outflow_streams: [plaidStream(h.ids, 'B', {
+      account: 'chk', keys: ks, amount: XTRA, description: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS',
+      detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', frequency: 'MONTHLY', status: 'MATURE', is_active: true,
+      first_days_ago: days_ago(paid[0]), last_days_ago: days_ago(last_ms), next_days: Math.round((U12(10, 29) - T) / DAY),
+    } as any, T)], inflow_streams: [] });
+    h.postTxns(paid.map((ms, i) => txn(keys[i], ms)));
+    h.setRecurring(stream(keys, paid[paid.length - 1]));
+    await h.sync('link');
+    const uid = h.ids.userId;
+    const bill = h.ids.streams.B;
+    await removeFromOct(uid, bill);
+    const spent = async (w: { start: number; end: number }) => spentOf(await view(uid, 'monthly', w));
+    const before = { sep: await spent(SEP), oct: await spent(OCT_2042) };
+    const all = [...keys];
+    for (const [key, ms] of later) { // each charge arrives in its own sync (as Plaid posts them)
+      all.push(key);
+      h.postTxns([txn(key, ms)]);
+      h.setRecurring(stream([...all], ms));
+      await h.sync(key);
+    }
+    return { uid, bill, before, spent, doc: (key: string) => `plaid_${h.ids.txn(key)}` };
+  }
+  const spentOf = (r: any) => Math.round(r.budgets.reduce((t: number, b: any) => t + b.periods.reduce((x: number, p: any) => x + (p.spent ?? 0), 0), 0) * 100) / 100;
+  const iso11 = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const paidBy11 = (r: any, bill: string, doc: string) =>
+    r.bills.filter((b: any) => b.recurring_id === bill).flatMap((b: any) => b.groups.flatMap((g: any) =>
+      g.occurrences.filter((o: any) => o.paid && o.transaction_id === doc).map((o: any) => [g.period_id, iso11(o.due_ms)])));
+  /** pays: the doc that pays Sep 29; spend: the released doc (October spending). */
+  async function expectOnce(c: Awaited<ReturnType<typeof extraCase>>, pays: string, spend: string) {
+    const link = async (doc: string) => ((await db.collection('transactions').doc(doc).get()).data()!.splits ?? []).map((s: any) => s.outflowId ?? null);
+    // Engine: the payer is the bill's, the released charge isn't.
+    expect(await link(c.doc(pays))).toEqual([c.bill]);
+    expect(await link(c.doc(spend))).toEqual([null]);
+    // Derive: Sep 29 paid by the payer in every view holding it; the released charge pays nothing anywhere.
+    const W = WEEKS.find((x) => x.start === Date.UTC(2042, 8, 28))!;
+    const views: Array<[string, { start: number; end: number }, string | null]> = [
+      ['monthly', SEP, '2042M09'], ['monthly', { start: SEP.start, end: OCT_2042.end }, '2042M09'], ['monthly', OCT_2042, null],
+      ['weekly', { start: W.start, end: W.end }, W.id], ['bi_monthly', { start: SEP.start, end: OCT_2042.end }, '2042BM09B'],
+    ];
+    for (const [cad, w, pid] of views) {
+      const r = await view(c.uid, cad, w);
+      expect({ cad, w: w.start, pays: paidBy11(r, c.bill, c.doc(pays)), spend: paidBy11(r, c.bill, c.doc(spend)) })
+        .toEqual({ cad, w: w.start, pays: pid ? [[pid, '2042-09-29']] : [], spend: [] });
+    }
+    // …and it is October spending, counted once (Sep unchanged).
+    expect(await c.spent(OCT_2042)).toBe(Math.round((c.before.oct + XTRA) * 100) / 100);
+    expect(await c.spent(SEP)).toBe(c.before.sep);
+    // Stored: Sep holds the payer, no stored period holds the released charge.
+    await runReconcile(c.uid, c.bill);
+    const occ_ids = (p: any) => (p?.reconciliation?.occurrences ?? []).map((o: any) => o.transactionId ?? null);
+    expect(occ_ids(await period(c.bill, '2042M09'))).toEqual([c.doc(pays)]);
+    const all_periods = await db.collection('outflow_periods').where('outflowId', '==', c.bill).get();
+    expect(all_periods.docs.filter((d) => occ_ids(d.data()).includes(c.doc(spend))).map((d) => d.id)).toEqual([]);
+    // The bill's transaction list: the payer listed, the released charge not.
+    const list = await derive_list(ctx(), c.uid, c.bill, 'outflow', SEP.start, OCT_2042.end);
+    const ids = list.map((t: any) => t.transaction_id);
+    expect([ids.includes(c.doc(pays)), ids.includes(c.doc(spend))]).toEqual([true, false]);
+  }
+  let derive_list: any;
+  beforeAll(() => {
+    ({ derive_recurring_transactions_orchestrator: derive_list } = require('../src/functions/orchestrators/recurring/derive_recurring_transactions.orchestrator'));
+  });
+  for (const flag of [false, true]) {
+    it(`test 11 (D37): ${flag ? 'v2' : 'old'} — paid on time Sep 29, an extra charge Oct 2 after removing → the Oct 2 charge is October spend`, async () => {
+      const c = await extraCase(`qzr5x${flag ? 'v' : 'o'}a`, flag, [U12(7, 29), U12(8, 29), U12(9, 29)], [['x', U12(10, 2)]]);
+      await expectOnce(c, 'b2', 'x');
+    }, 240000);
+    it(`test 11 (D37): ${flag ? 'v2' : 'old'} — two late payments Oct 1 + Oct 3 → the first pays Sep 29, the second is October spend`, async () => {
+      const c = await extraCase(`qzr5x${flag ? 'v' : 'o'}b`, flag, [U12(7, 29), U12(8, 29)], [['l1', U12(10, 1)], ['l2', U12(10, 3)]]);
+      await expectOnce(c, 'l1', 'l2');
+    }, 240000);
+  }
 });

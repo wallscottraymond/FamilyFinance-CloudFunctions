@@ -243,10 +243,22 @@ export async function resolve_recurring_reconciliation(
   const release_schedule = is_outflow && removal_intervals?.length
     ? bill_release_schedule(recurring as Parameters<typeof bill_release_schedule>[0])
     : null;
+  // D31 / D37: the bill's payments, as the release rule judges a late payment by them.
+  const release_bill = release_schedule
+    ? {
+      schedule: release_schedule,
+      payments: txns.filter((t) => t.isActive !== false).map((t) => ({
+        id: t.id,
+        date_ms: to_ms(t.transactionDate) ?? 0,
+        amount: compute_countable_split_net(paying(t) as Parameters<typeof compute_countable_split_net>[0], t.id).amount,
+      })),
+    }
+    : null;
   for (const txn of txns) {
     if (txn.isActive === false) continue;
-    // D31: except a bill's LATE payment of its last occurrence before the cut-off.
-    if (is_payment_released(removal_intervals, to_ms(txn.transactionDate) ?? 0, release_schedule)) continue;
+    // D31 / D37: except a bill's LATE payment of its last occurrence before the cut-off while
+    // that occurrence is still unpaid.
+    if (is_payment_released(removal_intervals, { id: txn.id, date_ms: to_ms(txn.transactionDate) ?? 0 }, release_bill)) continue;
     // Honor a manual PERIOD PIN for THIS outflow: align by the pinned period's midpoint
     // (forces placement into that period) instead of the transaction date.
     let date_ms = to_ms(txn.transactionDate) ?? 0;

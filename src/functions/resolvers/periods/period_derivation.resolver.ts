@@ -15,7 +15,12 @@
  */
 
 import { RemovalInterval, is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
-import { LATE_PAYMENT_MAX_MS, is_payment_released } from "../../domain/recurring/late_payment.service";
+import {
+  BillPaymentForRelease,
+  LATE_PAYMENT_LOOKBACK_MS,
+  LATE_PAYMENT_MAX_MS,
+  is_payment_released,
+} from "../../domain/recurring/late_payment.service";
 import {
   compute_countable_split_net,
   CountableSplitInput,
@@ -133,6 +138,12 @@ export interface PeriodDerivationRaw {
    * equals `txns`.
    */
   all_member_txns: Array<{ id: string; data: Record<string, unknown> }>;
+  /**
+   * D37: the view's transactions just BEFORE `txns`' range (up to 21 days before a removed bill's
+   * cut-off that a payment in the range is late for) — read only when such a cut-off is near; used
+   * only to judge whether that bill's last occurrence was already paid (the release rule).
+   */
+  release_lookback_txns?: Array<{ id: string; data: Record<string, unknown> }>;
   /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
   inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
   /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
@@ -324,12 +335,35 @@ export async function load_period_derivation_raw(
     ? Math.max(0, LATE_PAYMENT_MAX_MS - TRANSFER_PAIRING_BUFFER_MS)
     : 0;
   const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms)) + TRANSFER_PAIRING_BUFFER_MS + late_reach_ms;
-  const [member_txns, pairing_extra] = await Promise.all([
+  // D37: a payment in the range may be a removed bill's LATE payment (made within 7 days after a
+  // cut-off); whether the occurrence it pays was already paid is judged from the bill's payments
+  // up to 21 days before the cut-off (LATE_PAYMENT_MAX_MS + LATE_PAYMENT_LOOKBACK_MS). The same
+  // query reaches back that far — only when such a cut-off is near the range's start; the part
+  // before the range feeds the release rule only.
+  let lookback_start_ms = txn_start_ms;
+  for (const o of outflows) {
+    for (const iv of o.removal_intervals ?? []) {
+      const f = new Date(iv.from_ms);
+      const cut_ms = Date.UTC(f.getUTCFullYear(), f.getUTCMonth(), 1); // month-snapped (earliest)
+      if (cut_ms + LATE_PAYMENT_MAX_MS < txn_start_ms || cut_ms > txn_end_ms) continue;
+      lookback_start_ms = Math.min(lookback_start_ms, cut_ms - LATE_PAYMENT_MAX_MS - LATE_PAYMENT_LOOKBACK_MS);
+    }
+  }
+  const [member_txns_read, pairing_extra] = await Promise.all([
     per_member(scope, (m) =>
-      transaction_repo.get_active_in_date_range(ctx, m, txn_start_ms, txn_end_ms)
+      transaction_repo.get_active_in_date_range(ctx, m, lookback_start_ms, txn_end_ms)
     ),
     load_pairing_extra_txns(ctx, scope, txn_start_ms, txn_end_ms),
   ]);
+  const before_range = (t: { data: Record<string, unknown> }) =>
+    ts_cmp(t.data.transactionDate as Timestamp, txn_start_ms) < 0;
+  const member_txns = lookback_start_ms < txn_start_ms
+    ? member_txns_read.filter((t) => !before_range(t))
+    : member_txns_read;
+  const release_lookback_txns = lookback_start_ms < txn_start_ms
+    ? member_txns_read.filter((t) => before_range(t) && transaction_in_scope(
+      scope, t.data.accountId as string | undefined, (t.data.transactionDate as Timestamp).toMillis()))
+    : [];
   // Pairing pool: the members' transactions plus known group accounts (never counted).
   const all_member_txns = [...member_txns, ...pairing_extra];
   const txns = member_txns.filter((t) =>
@@ -369,6 +403,7 @@ export async function load_period_derivation_raw(
     all_goals,
     txns,
     all_member_txns,
+    ...(release_lookback_txns.length ? { release_lookback_txns } : {}),
     inflow_history_docs,
     scope,
     out_of_view_recurring,
@@ -684,10 +719,41 @@ export function shape_period_derivation_deps(
   // The bills / income removed or paused for a payment's month (usually none).
   // D31: a bill's late payment of its last occurrence before the cut-off is not released (the
   // engine stores the same — is_payment_released).
-  const released_at = (txn_date_ms: number): Set<string> => {
+  // D37: a removed bill's payments (every transaction loaded, incl. the lookback) — the release
+  // rule keeps a late payment only while the occurrence it pays is still unpaid by them.
+  const bill_payments_by_id = new Map<string, BillPaymentForRelease[]>();
+  if (bill_schedule_by_id.size > 0) {
+    const seen_txn = new Set<string>();
+    for (const { id, data } of [...(raw.release_lookback_txns ?? []), ...raw.txns]) {
+      if (seen_txn.has(id)) continue;
+      seen_txn.add(id);
+      const plaid_txn_id = (data.transactionId as string | null) ?? null;
+      const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
+      const splits = (plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits) : stored_splits)
+        .filter((sp) => !sp.outflowPinnedPeriodId);
+      const stream_bill = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
+      for (const rid of bill_schedule_by_id.keys()) {
+        const linked = splits.filter((sp) => sp.outflowId === rid);
+        const paying = linked.length
+          ? linked
+          : stream_bill === rid ? splits_paying_recurring(splits, "outflow", rid, true) : [];
+        if (paying.length === 0) continue;
+        const list = bill_payments_by_id.get(rid) ?? [];
+        list.push({
+          id,
+          date_ms: (data.transactionDate as Timestamp).toMillis(),
+          amount: compute_countable_split_net(paying as CountableSplitInput[], id).amount,
+        });
+        bill_payments_by_id.set(rid, list);
+      }
+    }
+  }
+  const released_at = (txn_date_ms: number, txn_id: string): Set<string> => {
     const ids = new Set<string>();
     for (const [rid, intervals] of removal_by_id) {
-      if (is_payment_released(intervals, txn_date_ms, bill_schedule_by_id.get(rid))) ids.add(rid);
+      const schedule = bill_schedule_by_id.get(rid);
+      const bill = schedule ? { schedule, payments: bill_payments_by_id.get(rid) ?? [] } : null;
+      if (is_payment_released(intervals, { id: txn_id, date_ms: txn_date_ms }, bill)) ids.add(rid);
     }
     return ids;
   };
@@ -735,7 +801,7 @@ export function shape_period_derivation_deps(
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
     // A bill / income removed or paused for this payment's month isn't paid by it: the money
     // counts as ordinary spending / money in (the engine stores the same — is_payment_released).
-    const released = released_at(txn_date_ms);
+    const released = released_at(txn_date_ms, id);
     const live = (rid: string | undefined): string | undefined =>
       rid && !released.has(rid) ? rid : undefined;
     const linked_inflow_id =
@@ -878,7 +944,7 @@ export function shape_period_derivation_deps(
   for (const { id, data } of view_pool) {
     if (counted_ids.has(id) || crossing.ids.has(id)) continue;
     // Released bills (removed / paused for this payment's month) are dropped here too.
-    const pool_released = released_at((data.transactionDate as Timestamp).toMillis());
+    const pool_released = released_at((data.transactionDate as Timestamp).toMillis(), id);
     const pinned_splits = without_out_of_view_links(
       (data.splits as Array<Record<string, unknown>>) ?? [],
       pool_released.size
@@ -912,7 +978,7 @@ export function shape_period_derivation_deps(
     for (const { id, data } of raw.txns) {
       const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
       if (txn_date_ms <= span_end_ms || txn_date_ms > late_end || counted_ids.has(id) || crossing.ids.has(id)) continue;
-      const released = released_at(txn_date_ms);
+      const released = released_at(txn_date_ms, id);
       // D37: only a payment made in a SUPPRESSED month of that bill (a late payment the release
       // rule keeps) — a payment in a kept month past the span is no different from a never-removed
       // bill's (the next view counts it), so a live bill with a past pause doesn't reach for it.

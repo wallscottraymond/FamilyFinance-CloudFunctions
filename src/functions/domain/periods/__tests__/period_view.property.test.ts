@@ -108,7 +108,7 @@ describe("derive property (seeded): counted exactly once; monthly == Σ sub-mont
         let released_total = 0;
         for (const bill of bills) {
           for (const p of bill.payments) {
-            const released = is_released(bill, p.date_ms);
+            const released = is_released(bill, p);
             if (released) released_total += p.amount;
             const n = released || resume_late(bill, p.date_ms) ? 0 : 1;
             expect({ cadence, p: p.id, n: counts.get(p.id) }).toEqual({ cadence, p: p.id, n });
@@ -158,11 +158,86 @@ describe("D31: a late payment of the last occurrence before a cut-off is counted
       const rnd = mulberry32(seed);
       const bills = Array.from({ length: 1 + Math.floor(rnd() * 3) }, (_, n) => randomBill(rnd, n));
       for (const b of bills) for (const p of b.payments) {
-        if (is_payment_suppressed(b.removal_intervals, p.date_ms) && !is_released(b, p.date_ms)) hits++;
+        if (is_payment_suppressed(b.removal_intervals, p.date_ms) && !is_released(b, p)) hits++;
         if (resume_late(b, p.date_ms)) residual++;
       }
     }
     expect(hits).toBeGreaterThan(0);
     console.log(`[D31 generator] late-payment cases: ${hits}; enumerated resume_late residual: ${residual}`);
+  });
+});
+
+/**
+ * D37: a bill's EXTRA charges after the cut-off — a second payment within 7 days after its last
+ * kept occurrence (on top of the on-time or a late one), made in the removed / paused month. Only
+ * a payment the matcher gives the still-unpaid occurrence pays it; the rest are released (normal
+ * spending, as before D31).
+ */
+function withExtras(rnd: () => number, bill: BillSpec): BillSpec {
+  const due = generate_expected_occurrences_in_window(schedule_of(bill), WIN.start, WIN.end).map((g) => g.due_date_ms);
+  const extras: BillSpec["payments"] = [];
+  due.forEach((d, i) => {
+    if (is_payment_suppressed(bill.removal_intervals, d)) return;
+    for (let k = 1; k <= 6; k++) {
+      const ms = d + k * DAY;
+      if (ms > WIN.end || !is_payment_suppressed(bill.removal_intervals, ms) || rnd() > 0.5) continue;
+      extras.push({ id: `${bill.id}_x${i}_${k}`, date_ms: ms, amount: bill.amount });
+    }
+  });
+  return { ...bill, payments: [...bill.payments, ...extras].sort((a, b) => a.date_ms - b.date_ms) };
+}
+
+describe("D37 (seeded): extra / second late charges after a cut-off; span-limited single-month views", () => {
+  const months_of_win = Array.from({ length: 12 }, (_, m) => ({ start: Date.UTC(2026, m, 1), end: Date.UTC(2026, m + 1, 1) - 1 }));
+  let extra_cases = 0;
+  let extra_released = 0;
+  for (const seed of SEEDS_D28) {
+    it(`seed ${seed}`, () => {
+      const rnd = mulberry32(seed);
+      const bills = Array.from({ length: 1 + Math.floor(rnd() * 3) }, (_, n) => withExtras(rnd, randomBill(rnd, n)));
+      // (a) The whole-year view: every payment counted exactly once (as before), extras included.
+      for (const cadence of ["monthly", "weekly", "bi_monthly"] as Cadence[]) {
+        const counts = payment_counts(derive(bills, cadence, WIN), bills);
+        for (const bill of bills) for (const p of bill.payments) {
+          const n = is_released(bill, p) || resume_late(bill, p.date_ms) ? 0 : 1;
+          expect({ cadence, p: p.id, n: counts.get(p.id) }).toEqual({ cadence, p: p.id, n });
+        }
+      }
+      // (b) Single-month views, loaded as the resolver loads them (span + the late reach).
+      const seen = new Map<string, Array<string>>();
+      let ee = 0;
+      for (const m of months_of_win) {
+        const r = derive(bills, "monthly", m, { span_limited: true });
+        for (const bill of r.bills) for (const g of bill.groups) for (const o of g.occurrences) {
+          if (o.paid && o.transaction_id) seen.set(o.transaction_id, [...(seen.get(o.transaction_id) ?? []), month_key(m.start)]);
+        }
+        for (const v of by_bucket(r, bills[0].id).values()) ee += v.ee;
+      }
+      let released_total = 0;
+      for (const bill of bills) for (const p of bill.payments) {
+        const released = is_released(bill, p);
+        if (released) released_total += p.amount;
+        const views = seen.get(p.id) ?? [];
+        if (p.id.includes("_x")) {
+          extra_cases++;
+          if (released) extra_released++;
+        }
+        if (released) {
+          expect({ p: p.id, views }).toEqual({ p: p.id, views: [] });
+        } else if (is_payment_suppressed(bill.removal_intervals, p.date_ms)) {
+          // A late payment the rule keeps: counted exactly once, in the view of the month it pays.
+          expect({ p: p.id, n: views.length }).toEqual({ p: p.id, n: 1 });
+        } else {
+          // Any other payment: never reached for by another month's view (D37 defect 1).
+          expect({ p: p.id, views: views.filter((k) => k !== month_key(p.date_ms)) }).toEqual({ p: p.id, views: [] });
+        }
+      }
+      expect(round2(ee)).toEqual(round2(released_total));
+    });
+  }
+  afterAll(() => {
+    expect(extra_cases).toBeGreaterThan(0);
+    expect(extra_released).toBeGreaterThan(0);
+    console.log(`[D37 generator] extra charges after a cut-off: ${extra_cases}; released: ${extra_released}`);
   });
 });
