@@ -103,6 +103,7 @@ interface LegacySplitDoc {
   biWeeklyPeriodId: string | null;
   outflowId?: string | null;
   inflowId?: string | null;
+  inflowAssignmentSource?: string;
   plaidPrimaryCategory: string;
   plaidDetailedCategory: string;
   internalPrimaryCategory: string | null;
@@ -141,6 +142,10 @@ function pending_manual_choices(s: Record<string, unknown>): Partial<Transaction
   if (typeof s.suspendedOutflowPinId === "string" && s.suspendedOutflowPinId) {
     out.suspended_outflow_pin_id = s.suspendedOutflowPinId;
     out.outflow_pinned_period_id = (s.outflowPinnedPeriodId as string | null | undefined) ?? null;
+  }
+  if (s.inflowAssignmentSource === "manual") {
+    out.inflow_assignment_source = "manual";
+    out.inflow_id = (s.inflowId as string | null | undefined) ?? null;
   }
   if (s.categorySource === "user") {
     out.category_source = "user";
@@ -307,6 +312,10 @@ function map_split_to_doc(
       }
       : {}),
     /* eslint-enable @typescript-eslint/naming-convention */
+    // Manual income pin (carried pending → posted). Only when set.
+    ...(split.inflow_assignment_source === "manual" && split.inflow_id
+      ? { inflowAssignmentSource: "manual", inflowId: split.inflow_id }
+      : {}),
     ...(split.category_source === "user"
       ? {
         categorySource: "user",
@@ -742,6 +751,15 @@ export const transaction_repo = {
       if (before.ownerId !== user_id && owner !== user_id) {
         throw new PermissionDeniedError("assign_split_to_outflow", doc_id);
       }
+      // The bill must be the caller's own (Convert-To-Recurring Phase 2 review: a guessable
+      // `conv_…` id of someone else's bill must never be pinned — it would enqueue reconciles for
+      // it and leave a dangling `splitOutflowIds`). One extra read, only when pinning to a bill.
+      if (outflow_id) {
+        const bill = await tx.get(getFirestore().collection("outflows").doc(outflow_id));
+        if (!bill.exists || (bill.data() as { ownerId?: string }).ownerId !== user_id) {
+          throw new PermissionDeniedError("assign_split_to_outflow", outflow_id);
+        }
+      }
       /* eslint-disable @typescript-eslint/naming-convention */
       const splits = (before.splits ?? []).map((s) =>
         s.splitId === split_id
@@ -774,8 +792,14 @@ export const transaction_repo = {
         )
       );
       const now = Timestamp.now();
+      // The pin nulls the split's income link, so the income denorm is recomputed with it (it was
+      // left stale before).
       // eslint-disable-next-line @typescript-eslint/naming-convention
-      const update_data = { splits, splitOutflowIds, updatedAt: now, updatedBy: user_id };
+      const splitInflowIds = Array.from(
+        new Set(splits.map((s) => s.inflowId as string | undefined).filter((id): id is string => !!id))
+      );
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      const update_data = { splits, splitOutflowIds, splitInflowIds, updatedAt: now, updatedBy: user_id };
       tx.update(ref, update_data);
       return { before, update_data };
     });
@@ -795,6 +819,70 @@ export const transaction_repo = {
       `[${ctx.trace_id}] pin_split_to_outflow: txn=${doc_id} split=${split_id} → ` +
         `outflow=${outflow_id ?? (detach ? "detached" : "cleared")}`
     );
+    return create_write_result("transaction", doc_id, "merge", before, { ...before, ...update_data });
+  },
+
+  /**
+   * Manually PIN a split to a recurring INCOME (`inflow_id`) or CLEAR the pin (null) — the income
+   * twin of `pin_split_to_outflow`. One Firestore transaction reads the transaction and the income
+   * and checks BOTH owners structurally (the caller owns the transaction and the income); the
+   * business rules (credit only, same view, …) are decided by the domain before this is called.
+   * `mutate` is the domain's pure edit of the split. Recomputes BOTH durable denorms
+   * (`splitInflowIds` and `splitOutflowIds`: a pin clears the split's bill link). Unstamped, like
+   * the bill pin: its write fires `on_transaction_written` (assignment + reconcile of the
+   * touched streams).
+   */
+  async pin_split_to_inflow(
+    ctx: TraceContext,
+    doc_id: string,
+    split_id: string,
+    inflow_id: string | null,
+    user_id: string,
+    mutate: (split: Record<string, unknown>) => Record<string, unknown>
+  ): Promise<WriteResult> {
+    const ref = doc_ref(doc_id);
+    const { before, update_data } = await getFirestore().runTransaction(async (tx) => {
+      const [snap, inflow] = await Promise.all([
+        tx.get(ref),
+        inflow_id ? tx.get(getFirestore().collection("inflows").doc(inflow_id)) : Promise.resolve(null),
+      ]);
+      if (!snap.exists) throw new NotFoundError("transaction", doc_id);
+      const before = snap.data() as LegacyTransactionDoc;
+      if (before.ownerId !== user_id && (before as unknown as Record<string, unknown>).userId !== user_id) {
+        throw new PermissionDeniedError("assign_split_to_inflow", doc_id);
+      }
+      if (inflow_id && (!inflow?.exists || (inflow.data() as { ownerId?: string }).ownerId !== user_id)) {
+        throw new PermissionDeniedError("assign_split_to_inflow", inflow_id);
+      }
+      if (!(before.splits ?? []).some((s) => s.splitId === split_id)) {
+        throw new NotFoundError("transaction_split", split_id);
+      }
+      const splits = (before.splits ?? []).map((s) => (s.splitId === split_id ? mutate(s as unknown as Record<string, unknown>) : (s as unknown as Record<string, unknown>)));
+      const ids = (field: "outflowId" | "inflowId") =>
+        Array.from(new Set(splits.map((s) => s[field] as string | undefined).filter((id): id is string => !!id)));
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const update_data = {
+        splits,
+        splitOutflowIds: ids("outflowId"),
+        splitInflowIds: ids("inflowId"),
+        updatedAt: Timestamp.now(),
+        updatedBy: user_id,
+      };
+      /* eslint-enable @typescript-eslint/naming-convention */
+      tx.update(ref, update_data);
+      return { before, update_data };
+    });
+
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "transaction",
+      entity_id: doc_id,
+      before: before as unknown as Record<string, unknown>,
+      after: { ...before, ...update_data } as unknown as Record<string, unknown>,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { manual_inflow_pin: true, inflow_id } },
+    });
     return create_write_result("transaction", doc_id, "merge", before, { ...before, ...update_data });
   },
 

@@ -94,6 +94,11 @@ export function merge_assignment_onto_raw_splits(
       // A manual bill pin parked while its bill is removed / paused for this month (X9).
       suspendedOutflowPinId: a.suspended_outflow_pin,
       inflowId: a.inflow_id,
+      // Manual income-pin source — written only when manual or already stored (a doc that never
+      // had one stays byte-identical).
+      ...(a.inflow_source === "manual" || raw.inflowAssignmentSource !== undefined
+        ? { inflowAssignmentSource: a.inflow_source }
+        : {}),
       monthlyPeriodId: a.monthly_period_id,
       weeklyPeriodId: a.weekly_period_id,
       biWeeklyPeriodId: a.bi_weekly_period_id,

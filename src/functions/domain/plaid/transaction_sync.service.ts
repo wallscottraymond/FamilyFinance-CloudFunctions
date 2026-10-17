@@ -302,6 +302,9 @@ export function merge_pending_to_posted(
             outflow_pinned_period_id: pending_split.outflow_pinned_period_id ?? null,
           }
           : {}),
+        ...(pending_split.inflow_assignment_source === "manual" && pending_split.inflow_id
+          ? { inflow_assignment_source: "manual" as const, inflow_id: pending_split.inflow_id }
+          : {}),
         ...(pending_split.category_source === "user"
           ? {
             category_source: "user" as const,

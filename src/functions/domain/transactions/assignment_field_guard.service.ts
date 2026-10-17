@@ -43,6 +43,7 @@ const SPLIT_RELEVANT_FIELDS = [
   "outflowId",
   "outflowAssignmentSource",
   "inflowId",
+  "inflowAssignmentSource",
   "isIgnored",
   "spendStatus",
 ] as const;

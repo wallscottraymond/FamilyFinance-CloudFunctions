@@ -95,6 +95,7 @@ export {
   ExternalServiceError,
   TimeoutError,
   AlreadyProcessedError,
+  ConvertRefusedError,
   get_http_status,
   get_https_error_code,
 } from "./errors";

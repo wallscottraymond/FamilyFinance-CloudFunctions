@@ -83,6 +83,10 @@ describe('Add Bill / Add Income with the flag OFF are unchanged (D43 golden)', (
       income: derived.income.filter((b: { recurring_id: string }) => mine.has(b.recurring_id)),
     };
     const dump = JSON.parse(label(JSON.stringify({ docs: normalizeDoc(docs, tag), rows: normalizeDoc(rows, tag) })));
+    // The page lists rows in an id-dependent order (the ids are random): compare by label.
+    const by_label = (a: { recurring_id: string }, b: { recurring_id: string }) => (a.recurring_id < b.recurring_id ? -1 : 1);
+    dump.rows.bills.sort(by_label);
+    dump.rows.income.sort(by_label);
 
     if (WRITE) {
       fs.writeFileSync(GOLDEN, JSON.stringify(dump, null, 1));

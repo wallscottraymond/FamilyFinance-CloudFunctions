@@ -244,6 +244,37 @@
    {
     "groups": [
      {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2139609600000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2139609600000,
+      "occurrence_ids": [
+       "ID0_2139609600000"
+      ],
+      "occurrences": [
+       {
+        "amount": 1200,
+        "due_ms": 2139609600000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 1200,
+      "total_paid": 0,
+      "total_unpaid": 1200
+     }
+    ],
+    "name": "Rent",
+    "recurring_id": "ID0"
+   },
+   {
+    "groups": [
+     {
       "count_in_period": 3,
       "count_paid": 0,
       "count_unpaid": 3,
@@ -320,7 +351,9 @@
     ],
     "name": "Gym",
     "recurring_id": "ID2"
-   },
+   }
+  ],
+  "income": [
    {
     "groups": [
      {
@@ -333,27 +366,25 @@
       "is_partially_paid": false,
       "next_unpaid_due_ms": 2139609600000,
       "occurrence_ids": [
-       "ID0_2139609600000"
+       "ID3_2139609600000"
       ],
       "occurrences": [
        {
-        "amount": 1200,
+        "amount": 2000,
         "due_ms": 2139609600000,
         "paid": false
        }
       ],
       "period_id": "2037M10",
       "status": "pending",
-      "total_due": 1200,
+      "total_due": 2000,
       "total_paid": 0,
-      "total_unpaid": 1200
+      "total_unpaid": 2000
      }
     ],
-    "name": "Rent",
-    "recurring_id": "ID0"
-   }
-  ],
-  "income": [
+    "name": "Day job",
+    "recurring_id": "ID3"
+   },
    {
     "groups": [
      {
@@ -396,37 +427,6 @@
     ],
     "name": "Tutoring",
     "recurring_id": "ID4"
-   },
-   {
-    "groups": [
-     {
-      "count_in_period": 1,
-      "count_paid": 0,
-      "count_unpaid": 1,
-      "first_due_ms": 2139609600000,
-      "is_due_period": true,
-      "is_fully_paid": false,
-      "is_partially_paid": false,
-      "next_unpaid_due_ms": 2139609600000,
-      "occurrence_ids": [
-       "ID3_2139609600000"
-      ],
-      "occurrences": [
-       {
-        "amount": 2000,
-        "due_ms": 2139609600000,
-        "paid": false
-       }
-      ],
-      "period_id": "2037M10",
-      "status": "pending",
-      "total_due": 2000,
-      "total_paid": 0,
-      "total_unpaid": 2000
-     }
-    ],
-    "name": "Day job",
-    "recurring_id": "ID3"
    }
   ]
  }

@@ -443,7 +443,8 @@ function without_guessed_links(
   return splits.map((s) => ({
     ...s,
     outflowId: s.outflowAssignmentSource === "manual" ? s.outflowId ?? null : keep(s.outflowId),
-    inflowId: keep(s.inflowId),
+    // A manual income pin is the user's choice, kept like a manual bill pin.
+    inflowId: s.inflowAssignmentSource === "manual" ? s.inflowId ?? null : keep(s.inflowId),
   }));
   /* eslint-enable @typescript-eslint/naming-convention */
 }
@@ -839,7 +840,7 @@ export function shape_period_derivation_deps(
     const on_outflow_stream = (sp: unknown) =>
       !!linked_outflow_id && is_split_on_stream(sp, "outflow");
     const on_inflow_stream = (sp: unknown) =>
-      !!linked_inflow_id && is_split_on_stream(sp, "inflow");
+      !!linked_inflow_id && is_split_on_stream(sp, "inflow", linked_inflow_id);
     // "Other income received", per split: an INCOME-meaning split (its EFFECTIVE category — a
     // user's pick decides, canon M7) not on an income stream, not linked to an income, and not
     // pinned to a budget (a pinned income credit counts in that budget — canon A13).
@@ -884,7 +885,10 @@ export function shape_period_derivation_deps(
       // Outflow (bills) attribute via the split's stored link; MANUAL inflows via
       // split.inflowId — but a Plaid income txn is attributed ONCE below via
       // transaction_ids (skip its split link here to avoid double-counting).
-      const link = outflow_id ?? (linked_inflow_id ? null : inflow_id);
+      // A manual income pin (Phase 2) to an income OTHER than the stream's wins and pays it once;
+      // a pin to the stream's own income is counted by the stream pass below, not twice.
+      const manual_inflow_pin = s.inflowAssignmentSource === "manual" && !!inflow_id && inflow_id !== linked_inflow_id;
+      const link = outflow_id ?? (manual_inflow_pin ? inflow_id : linked_inflow_id ? null : inflow_id);
       if (link && payments_by_id.has(link)) {
         linked_by_id.set(link, [...(linked_by_id.get(link) ?? []), s]);
       }

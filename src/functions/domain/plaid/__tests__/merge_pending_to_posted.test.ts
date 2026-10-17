@@ -93,3 +93,18 @@ describe("merge_pending_to_posted — parked bill pin (X9)", () => {
     expect(out.splits[0]).toMatchObject({ suspended_outflow_pin_id: "bill_1", outflow_pinned_period_id: "2026M06" });
   });
 });
+
+describe("merge_pending_to_posted — manual income pin (Convert-To-Recurring Phase 2)", () => {
+  it("carries a manual income pin (id + marker) to the posted split", () => {
+    const out = merge_pending_to_posted(
+      posted,
+      migration([pendingSplit({ inflow_assignment_source: "manual", inflow_id: "income_1" })])
+    );
+    expect(out.splits[0]).toMatchObject({ inflow_assignment_source: "manual", inflow_id: "income_1" });
+  });
+  it("adds nothing for a split that was never pinned", () => {
+    const out = merge_pending_to_posted(posted, migration([pendingSplit()]));
+    expect("inflow_assignment_source" in out.splits[0]).toBe(false);
+    expect("inflow_id" in out.splits[0]).toBe(false);
+  });
+});

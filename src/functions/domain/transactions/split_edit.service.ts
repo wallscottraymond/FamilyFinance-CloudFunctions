@@ -55,6 +55,8 @@ const assignment_key = (s: Raw) =>
     s.budgetAssignmentSource === "manual" ? s.budgetId ?? "" : "",
     s.outflowAssignmentSource ?? "auto",
     s.outflowAssignmentSource === "manual" ? s.outflowId ?? "" : "",
+    s.inflowAssignmentSource ?? "auto",
+    s.inflowAssignmentSource === "manual" ? s.inflowId ?? "" : "",
   ].join("#");
 
 const status_of = (s: Raw): string => split_spend_status(s);
@@ -110,7 +112,27 @@ function engine_owned_fields(split: Raw, before: Raw): Raw {
     out.outflowAssignmentSource = before.outflowAssignmentSource ?? "auto";
     out.outflowPinnedPeriodId = before.outflowPinnedPeriodId ?? null;
   }
+
+  // Income pin (Convert-To-Recurring Phase 2): set only through `assign_split_to_inflow` (which
+  // checks the credit, the owner and the view) — never taken from the app. A NEW budget pin
+  // detaches it (canon A4), like a bill pin.
+  if (before.inflowAssignmentSource === "manual" && !new_budget_pin) {
+    out.inflowAssignmentSource = "manual";
+  } else if (before.inflowAssignmentSource === "manual") {
+    out.inflowAssignmentSource = "auto";
+    out.inflowId = null;
+  } else if (before.inflowAssignmentSource !== undefined) {
+    out.inflowAssignmentSource = before.inflowAssignmentSource;
+  }
   return out;
+}
+
+/** A client-sent income pin is never stored: strip it from whatever the app echoed or invented. */
+function without_client_inflow_pin(fields: Raw, keep: Raw | undefined): Raw {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { inflowAssignmentSource: _client, ...rest } = fields;
+  void keep;
+  return rest;
 }
 
 export function build_split_edit(
@@ -132,7 +154,10 @@ export function build_split_edit(
     const category = resolve_split_category_edit(split, before, txn, catalog);
     // The unpin flag is an instruction, not data — never stored.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { budgetUnpin: _unpin, ...fields } = split;
+    const { budgetUnpin: _unpin, ...sent } = split;
+    // A client-sent income pin is stripped (also from a NEW split): pins come only from the callable.
+    const fields = without_client_inflow_pin(sent, before);
+    if (!before) delete fields.inflowId; // a new split's income link is the engine's to set
     return {
       ...(before ?? {}),
       ...fields,

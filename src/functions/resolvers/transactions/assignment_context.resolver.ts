@@ -119,6 +119,9 @@ export interface SharedAssignmentContext {
   recurring_view_by_id: Map<string, string | null>;
   /** Active, non-hidden bills — a manual pin to anything else (deleted / hidden) is stale. */
   active_outflow_ids: Set<string>;
+  /** The caller's OWN active, non-hidden incomes — a manual income pin to anything else is stale
+   *  (never another user's income, whatever a client wrote). */
+  active_inflow_ids?: Set<string>;
   /** Bill / income id → its remove / pause spans (only items that have any). A payment in a
    *  removed / paused month is released to budgets (`is_payment_released`). */
   removal_intervals_by_id: Map<string, RemovalInterval[]>;
@@ -207,6 +210,7 @@ export async function resolve_shared_assignment_context(
     recurring_view_by_id.set(r.id, group_views_by_account.get(r.account_id ?? "")?.group_id ?? null);
   }
   const active_outflow_ids = new Set(outflows.filter((o) => o.is_active && !o.is_hidden).map((o) => o.id));
+  const active_inflow_ids = new Set(inflows.filter((i) => i.is_active && !i.is_hidden).map((i) => i.id));
   const removal_intervals_by_id = new Map<string, RemovalInterval[]>();
   for (const r of [...outflows, ...inflows]) {
     if (r.removal_intervals?.length) removal_intervals_by_id.set(r.id, r.removal_intervals);
@@ -244,6 +248,7 @@ export async function resolve_shared_assignment_context(
     group_views_by_account,
     recurring_view_by_id,
     active_outflow_ids,
+    active_inflow_ids,
     removal_intervals_by_id,
     release_schedule_by_id,
     load_bill_payments_for_release,
@@ -536,6 +541,14 @@ export async function resolve_assignment_context(
   const suppressed_outflow_ids = new Set(
     [...resolved_shared.active_outflow_ids].filter((id) => of_view(id) && released(id))
   );
+  // The caller's own incomes in this view (a manual income pin elsewhere is dropped), and the ones
+  // removed / paused for this month (kept as stored).
+  const active_inflow_ids = new Set(
+    [...(resolved_shared.active_inflow_ids ?? [])].filter((id) => in_view(id))
+  );
+  const suppressed_inflow_ids = new Set(
+    [...(resolved_shared.active_inflow_ids ?? [])].filter((id) => of_view(id) && released(id))
+  );
   const { real_budgets, budget_names, everything_else_budget_ids } = view;
 
   // The engine's inputs for the ONE category function (canon M7): the immutable Plaid code +
@@ -561,6 +574,7 @@ export async function resolve_assignment_context(
       outflow_source: (s.outflowAssignmentSource as "auto" | "manual") ?? "auto",
       suspended_outflow_pin: (s.suspendedOutflowPinId as string | null | undefined) ?? null,
       inflow_id: (s.inflowId as string | null) ?? null,
+      inflow_source: (s.inflowAssignmentSource as "auto" | "manual" | undefined) ?? "auto",
       monthly_period_id: (s.monthlyPeriodId as string | null) ?? null,
       weekly_period_id: (s.weeklyPeriodId as string | null) ?? null,
       bi_weekly_period_id: (s.biWeeklyPeriodId as string | null) ?? null,
@@ -585,6 +599,8 @@ export async function resolve_assignment_context(
     recurring_by_split,
     active_outflow_ids,
     suppressed_outflow_ids,
+    active_inflow_ids,
+    suppressed_inflow_ids,
   };
 
   log_operation_success(span, user_id);

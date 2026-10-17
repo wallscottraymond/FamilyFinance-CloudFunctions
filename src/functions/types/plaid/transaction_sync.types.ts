@@ -188,6 +188,9 @@ export interface TransactionSplitForMigration {
   outflow_pinned_period_id?: string | null;
   /** A manual bill pin parked while its bill is removed / paused for that month (X9). */
   suspended_outflow_pin_id?: string | null;
+  /** A manual income pin (Convert-To-Recurring Phase 2), carried pending → posted. */
+  inflow_assignment_source?: "auto" | "manual";
+  inflow_id?: string | null;
   category_source?: "plaid" | "user";
   overall_category_id?: string | null;
   first_category_id?: string | null;
@@ -313,6 +316,9 @@ export interface TransactionSplitForPersistence {
   outflow_pinned_period_id?: string | null;
   /** A manual bill pin parked while its bill is removed / paused for that month (X9). */
   suspended_outflow_pin_id?: string | null;
+  /** A manual income pin (Convert-To-Recurring Phase 2), carried pending → posted. */
+  inflow_assignment_source?: "auto" | "manual";
+  inflow_id?: string | null;
   category_source?: "plaid" | "user";
   overall_category_id?: string | null;
   first_category_id?: string | null;

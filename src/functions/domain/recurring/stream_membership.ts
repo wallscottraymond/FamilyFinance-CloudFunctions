@@ -72,17 +72,22 @@ export function is_txn_detached_from_outflow(
 
 /**
  * Is this split OFF its income streams? A manual budget pin (canon A4 / A13: a pinned income
- * credit counts in the pinned budget; the engine stores no income link). PURE.
+ * credit counts in the pinned budget; the engine stores no income link), or — Convert-To-Recurring
+ * Phase 2 — a manual INCOME pin to a different income than `stream_id` (the user said this credit
+ * pays that income, so it is not also the stream's payment). A pin to the stream's own income stays
+ * on it. PURE.
  */
-export function is_split_detached_from_inflow(split: unknown): boolean {
-  return ((split ?? {}) as SplitPins).budgetAssignmentSource === "manual";
+export function is_split_detached_from_inflow(split: unknown, stream_id?: string | null): boolean {
+  const s = (split ?? {}) as SplitPins & { inflowId?: unknown; inflowAssignmentSource?: unknown };
+  if (s.budgetAssignmentSource === "manual") return true;
+  return s.inflowAssignmentSource === "manual" && !!s.inflowId && !!stream_id && s.inflowId !== stream_id;
 }
 
 /** True when ANY split of the transaction is off its income streams. PURE. */
 export function is_txn_detached_from_inflow(
   splits: ReadonlyArray<unknown> | null | undefined
 ): boolean {
-  return (splits ?? []).some(is_split_detached_from_inflow);
+  return (splits ?? []).some((sp) => is_split_detached_from_inflow(sp));
 }
 
 /**
@@ -104,7 +109,9 @@ export function splits_paying_recurring<T>(
   const link = (sp: T) => ((sp ?? {}) as Record<string, unknown>)[field] ?? null;
   const linked = splits.filter((sp) => link(sp) === recurring_id);
   if (linked.length || !in_stream) return linked;
-  const off = kind === "outflow" ? is_split_detached_from_outflow : is_split_detached_from_inflow;
+  const off = kind === "outflow"
+    ? is_split_detached_from_outflow
+    : (sp: unknown) => is_split_detached_from_inflow(sp, recurring_id);
   return splits.filter((sp) => link(sp) === null && !off(sp));
 }
 
@@ -118,10 +125,14 @@ export function is_edge_money(transfer_role: unknown): boolean {
 }
 
 /** Is this split ON its transaction's Plaid stream (member, not taken off)? PURE. */
-export function is_split_on_stream(split: unknown, kind: "outflow" | "inflow"): boolean {
+export function is_split_on_stream(
+  split: unknown,
+  kind: "outflow" | "inflow",
+  stream_id?: string | null
+): boolean {
   return kind === "outflow"
     ? !is_split_detached_from_outflow(split)
-    : !is_split_detached_from_inflow(split);
+    : !is_split_detached_from_inflow(split, stream_id);
 }
 
 /**

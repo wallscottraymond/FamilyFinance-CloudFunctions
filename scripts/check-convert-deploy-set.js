@@ -28,6 +28,10 @@ const DEPLOY_SET = [
   "sync_all_recurring_scheduled", "sync_all_transactions_scheduled",
   // the new callable + the period extensions changed by this project
   "answer_recurring_review_item", "extendRecurringOutflowPeriods", "extendRecurringInflowPeriods",
+  // Phase 2 (convert backend): the callables. The assignment engine is bundled into ~15 functions —
+  // an OLD instance would clobber a manual income pin (merge_assignment), so the whole set deploys
+  // from one commit.
+  "assign_split_to_inflow",
 ];
 const DERIVE_FUNCTIONS = DEPLOY_SET.filter((f) => f.startsWith("derive_")).concat("widget_snapshot");
 

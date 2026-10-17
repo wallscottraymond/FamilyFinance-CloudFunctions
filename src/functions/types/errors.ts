@@ -195,6 +195,19 @@ export class AlreadyProcessedError extends DomainError {
 }
 
 /**
+ * A request the system understood and refused for a reason the app shows (Convert-To-Recurring
+ * Phase 2): e.g. `ALREADY_TRACKED` (this transaction already pays a live bill), `OUT_OF_VIEW`,
+ * `NOT_AN_INCOME_PAYMENT`, `FEATURE_OFF`. The entry maps it to `failed-precondition` and passes
+ * `code` + `details` to the client so the sheet can say the right thing.
+ */
+export class ConvertRefusedError extends DomainError {
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(message, code, details);
+    this.name = "ConvertRefusedError";
+  }
+}
+
+/**
  * Maps DomainError to HTTP status codes for Entry layer.
  */
 export function get_http_status(error: DomainError): number {

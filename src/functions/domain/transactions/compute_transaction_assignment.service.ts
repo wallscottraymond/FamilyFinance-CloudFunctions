@@ -59,6 +59,10 @@ export interface SplitForAssignment {
    *  money counts as spending meanwhile); restored when the bill is live again (X9). */
   suspended_outflow_pin?: string | null;
   inflow_id: string | null;
+  /** Manual income-pin (Convert-To-Recurring Phase 2): when `"manual"`, `inflow_id` is a
+   *  user-chosen income the engine PRESERVES while that income is the owner's own and in this
+   *  view. Absent = `"auto"` (the engine derives it from the recurring match). */
+  inflow_source?: "auto" | "manual";
   monthly_period_id: string | null;
   weekly_period_id: string | null;
   bi_weekly_period_id: string | null;
@@ -104,6 +108,12 @@ export interface AssignmentContext {
   /** Bills (in this view) removed / paused for this transaction's month: a manual pin to one is
    *  PARKED (`suspended_outflow_pin`), not dropped, so Restore brings it back. */
   suppressed_outflow_ids?: Set<string>;
+  /** The caller's OWN live incomes in this view — validates a manual income pin. Omitted → no pin
+   *  is honoured (deny by default: a pin never links to an income the resolver didn't vouch for). */
+  active_inflow_ids?: Set<string>;
+  /** Incomes (in this view) removed / paused for this transaction's month: a manual pin to one
+   *  stays as stored (the readers drop a released link on read). */
+  suppressed_inflow_ids?: Set<string>;
 }
 
 /** The computed assignment for one split (the engine-owned fields only). */
@@ -123,6 +133,8 @@ export interface AssignedSplit {
   /** A parked manual bill pin (see `SplitForAssignment.suspended_outflow_pin`), else null. */
   suspended_outflow_pin: string | null;
   inflow_id: string | null;
+  /** "manual" = a user-pinned income the engine preserves; else "auto". */
+  inflow_source: "auto" | "manual";
   monthly_period_id: string | null;
   weekly_period_id: string | null;
   bi_weekly_period_id: string | null;
@@ -349,6 +361,23 @@ export function compute_transaction_assignment(
       recurring_reason = "manual_detached";
     }
 
+    // Manual income pin (Convert-To-Recurring Phase 2): the user said this credit is a payment of a
+    // specific income. Honoured only for a CREDIT, never together with a budget pin (a budget pin
+    // detaches the income pin — canon A4), and only for the caller's own income in this view (or
+    // one removed / paused for this month, kept as stored — readers drop its link on read). A
+    // pin to anything else is dropped and the split falls back to auto-derivation.
+    let inflow_source: "auto" | "manual" = "auto";
+    if (
+      split.inflow_source === "manual" && split.inflow_id && source !== "manual" && context.txn_is_income &&
+      (context.active_inflow_ids?.has(split.inflow_id) || context.suppressed_inflow_ids?.has(split.inflow_id))
+    ) {
+      inflow_id = split.inflow_id;
+      inflow_source = "manual";
+      recurring_reason = "inflow";
+      // An income payment is not also a bill payment (a "remove from bill" detach stays).
+      if (!(outflow_source === "manual" && !outflow_id)) outflow_id = null;
+    }
+
     // Edge money (3d: a transfer crossing the view — edge_out / edge_in) is never a bill payment
     // or a paycheck: the period page drops every recurring link on it (stream membership, split
     // links, manual pins) and counts it as spending / money in. Store no link either. The user's
@@ -358,7 +387,8 @@ export function compute_transaction_assignment(
       if (outflow_source === "manual" && outflow_id) suspended_outflow_pin = outflow_id;
       const keep_detach = outflow_source === "manual" && !outflow_id;
       outflow_id = null;
-      inflow_id = null;
+      // A manual income pin stays as stored (the readers drop every link on edge money).
+      inflow_id = inflow_source === "manual" ? inflow_id : null;
       outflow_source = keep_detach ? "manual" : "auto";
       recurring_reason = keep_detach ? "manual_detached" : "none";
     }
@@ -392,6 +422,7 @@ export function compute_transaction_assignment(
       outflow_source,
       suspended_outflow_pin,
       inflow_id,
+      inflow_source,
       monthly_period_id: periods.monthly_period_id,
       weekly_period_id: periods.weekly_period_id,
       bi_weekly_period_id: periods.bi_weekly_period_id,
@@ -435,6 +466,7 @@ function split_assignment_changed(
     (before.outflow_source ?? "auto") !== after.outflow_source ||
     (before.suspended_outflow_pin ?? null) !== after.suspended_outflow_pin ||
     before.inflow_id !== after.inflow_id ||
+    (before.inflow_source ?? "auto") !== after.inflow_source ||
     before.monthly_period_id !== after.monthly_period_id ||
     before.weekly_period_id !== after.weekly_period_id ||
     before.bi_weekly_period_id !== after.bi_weekly_period_id ||
