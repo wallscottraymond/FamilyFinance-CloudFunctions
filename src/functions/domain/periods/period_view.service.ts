@@ -33,9 +33,12 @@ import {
   PlacedOccurrenceGroup,
 } from "../recurring/occurrence_placement.service";
 import {
+  EARLY_CARRY_MAX_MS,
+  carried_early_payment_ms,
   is_payment_suppressed,
   is_suppressed_in_period,
 } from "../recurring/recurring_suppression.service";
+import type { ReconciledOccurrence } from "../recurring/reconcile_occurrences.service";
 import { PeriodDerivationDeps } from "./period_derivation.types";
 
 /** Synthetic income id for the "Other Income" bucket (unmatched real INCOME_* credits). */
@@ -101,7 +104,14 @@ export function compute_period_view(
   const income: DerivedRecurringResult[] = [];
   for (const r of deps.recurring) {
     // Expected occurrences (due date + the amount the page expects) — the shared rule.
-    const expected = build_expected_occurrences(r, deps.span_start_ms, deps.span_end_ms);
+    // D28: a removed / paused / ended BILL also looks just past the span, so an occurrence due in
+    // a suppressed month right after it can be matched by an early payment made inside the span
+    // (due Oct 1, paid Sep 29: the Sep view). Only such carried occurrences are kept from there.
+    const lookahead_ms = r.kind === "outflow" && r.removal_intervals?.length ? EARLY_CARRY_MAX_MS : 0;
+    const expected = build_expected_occurrences(r, deps.span_start_ms, deps.span_end_ms + lookahead_ms)
+      // Past the span: only a suppressed month's occurrence (the only kind an early payment carries
+      // back) — a kept one there could take a payment from an occurrence inside the span.
+      .filter((e) => e.due_date_ms <= deps.span_end_ms || is_payment_suppressed(r.removal_intervals, e.due_date_ms));
     // Income reconciles those expected occurrences against ACTUAL Plaid deposits
     // (authoritative receipts, with extras surfaced); bills reconcile against linked
     // payments. Both then place into the view buckets identically.
@@ -126,8 +136,10 @@ export function compute_period_view(
     // (is_payment_suppressed). Judging by the VIEW period's end instead dropped a week (or any
     // bucket) straddling the boundary in full: a payment made before an "It ended" date then
     // counted nowhere (not paid, not released). Monthly views are unchanged (bucket = month).
+    // D28: an occurrence of a suppressed month paid EARLY from a month that isn't suppressed
+    // counts as paid at its payment date (the month it was made), so that payment is counted once.
     const kept = r.removal_intervals?.length
-      ? settled.filter((o) => !is_payment_suppressed(r.removal_intervals, o.due_date_ms))
+      ? keep_unsuppressed(settled, r.removal_intervals, deps.span_start_ms, deps.span_end_ms)
       : settled;
     const groups = place_occurrences(kept, deps.placement_buckets);
     // A suppressed period shows the item only for the occurrences it kept (none → hidden).
@@ -224,6 +236,35 @@ export function compute_period_view(
   }
 
   return { view_cadence, budgets, bills, income };
+}
+
+/**
+ * The occurrences a removed / paused / ended item keeps (D26 month rule + D28): an occurrence due
+ * in a month that isn't suppressed is kept (only inside the span — the D28 look-ahead adds
+ * nothing else); one due in a suppressed month is dropped, unless it was paid EARLY by a payment
+ * made in a month that isn't suppressed — then it is kept, dated at that payment (so it lands in
+ * the payment's bucket), when the payment is inside the span. PURE.
+ */
+export function keep_unsuppressed(
+  occurrences: ReconciledOccurrence[],
+  intervals: Parameters<typeof is_payment_suppressed>[0],
+  span_start_ms: number,
+  span_end_ms: number
+): ReconciledOccurrence[] {
+  const out: ReconciledOccurrence[] = [];
+  for (const o of occurrences) {
+    if (!is_payment_suppressed(intervals, o.due_date_ms)) {
+      if (o.due_date_ms <= span_end_ms) out.push(o);
+      continue;
+    }
+    const carried = o.is_paid && !o.is_manual
+      ? carried_early_payment_ms(intervals, o.due_date_ms, o.payment_date_ms)
+      : null;
+    if (carried !== null && carried >= span_start_ms && carried <= span_end_ms) {
+      out.push({ ...o, due_date_ms: carried });
+    }
+  }
+  return out;
 }
 
 /**

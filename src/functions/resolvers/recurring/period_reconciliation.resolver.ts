@@ -47,6 +47,8 @@ export interface ResolvedReconciliationPeriod {
   period_type: string;
   /** Fingerprint of the stored reconciliation (null = never reconciled) — unchanged → no write. */
   stored_fingerprint: string | null;
+  /** D28: active only because it holds an early payment carried from a removed month. */
+  carry_active?: boolean;
 }
 
 /** A linked split, sign-normalized, with its date for alignment. */
@@ -63,6 +65,10 @@ export interface ResolvedReconciliation {
   splits: ResolvedLinkedSplit[];
   /** "Mark as paid / received" marks on the definition (applied by the shared rule). */
   manual_marks: ManualSettledOccurrences;
+  /** D28: the item's INACTIVE periods (an early payment may carry into one) — only loaded data,
+   *  no extra read; empty when the item has no removal intervals. */
+  inactive_periods?: ResolvedReconciliationPeriod[];
+  removal_intervals?: RemovalInterval[];
 }
 
 export interface ResolveReconciliationInput {
@@ -132,9 +138,7 @@ export async function resolve_recurring_reconciliation(
         ? await outflow_period_repo.get_by_ids(ctx, period_ids)
         : await inflow_period_repo.get_by_ids(ctx, period_ids);
 
-  const periods: ResolvedReconciliationPeriod[] = period_docs
-    .filter(({ data }) => data.isActive !== false)
-    .map(({ id, data }) => {
+  const to_period = ({ id, data }: { id: string; data: Record<string, unknown> }): ResolvedReconciliationPeriod => {
       const per_occurrence = Number(data.amountPerOccurrence ?? 0) || recurring_amount;
       let due_dates_ms = Array.isArray(data.occurrenceDueDates)
         ? data.occurrenceDueDates
@@ -158,8 +162,14 @@ export async function resolve_recurring_reconciliation(
         is_variable_amount,
         period_type: String(data.periodType ?? ""),
         stored_fingerprint: fingerprint_stored(data.reconciliation),
+        ...(data.carryActive === true ? { carry_active: true } : {}),
       };
-    });
+  };
+  const periods: ResolvedReconciliationPeriod[] = period_docs.filter(({ data }) => data.isActive !== false).map(to_period);
+  const removal_intervals_all = (recurring as { removal_intervals?: RemovalInterval[] }).removal_intervals;
+  const inactive_periods: ResolvedReconciliationPeriod[] = removal_intervals_all?.length
+    ? period_docs.filter(({ data }) => data.isActive === false).map(to_period)
+    : [];
 
   // Period-pin support (Bill-Assignment-Two-Stage-Picker): a split that pins a specific period
   // pays THAT period's occurrence — it's placed on the DUE DATE of the bill's first occurrence in
@@ -259,5 +269,8 @@ export async function resolve_recurring_reconciliation(
       `active_periods=${periods.length}, linked_splits=${splits.length}`
   );
 
-  return { periods, splits, manual_marks: recurring.manual_settled_occurrences ?? {} };
+  return {
+    periods, splits, manual_marks: recurring.manual_settled_occurrences ?? {},
+    ...(removal_intervals_all?.length ? { inactive_periods, removal_intervals: removal_intervals_all } : {}),
+  };
 }

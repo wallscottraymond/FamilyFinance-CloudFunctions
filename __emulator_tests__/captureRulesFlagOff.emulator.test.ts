@@ -14,7 +14,10 @@
  * page is derived monthly (Sep, Oct), weekly and twice-a-month (Sep–Oct). Monthly output must
  * equal the base exactly (D26); the weekly / twice-a-month output may differ from the base in
  * EXACTLY the A2 cases (a)–(c) — the bill groups listed below (+ Everything Else's leftover in those
- * same buckets, which follows the bills due there) — and nowhere else. Weekly / twice-a-month
+ * same buckets, which follows the bills due there) — and nowhere else. Round 4 (D28, user-approved):
+ * a fourth bill (ERL, due the 1st, paid EARLY Sep 29 for Oct 1, removed from Oct 1) — its early
+ * payment now counts as paid in September: the ONLY monthly difference (Sep: that bill + EE's
+ * leftover), plus its straddling week and Sep 16–30 half. Weekly / twice-a-month
  * source periods are added in-process only (spy on source_period_repo.get_overlapping during the
  * derive) so no other suite ever sees them.
  *
@@ -163,6 +166,7 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   await act('RST', { action: 'remove', mode: 'going_forward' }, Date.UTC(2037, 8, 10)); // from Sep 1
   await act('RST', { action: 'restore' }, Date.UTC(2037, 9, 20)); // restored Oct 20
   await act('PSE', { action: 'pause', resume_ms: Date.UTC(2037, 9, 2) }, Date.UTC(2037, 8, 10)); // Sep 1 → Oct 2
+  await act('ERL', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid early Sep 29 (D28)
   await new Promise((r) => setTimeout(r, 400));
   const after_removals = await dumpScenario(db, ids);
   const derive_removed = await withSyntheticPeriods(async () => ({
@@ -220,20 +224,29 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   const { derive_removed: got_removed, ...got_rest } = out;
   const { derive_removed: base_removed, ...base_rest } = golden_all;
   expect(got_rest).toEqual(base_rest);
-  expect(got_removed.monthly_sep).toEqual(base_removed.monthly_sep); // monthly views byte-identical (D26)
+  // Monthly views byte-identical (D26) — except EXACTLY the D28 case (round 4, user-approved): the
+  // ERL bill's Sep 29 early payment for its Oct 1 occurrence (removed from Oct 1) now counts as
+  // paid in September, + Everything Else's leftover in September (it follows the bills due there).
   expect(got_removed.monthly_oct).toEqual(base_removed.monthly_oct);
+  const M_SEP = (got_removed.monthly_sep.bills as any[]).find((b) => b.recurring_id === 'TAG_S_ERL')?.groups[0]?.period_id;
+  const ee_m = (base_removed.monthly_sep.budgets as any[]).find((b) => b.is_everything_else)?.budget_id;
+  const strip = (v: any) => ({ ...v, bills: undefined, income: undefined, budgets: undefined });
+  expect(strip(got_removed.monthly_sep)).toEqual(strip(base_removed.monthly_sep));
+  expect(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)).toEqual([`bill:TAG_S_ERL@${M_SEP}`, `budget:${ee_m}@${M_SEP}`].sort());
   const W_SEP27 = period_id_at('weekly', Date.UTC(2037, 8, 27));
   const W_OCT11 = period_id_at('weekly', Date.UTC(2037, 9, 11));
   const BM_OCT_A = period_id_at('bi_monthly', Date.UTC(2037, 9, 1));
+  const BM_SEP_B = period_id_at('bi_monthly', Date.UTC(2037, 8, 16));
   const ee = (base_removed.weekly.budgets as any[]).find((b) => b.is_everything_else)?.budget_id;
   const allowed = (keys: string[], buckets: string[]) =>
     keys.filter((k) => !(k.startsWith(`budget:${ee}@`) && buckets.some((b) => k.endsWith(`@${b}`))));
   const weekly_diff = diff_keys(got_removed.weekly, base_removed.weekly);
   expect(allowed(weekly_diff, [W_SEP27, W_OCT11])).toEqual([
+    `bill:TAG_S_ERL@${W_SEP27}`, // D28
     `bill:TAG_S_PSE@${W_SEP27}`, `bill:TAG_S_RMV@${W_SEP27}`, `bill:TAG_S_RST@${W_OCT11}`,
   ].sort());
   const bm_diff = diff_keys(got_removed.bi_monthly, base_removed.bi_monthly);
-  expect(allowed(bm_diff, [BM_OCT_A])).toEqual([`bill:TAG_S_RST@${BM_OCT_A}`]);
+  expect(allowed(bm_diff, [BM_OCT_A, BM_SEP_B])).toEqual([`bill:TAG_S_ERL@${BM_SEP_B}`, `bill:TAG_S_RST@${BM_OCT_A}`].sort()); // D28 + (b)
   // …and each case went the right way.
   const group = (view: any, bill: string, pid: string) =>
     (view.bills as any[]).find((b) => b.recurring_id === bill)?.groups.find((g: any) => g.period_id === pid);
@@ -246,6 +259,14 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   expect(occ(group(got_removed.bi_monthly, 'TAG_S_RST', BM_OCT_A))).toEqual([['2037-10-12', true]]);
   expect(occ(group(base_removed.weekly, 'TAG_S_PSE', W_SEP27))).toEqual([['2037-09-29', false]]); // (c) base: expected in a paused month
   expect(occ(group(got_removed.weekly, 'TAG_S_PSE', W_SEP27))).toEqual([]); // now: listed, no occurrence
+  // D28: base — the Sep 29 early payment counted nowhere; now paid in September in every view.
+  expect(occ(group(base_removed.monthly_sep, 'TAG_S_ERL', M_SEP))).toEqual([['2037-09-01', true]]);
+  expect(occ(group(got_removed.monthly_sep, 'TAG_S_ERL', M_SEP))).toEqual([['2037-09-01', true], ['2037-09-29', true]]);
+  expect(group(base_removed.weekly, 'TAG_S_ERL', W_SEP27)).toBeUndefined();
+  expect(occ(group(got_removed.weekly, 'TAG_S_ERL', W_SEP27))).toEqual([['2037-09-29', true]]);
+  expect(occ(group(got_removed.bi_monthly, 'TAG_S_ERL', BM_SEP_B))).toEqual([['2037-09-29', true]]);
+  console.log('[D28 golden diff] monthly_sep:', JSON.stringify(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)),
+    'weekly:', JSON.stringify(weekly_diff), 'bi_monthly:', JSON.stringify(bm_diff));
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -353,4 +374,3 @@ describe('capture rules — flag off equals today (emulator)', () => {
     console.log('[R4 honest] sync cold/warm/base:', cold.reads, warm.reads, golden.counts[1].reads, ' assign+derive cold/warm:', a_cold.reads, a_warm.reads);
   }, 180000);
 });
-

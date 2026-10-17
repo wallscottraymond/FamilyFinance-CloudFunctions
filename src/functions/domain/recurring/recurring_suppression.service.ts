@@ -197,6 +197,27 @@ export function is_payment_suppressed(
 }
 
 /**
+ * D28 — an occurrence due in a removed / paused / ended (UTC) month that was paid EARLY, by a
+ * payment made in a month that ISN'T suppressed (due Oct 1, paid Sep 29, removed from Oct 1),
+ * counts as paid in the month the payment was made. The engine links that payment to the bill
+ * (it routes by the payment's own month), so dropping the occurrence by its due month left the
+ * payment counted nowhere — not paid, not budget spend — in every view.
+ * Early = at most EARLY_CARRY_MAX_MS before the due date (the derive's match tolerance). Returns
+ * the date the occurrence counts at (the payment's), or null when the rule doesn't apply. PURE.
+ */
+export const EARLY_CARRY_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+export function carried_early_payment_ms(
+  intervals: RemovalInterval[] | undefined,
+  due_ms: number,
+  payment_ms: number | null | undefined
+): number | null {
+  if (!intervals || intervals.length === 0 || payment_ms === null || payment_ms === undefined) return null;
+  if (payment_ms >= due_ms || due_ms - payment_ms > EARLY_CARRY_MAX_MS) return null;
+  if (!is_payment_suppressed(intervals, due_ms) || is_payment_suppressed(intervals, payment_ms)) return null;
+  return payment_ms;
+}
+
+/**
  * Is a STORED (materialized) period active under the removal intervals? (D27 — the same month
  * rule as the derive, b6a8281.) A period is active when it isn't suppressed as a whole (judged by
  * its END, the whole-period snap), OR when ANY of its occurrences falls in a (UTC) month that isn't

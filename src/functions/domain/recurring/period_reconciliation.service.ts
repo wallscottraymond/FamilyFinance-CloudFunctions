@@ -156,6 +156,61 @@ export function default_early_window_ms(
 }
 
 // ============================================================================
+// 1b. D28 — AN EARLY PAYMENT CARRIED OUT OF A REMOVED MONTH
+// ============================================================================
+
+/** A stored period of ONE type, active or not (D28 carry). */
+export interface CarryPeriod {
+  period_id: string;
+  start_ms: number;
+  end_ms: number;
+  occurrence_due_dates_ms: number[];
+}
+
+/** Where a payment that carries a removed month's occurrence lands. */
+export interface CarriedPayment {
+  /** Index of the payment in the input list. */
+  index: number;
+  /** The period (of this type, active or not) whose range holds the payment date. */
+  period_id: string;
+  /** The suppressed-month occurrence it paid early. */
+  carried_due_ms: number;
+}
+
+/**
+ * D28 (stored periods, the derive's rule): a payment made in a month that isn't suppressed, a few
+ * days BEFORE an occurrence due in a removed / paused / ended month (due Oct 1, paid Sep 29,
+ * removed from Oct 1), pays that occurrence — counted as paid where the payment was made: the
+ * period of this type containing its date, which then expects that occurrence AT the payment date.
+ * It carries only when that occurrence is the payment's nearest (a closer occurrence in a kept
+ * month keeps it, as the derive's nearest match does). PURE.
+ */
+export function carried_payments(
+  periods: CarryPeriod[],
+  payments: Array<{ date_ms: number }>,
+  carry: (due_ms: number, payment_ms: number) => number | null,
+  is_suppressed_due: (due_ms: number) => boolean
+): CarriedPayment[] {
+  const dues = [...new Set(periods.flatMap((p) =>
+    p.occurrence_due_dates_ms.filter((d) => d >= p.start_ms && d <= p.end_ms)))].sort((a, b) => a - b);
+  const out: CarriedPayment[] = [];
+  payments.forEach((pay, index) => {
+    let carried: number | null = null;
+    for (const d of dues) {
+      if (carry(d, pay.date_ms) === null) continue;
+      if (carried === null || d - pay.date_ms < carried - pay.date_ms) carried = d;
+    }
+    if (carried === null) return;
+    const kept_nearer = dues.some((d) => !is_suppressed_due(d) && Math.abs(d - pay.date_ms) < carried! - pay.date_ms);
+    if (kept_nearer) return;
+    const home = periods.find((p) => pay.date_ms >= p.start_ms && pay.date_ms <= p.end_ms);
+    if (!home) return;
+    out.push({ index, period_id: home.period_id, carried_due_ms: carried });
+  });
+  return out;
+}
+
+// ============================================================================
 // 2. COMPUTE PERIOD RECONCILIATION  (status from currently-linked splits)
 // ============================================================================
 

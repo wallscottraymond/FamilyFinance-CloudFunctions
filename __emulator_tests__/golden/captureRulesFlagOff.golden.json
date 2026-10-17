@@ -1,12 +1,12 @@
 {
  "results": [
   {
-   "added": 55,
+   "added": 58,
    "modified": 0,
    "removed": 0,
    "rounds": 1,
    "status": "synced",
-   "streams_written": 12
+   "streams_written": 13
   },
   {
    "added": 0,
@@ -112,6 +112,55 @@
      "TAG_t_ccpay0",
      "TAG_t_ccpay1",
      "TAG_t_ccpay2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
+   "TAG_S_ERL": {
+    "accountId": "TAG_chk",
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132697600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_ERL",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 120,
+    "lastDate": {
+     "__ts": 2137795200000
+    },
+    "merchantName": "Mortgage Co",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140646400000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_erl0",
+     "TAG_t_erl1",
+     "TAG_t_erl2"
     ],
     "type": "recurring",
     "updatedBy": "TAG_u",
@@ -613,7 +662,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 51,
+  "outflow_periods": 57,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -1900,6 +1949,714 @@
     "transactionIds": [],
     "transactionSplits": [],
     "type": "loan",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2132697600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2132697600000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2132697600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2132697600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2135376000000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl0"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2132697600000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl0"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 124,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135376000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135376000000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2135376000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135376000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137968000000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2135376000000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137968000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137968000000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2137968000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137968000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140646400000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2137968000000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 124,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140646400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140646400000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2140646400000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140646400000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143238400000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2140646400000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143238400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143238400000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2143238400000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143238400000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145916800000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143238400000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145916800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145916800000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2145916800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145916800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148595200000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145916800000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
     "updatedBy": "TAG_u",
     "userCustomName": null,
     "userId": "TAG_u"
@@ -8878,6 +9635,288 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "capital one"
+   },
+   "plaid_TAG_t_erl0": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132697600000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132697600000
+    },
+    "transactionId": "TAG_t_erl0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
+   "plaid_TAG_t_erl1": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135376000000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135376000000
+    },
+    "transactionId": "TAG_t_erl1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
+   "plaid_TAG_t_erl2": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2137795200000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2137795200000
+    },
+    "transactionId": "TAG_t_erl2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
    },
    "plaid_TAG_t_groc0": {
     "accountId": "TAG_chk",
@@ -13232,6 +14271,55 @@
     "updatedBy": "TAG_u",
     "userCustomName": null
    },
+   "TAG_S_ERL": {
+    "accountId": "TAG_chk",
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132697600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_ERL",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 120,
+    "lastDate": {
+     "__ts": 2137795200000
+    },
+    "merchantName": "Mortgage Co",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140646400000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_erl0",
+     "TAG_t_erl1",
+     "TAG_t_erl2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
    "TAG_S_GYM": {
     "accountId": "TAG_chk",
     "averageAmount": 30,
@@ -13728,7 +14816,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 51,
+  "outflow_periods": 57,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -15015,6 +16103,714 @@
     "transactionIds": [],
     "transactionSplits": [],
     "type": "loan",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2132697600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2132697600000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2132697600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2132697600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2135376000000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl0"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2132697600000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl0"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 124,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135376000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135376000000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2135376000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135376000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137968000000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2135376000000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137968000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137968000000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2137968000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137968000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140646400000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2137968000000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 124,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140646400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140646400000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2140646400000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140646400000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143238400000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2140646400000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143238400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143238400000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2143238400000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143238400000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145916800000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143238400000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145916800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145916800000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2145916800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145916800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148595200000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145916800000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
     "updatedBy": "TAG_u",
     "userCustomName": null,
     "userId": "TAG_u"
@@ -21993,6 +23789,288 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "capital one"
+   },
+   "plaid_TAG_t_erl0": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132697600000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132697600000
+    },
+    "transactionId": "TAG_t_erl0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
+   "plaid_TAG_t_erl1": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135376000000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135376000000
+    },
+    "transactionId": "TAG_t_erl1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
+   "plaid_TAG_t_erl2": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2137795200000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2137795200000
+    },
+    "transactionId": "TAG_t_erl2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
    },
    "plaid_TAG_t_groc0": {
     "accountId": "TAG_chk",
@@ -26318,6 +28396,37 @@
       "count_in_period": 1,
       "count_paid": 0,
       "count_unpaid": 1,
+      "first_due_ms": 2137968000000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2137968000000,
+      "occurrence_ids": [
+       "TAG_S_ERL_2137968000000"
+      ],
+      "occurrences": [
+       {
+        "amount": 120,
+        "due_ms": 2137968000000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 120,
+      "total_paid": 0,
+      "total_unpaid": 120
+     }
+    ],
+    "name": "Mortgage Co",
+    "recurring_id": "TAG_S_ERL"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
       "first_due_ms": 2140387200000,
       "is_due_period": true,
       "is_fully_paid": false,
@@ -26509,16 +28618,16 @@
     "name": "Everything else",
     "periods": [
      {
-      "allocated_amount": 3479.52,
+      "allocated_amount": 3359.52,
       "budget_id": "TAG_ee_monthly",
-      "effective_amount": 3479.52,
+      "effective_amount": 3359.52,
       "end_ms": 2140646399999,
       "is_derived": true,
       "no_income": false,
       "pending_spent": 0,
       "period_id": "2037M10",
       "period_type": "monthly",
-      "remaining": 3398.52,
+      "remaining": 3278.52,
       "return_amount": 0,
       "spent": 81,
       "start_ms": 2137968000000
@@ -26664,6 +28773,38 @@
     ],
     "name": "Capital One",
     "recurring_id": "TAG_S_CCPAY"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 1,
+      "count_unpaid": 0,
+      "first_due_ms": 2135376000000,
+      "is_due_period": true,
+      "is_fully_paid": true,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": null,
+      "occurrence_ids": [
+       "TAG_S_ERL_2135376000000"
+      ],
+      "occurrences": [
+       {
+        "amount": 120,
+        "due_ms": 2135376000000,
+        "paid": true,
+        "transaction_id": "plaid_TAG_t_erl1"
+       }
+      ],
+      "period_id": "2037M09",
+      "status": "paid",
+      "total_due": 120,
+      "total_paid": 120,
+      "total_unpaid": 0
+     }
+    ],
+    "name": "Mortgage Co",
+    "recurring_id": "TAG_S_ERL"
    },
    {
     "groups": [
@@ -26864,16 +29005,16 @@
     "name": "Everything else",
     "periods": [
      {
-      "allocated_amount": 5479.52,
+      "allocated_amount": 5359.52,
       "budget_id": "TAG_ee_monthly",
-      "effective_amount": 5479.52,
+      "effective_amount": 5359.52,
       "end_ms": 2137967999999,
       "is_derived": true,
       "no_income": false,
       "pending_spent": 0,
       "period_id": "2037M09",
       "period_type": "monthly",
-      "remaining": 5350.52,
+      "remaining": 5230.52,
       "return_amount": 0,
       "spent": 129,
       "start_ms": 2135376000000
@@ -27058,6 +29199,61 @@
      "TAG_t_ccpay0",
      "TAG_t_ccpay1",
      "TAG_t_ccpay2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
+   "TAG_S_ERL": {
+    "accountId": "TAG_chk",
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132697600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_ERL",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 120,
+    "lastDate": {
+     "__ts": 2137795200000
+    },
+    "merchantName": "Mortgage Co",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140646400000
+    },
+    "removalIntervals": [
+     {
+      "fromMs": 2137968000000,
+      "mode": "going_forward",
+      "toMs": null
+     }
+    ],
+    "removedByUser": true,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_erl0",
+     "TAG_t_erl1",
+     "TAG_t_erl2"
     ],
     "type": "recurring",
     "updatedBy": "TAG_u",
@@ -27577,7 +29773,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 51,
+  "outflow_periods": 57,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -28864,6 +31060,714 @@
     "transactionIds": [],
     "transactionSplits": [],
     "type": "loan",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2132697600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2132697600000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2132697600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2132697600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2135376000000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl0"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2132697600000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl0"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 124,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135376000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135376000000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2135376000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135376000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137968000000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2135376000000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 120,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137968000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137968000000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2137968000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137968000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140646400000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 120,
+     "matchedSplits": [
+      {
+       "amount": 120,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_erl2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 120,
+       "dueDate": {
+        "__ts": 2137968000000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_erl2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 120,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 124,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140646400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140646400000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2140646400000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140646400000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143238400000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2140646400000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143238400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143238400000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2143238400000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143238400000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145916800000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143238400000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_ERL_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 120,
+    "amountWithheld": 128,
+    "averageAmount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140646400000
+    },
+    "cycleStartDate": {
+     "__ts": 2138054400000
+    },
+    "dailyWithholdingRate": 4,
+    "description": "MORTGAGE CO",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 120,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145916800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_ERL_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145916800000
+    },
+    "merchant": "Mortgage Co",
+    "merchantName": "Mortgage Co",
+    "nextUnpaidDueDate": {
+     "__ts": 2145916800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145916800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_ERL",
+    "ownerId": "TAG_u",
+    "payee": "Mortgage Co",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148595200000
+    },
+    "reconciliation": {
+     "expectedAmount": 120,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145916800000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 120,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
     "updatedBy": "TAG_u",
     "userCustomName": null,
     "userId": "TAG_u"
@@ -35843,6 +38747,288 @@
     "userId": "TAG_u",
     "vendorKey": "capital one"
    },
+   "plaid_TAG_t_erl0": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132697600000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132697600000
+    },
+    "transactionId": "TAG_t_erl0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
+   "plaid_TAG_t_erl1": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135376000000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135376000000
+    },
+    "transactionId": "TAG_t_erl1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
+   "plaid_TAG_t_erl2": {
+    "accountId": "TAG_chk",
+    "amount": 120,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "MORTGAGE CO",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_erl2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Mortgage Co",
+     "plaidName": "MORTGAGE CO",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_erl2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Mortgage Co",
+    "name": "MORTGAGE CO",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_ERL"
+    ],
+    "splits": [
+     {
+      "amount": 120,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_ERL",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2137795200000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2137795200000
+    },
+    "transactionId": "TAG_t_erl2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "mortgage co"
+   },
    "plaid_TAG_t_groc0": {
     "accountId": "TAG_chk",
     "amount": 40,
@@ -40167,6 +43353,38 @@
      "recurring_id": "TAG_S_CCPAY"
     },
     {
+     "groups": [
+      {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2135376000000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_ERL_2135376000000"
+       ],
+       "occurrences": [
+        {
+         "amount": 120,
+         "due_ms": 2135376000000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_erl1"
+        }
+       ],
+       "period_id": "2037M09",
+       "status": "paid",
+       "total_due": 120,
+       "total_paid": 120,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Mortgage Co",
+     "recurring_id": "TAG_S_ERL"
+    },
+    {
      "groups": [],
      "name": "Iron Gym",
      "recurring_id": "TAG_S_PSE"
@@ -40311,16 +43529,16 @@
      "name": "Everything else",
      "periods": [
       {
-       "allocated_amount": 5757.52,
+       "allocated_amount": 5637.52,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 5757.52,
+       "effective_amount": 5637.52,
        "end_ms": 2137967999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037M09",
        "period_type": "monthly",
-       "remaining": 5350.52,
+       "remaining": 5230.52,
        "return_amount": 0,
        "spent": 407,
        "start_ms": 2135376000000
@@ -40474,6 +43692,11 @@
      ],
      "name": "Capital One",
      "recurring_id": "TAG_S_CCPAY"
+    },
+    {
+     "groups": [],
+     "name": "Mortgage Co",
+     "recurring_id": "TAG_S_ERL"
     },
     {
      "groups": [
@@ -41090,6 +44313,89 @@
      ],
      "name": "Capital One",
      "recurring_id": "TAG_S_CCPAY"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2135376000000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_ERL_2135376000000"
+       ],
+       "occurrences": [
+        {
+         "amount": 120,
+         "due_ms": 2135376000000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_erl1"
+        }
+       ],
+       "period_id": "2037SW01",
+       "status": "paid",
+       "total_due": 120,
+       "total_paid": 120,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW02",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW03",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW04",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Mortgage Co",
+     "recurring_id": "TAG_S_ERL"
     },
     {
      "groups": [
@@ -41859,16 +45165,16 @@
      "name": "Everything else",
      "periods": [
       {
-       "allocated_amount": 1966.52,
+       "allocated_amount": 1846.52,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 1966.52,
+       "effective_amount": 1846.52,
        "end_ms": 2135807999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SW01",
        "period_type": "weekly",
-       "remaining": 1922.52,
+       "remaining": 1802.52,
        "return_amount": 0,
        "spent": 44,
        "start_ms": 2135203200000
@@ -42567,6 +45873,55 @@
     {
      "groups": [
       {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2135376000000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_ERL_2135376000000"
+       ],
+       "occurrences": [
+        {
+         "amount": 120,
+         "due_ms": 2135376000000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_erl1"
+        }
+       ],
+       "period_id": "2037SBM9A",
+       "status": "paid",
+       "total_due": 120,
+       "total_paid": 120,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SBM9B",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Mortgage Co",
+     "recurring_id": "TAG_S_ERL"
+    },
+    {
+     "groups": [
+      {
        "count_in_period": 0,
        "count_paid": 0,
        "count_unpaid": 0,
@@ -42967,16 +46322,16 @@
      "name": "Everything else",
      "periods": [
       {
-       "allocated_amount": 3836.51,
+       "allocated_amount": 3716.51,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 3836.51,
+       "effective_amount": 3716.51,
        "end_ms": 2136671999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SBM9A",
        "period_type": "bi_monthly",
-       "remaining": 3516.51,
+       "remaining": 3396.51,
        "return_amount": 0,
        "spent": 320,
        "start_ms": 2135376000000
@@ -43243,43 +46598,43 @@
  },
  "counts": [
   {
-   "reads": 690,
-   "writes": 212,
-   "audit_writes": 76,
+   "reads": 741,
+   "writes": 228,
+   "audit_writes": 83,
    "reads_by": {
     "purge_status": 1,
     "_item_sync_leases": 2,
     "plaid_items": 3,
     "users": 6,
     "inflows": 13,
-    "outflows": 59,
+    "outflows": 65,
     "accounts": 9,
-    "transactions": 230,
+    "transactions": 245,
     "rules": 1,
     "categories": 1,
-    "inflow_periods": 43,
     "budgets": 12,
-    "outflow_periods": 213,
-    "source_periods": 94,
+    "inflow_periods": 43,
+    "outflow_periods": 237,
+    "source_periods": 100,
     "budget_periods": 3,
     "_transfer_classification_state": 1
    },
    "writes_by": {
     "_item_sync_leases": 2,
     "inflows": 2,
-    "_audit": 76,
-    "outflows": 11,
+    "_audit": 83,
+    "outflows": 12,
     "plaid_items": 2,
-    "transactions": 61,
+    "transactions": 64,
+    "outflow_periods": 120,
     "inflow_periods": 22,
     "_logs_minimal": 1,
-    "outflow_periods": 108,
     "user_data_versions": 2,
     "_transfer_classification_state": 1
    }
   },
   {
-   "reads": 40,
+   "reads": 42,
    "writes": 4,
    "audit_writes": 0,
    "reads_by": {
@@ -43288,7 +46643,7 @@
     "plaid_items": 3,
     "users": 2,
     "inflows": 4,
-    "outflows": 19,
+    "outflows": 21,
     "accounts": 6,
     "transactions": 2,
     "rules": 1

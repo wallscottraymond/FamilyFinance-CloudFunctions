@@ -751,6 +751,31 @@ export const outflow_period_repo = {
    * fields in place, batched, **NOT** `increment` (invalidation model). The
    * orchestrator is responsible for NOT passing inactive periods.
    */
+  /**
+   * D28: turn periods on that hold an early payment carried out of a removed month (marked
+   * `carryActive`), and turn off the ones that no longer do (only periods carrying the mark —
+   * a period inactive or active for any other reason is never touched). Writes only those two
+   * fields. Returns the number of docs written.
+   */
+  async set_carry_active(_ctx: TraceContext, on_ids: string[], off_ids: string[], clear_ids: string[] = []): Promise<number> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const all = [
+      ...on_ids.map((id) => [id, { isActive: true, carryActive: true }] as const),
+      ...off_ids.map((id) => [id, { isActive: false, carryActive: false }] as const),
+      // Active again by the month rule itself (restored): only the mark is dropped.
+      ...clear_ids.map((id) => [id, { carryActive: false }] as const),
+    ];
+    /* eslint-enable @typescript-eslint/naming-convention */
+    if (all.length === 0) return 0;
+    const db = getFirestore();
+    for (const chunk of chunk_for_batch(all)) {
+      const batch = db.batch();
+      for (const [id, data] of chunk) batch.update(db.collection(COLLECTION).doc(id), data);
+      await batch.commit();
+    }
+    return all.length;
+  },
+
   async update_reconciliation(
     _ctx: TraceContext,
     results: ReconciliationResult[]

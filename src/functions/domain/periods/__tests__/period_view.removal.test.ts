@@ -94,3 +94,50 @@ describe("derive month rule — A2 cases (pure)", () => {
     expect(total(derive([bill], "bi_monthly", win))).toEqual(m);
   });
 });
+
+describe("D28 — an early payment before a removal / end cut-off counts (pure)", () => {
+  // Due the 1st; paid Sep 1 on time and Sep 29 EARLY for Oct 1; removed (or ended / paused) from Oct 1.
+  const make = (mode: "going_forward" | "paused"): BillSpec => ({
+    id: "e", frequency: "monthly", amount: 100, anchor_ms: U(11, 1), first_ms: U(1, 1),
+    removal_intervals: [{ from_ms: Date.UTC(2026, 9, 1), to_ms: mode === "paused" ? Date.UTC(2026, 10, 1) : null, mode }],
+    payments: [{ id: "p_sep1", date_ms: U(9, 1), amount: 100 }, { id: "p_sep29", date_ms: U(9, 29), amount: 100 }],
+  });
+  for (const mode of ["going_forward", "paused"] as const) {
+    it(`${mode}: paid in Sep in every cadence (one window or a range), Oct hidden, counted exactly once, never budget spend`, () => {
+      const bill = make(mode);
+      const SEP = { start: Date.UTC(2026, 8, 1), end: Date.UTC(2026, 9, 1) - 1 };
+      for (const w of [SEP, SEP_OCT]) {
+        const m = derive([bill], "monthly", w);
+        expect(occ(m, "e", "M_2026_8")).toEqual([["2026-09-01", true], ["2026-09-29", true]]);
+        expect(visible(m, "e", "M_2026_9")).toBe(false);
+        expect(payment_counts(m, [bill]).get("p_sep29")).toBe(1);
+        expect(by_bucket(m, "e").get("M_2026_8")?.ee).toBe(0);
+        const bm = derive([bill], "bi_monthly", w);
+        expect(occ(bm, "e", "BM_2026_8_B")).toEqual([["2026-09-29", true]]);
+        expect(payment_counts(bm, [bill]).get("p_sep29")).toBe(1);
+      }
+      const wk = derive([bill], "weekly", SEP_OCT);
+      expect(occ(wk, "e", W_SEP27)).toEqual([["2026-09-29", true]]);
+      expect(payment_counts(wk, [bill]).get("p_sep29")).toBe(1);
+      expect(by_bucket(wk, "e").get(W_SEP27)?.ee).toBe(0);
+      // The Oct view alone: hidden, nothing counted there.
+      const oct = derive([bill], "monthly", { start: Date.UTC(2026, 9, 1), end: Date.UTC(2026, 10, 1) - 1 });
+      expect(visible(oct, "e", "M_2026_9")).toBe(false);
+    });
+  }
+
+  it("not early (paid on/after the due day in the removed month) or the payment's month removed too → unchanged", () => {
+    const late: BillSpec = { ...make("going_forward"), payments: [{ id: "p_oct2", date_ms: U(10, 2), amount: 100 }] };
+    const m = derive([late], "monthly", SEP_OCT);
+    expect(visible(m, "e", "M_2026_9")).toBe(false);
+    expect(by_bucket(m, "e").get("M_2026_9")?.ee).toBe(100); // released → budget spend, as before
+    const both: BillSpec = { ...make("going_forward"), removal_intervals: [{ from_ms: Date.UTC(2026, 8, 1), to_ms: null, mode: "going_forward" }] };
+    expect(visible(derive([both], "monthly", SEP_OCT), "e", "M_2026_8")).toBe(false);
+  });
+
+  it("no removal: a cross-month early payment is untouched (no look-ahead for live bills)", () => {
+    const live: BillSpec = { ...make("going_forward"), removal_intervals: [] };
+    const SEP = { start: Date.UTC(2026, 8, 1), end: Date.UTC(2026, 9, 1) - 1 };
+    expect(occ(derive([live], "monthly", SEP), "e", "M_2026_8")).toEqual([["2026-09-01", true]]);
+  });
+});

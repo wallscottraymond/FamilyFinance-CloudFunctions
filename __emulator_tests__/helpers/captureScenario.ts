@@ -20,6 +20,8 @@
  *   S_RMV     bill    MATURE  MONTHLY  active          City Water, due 29th, paid Jul–Sep  → removed from Oct 1
  *   S_RST     bill    MATURE  MONTHLY  active          Car Loan, due 12th, paid Jul–Oct    → removed Sep 1, restored Oct 20
  *   S_PSE     bill    MATURE  MONTHLY  active          Iron Gym, due 29th, paid Jul–Sep    → paused Sep 1 → Oct 2
+ *   S_ERL     bill    MATURE  MONTHLY  active          Mortgage Co, due 1st, paid Aug 1, Sep 1 + Sep 29
+ *                                                       (early, for Oct 1)                  → removed from Oct 1 (D28)
  *
  * Everything is deterministic for a fixed clock (`NOW_ISO`, frozen via jest
  * fake Date in the suites), and ids are prefixed with `tag` so many scenarios share one emulator.
@@ -81,6 +83,8 @@ export const REMOVAL_BILLS = {
   RMV: { name: 'CITY WATER', merchant: 'City Water', primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_WATER', amount: 61, paid_days_ago: [78, 47, 16], first_days_ago: 78, last_days_ago: 16, next_days: 14 },
   RST: { name: 'CAR LOAN CO', merchant: 'Car Loan Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_CAR_PAYMENT', amount: 233, paid_days_ago: [95, 64, 33, 3], first_days_ago: 95, last_days_ago: 3, next_days: 28 },
   PSE: { name: 'IRON GYM', merchant: 'Iron Gym', primary: 'PERSONAL_CARE', detailed: 'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS', amount: 45, paid_days_ago: [78, 47, 16], first_days_ago: 78, last_days_ago: 16, next_days: 14 },
+  // D28 (round 4): due the 1st, paid Aug 1, Sep 1 and EARLY on Sep 29 for Oct 1 → removed from Oct 1.
+  ERL: { name: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 120, paid_days_ago: [75, 44, 16], first_days_ago: 75, last_days_ago: 16, next_days: 17 },
 } as const;
 
 /** The scenario's transactions (keys are stable; ids come from `ids.txn(key)`). */

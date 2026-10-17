@@ -9,11 +9,11 @@
  *     across the weekly buckets and across the twice-a-month buckets.
  * Engine routing (link vs release by the payment's month) is modelled by the fixture.
  *
- * Payments never cross into the previous month here: a payment made in a KEPT month for an
- * occurrence due in a REMOVED month (e.g. due Oct 1, paid Sep 29, removed / ended from Oct 1)
- * is counted nowhere — the engine links it by its own month, the derive drops the occurrence by
- * its due month (all cadences, monthly included, as on the base). Reported, not fixed here: the
- * fix changes monthly views (D26 keeps them byte-identical) and needs a decision. See the todo.
+ * D28 (round 4): payments may now be made EARLY across a month boundary — up to 6 days before
+ * the due date (2 for weekly bills, so a payment never sits nearer the previous occurrence), into
+ * the previous month, across removal / pause boundaries. A payment made in a KEPT month for an
+ * occurrence due in a REMOVED month (due Oct 1, paid Sep 29, removed / ended from Oct 1) is paid
+ * in the month it was made — counted exactly once, like every other payment.
  */
 import { Timestamp } from "firebase-admin/firestore";
 import { generate_expected_occurrences_in_window } from "../../outflows/outflow_period.service";
@@ -57,13 +57,16 @@ function randomBill(rnd: () => number, n: number): BillSpec {
   const payments = due
     .filter(() => rnd() < 0.8)
     .map((ms, i) => {
-      // Paid on the due day, or up to 2 days early — never into the previous month.
-      const early = Math.floor(rnd() * 3) * DAY;
-      const month_start = Date.UTC(new Date(ms).getUTCFullYear(), new Date(ms).getUTCMonth(), 1);
-      return { id: `b${n}_p${i}`, date_ms: Math.max(month_start, ms - early), amount };
+      // Paid on the due day or EARLY (D28: across month and removal boundaries) — up to 6 days
+      // (2 for weekly), never before the window.
+      const max_early = frequency === "weekly" ? 2 : 6;
+      const early = Math.floor(rnd() * (max_early + 1)) * DAY;
+      return { id: `b${n}_p${i}`, date_ms: Math.max(WIN.start, ms - early), amount };
     });
   return { id: `b${n}`, frequency, amount, anchor_ms, first_ms: Date.UTC(2025, 0, day, 12), removal_intervals: intervals, payments };
 }
+
+const SEEDS_D28 = Array.from({ length: 60 }, (_, i) => 1000 + i * 7919);
 
 const month_key = (ms: number) => `${new Date(ms).getUTCFullYear()}-${new Date(ms).getUTCMonth()}`;
 
@@ -109,7 +112,18 @@ describe("derive property (seeded): counted exactly once; monthly == Σ sub-mont
   }
 });
 
-describe("known gap (reported, review round 3 fix round 2)", () => {
-  it.todo("a payment in a kept month for an occurrence due in a removed month (due Oct 1, paid Sep 29, removed from Oct 1) is counted once");
+describe("D28: a payment in a kept month for an occurrence due in a removed month is counted once", () => {
+  it("the generator really produces the case (early payments across a removal / pause boundary)", () => {
+    let hits = 0;
+    for (const seed of SEEDS_D28) {
+      const rnd = mulberry32(seed);
+      const bills = Array.from({ length: 1 + Math.floor(rnd() * 3) }, (_, n) => randomBill(rnd, n));
+      for (const b of bills) for (const p of b.payments) {
+        if (!is_payment_suppressed(b.removal_intervals, p.date_ms) &&
+          b.removal_intervals.some(() => is_payment_suppressed(b.removal_intervals, p.date_ms + 6 * DAY))) hits++;
+      }
+    }
+    expect(hits).toBeGreaterThan(0);
+  });
 });
 
