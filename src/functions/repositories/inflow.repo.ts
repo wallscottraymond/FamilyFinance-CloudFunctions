@@ -19,7 +19,11 @@ import {
   TraceContext,
   create_write_result,
   chunk_for_batch,
+  ConvertRefusedError,
 } from "../types";
+
+/** The create is attempt 1; a convert that keeps failing is given up after this many. */
+const MAX_CONVERT_ATTEMPTS = 3;
 import { InflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
 import {
   RemovalInterval,
@@ -33,6 +37,7 @@ import {
   ConvertDocFields,
   ConvertEntityView,
   carried_convert_fields,
+  without_lifecycle_markers,
   map_convert_fields_to_entity,
   absorbed_streams_to_doc,
   merge_log_to_doc,
@@ -982,7 +987,9 @@ export const inflow_repo = {
         const stamped = run_id
           ? { ...doc_data, syncRunId: run_id, lastWriteSource: "plaid_sync" }
           : doc_data;
-        batch.set(doc_ref(entity.id), stamped);
+        const { data: to_write, merge: as_merge } = without_lifecycle_markers(existing_doc, stamped as unknown as Record<string, unknown>);
+        if (as_merge) batch.set(doc_ref(entity.id), to_write, { merge: true });
+        else batch.set(doc_ref(entity.id), stamped);
         writes++;
         written.push({
           id: entity.id,
@@ -1142,8 +1149,12 @@ export const inflow_repo = {
       const snap = await tx.get(doc_ref(id));
       const lease = (snap.data() as { resumeLeaseMs?: number } | undefined)?.resumeLeaseMs ?? 0;
       if (!snap.exists || lease > now_ms) return false;
+      const attempts = (snap.data() as { convertAttempts?: number }).convertAttempts ?? 1;
+      if (attempts >= MAX_CONVERT_ATTEMPTS) {
+        throw new ConvertRefusedError("CONVERT_FAILED", "This couldn't be finished. Please remove it and try again, or contact support.");
+      }
       /* eslint-disable @typescript-eslint/naming-convention */
-      tx.update(doc_ref(id), { resumeLeaseMs: now_ms + 330_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });
+      tx.update(doc_ref(id), { convertAttempts: attempts + 1, resumeLeaseMs: now_ms + 330_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });
       /* eslint-enable @typescript-eslint/naming-convention */
       return true;
     });

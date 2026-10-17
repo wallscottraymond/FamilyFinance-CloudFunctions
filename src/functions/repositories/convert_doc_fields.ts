@@ -55,6 +55,8 @@ export interface ConvertDocFields {
   resumeLeaseMs?: number;
   /** When the convert's retro-link finished (ms). Absent = a convert that died: the next tap resumes it. */
   retroLinkedAtMs?: number;
+  /** How many times the convert has run (the create is the first); a repeat failure gives up. */
+  convertAttempts?: number;
   /** The convert's periods + follow-up pass finished (ms). Absent = a resume must redo them. */
   followUpsDoneAtMs?: number;
   /** Budgets the source split(s) belonged to when converted (the resume recomputes them). */
@@ -93,12 +95,33 @@ export function carried_convert_fields(
     ...(existing?.convertedFromSplitIds !== undefined ? { convertedFromSplitIds: existing.convertedFromSplitIds } : (!existing && entity.converted_from_split_ids?.length ? { convertedFromSplitIds: entity.converted_from_split_ids } : {})),
     ...(existing?.resumeLeaseMs !== undefined ? { resumeLeaseMs: existing.resumeLeaseMs } : {}),
     ...(existing?.retroLinkedAtMs !== undefined ? { retroLinkedAtMs: existing.retroLinkedAtMs } : {}),
+    ...(existing?.convertAttempts !== undefined ? { convertAttempts: existing.convertAttempts } : {}),
     ...(existing?.followUpsDoneAtMs !== undefined ? { followUpsDoneAtMs: existing.followUpsDoneAtMs } : {}),
     ...(existing?.convertedSourceBudgetIds !== undefined ? { convertedSourceBudgetIds: existing.convertedSourceBudgetIds } : {}),
     ...(existing?.mergeLog !== undefined ? { mergeLog: existing.mergeLog } : {}),
   };
 }
 /* eslint-enable @typescript-eslint/naming-convention */
+
+/** Convert-lifecycle markers: written ONLY by targeted `update()`s, never carried by a sync's `set`. */
+export const CONVERT_LIFECYCLE_FIELDS = ["resumeLeaseMs", "retroLinkedAtMs", "followUpsDoneAtMs", "convertAttempts"] as const;
+
+/**
+ * How a sync's full-document write must treat a stored doc's lifecycle markers: when the stored doc
+ * has any, they're removed from what is written and the write becomes a MERGE — so a marker the
+ * sync read earlier can never overwrite a newer one. A doc without markers is written exactly as
+ * before (byte-identical).
+ */
+export function without_lifecycle_markers(
+  stored: object | null | undefined,
+  doc: Record<string, unknown>
+): { data: Record<string, unknown>; merge: boolean } {
+  const has = !!stored && CONVERT_LIFECYCLE_FIELDS.some((f) => (stored as Record<string, unknown>)[f] !== undefined);
+  if (!has) return { data: doc, merge: false };
+  const data = { ...doc };
+  for (const f of CONVERT_LIFECYCLE_FIELDS) delete data[f];
+  return { data, merge: true };
+}
 
 /** Entity-side (snake_case) view of the stored fields. */
 export interface ConvertEntityView {

@@ -54,6 +54,8 @@ export interface GenerateOutflowPeriodsInput {
   outflow_id: string;
   outflow_data: Record<string, unknown>;
   user_id: string;
+  /** Write only periods that don't exist yet (convert). */
+  only_missing?: boolean;
 }
 
 /**
@@ -198,7 +200,8 @@ export async function generate_outflow_periods_orchestrator(
     const write_result = await outflow_period_repo.save_batch(
       persist_span,
       periods,
-      ctx.input.user_id
+      ctx.input.user_id,
+      ctx.input.only_missing ? { only_missing: true } : undefined
     );
 
     perf.writes += write_result.count;

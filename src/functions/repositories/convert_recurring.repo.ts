@@ -118,6 +118,7 @@ export const convert_recurring_repo = {
       tx.create(built.ref, {
         ...built.data,
         resumeLeaseMs: Date.now() + RESUME_LEASE_MS,
+        convertAttempts: 1,
         ...(source_budgets.length ? { convertedSourceBudgetIds: source_budgets } : {}),
       });
       tx.update(txn_ref, update);

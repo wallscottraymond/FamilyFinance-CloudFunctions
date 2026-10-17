@@ -279,8 +279,19 @@ export const outflow_period_repo = {
   async save_batch(
     ctx: TraceContext,
     entities: OutflowPeriodForPersistence[],
-    user_id: string
+    user_id: string,
+    /** Write ONLY periods that don't exist yet (a resumed convert: stored periods keep their
+     *  isActive / isHidden and removal state). */
+    options?: { only_missing?: boolean }
   ): Promise<BatchWriteResult> {
+    if (options?.only_missing && entities.length > 0) {
+      const have = new Set<string>();
+      for (const ids of chunk_for_batch(entities.map((e) => e.id))) {
+        const snaps = await getFirestore().getAll(...ids.map((id) => doc_ref(id)), { fieldMask: [] });
+        for (const snap of snaps) if (snap.exists) have.add(snap.id);
+      }
+      entities = entities.filter((e) => !have.has(e.id));
+    }
     if (entities.length === 0) {
       console.log(`[${ctx.trace_id}] outflow_period_repo.save_batch: no entities to save`);
       return { results: [], count: 0, success: true };

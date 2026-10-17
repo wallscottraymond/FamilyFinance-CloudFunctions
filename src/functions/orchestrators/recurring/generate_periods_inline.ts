@@ -20,7 +20,9 @@ const is_outflow = (s: RecurringWrittenDoc): boolean => s.kind === "outflow";
 export async function generate_periods_inline(
   ctx: TraceContext,
   user_id: string,
-  created: RecurringWrittenDoc[]
+  created: RecurringWrittenDoc[],
+  /** Create only the periods that are missing (convert): stored ones keep their state. */
+  only_missing = false
 ): Promise<string[]> {
   const failed: string[] = [];
   for (let i = 0; i < created.length; i += PERIOD_CONCURRENCY) {
@@ -31,14 +33,14 @@ export async function generate_periods_inline(
           if (is_outflow(s)) {
             const r = await generate_outflow_periods_orchestrator({
               ...trace,
-              input: { outflow_id: s.id, outflow_data: s.after, user_id },
+              input: { outflow_id: s.id, outflow_data: s.after, user_id, ...(only_missing ? { only_missing } : {}) },
               idempotency_key: `sync_periods:${s.id}`,
             });
             if (!r.success) failed.push(s.id);
           } else {
             const r = await generate_inflow_periods_orchestrator({
               ...trace,
-              input: { inflow_id: s.id, inflow_data: s.after, user_id },
+              input: { inflow_id: s.id, inflow_data: s.after, user_id, ...(only_missing ? { only_missing } : {}) },
               idempotency_key: `sync_periods:${s.id}`,
             });
             if (!r.success) failed.push(s.id);

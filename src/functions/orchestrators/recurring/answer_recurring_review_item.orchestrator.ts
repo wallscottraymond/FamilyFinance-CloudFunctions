@@ -54,6 +54,8 @@ export interface AnswerReviewItemResult {
   status: string;
   answer: string;
   no_op: boolean;
+  /** "converted" only: the bill exists but is still being finished — the item stays open; ask again. */
+  in_progress?: boolean;
 }
 
 export async function answer_recurring_review_item_orchestrator(
@@ -99,7 +101,7 @@ export async function answer_recurring_review_item_orchestrator(
       const freq = (input.frequency ?? item.user_frequency ?? item.frequency) as ConvertFrequency | null;
       if (!freq || !CONVERT_FREQUENCIES.includes(freq)) throw new ValidationError(["pick a schedule for this bill"]);
       const due_ms = item.next_due_ms ?? now_ms;
-      await convert_transaction_to_recurring_orchestrator(ctx, user_id, {
+      const converted = await convert_transaction_to_recurring_orchestrator(ctx, user_id, {
         transaction_id: latest.id,
         name: input.name ?? item.name,
         amount: input.amount ?? item.amount,
@@ -109,6 +111,7 @@ export async function answer_recurring_review_item_orchestrator(
         review_item_id: item.id,
       }, now_ms);
       log_operation_success(span, user_id);
+      if (converted.in_progress) return { item_id: input.item_id, status: "open", answer: "converted", no_op: false, in_progress: true };
       return { item_id: input.item_id, status: "resolved", answer: "converted", no_op: false };
     }
 

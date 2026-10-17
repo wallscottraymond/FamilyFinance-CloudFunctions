@@ -114,7 +114,11 @@ export async function convert_transaction_to_recurring_orchestrator(
       if (!r.existing_conversion.retro_done) {
         // Only one resume at a time: a concurrent double tap returns the existing bill.
         const repo = direction === "outflow" ? outflow_repo : inflow_repo;
-        if (!(await repo.claim_resume(ctx, r.existing_conversion.id, now_ms))) {
+        const claimed = await repo.claim_resume(ctx, r.existing_conversion.id, now_ms).catch((e: unknown) => {
+          follow_up_done = true; // a convert that gave up: nothing more runs, no bump
+          throw e;
+        });
+        if (!claimed) {
           follow_up_done = true;
           return { id: r.existing_conversion.id, direction, already: true, in_progress: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
         }
@@ -246,7 +250,7 @@ async function complete_convert(
   //    (deterministic ids), so a resume regenerates ALL of them: a partial set is filled in.
   let periods_ok = true;
   if (!done_before) {
-    const failed = await generate_periods_inline(ctx, user_id, [{ id, kind: direction, created: true, before: null, after: record }]);
+    const failed = await generate_periods_inline(ctx, user_id, [{ id, kind: direction, created: true, before: null, after: record }], true);
     periods_ok = failed.length === 0;
   }
 
