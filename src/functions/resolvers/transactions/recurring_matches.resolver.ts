@@ -27,6 +27,7 @@ import {
 import {
   ConvertedIndex,
   d1_allows,
+  eligible_bills,
   pick_converted_bill,
 } from "../../domain/recurring/converted_match.service";
 import { converted_key } from "../../domain/recurring/convert_recurring.service";
@@ -233,6 +234,11 @@ export async function resolve_recurring_matches(
     converted_index?: ConvertedIndex;
     /** The transaction's vendor key (stored, else computed the same way). */
     txn_vendor_key?: string | null;
+    /** When our copy of the transaction was created (a late arrival links, A). */
+    txn_created_ms?: number | null;
+    /** Plaid payment id → the converted bill that ABSORBED it (D42). Subject to the same floors and
+     *  the single-split rule as a D1 key hit (B). */
+    absorbed_tx_to_id?: Map<string, string>;
   } = {}
 ): Promise<RecurringBySplit> {
   const out: RecurringBySplit = {};
@@ -255,8 +261,7 @@ export async function resolve_recurring_matches(
   let d1_pick: string | null = null;
   if (converted && converted.ids.size > 0 && opts.txn_account_id && opts.txn_vendor_key && splits.length === 1) {
     const key_bills = converted.by_key.get(converted_key(dir, opts.txn_account_id, opts.txn_vendor_key));
-    const eligible = (key_bills ?? []).filter((b) =>
-      d1_allows(b, { date_ms: txn_date_ms, plaid_id: opts.txn_plaid_id ?? null }));
+    const eligible = eligible_bills(key_bills ?? [], { date_ms: txn_date_ms, plaid_id: opts.txn_plaid_id ?? null, created_ms: opts.txn_created_ms });
     if (eligible.length > 0) {
       let scorer_pick: string | null = null;
       if (eligible.length > 1) {
@@ -270,6 +275,14 @@ export async function resolve_recurring_matches(
       }
       d1_pick = pick_converted_bill(eligible, splits[0].amount, scorer_pick);
     }
+  }
+
+  // D42: a payment of a stream a converted bill absorbed links to it (even if its vendor key differs)
+  // — under the same floors and single-split rule as a key hit.
+  if (!d1_pick && converted && opts.txn_plaid_id && splits.length === 1) {
+    const bill_id = opts.absorbed_tx_to_id?.get(opts.txn_plaid_id);
+    const bill = bill_id ? converted.by_id.get(bill_id) : undefined;
+    if (bill && d1_allows(bill, { date_ms: txn_date_ms, plaid_id: opts.txn_plaid_id, created_ms: opts.txn_created_ms })) d1_pick = bill.id;
   }
 
   // 0. AUTHORITATIVE deterministic link: if this transaction is a member of a recurring

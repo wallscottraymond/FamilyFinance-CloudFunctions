@@ -725,18 +725,53 @@ export const transaction_repo = {
     user_id: string,
     vendor_key: string,
     from_ms: number,
-    limit = 600
+    /** Rows kept in total (the account filter happens after, so this pages until it is reached). */
+    max_rows = 3000
   ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
-    const snapshot = await getFirestore()
+    const PAGE = 600;
+    const out: Array<{ id: string; data: Record<string, unknown> }> = [];
+    let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    while (out.length < max_rows) {
+      let q = getFirestore()
+        .collection(COLLECTION)
+        .where("userId", "==", user_id)
+        .where("isActive", "==", true)
+        .where("vendorKey", "==", vendor_key)
+        .where("transactionDate", ">=", Timestamp.fromMillis(from_ms))
+        .orderBy("transactionDate", "desc")
+        .limit(PAGE);
+      if (cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      for (const d of snap.docs) out.push({ id: d.id, data: d.data() as Record<string, unknown> });
+      if (snap.size < PAGE) break;
+      cursor = snap.docs[snap.docs.length - 1];
+    }
+    return out;
+  },
+
+  /**
+   * An account's ACTIVE transactions from `from_ms` on, newest first (existing index
+   * `(ownerId, accountId, transactionDate DESC)`), capped. Only the convert's fallback for a source
+   * transaction written before `vendorKey` was stored: the caller computes the key in memory.
+   */
+  async get_account_window(
+    _ctx: TraceContext,
+    user_id: string,
+    account_id: string,
+    from_ms: number,
+    limit = 1500
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const snap = await getFirestore()
       .collection(COLLECTION)
-      .where("userId", "==", user_id)
-      .where("isActive", "==", true)
-      .where("vendorKey", "==", vendor_key)
+      .where("ownerId", "==", user_id)
+      .where("accountId", "==", account_id)
       .where("transactionDate", ">=", Timestamp.fromMillis(from_ms))
       .orderBy("transactionDate", "desc")
       .limit(limit)
       .get();
-    return snapshot.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
+    return snap.docs
+      .map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+      .filter((t) => t.data.isActive !== false);
   },
 
   /**

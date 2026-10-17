@@ -45,8 +45,9 @@ describe("plan_absorb", () => {
   it("records the stream and its payments, sorted; never Plaid's numbers", () => {
     const w = plan_absorb(rec(), stream(), 5, inr, undefined);
     if (!w || w === "declined" || w === "full") throw new Error("expected a write");
-    expect(w.streams).toEqual([{ stream_id: "s1", state: "absorbed", at_ms: 5, txn_ids: ["a", "b"] }]);
-    expect(w.txn_ids).toEqual(["a", "b"]);
+    // arrival order is kept (Plaid lists oldest → newest) so a cap drops the OLDEST, and the stream's vendor is recorded
+    expect(w.streams).toEqual([{ stream_id: "s1", state: "absorbed", at_ms: 5, txn_ids: ["b", "a"], vendor_key: "landlord llc" }]);
+    expect(w.txn_ids).toEqual(["b", "a"]);
     expect(w.added_txn_ids).toEqual(["a", "b"]);
   });
   it("an already absorbed stream with nothing new is no write; growth writes only the new ids", () => {
@@ -69,6 +70,20 @@ describe("plan_absorb", () => {
     expect(w.streams).toHaveLength(20);
     expect(w.streams.some((s) => s.stream_id === "old0")).toBe(false); // the oldest gone one
   });
+  it("H: more than 120 payments in a stream keep the NEWEST 120", () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `t${String(i).padStart(3, "0")}`);
+    const w = plan_absorb(rec(), stream({ transaction_ids: ids }), 5, inr, undefined);
+    if (!w || w === "declined" || w === "full") throw new Error("expected a write");
+    expect(w.streams[0].txn_ids).toHaveLength(120);
+    expect(w.streams[0].txn_ids[119]).toBe("t149");
+    expect(w.streams[0].txn_ids).not.toContain("t000");
+    // …and growth appends at the end and re-truncates from the front
+    const g = plan_absorb(rec({ absorbed_streams: w.streams }), stream({ transaction_ids: [...ids, "t150"] }), 6, inr, undefined);
+    if (!g || g === "declined" || g === "full") throw new Error("expected growth");
+    expect(g.streams[0].txn_ids[119]).toBe("t150");
+    expect(g.streams[0].txn_ids).toHaveLength(120);
+  });
+
   it("decline drops the stream's payments from the claimed set", () => {
     const have: AbsorbedStream[] = [
       { stream_id: "s1", state: "absorbed", at_ms: 1, txn_ids: ["a", "b"] },
@@ -95,6 +110,10 @@ describe("merge + undo", () => {
   });
   it("is idempotent for an already merged record", () => {
     expect(plan_merge_old_into_new(old({ merged_into_id: "new" }), "new", NOW, MONTH)).toBeNull();
+  });
+  it("F: the log remembers the old bill's active flag so undo can restore it", () => {
+    expect(plan_merge_old_into_new(old({ is_active: false }), "new", NOW, MONTH)!.merge_log.prior_is_active).toBe(false);
+    expect("prior_is_active" in plan_merge_old_into_new(old(), "new", NOW, MONTH)!.merge_log).toBe(false);
   });
   it("undo restores the prior intervals and resets the inherited fields only where unchanged", () => {
     const log = plan_merge_old_into_new(old(), "new", NOW, MONTH)!.merge_log;

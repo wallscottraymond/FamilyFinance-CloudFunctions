@@ -200,6 +200,13 @@ export const plaid_item_repo = {
     return snap.docs.map((d) => d.id);
   },
 
+  /** Mark items as carrying a review memory ("Not a bill" vendors, held-out ids) — the recurring sync
+   *  already reads its item, so it learns the planner must run without any extra read. */
+  async set_review_memory(_ctx: TraceContext, doc_ids: string[]): Promise<void> {
+    const db = get_db();
+    await Promise.all(doc_ids.map((id) => db.collection(COLLECTION).doc(id).update({ reviewMemory: true })));
+  },
+
   async get_by_user_id(
     ctx: TraceContext,
     user_id: string,

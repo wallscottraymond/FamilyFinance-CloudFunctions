@@ -128,6 +128,7 @@ export interface InflowForPersistence {
   converted_at_ms?: number;
   /** Plaid ids of the past payments a convert linked (D2 / D46): D1 keeps them linked. */
   retro_txn_ids?: string[];
+  converted_from_split_ids?: string[];
   /** The expected amount, written at creation (a Plaid average never drifts it). */
   expected_amount_override?: number | null;
   /** Add Income (D43): the settings the form collected (hourly / commission / bonus / variable
@@ -214,6 +215,7 @@ export interface OutflowForPersistence {
   converted_at_ms?: number;
   /** Plaid ids of the past payments a convert linked (D2 / D46): D1 keeps them linked. */
   retro_txn_ids?: string[];
+  converted_from_split_ids?: string[];
   /** The expected amount, written at creation (a Plaid average never drifts it). */
   expected_amount_override?: number | null;
 }

@@ -107,3 +107,24 @@ describe("D1 in the matching order", () => {
     expect(r.s1).toEqual({ outflow_id: "old", inflow_id: null });
   });
 });
+
+describe("B: a payment of an ABSORBED stream obeys the floors and the single-split rule", () => {
+  const absorbed = new Map([["pa", "conv"]]);
+  const withAbs = (extra: Record<string, unknown> = {}) => ({
+    ...base({ txn_plaid_id: "pa", txn_vendor_key: "some other key" }), absorbed_tx_to_id: absorbed, ...extra,
+  });
+  it("links a post-floor, single-split payment whose vendor key differs", async () => {
+    const r = await resolve_recurring_matches(ctx, "u", "expense", "LL PMT", T0, one, withAbs());
+    expect(r.s1.outflow_id).toBe("conv");
+  });
+  it("an older payment of the absorbed stream stays in budgets (D40 / D46); a multi-split one is not linked", async () => {
+    expect((await resolve_recurring_matches(ctx, "u", "expense", "LL PMT", T0 - 60 * DAY, one, withAbs())).s1.outflow_id).toBeNull();
+    const multi = await resolve_recurring_matches(ctx, "u", "expense", "LL PMT", T0,
+      [{ split_id: "s1", amount: 5 }, { split_id: "s2", amount: 5 }], withAbs());
+    expect([multi.s1.outflow_id, multi.s2.outflow_id]).toEqual([null, null]);
+  });
+  it("A: a late arrival (created after the convert day, dated just before) links", async () => {
+    const late = withAbs({ txn_created_ms: T0 + 1000 });
+    expect((await resolve_recurring_matches(ctx, "u", "expense", "LL PMT", T0 - 8 * DAY, one, late)).s1.outflow_id).toBe("conv");
+  });
+});

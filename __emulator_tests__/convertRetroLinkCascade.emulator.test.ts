@@ -163,7 +163,7 @@ describe('convert / retro-link cascade is bounded (emulator)', () => {
     // the 4th, so every occurrence falls on a coffee day.
     const monthly = await convert(ctx(), uid, {
       transaction_id: `plaid_${h.ids.txn('v10')}`, name: 'Coffee', amount: 4.5, frequency: 'monthly', next_due_date: '2037-11-04', link_past: true,
-    }, NOW_MS);
+    }, Date.now());
     const linked = (await db.collection('transactions').where('splitOutflowIds', 'array-contains', monthly.id).get()).docs;
     expect(linked.length).toBe(12);
     const ids_a = linked.map((d) => d.id).sort();
@@ -180,7 +180,7 @@ describe('convert / retro-link cascade is bounded (emulator)', () => {
     const semi = await seed_vendor('qzr8g', COFFEE, 360, 1, 4.5, 1);
     const sr = await convert(ctx(), semi.h.ids.userId, {
       transaction_id: `plaid_${semi.h.ids.txn('v10')}`, name: 'Coffee2', amount: 4.5, frequency: 'semimonthly', next_due_date: '2037-10-19', link_past: true,
-    }, NOW_MS);
+    }, Date.now());
     const linked2 = (await db.collection('transactions').where('splitOutflowIds', 'array-contains', sr.id).get()).docs;
     expect(linked2.length).toBe(24);
     void ids_a;
@@ -204,7 +204,7 @@ describe('convert / retro-link cascade is bounded (emulator)', () => {
     void edge;
     const r = await convert(ctx(), uid, {
       transaction_id: `plaid_${h.ids.txn('v0')}`, name: 'Gym', amount: 40, frequency: 'monthly', next_due_date: ymd(NOW_MS + 25 * DAY), link_past: true,
-    }, NOW_MS);
+    }, Date.now());
     expect(r.linked_past_count).toBe(4); // 6 payments − the source − the edge one
     const after = (await db.collection('transactions').doc(`plaid_${h.ids.txn('v3')}`).get()).data()!;
     expect(after.updatedAt.toMillis()).toBe(before.updatedAt.toMillis());

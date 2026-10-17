@@ -215,7 +215,7 @@ export function plan_convert(facts: ConvertFacts, req: ConvertRequest, new_id: s
   const built = build_converted_recurring({
     id: new_id, direction, user_id: facts.user_id, name: req.name, amount: req.amount, frequency: req.frequency,
     next_due_ms, first_date_ms, account_id: t.account_id, vendor_key: t.vendor_key, merchant_source: t.vendor_source,
-    converted_from_txn_id: t.doc_id, now_ms: facts.now_ms,
+    converted_from_txn_id: t.doc_id, converted_from_split_ids: split_ids, now_ms: facts.now_ms,
     plaid_primary_category: t.plaid_primary_category ?? undefined,
     plaid_detailed_category: t.plaid_detailed_category ?? undefined,
   });

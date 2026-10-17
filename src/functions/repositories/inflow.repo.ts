@@ -148,6 +148,7 @@ export interface Inflow {
   absorbed_txn_ids?: string[];
   retro_txn_ids?: string[];
   retro_linked_at_ms?: number | null;
+  converted_from_split_ids?: string[];
   /** The schedule the user picked when tracking a suggestion (D8). */
   user_frequency?: string | null;
   /** Set on a record merged into another (D7 / D22 / D41): what undo needs. */
@@ -1098,9 +1099,10 @@ export const inflow_repo = {
   },
 
   /** Undo a merge on the OLD inflow: its intervals back, the merge fields gone. One stamped write. */
-  async clear_merge(_ctx: TraceContext, id: string, intervals: RemovalInterval[], run_id: string): Promise<void> {
+  async clear_merge(_ctx: TraceContext, id: string, intervals: RemovalInterval[], run_id: string, prior_is_active?: boolean): Promise<void> {
     /* eslint-disable @typescript-eslint/naming-convention */
     await doc_ref(id).update({
+      ...(prior_is_active !== undefined ? { isActive: prior_is_active } : {}),
       removalIntervals: to_removal_interval_docs(intervals),
       removedByUser: intervals.some((i) => i.to_ms === null),
       mergedIntoId: FieldValue.delete(),
@@ -1129,6 +1131,22 @@ export const inflow_repo = {
       updatedAt: Timestamp.now(),
     });
     /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
+   * Claim the right to RESUME a died convert: one resume at a time (a lease of 2 minutes), so a
+   * concurrent double tap returns the bill instead of repeating the work. Stamped.
+   */
+  async claim_resume(_ctx: TraceContext, id: string, now_ms: number): Promise<boolean> {
+    return getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(doc_ref(id));
+      const lease = (snap.data() as { resumeLeaseMs?: number } | undefined)?.resumeLeaseMs ?? 0;
+      if (!snap.exists || lease > now_ms) return false;
+      /* eslint-disable @typescript-eslint/naming-convention */
+      tx.update(doc_ref(id), { resumeLeaseMs: now_ms + 120_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });
+      /* eslint-enable @typescript-eslint/naming-convention */
+      return true;
+    });
   },
 
   /** Does this inflow have any stored period? (A resumed convert generates them only when none exist.) */

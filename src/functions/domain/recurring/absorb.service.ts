@@ -69,6 +69,8 @@ export interface AbsorbWrite {
 }
 
 const sorted_unique = (xs: string[]): string[] => [...new Set(xs)].sort();
+/** Unique ids in arrival order (Plaid lists a stream oldest → newest), so truncating keeps the NEWEST. */
+const unique_ordered = (xs: string[]): string[] => [...new Set(xs)];
 
 /**
  * The record's absorbed state after taking `stream` (or growing it). Returns null when nothing
@@ -86,12 +88,12 @@ export function plan_absorb(
   const base_streams = pending?.streams ?? record.absorbed_streams ?? [];
   const existing = base_streams.find((s) => s.stream_id === stream.stream_id);
   if (existing?.state === "declined") return "declined";
-  const ids = sorted_unique(stream.transaction_ids).slice(0, MAX_IDS_PER_STREAM);
+  const ids = unique_ordered(stream.transaction_ids).slice(-MAX_IDS_PER_STREAM);
   if (existing) {
     const have = new Set(existing.txn_ids);
     const grown = ids.filter((id) => !have.has(id));
     if (grown.length === 0) return pending ?? null;
-    return build(record, base_streams.map((s) => (s === existing ? { ...s, txn_ids: sorted_unique([...s.txn_ids, ...grown]).slice(0, MAX_IDS_PER_STREAM) } : s)), pending, grown);
+    return build(record, base_streams.map((s) => (s === existing ? { ...s, txn_ids: unique_ordered([...s.txn_ids, ...grown]).slice(-MAX_IDS_PER_STREAM) } : s)), pending, grown);
   }
   let streams = [...base_streams];
   if (streams.length >= MAX_ABSORBED_STREAMS) {
@@ -101,12 +103,13 @@ export function plan_absorb(
     if (gone.length === 0) return "full";
     streams = streams.filter((s) => s !== gone[0]);
   }
-  streams.push({ stream_id: stream.stream_id, state: "absorbed", at_ms: now_ms, txn_ids: ids });
+  const sv = vendor_key({ merchant_name: stream.merchant_name, name: stream.description });
+  streams.push({ stream_id: stream.stream_id, state: "absorbed", at_ms: now_ms, txn_ids: ids, ...(sv ? { vendor_key: sv } : {}) });
   return build(record, streams, pending, ids);
 }
 
 function build(record: PlannerRecord, streams: AbsorbedStream[], pending: AbsorbWrite | undefined, added: string[]): AbsorbWrite {
-  const all = sorted_unique(streams.filter((s) => s.state === "absorbed").flatMap((s) => s.txn_ids)).slice(0, MAX_ABSORBED_TXN_IDS);
+  const all = unique_ordered(streams.filter((s) => s.state === "absorbed").flatMap((s) => s.txn_ids)).slice(-MAX_ABSORBED_TXN_IDS);
   return {
     record_id: record.id,
     direction: record.direction,
@@ -128,6 +131,6 @@ export function decline_absorbed_stream(
   const hit = streams.find((s) => s.stream_id === stream_id && s.state === "absorbed");
   if (!hit) return null;
   const next = streams.map((s) => (s === hit ? { ...s, state: "declined" as const, at_ms: now_ms, txn_ids: [] } : s));
-  const txn_ids = sorted_unique(next.filter((s) => s.state === "absorbed").flatMap((s) => s.txn_ids)).slice(0, MAX_ABSORBED_TXN_IDS);
+  const txn_ids = unique_ordered(next.filter((s) => s.state === "absorbed").flatMap((s) => s.txn_ids)).slice(-MAX_ABSORBED_TXN_IDS);
   return { streams: next, txn_ids };
 }

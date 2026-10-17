@@ -26,6 +26,7 @@ export interface MergeOldBill {
   /** Plaid's last payment date for it (ms), or null. */
   last_payment_ms: number | null;
   merged_into_id: string | null;
+  is_active?: boolean;
 }
 
 export interface MergePlan {
@@ -51,6 +52,7 @@ export function plan_merge_old_into_new(
       prior_intervals: old.removal_intervals,
       inherited_name: old.user_custom_name,
       inherited_override: old.expected_amount_override,
+      ...(old.is_active !== undefined ? { prior_is_active: old.is_active } : {}),
     },
     reactivate: true,
   };

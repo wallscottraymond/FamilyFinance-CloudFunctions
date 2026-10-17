@@ -15,7 +15,6 @@ import { inflow_repo } from "../../repositories/inflow.repo";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { resolve_manual_source } from "../../resolvers/recurring/manual_source.resolver";
 import { build_manual_inflow, ManualInflowRequest } from "../../domain/recurring/manual_inflow.service";
-import { utc_day_start } from "../../domain/recurring/convert_recurring.service";
 import { generate_periods_inline } from "./generate_periods_inline";
 
 export type CreateManualInflowInput = Omit<ManualInflowRequest, "id" | "user_id" | "account_id" | "vendor_key" | "now_ms"> & {
@@ -45,7 +44,7 @@ export async function create_manual_inflow_orchestrator(
     });
     if (built.errors || !built.inflow) throw new ValidationError(built.errors ?? ["Invalid income"]);
     const run_id = `manual_${randomUUID()}`;
-    const entity = built.inflow.vendor_key ? { ...built.inflow, converted_at_ms: utc_day_start(now_ms) } : built.inflow;
+    const entity = built.inflow.vendor_key ? { ...built.inflow, converted_at_ms: now_ms } : built.inflow;
     const saved = await inflow_repo.save_batch(ctx, [entity], run_id);
     await generate_periods_inline(ctx, user_id, saved.written.filter((w) => w.created));
     await bump_derive_version(user_id).catch(() => {});

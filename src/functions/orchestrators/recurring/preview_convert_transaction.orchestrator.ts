@@ -38,6 +38,10 @@ export async function preview_convert_transaction_orchestrator(
     if (r.existing_conversion?.live) {
       return { enabled: true, already_converted: { id: r.existing_conversion.id, name: r.existing_conversion.name } };
     }
+    // A conversion that was removed: convert refuses it, so the preview says so too.
+    if (r.existing_conversion) {
+      return { enabled: true, refusal: { code: "ALREADY_TRACKED", message: "This was already made into a bill", details: { id: r.existing_conversion.id, name: r.existing_conversion.name } } };
+    }
     const preview = build_preview(r.facts);
     log_operation_success(span, user_id);
     if (!preview.ok) {

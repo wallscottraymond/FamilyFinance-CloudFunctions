@@ -64,6 +64,8 @@ export interface AbsorbedStream {
   at_ms: number;
   /** The Plaid payments of that stream the record claims (their union is `absorbed_txn_ids`). */
   txn_ids: string[];
+  /** The stream's own vendor key (it can differ from the record's) — a delete remembers it too. */
+  vendor_key?: string;
 }
 
 /** How a bill was merged into another (D7 / D22 / D41), kept so the merge can be undone (D18). */
@@ -76,6 +78,8 @@ export interface MergeLog {
   /** What the new bill inherited from this one (null = nothing inherited for that field). */
   inherited_name: string | null;
   inherited_override: number | null;
+  /** The old bill's active flag before the merge (the merge keeps it active; undo restores this). */
+  prior_is_active?: boolean;
 }
 
 /** The key that links a payment (direction + account + vendor) to its converted bill(s). */
@@ -417,6 +421,7 @@ export interface BuildConvertedInput {
   /** The raw vendor string `vendor_key` was made from (the record's merchant). */
   merchant_source: string | null;
   converted_from_txn_id: string | null;
+  converted_from_split_ids?: string[];
   now_ms: number;
   /** Categories (the converting transaction's; defaults are the generic-services ones). */
   plaid_primary_category?: string;
@@ -499,7 +504,10 @@ export function build_converted_recurring(input: BuildConvertedInput): BuildConv
     // Conditional: a record without a key / source txn carries none of them (X1: no `?? null`).
     ...(key ? { vendor_key: key } : {}),
     ...(input.converted_from_txn_id ? { converted_from_txn_id: input.converted_from_txn_id } : {}),
-    converted_at_ms: utc_day_start(input.now_ms),
+    ...(input.converted_from_split_ids?.length ? { converted_from_split_ids: input.converted_from_split_ids } : {}),
+    // the exact instant (a payment CREATED after it, but dated earlier, is a late arrival — A); the D1
+    // floor is this instant's UTC day.
+    converted_at_ms: input.now_ms,
     // The average never drifts what the user typed: the override pins the expected amount.
     expected_amount_override: input.expected_amount_override === undefined ? input.amount : input.expected_amount_override,
   };

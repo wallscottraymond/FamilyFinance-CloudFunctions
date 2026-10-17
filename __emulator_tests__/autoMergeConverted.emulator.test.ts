@@ -83,8 +83,8 @@ describe('Plaid detects a converted bill (emulator)', () => {
   it('F16: one bill — the stream is absorbed, not saved; its payments (even a differently-keyed one) link to the converted bill; no double total', async () => {
     const { h, bill } = await converted_user('qzam1');
     const uid = h.ids.userId;
-    // a payment of the stream whose name/merchant differs (a different vendor key)
-    h.postTxns([ll(h.ids, 'odd', ago(2037, 7, 3), { name: 'LL PMT 7731', merchant_name: null })]);
+    // a late-arriving payment of the stream whose name/merchant differs (a different vendor key)
+    h.postTxns([ll(h.ids, 'odd', 1, { name: 'LL PMT 7731', merchant_name: null })]);
     const { rec, id } = with_stream(h, { keys: ['oct', 'sep', 'aug', 'odd'] });
     h.setRecurring(rec);
     await h.sync('detect');

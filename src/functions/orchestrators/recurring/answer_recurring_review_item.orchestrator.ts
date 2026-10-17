@@ -30,8 +30,10 @@ import { plan_review_answer, UserAnswer } from "../../domain/recurring/review_an
 import { apply_review_state_change } from "../../domain/recurring/review_item.service";
 import { manage_recurring_removal_orchestrator } from "./manage_recurring_removal.orchestrator";
 import { enqueue_item_sync } from "../plaid/sync_item.orchestrator";
+import { txn_facts } from "../../resolvers/recurring/convert.resolver";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { plan_merge_old_into_new } from "../../domain/recurring/merge.service";
+import { resolve_last_payment_ms } from "../../resolvers/recurring/last_payment.resolver";
 import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
 import { convert_transaction_to_recurring_orchestrator } from "./convert_transaction_to_recurring.orchestrator";
 import { ConvertFrequency, CONVERT_FREQUENCIES } from "../../domain/recurring/convert_recurring.service";
@@ -89,7 +91,9 @@ export async function answer_recurring_review_item_orchestrator(
       const item = context.item;
       const docs = await transaction_repo.get_raw_by_ids(ctx, item.transaction_ids);
       const latest = docs
-        .filter((d) => d.data.isActive !== false && d.data.isPending !== true && (!item.account_id || d.data.accountId === item.account_id))
+        // …of THIS suggestion's vendor (a payment of another vendor would fail the review match).
+        .filter((d) => d.data.isActive !== false && d.data.isPending !== true && (!item.account_id || d.data.accountId === item.account_id) &&
+          txn_facts(d.id, d.data, false).vendor_key === item.vendor_key)
         .sort((a, b) => ((b.data.transactionDate as { toMillis(): number }).toMillis()) - ((a.data.transactionDate as { toMillis(): number }).toMillis()))[0];
       if (!latest) throw new ValidationError(["the payments behind this suggestion are gone"]);
       const freq = (input.frequency ?? item.user_frequency ?? item.frequency) as ConvertFrequency | null;
@@ -120,7 +124,8 @@ export async function answer_recurring_review_item_orchestrator(
         const mp = plan_merge_old_into_new({
           id: old.id, removal_intervals: old.removal_intervals, user_custom_name: old.user_custom_name,
           expected_amount_override: old.expected_amount_override, user_frequency: old.user_frequency ?? null,
-          last_payment_ms: old.last_date?.toMillis?.() ?? null, merged_into_id: old.merged_into_id,
+          last_payment_ms: await resolve_last_payment_ms(ctx, user_id, context.item.direction, old.id, old.last_date?.toMillis?.() ?? null),
+          merged_into_id: old.merged_into_id, is_active: old.is_active,
         }, plan.merge.into_stream_id, now_ms, month_start);
         if (mp) {
           await repo.apply_merge(ctx, old_id, { intervals: mp.intervals, merged_into_id: plan.merge.into_stream_id, merge_log: mp.merge_log }, `merge_${ctx.trace_id}`);
@@ -162,13 +167,28 @@ export async function answer_recurring_review_item_orchestrator(
 
     // 5. "Track" / "keep separate": re-sync the item now so the bill exists right away.
     if (plan.resync_item_doc_id) {
-      await enqueue_item_sync({
-        item_doc_id: plan.resync_item_doc_id,
-        user_id,
-        recurring: true,
-        reason: `review_${input.answer}`,
-        trace_id: ctx.trace_id,
-      });
+      try {
+        await enqueue_item_sync({
+          item_doc_id: plan.resync_item_doc_id,
+          user_id,
+          recurring: true,
+          reason: `review_${input.answer}`,
+          trace_id: ctx.trace_id,
+        });
+      } catch (error) {
+        // The new bill can't be made: a "same bill" merge written above must not strand the old one.
+        if (plan.merge) {
+          const repo = context.item.direction === "outflow" ? outflow_repo : inflow_repo;
+          const old = await repo.get_by_id(ctx, plan.merge.old_record_id, { include_deleted: true });
+          const log = old?.merge_log;
+          if (old && log) {
+            await repo.clear_merge(ctx, old.id, log.prior_intervals, `merge_rollback_${ctx.trace_id}`, log.prior_is_active);
+            await repo.apply_period_suppression(ctx, old.id, log.prior_intervals, user_id);
+            await bump_derive_version(user_id).catch(() => {});
+          }
+        }
+        throw error;
+      }
     }
 
     log_operation_success(span, user_id);

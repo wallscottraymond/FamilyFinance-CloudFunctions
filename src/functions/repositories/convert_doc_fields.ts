@@ -23,6 +23,7 @@ export interface AbsorbedStreamDoc {
   atMs: number;
   /** The Plaid payments of that stream the record claims (their union is `absorbedTxnIds`). */
   txnIds?: string[];
+  vendorKey?: string;
 }
 
 export interface MergeLogDoc {
@@ -31,6 +32,7 @@ export interface MergeLogDoc {
   priorIntervals: Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>;
   inheritedName: string | null;
   inheritedOverride: number | null;
+  priorIsActive?: boolean;
 }
 
 /** The stored fields (all optional: absent = none). */
@@ -47,6 +49,10 @@ export interface ConvertDocFields {
   absorbedTxnIds?: string[];
   /** Past payments (Plaid transaction ids) a convert linked (D2 / D46) — D1 keeps them linked. */
   retroTxnIds?: string[];
+  /** The splits of the converting transaction this record was converted from (a 2nd split converts on its own). */
+  convertedFromSplitIds?: string[];
+  /** Lease so only one resume of a died convert runs at a time (ms). */
+  resumeLeaseMs?: number;
   /** When the convert's retro-link finished (ms). Absent = a convert that died: the next tap resumes it. */
   retroLinkedAtMs?: number;
   /** Set on a record that was merged into another (D7 / D22 / D41), so the merge can be undone. */
@@ -59,6 +65,7 @@ export interface ConvertEntityFields {
   converted_from_txn_id?: string;
   converted_at_ms?: number;
   retro_txn_ids?: string[];
+  converted_from_split_ids?: string[];
 }
 
 /**
@@ -79,6 +86,8 @@ export function carried_convert_fields(
     ...(existing?.absorbedStreams !== undefined ? { absorbedStreams: existing.absorbedStreams } : {}),
     ...(existing?.absorbedTxnIds !== undefined ? { absorbedTxnIds: existing.absorbedTxnIds } : {}),
     ...(existing?.retroTxnIds !== undefined ? { retroTxnIds: existing.retroTxnIds } : (!existing && entity.retro_txn_ids?.length ? { retroTxnIds: entity.retro_txn_ids } : {})),
+    ...(existing?.convertedFromSplitIds !== undefined ? { convertedFromSplitIds: existing.convertedFromSplitIds } : (!existing && entity.converted_from_split_ids?.length ? { convertedFromSplitIds: entity.converted_from_split_ids } : {})),
+    ...(existing?.resumeLeaseMs !== undefined ? { resumeLeaseMs: existing.resumeLeaseMs } : {}),
     ...(existing?.retroLinkedAtMs !== undefined ? { retroLinkedAtMs: existing.retroLinkedAtMs } : {}),
     ...(existing?.mergeLog !== undefined ? { mergeLog: existing.mergeLog } : {}),
   };
@@ -94,6 +103,7 @@ export interface ConvertEntityView {
   absorbed_txn_ids: string[];
   retro_txn_ids: string[];
   retro_linked_at_ms: number | null;
+  converted_from_split_ids: string[];
   merge_log: MergeLog | null;
 }
 
@@ -107,10 +117,12 @@ export function map_convert_fields_to_entity(doc: ConvertDocFields): ConvertEnti
       state: s.state,
       at_ms: s.atMs,
       txn_ids: s.txnIds ?? [],
+      ...(s.vendorKey ? { vendor_key: s.vendorKey } : {}),
     })),
     absorbed_txn_ids: doc.absorbedTxnIds ?? [],
     retro_txn_ids: doc.retroTxnIds ?? [],
     retro_linked_at_ms: doc.retroLinkedAtMs ?? null,
+    converted_from_split_ids: doc.convertedFromSplitIds ?? [],
     merge_log: doc.mergeLog
       ? {
         into: doc.mergeLog.into,
@@ -120,6 +132,7 @@ export function map_convert_fields_to_entity(doc: ConvertDocFields): ConvertEnti
         ),
         inherited_name: doc.mergeLog.inheritedName,
         inherited_override: doc.mergeLog.inheritedOverride,
+        ...(doc.mergeLog.priorIsActive !== undefined ? { prior_is_active: doc.mergeLog.priorIsActive } : {}),
       }
       : null,
   };
@@ -127,7 +140,7 @@ export function map_convert_fields_to_entity(doc: ConvertDocFields): ConvertEnti
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export const absorbed_streams_to_doc = (xs: AbsorbedStream[]): AbsorbedStreamDoc[] =>
-  xs.map((s) => ({ streamId: s.stream_id, state: s.state, atMs: s.at_ms, txnIds: s.txn_ids }));
+  xs.map((s) => ({ streamId: s.stream_id, state: s.state, atMs: s.at_ms, txnIds: s.txn_ids, ...(s.vendor_key ? { vendorKey: s.vendor_key } : {}) }));
 
 export const merge_log_to_doc = (m: MergeLog): MergeLogDoc => ({
   into: m.into,
@@ -135,5 +148,6 @@ export const merge_log_to_doc = (m: MergeLog): MergeLogDoc => ({
   priorIntervals: m.prior_intervals.map((i) => ({ fromMs: i.from_ms, toMs: i.to_ms, mode: i.mode })),
   inheritedName: m.inherited_name,
   inheritedOverride: m.inherited_override,
+  ...(m.prior_is_active !== undefined ? { priorIsActive: m.prior_is_active } : {}),
 });
 /* eslint-enable @typescript-eslint/naming-convention */

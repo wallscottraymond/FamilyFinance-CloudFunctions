@@ -60,6 +60,8 @@ export interface PlaidItemForRecurringSync {
 
   /** Last recurring sync timestamp */
   last_recurring_sync?: Date | null;
+  /** The user has a "Not a bill" / delete memory the planner must honour (C). */
+  review_memory?: boolean;
 }
 
 /**
@@ -400,6 +402,7 @@ export async function resolve_recurring_sync_dependencies(
       institution_id: item_data.institutionId || "",
       institution_name: item_data.institutionName || "Unknown Institution",
       last_recurring_sync: item_data.lastRecurringSyncAt?.toDate() || null,
+      review_memory: (item_data as { reviewMemory?: boolean }).reviewMemory === true,
     },
     user_context,
     existing_manual_inflows,

@@ -29,7 +29,6 @@ import { is_convert_to_recurring_enabled } from "../../infrastructure/feature_fl
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { resolve_manual_source } from "../../resolvers/recurring/manual_source.resolver";
 import { CAPTURE_RULES_VERSION } from "../../domain/recurring/capture_rules";
-import { utc_day_start } from "../../domain/recurring/convert_recurring.service";
 import { generate_periods_inline } from "./generate_periods_inline";
 import { ConvertRefusedError } from "../../types";
 
@@ -110,7 +109,7 @@ export async function create_manual_outflow_orchestrator(
         account_id: src.account_id,
         capture_rules_version: CAPTURE_RULES_VERSION,
         plaid_is_active: true,
-        ...(src.vendor_key && src.account_id ? { vendor_key: src.vendor_key, converted_at_ms: utc_day_start(Date.now()) } : {}),
+        ...(src.vendor_key && src.account_id ? { vendor_key: src.vendor_key, converted_at_ms: Date.now() } : {}),
       };
       const saved = await outflow_repo.save_batch(ctx, [entity], run_id);
       await generate_periods_inline(ctx, ctx.user_id, saved.written.filter((w) => w.created));

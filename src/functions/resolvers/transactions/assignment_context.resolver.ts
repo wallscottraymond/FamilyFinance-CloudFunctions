@@ -154,6 +154,9 @@ export interface SharedAssignmentContext {
    * built from the bills / income this context already loads. Empty for anyone without such records.
    */
   converted_index?: ConvertedIndex;
+  /** Plaid payment id → the converted bill / income that absorbed it. */
+  outflow_absorbed_tx_to_id?: Map<string, string>;
+  inflow_absorbed_tx_to_id?: Map<string, string>;
 }
 
 /** One view's budgets, as the engine matches against them. */
@@ -190,10 +193,10 @@ export async function resolve_shared_assignment_context(
   // a txn is linked to a bill/income exactly as the derive-on-read read path does. A txn
   // claimed by two streams is excluded (no guessing — see build_stream_membership_map).
   const outflow_tx_to_id = build_stream_membership_map(
-    outflows.filter((o) => o.is_active && !o.is_hidden).map(with_absorbed_ids)
+    outflows.filter((o) => o.is_active && !o.is_hidden)
   );
   const inflow_tx_to_id = build_stream_membership_map(
-    inflows.filter((i) => i.is_active && !i.is_hidden).map(with_absorbed_ids)
+    inflows.filter((i) => i.is_active && !i.is_hidden)
   );
 
   // The `categories` collection as the one category function needs it (canon M7).
@@ -233,6 +236,12 @@ export async function resolve_shared_assignment_context(
     if (is_v2_record(r) && r.account_id) v2_account_by_recurring_id.set(r.id, r.account_id);
   }
 
+  // Payments of streams a converted bill absorbed (D42): their own map, judged by the D1 floors.
+  const absorbed_of = (list: Array<{ id: string; is_active: boolean; is_hidden: boolean; absorbed_txn_ids?: string[] }>) =>
+    build_stream_membership_map(
+      list.filter((r) => r.is_active && !r.is_hidden && r.absorbed_txn_ids?.length)
+        .map((r) => ({ id: r.id, transaction_ids: r.absorbed_txn_ids }))
+    );
   const converted_index = build_converted_index([
     ...outflows.map((o) => as_converted_input(o, "outflow")),
     ...inflows.map((i) => as_converted_input(i, "inflow")),
@@ -255,20 +264,9 @@ export async function resolve_shared_assignment_context(
     fuzzy_excluded_plaid_ids: new Set(review_state?.suppressed_txn_ids ?? []),
     v2_account_by_recurring_id,
     converted_index,
+    outflow_absorbed_tx_to_id: absorbed_of(outflows),
+    inflow_absorbed_tx_to_id: absorbed_of(inflows),
   };
-}
-
-/**
- * A record's stream membership for the engine: its Plaid stream's ids PLUS the Plaid payments it
- * absorbed (D42: a Plaid stream that turned out to be this converted bill). Records without
- * absorbed ids pass through as the same object — unchanged for everything that exists today.
- */
-function with_absorbed_ids<T extends { id: string; transaction_ids?: string[] | null; absorbed_txn_ids?: string[] }>(
-  r: T
-): { id: string; transaction_ids?: string[] | null } {
-  return r.absorbed_txn_ids?.length
-    ? { id: r.id, transaction_ids: [...(r.transaction_ids ?? []), ...r.absorbed_txn_ids] }
-    : r;
 }
 
 function as_converted_input(
@@ -466,6 +464,8 @@ export async function resolve_assignment_context(
       txn_account_id: (data.accountId as string | null) ?? null,
       converted_index: resolved_shared.converted_index,
       txn_vendor_key: txn_vendor_key(data),
+      txn_created_ms: (data.createdAt as Timestamp | undefined)?.toMillis?.() ?? null,
+      absorbed_tx_to_id: txn_type === "income" ? resolved_shared.inflow_absorbed_tx_to_id : resolved_shared.outflow_absorbed_tx_to_id,
     }
   );
 

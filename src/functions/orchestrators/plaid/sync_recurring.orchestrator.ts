@@ -327,7 +327,8 @@ export async function sync_recurring_orchestrator(
     flag_on ||
     [...existing_records.values()].some((r) => r.v2) ||
     stale_records.some((r) => r.v2) ||
-    deps.active_records.some((r) => r.v2 && r.source === "manual" && !!r.vendor_key);
+    deps.active_records.some((r) => r.v2 && r.source === "manual" && !!r.vendor_key) ||
+    deps.plaid_item.review_memory === true;
 
   let plan: CapturePlan = {
     save_outflows: valid_outflows,

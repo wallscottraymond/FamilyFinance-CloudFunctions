@@ -13,6 +13,7 @@
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { TraceContext, NotFoundError, PermissionDeniedError } from "../types";
 import type { InflowForPersistence, OutflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
+import { is_currently_suppressed } from "../domain/recurring/recurring_suppression.service";
 import { apply_source_pin, ConvertDirection } from "../domain/recurring/convert_recurring.service";
 import { record_audit_entry_async } from "../audit";
 import { outflow_repo } from "./outflow.repo";
@@ -31,7 +32,13 @@ export type CreateConvertedResult =
   | { status: "already_tracked"; existing_id: string; existing_name: string };
 
 const live = (d: Record<string, unknown> | undefined): boolean =>
-  !!d && d.isActive !== false && d.isHidden !== true && !d.mergedIntoId;
+  !!d && d.isActive !== false && d.isHidden !== true && !d.mergedIntoId &&
+  // a bill the user removed / paused / ended right now isn't claiming anything
+  !is_currently_suppressed(
+    ((d.removalIntervals as Array<{ fromMs: number; toMs: number | null; mode: string }> | undefined) ?? [])
+      .map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode as "all" | "going_forward" | "paused" })),
+    Date.now()
+  );
 
 export const convert_recurring_repo = {
   async create_with_source_pin(

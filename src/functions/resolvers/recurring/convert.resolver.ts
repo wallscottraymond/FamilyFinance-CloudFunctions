@@ -21,6 +21,7 @@ import { account_repo } from "../../repositories/account.repo";
 import { vendor_key as vendor_key_of } from "../../domain/transactions/vendor_key.service";
 import { ConvertFacts, ConvertTxnFacts, direction_of, retro_floor_ms } from "../../domain/recurring/convert_plan.service";
 import { splits_paying_recurring } from "../../domain/recurring/stream_membership";
+import { is_currently_suppressed } from "../../domain/recurring/recurring_suppression.service";
 
 export type ConvertResolution =
   | { ok: false; reason: "not_found" | "permission_denied" }
@@ -43,6 +44,7 @@ export interface OldBill {
   last_payment_ms: number | null;
   merged_into_id: string | null;
   account_id: string | null;
+  is_active: boolean;
 }
 
 type Raw = Record<string, unknown>;
@@ -91,7 +93,9 @@ export async function resolve_convert_facts(
   ctx: TraceContext,
   user_id: string,
   transaction_id: string,
-  now_ms: number
+  now_ms: number,
+  /** The split being converted (absent = the whole transaction). */
+  split_id?: string
 ): Promise<ConvertResolution> {
   const txn = await transaction_repo.get_raw_by_id(ctx, transaction_id);
   if (!txn) return { ok: false, reason: "not_found" };
@@ -130,7 +134,7 @@ export async function resolve_convert_facts(
       id: r.id, removal_intervals: r.removal_intervals, user_custom_name: r.user_custom_name,
       expected_amount_override: r.expected_amount_override, user_frequency: r.user_frequency ?? null,
       last_payment_ms: (r.last_date as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null,
-      merged_into_id: r.merged_into_id, account_id: r.account_id,
+      merged_into_id: r.merged_into_id, account_id: r.account_id, is_active: r.is_active,
     }));
     for (const r of matching) for (const t of r.transaction_ids ?? []) stream_ids.add(t);
   }
@@ -141,17 +145,25 @@ export async function resolve_convert_facts(
   const records = direction === "inflow" ? shown_in : shown_out;
   const kind = direction === "inflow" ? "inflow" : "outflow";
   const raw_splits = (txn.data.splits as Array<Raw> | undefined) ?? [];
+  // Only the split(s) being converted can be claimed (a sibling split already in a bill doesn't block B).
+  const wanted_splits = split_id ? [split_id] : raw_splits.map((x) => String(x.splitId ?? ""));
+  const claim_splits = raw_splits.filter((x) => wanted_splits.includes(String(x.splitId ?? "")));
   let claimed_by: { id: string; name: string } | null = null;
   for (const r of records) {
+    // A bill the user removed / paused / ended right now isn't a live bill: its payment converts.
+    if (is_currently_suppressed(r.removal_intervals, now_ms)) continue;
     const in_stream = !!base.plaid_id && (r.transaction_ids ?? []).includes(base.plaid_id);
-    if (splits_paying_recurring(raw_splits, kind, r.id, in_stream).length > 0) {
+    if (splits_paying_recurring(claim_splits, kind, r.id, in_stream).length > 0) {
       claimed_by = { id: r.id, name: record_name(r) };
       break;
     }
   }
 
   // A record already converted from THIS transaction (double tap / timed-out convert): resume it.
-  const prior = [...outflows, ...inflows].find((r) => r.converted_from_txn_id === txn.id && r.is_active);
+  // …for THIS split: a second split of the same transaction converts on its own (E).
+  const prior = [...outflows, ...inflows].find((r) =>
+    r.converted_from_txn_id === txn.id && r.is_active &&
+    ((r.converted_from_split_ids ?? []).length === 0 || (r.converted_from_split_ids ?? []).some((x) => wanted_splits.includes(x))));
   const existing_conversion = prior
     ? {
       id: prior.id,
@@ -172,7 +184,14 @@ export async function resolve_convert_facts(
   };
   // The vendor's other payments (only worth reading for a transaction that can convert).
   if (own.vendor_key && own.account_id && !existing_conversion) {
-    const rows = await transaction_repo.get_by_vendor_key(ctx, user_id, own.vendor_key, retro_floor_ms(facts));
+    let rows = await transaction_repo.get_by_vendor_key(ctx, user_id, own.vendor_key, retro_floor_ms(facts));
+    // Transactions written before `vendorKey` was stored aren't found by the key: when the source
+    // itself has none, scan the account's window and compute the key exactly as the engine does.
+    if (!(typeof txn.data.vendorKey === "string" && txn.data.vendorKey)) {
+      const have = new Set(rows.map((x) => x.id));
+      const window = await transaction_repo.get_account_window(ctx, user_id, own.account_id, retro_floor_ms(facts));
+      rows = [...rows, ...window.filter((w) => !have.has(w.id) && !w.data.vendorKey && txn_facts(w.id, w.data, false).vendor_key === own.vendor_key)];
+    }
     facts.vendor_txns = rows.map((r) => {
       const f = txn_facts(r.id, r.data, false);
       return { ...f, in_shown_stream: !!f.plaid_id && stream_ids.has(f.plaid_id) };

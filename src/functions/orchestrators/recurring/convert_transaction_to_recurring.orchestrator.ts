@@ -45,6 +45,7 @@ import { generate_periods_inline } from "./generate_periods_inline";
 import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
 import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
 import { plan_merge_old_into_new } from "../../domain/recurring/merge.service";
+import { resolve_last_payment_ms } from "../../resolvers/recurring/last_payment.resolver";
 import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
 
 export interface ConvertInput {
@@ -91,7 +92,7 @@ export async function convert_transaction_to_recurring_orchestrator(
     }
 
     // 1. Resolve — owner first; nothing else is read for someone else's transaction.
-    const r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms);
+    const r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms, input.split_id);
     if (!r.ok) {
       if (r.reason === "not_found") throw new NotFoundError("transaction", input.transaction_id);
       throw new PermissionDeniedError("convert_transaction_to_recurring", input.transaction_id);
@@ -107,8 +108,17 @@ export async function convert_transaction_to_recurring_orchestrator(
       const direction = direction_of(r.facts.txn.type) as ConvertDirection;
       created = { id: r.existing_conversion.id, direction };
       if (!r.existing_conversion.retro_done) {
+        // Only one resume at a time: a concurrent double tap returns the existing bill.
+        const repo = direction === "outflow" ? outflow_repo : inflow_repo;
+        if (!(await repo.claim_resume(ctx, r.existing_conversion.id, now_ms))) {
+          follow_up_done = true;
+          return { id: r.existing_conversion.id, direction, already: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
+        }
         const resumed = await complete_convert(ctx, user_id, direction, r.existing_conversion.id, now_ms, null);
         follow_up_done = true;
+        const rec = (await repo.get_raw_by_ids(ctx, [r.existing_conversion.id])).get(r.existing_conversion.id);
+        await finish_convert(ctx, user_id, direction, r.existing_conversion.id, (rec?.vendorKey as string | undefined) ?? r.facts.txn.vendor_key ?? "",
+          (rec?.accountId as string | undefined) ?? r.facts.txn.account_id, r.old_bills, input.review_item_id, now_ms, `convert_resume_${randomUUID()}`);
         return { ...resumed, already: true };
       }
       return { id: r.existing_conversion.id, direction, already: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
@@ -127,16 +137,17 @@ export async function convert_transaction_to_recurring_orchestrator(
       throw new ConvertRefusedError(plan.code, plan.message, plan.details);
     }
     // The vendor's open question (looked up by its deterministic id, plus the one the app named).
-    const by_vendor_id = suggested_item_id(user_id, plan.direction, plan.vendor_key);
-    const wanted = [by_vendor_id, ...(input.review_item_id ? [input.review_item_id] : [])];
-    const items = await recurring_review_repo.get_items_by_ids(ctx, wanted);
-    const review = plan_convert_review(
-      user_id, plan.direction, plan.vendor_key,
-      input.review_item_id ? items.get(input.review_item_id) ?? null : null,
-      items.get(by_vendor_id) ?? null,
-      input.review_item_id !== undefined, now_ms
-    );
-    if (!review.ok) throw new ValidationError([review.error]);
+    // The named item must match this transaction BEFORE anything is written (finish_convert re-plans).
+    {
+      const by_vendor_id = suggested_item_id(user_id, plan.direction, plan.vendor_key);
+      const items = await recurring_review_repo.get_items_by_ids(ctx, [by_vendor_id, ...(input.review_item_id ? [input.review_item_id] : [])]);
+      const check = plan_convert_review(
+        user_id, plan.direction, plan.vendor_key,
+        input.review_item_id ? items.get(input.review_item_id) ?? null : null,
+        items.get(by_vendor_id) ?? null, input.review_item_id !== undefined, now_ms
+      );
+      if (!check.ok) throw new ValidationError([check.error]);
+    }
 
     // 3. Write: the record + the source pin, atomically. The retro-linked Plaid ids ride on the
     //    record from the start, so D1 keeps those past payments linked on every later pass.
@@ -163,35 +174,7 @@ export async function convert_transaction_to_recurring_orchestrator(
     });
     follow_up_done = true;
 
-    // 6b. D41 — an old, turned-off / stale record of the same vendor on this account is the same
-    //     bill: the user tapped Convert, so it ends at its last payment and merges into the new one
-    //     (kept active, out of the Removed list, undoable). History moves nowhere: the retro-link
-    //     skipped its payments.
-    if (r.old_bills.length > 0) {
-      const repo = plan.direction === "outflow" ? outflow_repo : inflow_repo;
-      const month_start = Date.UTC(new Date(now_ms).getUTCFullYear(), new Date(now_ms).getUTCMonth(), 1);
-      let from_ms = month_start;
-      for (const old of r.old_bills) {
-        const mp = plan_merge_old_into_new(old, id, now_ms, month_start);
-        if (!mp) continue;
-        await repo.apply_merge(ctx, old.id, { intervals: mp.intervals, merged_into_id: id, merge_log: mp.merge_log }, run_id);
-        await repo.apply_period_suppression(ctx, old.id, mp.intervals, user_id);
-        from_ms = Math.min(from_ms, mp.intervals[mp.intervals.length - 1].from_ms);
-      }
-      await enqueue_reassign_user({
-        user_id, reason: "recurring_removal", scope: { account_ids: [plan.entity.account_id], from_ms },
-      }, ctx.trace_id).catch((e) => console.error(`[${ctx.trace_id}] convert merge re-assign enqueue failed:`, e));
-      await bump_derive_version(user_id).catch(() => {});
-    }
-
-    // 7. The vendor's question: closed `converted`; its held-out payments released; a "Not a bill"
-    //    memory forgotten. Guarded state write (a racing sync's change is never lost).
-    if (review.items.length > 0) await recurring_review_repo.upsert_items(ctx, review.items);
-    const current = await recurring_review_repo.get_state(ctx, user_id);
-    if (apply_review_state_change(current, user_id, review.state_change).changed) {
-      const next = await recurring_review_repo.apply_state_change(ctx, user_id, review.state_change);
-      if (next.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
-    }
+    await finish_convert(ctx, user_id, plan.direction, id, plan.vendor_key, plan.entity.account_id, r.old_bills, input.review_item_id, now_ms, run_id);
 
     log_operation_success(span, user_id);
     return {
@@ -268,12 +251,71 @@ async function complete_convert(
     transfers_changed: false,
   }, { preload_budget_window: true });
 
-  // 7. The marker (stamped: no trigger work).
-  await repo.mark_retro_linked(ctx, id, now_ms, `convert_done_${randomUUID()}`);
   return {
     id, direction, already: false, linked_past_count: retro_doc_ids.length,
     first_date_ms: (record.firstDate as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null,
     next_due_ms: (record.predictedNextDate as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null,
     next_due_clamped: false,
   };
+}
+
+/**
+ * The last steps — IDEMPOTENT, shared by a fresh convert and a resume: the D41 merge of old stopped
+ * bills, the vendor's review question, and (last, so a death before it makes the next tap resume
+ * everything) the `retroLinkedAt` marker.
+ */
+async function finish_convert(
+  ctx: TraceContext,
+  user_id: string,
+  direction: ConvertDirection,
+  id: string,
+  vendor_key: string,
+  account_id: string,
+  old_bills: Awaited<ReturnType<typeof resolve_convert_facts>> extends infer R ? (R extends { old_bills: infer O } ? O : never) : never,
+  review_item_id: string | undefined,
+  now_ms: number,
+  run_id: string
+): Promise<void> {
+  const repo = direction === "outflow" ? outflow_repo : inflow_repo;
+    // 6b. D41 — an old, turned-off / stale record of the same vendor on this account is the same
+    //     bill: the user tapped Convert, so it ends at its last payment and merges into the new one
+    //     (kept active, out of the Removed list, undoable). History moves nowhere: the retro-link
+    //     skipped its payments.
+    if (old_bills.length > 0) {
+      const repo = direction === "outflow" ? outflow_repo : inflow_repo;
+      const month_start = Date.UTC(new Date(now_ms).getUTCFullYear(), new Date(now_ms).getUTCMonth(), 1);
+      let from_ms = month_start;
+      for (const old of old_bills) {
+        const mp = plan_merge_old_into_new(
+          { ...old, last_payment_ms: await resolve_last_payment_ms(ctx, user_id, direction, old.id, old.last_payment_ms) },
+          id, now_ms, month_start);
+        if (!mp) continue;
+        await repo.apply_merge(ctx, old.id, { intervals: mp.intervals, merged_into_id: id, merge_log: mp.merge_log }, run_id);
+        await repo.apply_period_suppression(ctx, old.id, mp.intervals, user_id);
+        from_ms = Math.min(from_ms, mp.intervals[mp.intervals.length - 1].from_ms);
+      }
+      await enqueue_reassign_user({
+        user_id, reason: "recurring_removal", scope: { account_ids: [account_id], from_ms },
+      }, ctx.trace_id).catch((e) => console.error(`[${ctx.trace_id}] convert merge re-assign enqueue failed:`, e));
+      await bump_derive_version(user_id).catch(() => {});
+    }
+
+    // 7. The vendor's question: closed `converted`; its held-out payments released; a "Not a bill"
+    //    memory forgotten. Guarded state write (a racing sync's change is never lost).
+    const by_vendor_id = suggested_item_id(user_id, direction, vendor_key);
+    const items = await recurring_review_repo.get_items_by_ids(ctx, [by_vendor_id, ...(review_item_id ? [review_item_id] : [])]);
+    const review = plan_convert_review(
+      user_id, direction, vendor_key,
+      review_item_id ? items.get(review_item_id) ?? null : null, items.get(by_vendor_id) ?? null, review_item_id !== undefined, now_ms
+    );
+    if (review.ok) {
+      if (review.items.length > 0) await recurring_review_repo.upsert_items(ctx, review.items);
+      const current = await recurring_review_repo.get_state(ctx, user_id);
+      if (apply_review_state_change(current, user_id, review.state_change).changed) {
+        const next = await recurring_review_repo.apply_state_change(ctx, user_id, review.state_change);
+        if (next.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
+      }
+    }
+
+  await repo.mark_retro_linked(ctx, id, now_ms, `convert_done_${randomUUID()}`);
 }

@@ -211,7 +211,7 @@ describe("build_converted_recurring", () => {
       capture_rules_version: 2, vendor_key: "landlord llc", converted_from_txn_id: "plaid_t1", merchant_name: "Landlord LLC",
       user_custom_name: "Rent", expected_amount_override: 1200, plaid_stream_id: "conv_1", transaction_ids: [],
     });
-    expect(r.converted_at_ms).toBe(utc_day_start(NOW));
+    expect(r.converted_at_ms).toBe(NOW); // the exact instant
   });
   it("omits the key fields when there is no vendor key / source transaction (no ?? null)", () => {
     const r = build_converted_recurring({ ...base, vendor_key: null, converted_from_txn_id: null, account_id: "" }).outflow!;
@@ -249,5 +249,18 @@ describe("carried convert fields (full-document writers)", () => {
       .toEqual({ vendorKey: "k2", convertedFromTxnId: "t2", convertedAtMs: 9 });
     // an existing doc never takes the entity's values
     expect(carried_convert_fields({}, { vendor_key: "k2" })).toEqual({});
+  });
+});
+
+describe("quarterly / yearly bounds (review round 1)", () => {
+  it("clamp next due for a quarterly and a yearly schedule (one cadence back, one year forward)", () => {
+    const today = utc_day_start(NOW);
+    expect(clamp_next_due(d(1990, 1, 1), "quarterly", NOW).next_due_ms).toBe(today - 91 * DAY - 7 * DAY);
+    expect(clamp_next_due(d(1990, 1, 1), "yearly", NOW).next_due_ms).toBe(today - 365 * DAY - 7 * DAY);
+    expect(clamp_next_due(d(2100, 1, 1), "yearly", NOW).next_due_ms).toBe(today + 365 * DAY);
+  });
+  it("the first date never reaches further back than 12 months + one cadence", () => {
+    expect(floor_first_date(d(2000, 1, 1), "quarterly", NOW)).toBe(d(2036, 10, 15) - 91 * DAY);
+    expect(floor_first_date(d(2000, 1, 1), "yearly", NOW)).toBe(d(2036, 10, 15) - 365 * DAY);
   });
 });

@@ -63,7 +63,7 @@ export async function undo_recurring_merge_orchestrator(
     const plan = plan_undo_merge(log, target ? {
       user_custom_name: target.user_custom_name, expected_amount_override: target.expected_amount_override,
     } : null);
-    await repo.clear_merge(ctx, input.record_id, plan.restore_intervals, run_id);
+    await repo.clear_merge(ctx, input.record_id, plan.restore_intervals, run_id, log.prior_is_active);
     await repo.apply_period_suppression(ctx, input.record_id, plan.restore_intervals, user_id);
     if (target && (plan.revert_target_name || plan.revert_target_override)) {
       await repo.revert_inherited(ctx, target.id, { name: plan.revert_target_name, override: plan.revert_target_override }, run_id);
