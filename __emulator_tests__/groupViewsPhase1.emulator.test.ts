@@ -12,6 +12,7 @@ import * as admin from 'firebase-admin';
 import { FAKE_CLOCK, OCT, makeHarness, plaidTxn, scenarioRecurring, seedMonths, setFlag } from './helpers/captureHarness';
 import { NOW_MS, plaidStream } from './helpers/captureScenario';
 import { synthetic, withSyntheticPeriods } from './helpers/syntheticPeriods';
+import { startCounting } from './helpers/firestoreCounter';
 
 const mockSync = jest.fn();
 const mockRecurring = jest.fn();
@@ -58,19 +59,23 @@ const ctx = () => ({ trace_id: `t_${Math.random()}`, span_id: 's' });
 const octx = <T>(user_id: string, input: T) => ({ ...ctx(), user_id, input, idempotency_key: `k_${Math.random()}` });
 const SYN = synthetic(Date.UTC(2037, 8, 27), Date.UTC(2037, 10, 8), 'GV');
 
-async function groupWith(h: Awaited<ReturnType<typeof makeHarness>>) {
+async function groupWith(h: Awaited<ReturnType<typeof makeHarness>>, n_members = 1) {
   const owner = h.ids.userId;
-  const member = `${h.ids.tag}_member`;
-  await db.collection('users').doc(member).set({ email: `${member}@x.com` });
-  const a = (await sharing.get_my_connect_code_orchestrator(octx(owner, { refresh: true }))).code;
-  const b = (await sharing.get_my_connect_code_orchestrator(octx(member, { refresh: true }))).code;
-  await sharing.enter_connect_code_orchestrator(octx(owner, { code: b }));
-  await sharing.enter_connect_code_orchestrator(octx(member, { code: a }));
-  const group_id = (await sharing.create_group_orchestrator(octx(owner, { name: 'Home', invitee_ids: [member] }))).group_id;
-  const req = (await sharing.get_sharing_overview_orchestrator(octx(member, {}))).requests[0];
-  await sharing.respond_to_request_orchestrator(octx(member, { request_id: req.id, accept: true }));
+  const members = Array.from({ length: n_members }, (_, i) => `${h.ids.tag}_member${i ? i + 1 : ''}`);
+  for (const m of members) {
+    const a = (await sharing.get_my_connect_code_orchestrator(octx(owner, { refresh: true }))).code;
+    await db.collection('users').doc(m).set({ email: `${m}@x.com` });
+    const b = (await sharing.get_my_connect_code_orchestrator(octx(m, { refresh: true }))).code;
+    await sharing.enter_connect_code_orchestrator(octx(owner, { code: b }));
+    await sharing.enter_connect_code_orchestrator(octx(m, { code: a }));
+  }
+  const group_id = (await sharing.create_group_orchestrator(octx(owner, { name: 'Home', invitee_ids: members }))).group_id;
+  for (const m of members) {
+    const req = (await sharing.get_sharing_overview_orchestrator(octx(m, {}))).requests[0];
+    await sharing.respond_to_request_orchestrator(octx(m, { request_id: req.id, accept: true }));
+  }
   await account_repo.set_placement(ctx(), h.ids.chk, { group_id, shared_from_ms: null, shared_by: owner, shared_at_ms: NOW_MS }, owner);
-  return { owner, member, group_id };
+  return { owner, member: members[0], members, group_id };
 }
 
 const view = (uid: string, cadence: string, scope: any): Promise<any> =>
@@ -143,5 +148,24 @@ describe('group views under the capture rules (emulator)', () => {
       .map((d) => d.data()).sort((a, b) => (a.id < b.id ? -1 : 1));
     expect(items_after).toEqual(items_before);
     expect((await db.collection('recurring_review_items').where('userId', '==', member).get()).size).toBe(0);
+  }, 300000);
+
+  it('round 4 test 3: a COLD flag cache + a 3-member group derive → exactly 1 _feature_flags read (single-flight)', async () => {
+    const h = await makeHarness(db, 'qzgvff', mocks, { flag: false });
+    const { owner, members, group_id } = await groupWith(h, 2);
+    expect(members).toHaveLength(2); // + the owner = 3 members
+    await h.sync('link');
+    const scope = { kind: 'group', group_id };
+    const coll = process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags';
+    const ff = require('../src/functions/infrastructure/feature_flags');
+    ff.invalidate_flag_cache();
+    const cold = startCounting();
+    const r = await view(owner, 'monthly', scope);
+    const c = cold.stop();
+    expect(r.bills.length).toBeGreaterThan(0);
+    expect(c.reads_by[coll] ?? 0).toBe(1);
+    const warm = startCounting();
+    await view(members[1], 'monthly', scope);
+    expect(warm.stop().reads_by[coll] ?? 0).toBe(0);
   }, 300000);
 });

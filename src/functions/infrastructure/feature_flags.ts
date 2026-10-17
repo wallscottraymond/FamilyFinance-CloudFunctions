@@ -67,6 +67,12 @@ interface FlagCache {
  */
 let flag_cache: FlagCache | null = null;
 
+/** The shared in-flight cold load (single-flight), or null when no load is running. */
+let flag_load_in_flight: Promise<void> | null = null;
+
+/** Bumped on every invalidation, so a load that started before it can't repopulate the cache. */
+let flag_cache_generation = 0;
+
 /**
  * Default cache TTL (5 minutes).
  */
@@ -87,20 +93,46 @@ export async function load_feature_flags(force_reload = false): Promise<void> {
     }
   }
 
-  const db = getFirestore();
-  const snapshot = await db.collection(feature_flags_collection()).get();
+  // Single-flight (Convert-To-Recurring round 4, defect 3): concurrent cold callers (e.g. a group
+  // derive resolving the flag for every member at once) share ONE in-flight read instead of each
+  // reading the whole collection. A forced reload always starts its own read.
+  if (!force_reload && flag_load_in_flight) {
+    return flag_load_in_flight;
+  }
 
-  const flags = new Map<string, FeatureFlag>();
-  snapshot.docs.forEach((doc) => {
-    const flag = doc.data() as FeatureFlag;
-    flags.set(doc.id, { ...flag, name: doc.id });
-  });
+  const generation = flag_cache_generation;
+  const load = (async () => {
+    const db = getFirestore();
+    const snapshot = await db.collection(feature_flags_collection()).get();
 
-  flag_cache = {
-    flags,
-    loaded_at: Date.now(),
-    ttl_ms: DEFAULT_CACHE_TTL_MS,
-  };
+    const flags = new Map<string, FeatureFlag>();
+    snapshot.docs.forEach((doc) => {
+      const flag = doc.data() as FeatureFlag;
+      flags.set(doc.id, { ...flag, name: doc.id });
+    });
+
+    // An invalidation that landed while this read was in flight wins: don't repopulate the cache
+    // with a possibly pre-write snapshot.
+    if (generation === flag_cache_generation) {
+      flag_cache = {
+        flags,
+        loaded_at: Date.now(),
+        ttl_ms: DEFAULT_CACHE_TTL_MS,
+      };
+    }
+  })();
+
+  if (force_reload) {
+    await load;
+    return;
+  }
+
+  flag_load_in_flight = load;
+  try {
+    await load;
+  } finally {
+    if (flag_load_in_flight === load) flag_load_in_flight = null;
+  }
 }
 
 /**
@@ -246,7 +278,7 @@ export async function set_feature_flag(
   }
 
   // Invalidate cache
-  flag_cache = null;
+  invalidate_flag_cache();
 }
 
 /**
@@ -259,7 +291,7 @@ export async function delete_feature_flag(flag_name: string): Promise<void> {
   await db.collection(feature_flags_collection()).doc(flag_name).delete();
 
   // Invalidate cache
-  flag_cache = null;
+  invalidate_flag_cache();
 }
 
 /**
@@ -283,6 +315,8 @@ export async function list_feature_flags(): Promise<FeatureFlag[]> {
  */
 export function invalidate_flag_cache(): void {
   flag_cache = null;
+  flag_load_in_flight = null;
+  flag_cache_generation++;
 }
 
 /**
