@@ -38,6 +38,7 @@ import {
 } from "../../domain/recurring/recurring_suppression.service";
 import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
 import { RecurringRemovalContext } from "../../resolvers/recurring/recurring_removal.resolver";
+import { handle_converted_delete } from "./converted_delete";
 
 /** The write surface a removal-manageable recurring repo must expose. */
 export interface RemovalManageableRepo extends RemovalReadableRepo {
@@ -144,6 +145,8 @@ export async function manage_recurring_removal_orchestrator(
 
     // 3. Permanent delete is a distinct hard-delete path (no interval math).
     if (input.action === "delete") {
+      // Others may depend on it: merged-into records are un-merged, absorbed streams remembered.
+      await handle_converted_delete(ctx, user_id, entity_kind === "recurring_outflow" ? "outflow" : "inflow", input.id);
       await repo.hard_delete(ctx, input.id, user_id);
       await reassign_released_payments(ctx, context, undefined); // its links go everywhere
       log_operation_success(span, user_id);

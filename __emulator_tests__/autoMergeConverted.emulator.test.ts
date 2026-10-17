@@ -175,4 +175,20 @@ describe('Plaid detects a converted bill (emulator)', () => {
   }, 300000);
 });
 
+describe('undo an absorb', () => {
+  it('declined: the converted bill lets the stream go and the next sync creates a separate bill for it', async () => {
+    const { h, bill } = await converted_user('qzam6');
+    const { rec, id } = with_stream(h, { keys: ['oct', 'sep'] });
+    h.setRecurring(rec);
+    await h.sync('detect');
+    const { undo_recurring_merge_orchestrator: undo } = require('../src/functions/orchestrators/recurring/undo_recurring_merge.orchestrator');
+    await undo(ctx(), h.ids.userId, { kind: 'outflow', mode: 'absorb', record_id: bill, stream_id: id }, NOW_MS);
+    const doc = (await db.collection('outflows').doc(bill).get()).data()!;
+    expect(doc.absorbedStreams).toEqual([expect.objectContaining({ streamId: id, state: 'declined' })]);
+    expect(doc.absorbedTxnIds).toEqual([]);
+    await h.sync('separate');
+    expect((await db.collection('outflows').doc(id).get()).exists).toBe(true);
+    expect((await undo(ctx(), h.ids.userId, { kind: 'outflow', mode: 'absorb', record_id: bill, stream_id: id }, NOW_MS)).no_op).toBe(true);
+  }, 240000);
+});
 void bills_of;

@@ -47,6 +47,7 @@ export { assign_split_to_inflow } from "./assign_split_to_inflow.entry";
 export { convert_transaction_to_recurring } from "./convert_transaction_to_recurring.entry";
 export { preview_convert_transaction } from "./preview_convert_transaction.entry";
 export { get_recurring_capabilities } from "./get_recurring_capabilities.entry";
+export { undo_recurring_merge } from "./undo_recurring_merge.entry";
 
 // Derive-On-Read Period Architecture (Phase 3): bill/income view derivation
 export { derive_recurring_view } from "./derive_recurring_view.entry";

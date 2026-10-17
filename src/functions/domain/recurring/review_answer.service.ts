@@ -37,15 +37,17 @@ export interface ReviewAnswerPlan {
   record_action: "ack_still_a_bill" | "end" | null;
   /** Re-sync the item so the planner creates the bill now ("track" / "keep separate"). */
   resync_item_doc_id: string | null;
+  /** "Same bill": the old bill ends and is merged into the new stream's bill (D7 / D22). */
+  merge: { old_record_id: string; into_stream_id: string } | null;
 }
 
 export type ReviewAnswerResult = { ok: true; plan: ReviewAnswerPlan } | { ok: false; error: string };
 
 const ALLOWED: Record<string, UserAnswer[]> = {
   "suggested:plaid": ["track", "not_bill"],
-  "suggested:detector": ["not_bill"],
   "still_a_bill:plaid": ["still_a_bill", "it_ended"],
-  "same_bill:plaid": ["keep_separate"],
+  "same_bill:plaid": ["keep_separate", "same_bill"],
+  "suggested:detector": ["not_bill"],
 };
 
 /** Plan an answer. PURE. */
@@ -71,7 +73,7 @@ export function plan_review_answer(
     if (item.answer === answer) {
       return {
         ok: true,
-        plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null },
+        plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null, merge: null },
       };
     }
     return { ok: false, error: "this question was already answered" };
@@ -93,8 +95,14 @@ export function plan_review_answer(
     state_change: {},
     record_action: null,
     resync_item_doc_id: null,
+    merge: null,
   };
   switch (answer) {
+    case "same_bill":
+      if (!item.record_id || !item.stream_id) return { ok: false, error: "this question has no bill to merge" };
+      plan.merge = { old_record_id: item.record_id, into_stream_id: item.stream_id };
+      // falls through: the new stream's bill is created now, like "keep separate"
+    // eslint-disable-next-line no-fallthrough
     case "track":
     case "keep_separate":
       // The item's payments stay held out of fuzzy matching until the bill actually EXISTS: the

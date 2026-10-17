@@ -11,7 +11,7 @@
  */
 
 import type { RecurringWrittenDoc } from "./recurring_doc_equality";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import {
   WriteResult,
   BatchWriteResult,
@@ -35,6 +35,7 @@ import {
   carried_convert_fields,
   map_convert_fields_to_entity,
   absorbed_streams_to_doc,
+  merge_log_to_doc,
 } from "./convert_doc_fields";
 import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
 import {
@@ -338,7 +339,8 @@ function map_persistence_to_doc(
     updatedBy: entity.updated_by,
     groupId: entity.group_ids[0] ?? null,
     groupIds: entity.group_ids,
-    isActive: entity.is_active,
+    // A record merged into another keeps OUR active flag: Plaid's never turns it off again (D41).
+    isActive: existing?.mergedIntoId ? existing.isActive : entity.is_active,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
 
@@ -1058,6 +1060,65 @@ export const outflow_repo = {
       absorbedTxnIds: txn_ids,
       syncRunId: run_id,
       lastWriteSource: "plaid_sync",
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
+   * Apply a same-bill merge to the OLD outflow in ONE stamped write: its end interval, `mergedIntoId`,
+   * `mergeLog`, and active again (its history keeps showing). The caller flips the stored periods
+   * (`apply_period_suppression`) and bumps after.
+   */
+  async apply_merge(
+    _ctx: TraceContext,
+    id: string,
+    plan: { intervals: RemovalInterval[]; merged_into_id: string; merge_log: import("../domain/recurring/convert_recurring.service").MergeLog },
+    run_id: string
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      removalIntervals: to_removal_interval_docs(plan.intervals),
+      removedByUser: plan.intervals.some((i) => i.to_ms === null),
+      mergedIntoId: plan.merged_into_id,
+      mergeLog: merge_log_to_doc(plan.merge_log),
+      isActive: true,
+      syncRunId: run_id,
+      lastWriteSource: "merge",
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /** Undo a merge on the OLD outflow: its intervals back, the merge fields gone. One stamped write. */
+  async clear_merge(_ctx: TraceContext, id: string, intervals: RemovalInterval[], run_id: string): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      removalIntervals: to_removal_interval_docs(intervals),
+      removedByUser: intervals.some((i) => i.to_ms === null),
+      mergedIntoId: FieldValue.delete(),
+      mergeLog: FieldValue.delete(),
+      syncRunId: run_id,
+      lastWriteSource: "merge",
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /** The user's outflows merged into `into_id` (a delete of the target unmerges them). */
+  async get_merged_into(_ctx: TraceContext, user_id: string, into_id: string): Promise<Array<{ id: string }>> {
+    const snap = await getFirestore().collection(COLLECTION).where("ownerId", "==", user_id).where("mergedIntoId", "==", into_id).select().get();
+    return snap.docs.map((d) => ({ id: d.id }));
+  },
+
+  /** Reset the inherited name / override on the NEW outflow (undo). Stamped. */
+  async revert_inherited(_ctx: TraceContext, id: string, fields: { name: boolean; override: boolean }, run_id: string): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      ...(fields.name ? { userCustomName: null } : {}),
+      ...(fields.override ? { expectedAmountOverride: null } : {}),
+      syncRunId: run_id,
+      lastWriteSource: "merge",
       updatedAt: Timestamp.now(),
     });
     /* eslint-enable @typescript-eslint/naming-convention */

@@ -58,7 +58,7 @@ describe("plan_review_answer", () => {
     const r = plan_review_answer(item(), "not_bill", NOW);
     const answered = r.ok ? r.plan.item! : item();
     expect(plan_review_answer(answered, "not_bill", NOW + 1)).toEqual({
-      ok: true, plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null },
+      ok: true, plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null, merge: null },
     });
     expect(plan_review_answer(answered, "track", NOW + 1).ok).toBe(false);
   });

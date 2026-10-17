@@ -504,7 +504,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   for (const pt of input.state?.pending_tracks ?? []) {
     if (pt.plaid_item_doc_id !== input.plaid_item_doc_id || !pt.stream_id || typeof pt.handed_off_ms === "number") continue;
     const it = input.review_items.get(pt.item_id);
-    if (it && it.status === "resolved" && (it.answer === "track" || it.answer === "keep_separate")) pending_by_stream.set(pt.stream_id, it);
+    if (it && it.status === "resolved" && (it.answer === "track" || it.answer === "keep_separate" || it.answer === "same_bill")) pending_by_stream.set(pt.stream_id, it);
   }
 
   for (const s of input.streams) {
@@ -567,6 +567,13 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       // declined (the user undid the absorb) or no room: the stream is handled as any new stream
     }
     if (!input.flag_on) {
+      // A vendor the user said "Not a bill" for — or whose converted bill they deleted, which
+      // records the same memory so its absorbed stream never returns as a new Plaid bill (P9) — stays
+      // skipped even with the flag off (the memory is the user's, not the flag's).
+      if (is_vendor_dismissed(input.state, s.direction, stream_vendor(s))) {
+        suppress(s.transaction_ids);
+        continue;
+      }
       save(s, s.entity); // today's handling (no stamp)
       continue;
     }
@@ -580,7 +587,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     const pending_item = pending_by_stream.get(s.stream_id);
     const tracked =
       (suggested && suggested.answer === "track" && suggested.status === "resolved") ||
-      (same_bill && same_bill.answer === "keep_separate" && same_bill.status === "resolved") ||
+      (same_bill && (same_bill.answer === "keep_separate" || same_bill.answer === "same_bill") && same_bill.status === "resolved") ||
       !!pending_item;
     if (tracked) {
       const picked =
@@ -589,7 +596,12 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
           : pending_item?.answer === "track"
             ? pending_item.user_frequency
             : null;
-      create_v2(s, picked);
+      // "Same bill" (D7 / D22): the new bill continues the old one — it inherits the user's name,
+      // expected amount and schedule IN ITS CREATE PAYLOAD (a later update would re-materialize
+      // every period: the amount trigger has no by-sync guard).
+      const merged_from = [same_bill, pending_item].find((it) => it?.answer === "same_bill" && it.status === "resolved")?.record_id;
+      const old = merged_from ? pool_by_id.get(merged_from) : undefined;
+      create_v2(s, picked ?? old?.user_frequency ?? null, old);
       // The answered item's held-out payments are released now that the bill exists (not at
       // answer time — fix round: the hold-out must cover the gap until creation).
       // Only the item's OWN stream releases its ids (another item's stream of the same vendor
@@ -703,9 +715,11 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     base_change.remove_suppressed.push(...it.transaction_ids.filter((id) => !held_now.has(id)));
   }
 
-  function create_v2(s: PlannerStream, user_frequency: string | null): void {
+  function create_v2(s: PlannerStream, user_frequency: string | null, inherit?: PlannerRecord): void {
     save(s, {
       ...s.entity!,
+      ...(inherit?.custom_name ? { user_custom_name: inherit.custom_name } : {}),
+      ...(inherit?.expected_amount_override != null ? { expected_amount_override: inherit.expected_amount_override } : {}),
       capture_rules_version: CAPTURE_RULES_VERSION,
       plaid_is_active: true,
       // A card-side "payment received" credit isn't income: hidden from creation (gap 3, X7) —
@@ -719,7 +733,8 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   const in_response = new Set(input.streams.map((s) => s.stream_id));
   for (const r of input.stale_candidates) {
     if (!r.v2) {
-      (r.direction === "outflow" ? plan.stale_outflow_ids : plan.stale_inflow_ids).push(r.id);
+      // A record merged into another bill (D41) is exempt: Plaid never stales it.
+      if (!r.merged_into_id) (r.direction === "outflow" ? plan.stale_outflow_ids : plan.stale_inflow_ids).push(r.id);
       continue;
     }
     if (in_response.has(r.id)) continue; // v2 + rejected: kept as is (gap 8 / X10)

@@ -335,7 +335,7 @@ describe('Phase 1 extras (emulator)', () => {
     expect(after.map((i) => [i.direction, i.status]).sort()).toEqual([['inflow', 'open'], ['outflow', 'dismissed']]);
   }, 180000);
 
-  it('extra: the answer callable refuses same_bill (Phase 2) and enforces the bill owner on keep_separate', async () => {
+  it('extra: the answer callable enforces the bill owner on same_bill and keep_separate', async () => {
     const h = await makeHarness(db, 'qzxcall', mocks, { flag: true });
     await h.sync('link');
     const other = await makeHarness(db, 'qzxcallo', mocks, { flag: false });
@@ -350,7 +350,8 @@ describe('Phase 1 extras (emulator)', () => {
     const mine = mk(h.ids.streams.SPOT, `${h.ids.tag}_S_NEWSPOT`);
     const foreign = mk(other.ids.streams.SPOT, `${h.ids.tag}_S_NEWSPOT2`); // the "stopped bill" is another user's
     await recurring_review_repo.upsert_items(ctx(), [mine, foreign]);
-    await expect(answer(ctx(), uid, { item_id: mine.id, answer: 'same_bill' }, NOW_MS)).rejects.toThrow(/not available yet/);
+    // Phase 2: "same bill" works for the owner; it is refused for a stopped bill that isn't theirs.
+    await expect(answer(ctx(), uid, { item_id: foreign.id, answer: 'same_bill' }, NOW_MS)).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
     await expect(answer(ctx(), uid, { item_id: foreign.id, answer: 'keep_separate' }, NOW_MS)).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
     expect((await recurring_review_repo.get_item(ctx(), foreign.id)).status).toBe('open'); // nothing written
     expect((await answer(ctx(), uid, { item_id: mine.id, answer: 'keep_separate' }, NOW_MS)).status).toBe('resolved');

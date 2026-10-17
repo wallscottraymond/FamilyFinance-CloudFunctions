@@ -2,6 +2,7 @@
  * Absorb + merge rules (Convert-To-Recurring D3 / D7 / D22 / D41 / D42) — pure.
  */
 import { can_absorb, decline_absorbed_stream, find_absorber, plan_absorb } from "../absorb.service";
+import { plan_merge_old_into_new, plan_undo_merge } from "../merge.service";
 import type { PlannerRecord, PlannerStream } from "../recurring_capture_planner.service";
 import type { AbsorbedStream } from "../convert_recurring.service";
 
@@ -80,4 +81,26 @@ describe("plan_absorb", () => {
   });
 });
 
+describe("merge + undo", () => {
+  const old = (o = {}) => ({
+    id: "old", removal_intervals: [], user_custom_name: "My Sunbit", expected_amount_override: 55, user_frequency: null,
+    last_payment_ms: Date.UTC(2037, 9, 10), merged_into_id: null, ...o,
+  });
+  const NOW = Date.UTC(2037, 9, 15);
+  const MONTH = Date.UTC(2037, 9, 1);
+  it("ends the old bill the month after its last payment and logs what undo needs", () => {
+    const p = plan_merge_old_into_new(old(), "new", NOW, MONTH)!;
+    expect(p.intervals).toEqual([{ from_ms: Date.UTC(2037, 10, 1), to_ms: null, mode: "going_forward" }]);
+    expect(p.merge_log).toMatchObject({ into: "new", prior_intervals: [], inherited_name: "My Sunbit", inherited_override: 55 });
+  });
+  it("is idempotent for an already merged record", () => {
+    expect(plan_merge_old_into_new(old({ merged_into_id: "new" }), "new", NOW, MONTH)).toBeNull();
+  });
+  it("undo restores the prior intervals and resets the inherited fields only where unchanged", () => {
+    const log = plan_merge_old_into_new(old(), "new", NOW, MONTH)!.merge_log;
+    expect(plan_undo_merge(log, { user_custom_name: "My Sunbit", expected_amount_override: 55 })).toMatchObject({ revert_target_name: true, revert_target_override: true });
+    expect(plan_undo_merge(log, { user_custom_name: "Renamed", expected_amount_override: 70 })).toMatchObject({ revert_target_name: false, revert_target_override: false });
+    expect(plan_undo_merge(log, null)).toMatchObject({ restore_intervals: [], revert_target_name: false });
+  });
+});
 void DAY;

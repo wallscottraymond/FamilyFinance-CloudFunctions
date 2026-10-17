@@ -29,7 +29,21 @@ export type ConvertResolution =
     facts: ConvertFacts;
     /** A record this transaction was already converted into (a double tap / a timed-out convert). */
     existing_conversion: { id: string; name: string; live: boolean; retro_done: boolean } | null;
+    /** Old, turned-off / stale records of the same direction + account + vendor (D41): a convert
+     *  over them is a user-tapped "Same bill" — they end and merge into the new record. */
+    old_bills: OldBill[];
   };
+
+export interface OldBill {
+  id: string;
+  removal_intervals: import("../../domain/recurring/recurring_suppression.service").RemovalInterval[];
+  user_custom_name: string | null;
+  expected_amount_override: number | null;
+  user_frequency: string | null;
+  last_payment_ms: number | null;
+  merged_into_id: string | null;
+  account_id: string | null;
+}
 
 type Raw = Record<string, unknown>;
 
@@ -97,6 +111,29 @@ export async function resolve_convert_facts(
 
   const base = txn_facts(txn.id, txn.data, false);
   const direction = direction_of(base.type);
+
+  // D41: stopped records (inactive, not merged) of this vendor on this account — read only for a
+  // transaction that can convert (one small owner-scoped query). Their Plaid payments are history of
+  // THEIR bill: the retro-link never takes them.
+  let old_bills: OldBill[] = [];
+  if (direction && base.vendor_key && base.account_id) {
+    const inactive = direction === "inflow"
+      ? await inflow_repo.get_inactive_by_user_id(ctx, user_id)
+      : await outflow_repo.get_inactive_by_user_id(ctx, user_id);
+    const matching = inactive.filter((r) =>
+      !r.merged_into_id && r.account_id === base.account_id &&
+      vendor_key_of({
+        merchant_name: "merchant_name" in r ? (r as { merchant_name?: string | null }).merchant_name : (r as { payer_name?: string | null }).payer_name,
+        name: r.description,
+      }) === base.vendor_key);
+    old_bills = matching.map((r) => ({
+      id: r.id, removal_intervals: r.removal_intervals, user_custom_name: r.user_custom_name,
+      expected_amount_override: r.expected_amount_override, user_frequency: r.user_frequency ?? null,
+      last_payment_ms: (r.last_date as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null,
+      merged_into_id: r.merged_into_id, account_id: r.account_id,
+    }));
+    for (const r of matching) for (const t of r.transaction_ids ?? []) stream_ids.add(t);
+  }
   const own = txn_facts(txn.id, txn.data, !!base.plaid_id && stream_ids.has(base.plaid_id));
 
   // What already claims the source: a split link to a shown record, or its Plaid stream (a split
@@ -141,5 +178,5 @@ export async function resolve_convert_facts(
       return { ...f, in_shown_stream: !!f.plaid_id && stream_ids.has(f.plaid_id) };
     });
   }
-  return { ok: true, facts, existing_conversion };
+  return { ok: true, facts, existing_conversion, old_bills };
 }

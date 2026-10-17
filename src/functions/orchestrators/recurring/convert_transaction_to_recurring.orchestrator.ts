@@ -44,6 +44,8 @@ import { apply_review_state_change } from "../../domain/recurring/review_item.se
 import { generate_periods_inline } from "./generate_periods_inline";
 import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
 import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
+import { plan_merge_old_into_new } from "../../domain/recurring/merge.service";
+import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
 
 export interface ConvertInput {
   transaction_id: string;
@@ -160,6 +162,27 @@ export async function convert_transaction_to_recurring_orchestrator(
       retro_doc_ids: plan.retro_doc_ids,
     });
     follow_up_done = true;
+
+    // 6b. D41 — an old, turned-off / stale record of the same vendor on this account is the same
+    //     bill: the user tapped Convert, so it ends at its last payment and merges into the new one
+    //     (kept active, out of the Removed list, undoable). History moves nowhere: the retro-link
+    //     skipped its payments.
+    if (r.old_bills.length > 0) {
+      const repo = plan.direction === "outflow" ? outflow_repo : inflow_repo;
+      const month_start = Date.UTC(new Date(now_ms).getUTCFullYear(), new Date(now_ms).getUTCMonth(), 1);
+      let from_ms = month_start;
+      for (const old of r.old_bills) {
+        const mp = plan_merge_old_into_new(old, id, now_ms, month_start);
+        if (!mp) continue;
+        await repo.apply_merge(ctx, old.id, { intervals: mp.intervals, merged_into_id: id, merge_log: mp.merge_log }, run_id);
+        await repo.apply_period_suppression(ctx, old.id, mp.intervals, user_id);
+        from_ms = Math.min(from_ms, mp.intervals[mp.intervals.length - 1].from_ms);
+      }
+      await enqueue_reassign_user({
+        user_id, reason: "recurring_removal", scope: { account_ids: [plan.entity.account_id], from_ms },
+      }, ctx.trace_id).catch((e) => console.error(`[${ctx.trace_id}] convert merge re-assign enqueue failed:`, e));
+      await bump_derive_version(user_id).catch(() => {});
+    }
 
     // 7. The vendor's question: closed `converted`; its held-out payments released; a "Not a bill"
     //    memory forgotten. Guarded state write (a racing sync's change is never lost).

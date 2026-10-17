@@ -30,6 +30,9 @@ import { plan_review_answer, UserAnswer } from "../../domain/recurring/review_an
 import { apply_review_state_change } from "../../domain/recurring/review_item.service";
 import { manage_recurring_removal_orchestrator } from "./manage_recurring_removal.orchestrator";
 import { enqueue_item_sync } from "../plaid/sync_item.orchestrator";
+import { plan_merge_old_into_new } from "../../domain/recurring/merge.service";
+import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
+
 
 export interface AnswerReviewItemInput {
   item_id: string;
@@ -72,6 +75,33 @@ export async function answer_recurring_review_item_orchestrator(
     if (plan.no_op) {
       log_operation_success(span, user_id);
       return { item_id: input.item_id, status: context.item.status, answer: input.answer, no_op: true };
+    }
+
+    // 2c. "Same bill" (D7 / D22): the old bill ends after its last payment and is merged into the
+    //     new stream's bill (kept active, out of the Removed list, undoable). One stamped write +
+    //     the stored periods follow + ONE coalesced re-assign of its account.
+    if (plan.merge) {
+      const old_id = plan.merge.old_record_id;
+      const repo = context.item.direction === "outflow" ? outflow_repo : inflow_repo;
+      const old = await repo.get_by_id(ctx, old_id, { include_deleted: true });
+      if (old && old.user_id === user_id) {
+        const month_start = Date.UTC(new Date(now_ms).getUTCFullYear(), new Date(now_ms).getUTCMonth(), 1);
+        const mp = plan_merge_old_into_new({
+          id: old.id, removal_intervals: old.removal_intervals, user_custom_name: old.user_custom_name,
+          expected_amount_override: old.expected_amount_override, user_frequency: old.user_frequency ?? null,
+          last_payment_ms: old.last_date?.toMillis?.() ?? null, merged_into_id: old.merged_into_id,
+        }, plan.merge.into_stream_id, now_ms, month_start);
+        if (mp) {
+          await repo.apply_merge(ctx, old_id, { intervals: mp.intervals, merged_into_id: plan.merge.into_stream_id, merge_log: mp.merge_log }, `merge_${ctx.trace_id}`);
+          await repo.apply_period_suppression(ctx, old_id, mp.intervals, user_id);
+          await enqueue_reassign_user({
+            user_id,
+            reason: "recurring_removal",
+            scope: { ...(old.account_id ? { account_ids: [old.account_id] } : {}), from_ms: Math.min(month_start, mp.intervals[mp.intervals.length - 1].from_ms) },
+          }, ctx.trace_id).catch((e) => console.error(`[${ctx.trace_id}] merge re-assign enqueue failed:`, e));
+          await bump_derive_version(user_id).catch(() => {});
+        }
+      }
     }
 
     // 3. Record action first (so a failure leaves the question open, to be answered again).
