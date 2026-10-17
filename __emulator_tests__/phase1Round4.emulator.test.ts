@@ -185,5 +185,86 @@ describe('round 4 — cross-item tiles + tracks (emulator)', () => {
     expect(c.stop().writes_by.recurring_review_items ?? 0).toBe(0);
     expect((await id_of())?.transactionIds).toEqual(before?.transactionIds);
   }, 240000);
+
+  for (const tracked_in of ['chunk1', 'chunk2'] as const) {
+    it(`test 6: a partial save_batch failure (chunk 1 commits, chunk 2 throws; the tracked bill in ${tracked_in}) → the next sync releases the ids + fulfils the track`, async () => {
+      const h = await makeHarness(db, `qzr4t6${tracked_in === 'chunk1' ? 'a' : 'b'}`, mocks, { flag: true });
+      await h.sync('link');
+      const [tile] = await sunbitItems(h.ids.userId);
+      await answer(ctx(), h.ids.userId, { item_id: tile.id, answer: 'track' }, NOW_MS);
+      const { outflow_repo } = require('../src/functions/repositories');
+      const orig = outflow_repo.save_batch;
+      const spy = jest.spyOn(outflow_repo, 'save_batch').mockImplementationOnce((async (c: any, ents: any[], run: any, pre: any) => {
+        const is_tracked = (e: any) => e.id === h.ids.streams.SUNBIT;
+        const chunk1 = ents.filter((e) => (tracked_in === 'chunk1' ? is_tracked(e) : !is_tracked(e)));
+        await orig.call(outflow_repo, c, chunk1, run, pre); // chunk 1 commits…
+        throw new Error('chunk 2 failed'); // …chunk 2 throws
+      }) as any);
+      const r = await h.syncRaw('partial');
+      expect(r.status).toBe('synced');
+      spy.mockRestore();
+      let st = await state(h.ids.userId);
+      // The failed direction kept everything that depended on its saves: still pending + held.
+      expect((st.pendingTracks ?? []).map((p: any) => p.itemId)).toEqual([tile.id]);
+      expect(st.suppressedTxnIds).toEqual(expect.arrayContaining([h.ids.txn('sunbit0'), h.ids.txn('sunbit1')]));
+      expect(!!(await db.collection('outflows').doc(h.ids.streams.SUNBIT).get()).exists).toBe(tracked_in === 'chunk1');
+      // The next (healthy) sync: the bill exists (created now, or already from chunk 1) → released + fulfilled.
+      await h.sync('next');
+      expect((await db.collection('outflows').doc(h.ids.streams.SUNBIT).get()).data()?.captureRulesVersion).toBe(2);
+      st = await state(h.ids.userId);
+      expect(st.pendingTracks ?? []).toEqual([]);
+      expect(st.suppressedTxnIds ?? []).not.toEqual(expect.arrayContaining([h.ids.txn('sunbit0')]));
+      expect((await sunbitItems(h.ids.userId))[0].answer).toBe('track');
+    }, 240000);
+  }
+
+  for (const mode of ['blocked', 'aborted_retry'] as const) {
+    it(`test 9 (${mode}): an answer landing INSIDE write_items_guarded's transaction keeps the answer`, async () => {
+      const h = await makeHarness(db, `qzr4t9${mode[0]}`, mocks, { flag: true });
+      await h.sync('link');
+      const [tile] = await sunbitItems(h.ids.userId);
+      expect(tile.status).toBe('open');
+      // The next sync rewrites the tile (Plaid changed its amount)…
+      const rec = scenarioRecurring(h.ids);
+      const sb: any = rec.outflow_streams.find((x: any) => x.stream_id === h.ids.streams.SUNBIT);
+      sb.average_amount = { amount: 55, iso_currency_code: 'USD' };
+      h.setRecurring(rec);
+      // …and the user's "Not a bill" lands right after the guard's transaction READ the tile:
+      //   blocked       — the answer write waits on the transaction's lock and lands after it;
+      //   aborted_retry — the attempt is ABORTED (contention) after the answer started; the SDK
+      //                   retries, and the retry reads the ANSWERED tile → skipped, not reverted.
+      const { Transaction } = require('@google-cloud/firestore');
+      const orig_get_all = Transaction.prototype.getAll;
+      const ref = db.collection('recurring_review_items').doc(tile.id);
+      let attempts = 0;
+      let write: Promise<unknown> | null = null;
+      Transaction.prototype.getAll = async function (...refs: any[]) {
+        const hits = refs.some((r: any) => r?.path === ref.path);
+        if (hits && write && mode === 'aborted_retry') await write; // the retry reads after the answer
+        const snaps = await orig_get_all.apply(this, refs);
+        if (hits) {
+          attempts++;
+          if (!write) {
+            write = answer(ctx(), h.ids.userId, { item_id: tile.id, answer: 'not_bill' }, NOW_MS);
+            if (mode === 'aborted_retry') throw Object.assign(new Error('simulated contention'), { code: 10 });
+            await Promise.race([write, new Promise((r) => setTimeout(r, 1500))]);
+          }
+        }
+        return snaps;
+      };
+      try {
+        await h.sync('race');
+        await write;
+      } finally {
+        Transaction.prototype.getAll = orig_get_all;
+      }
+      const after = (await ref.get()).data()!;
+      expect([after.status, after.answer]).toEqual(['dismissed', 'not_bill']);
+      expect(attempts).toBe(mode === 'aborted_retry' ? 2 : 1);
+      // The next sync never reverts it.
+      await h.sync('after');
+      expect((await ref.get()).data()!.answer).toBe('not_bill');
+    }, 240000);
+  }
 });
 
