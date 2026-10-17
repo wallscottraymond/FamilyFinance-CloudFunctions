@@ -296,6 +296,9 @@ export interface ReviewStateChange {
   remove_pending_track_ids?: string[];
   /** Replace the open suggested tiles one Plaid item owns (round 4 defect 2). */
   set_suggested_owners?: { plaid_item_doc_id: string; item_ids: string[] };
+  /** Round 5: the user's Plaid items that still exist — owner entries of any other item are
+   *  dropped (only sent when the sync already loaded the user's items). */
+  keep_owner_item_doc_ids?: string[];
 }
 
 /**
@@ -329,11 +332,16 @@ export function apply_review_state_change(
     ...(change.add_pending_tracks ?? []),
   ].slice(-MAX_PENDING_TRACKS);
   const owners_change = change.set_suggested_owners;
-  const owners: SuggestedOwner[] = owners_change
-    ? [
-      ...(base.suggested_owners ?? []).filter((o) => o.plaid_item_doc_id !== owners_change.plaid_item_doc_id),
-      ...[...new Set(owners_change.item_ids)].sort().map((item_id) => ({ item_id, plaid_item_doc_id: owners_change.plaid_item_doc_id })),
-    ].slice(-MAX_SUGGESTED_OWNERS)
+  const keep_items = change.keep_owner_item_doc_ids ? new Set(change.keep_owner_item_doc_ids) : null;
+  const owners_in: SuggestedOwner[] = [
+    ...(base.suggested_owners ?? []).filter((o) => !owners_change || o.plaid_item_doc_id !== owners_change.plaid_item_doc_id),
+    ...(owners_change ? [...new Set(owners_change.item_ids)].map((item_id) => ({ item_id, plaid_item_doc_id: owners_change.plaid_item_doc_id })) : []),
+  ].filter((o) => !keep_items || keep_items.has(o.plaid_item_doc_id));
+  // Round 5: one deterministic order (Plaid item, then tile) and cap — the same owners always
+  // store the same list whichever item wrote last (an insertion-order cap let two items evict
+  // each other's entries on every sync: a rewrite war). Untouched → stored as is (no rewrite).
+  const owners: SuggestedOwner[] = owners_change || keep_items
+    ? [...owners_in].sort((a, b) => cmp(a.plaid_item_doc_id, b.plaid_item_doc_id) || cmp(a.item_id, b.item_id)).slice(0, MAX_SUGGESTED_OWNERS)
     : base.suggested_owners ?? [];
   const next: RecurringReviewState = {
     user_id,
@@ -361,6 +369,8 @@ export function apply_review_state_change(
     owners.length === 0;
   return { next, changed: changed && !(current === null && is_empty), suppressed_changed };
 }
+
+const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** The deterministic held-out cap: sorted, first MAX_SUPPRESSED_TXN_IDS kept (defect 6). PURE. */
 export function cap_suppressed_ids(ids: string[]): string[] {

@@ -148,3 +148,38 @@ describe("round 5 test 2 — a merchant rename closes the old tile: exactly one 
   });
 });
 
+describe("round 5 — owners list: deterministic cap + entries of removed Plaid items dropped", () => {
+  it("over the cap, the kept entries don't depend on which item wrote last (no rewrite war)", () => {
+    const many = (item: string, n: number) => Array.from({ length: n }, (_, i) => `${item}_${String(i).padStart(4, "0")}`);
+    const a = { plaid_item_doc_id: "itemA", item_ids: many("a", 700) };
+    const b = { plaid_item_doc_id: "itemB", item_ids: many("b", 700) };
+    // A then B, vs B then A: the same stored list; re-applying either is no change.
+    const ab = apply_review_state_change(apply_review_state_change(state(), U, { set_suggested_owners: a }).next, U, { set_suggested_owners: b }).next;
+    const ba = apply_review_state_change(apply_review_state_change(state(), U, { set_suggested_owners: b }).next, U, { set_suggested_owners: a }).next;
+    expect(ab.suggested_owners).toEqual(ba.suggested_owners);
+    expect(ab.suggested_owners).toHaveLength(1000);
+    // Alternating identical syncs of the two items → no write at all.
+    let st = ab;
+    for (let k = 0; k < 4; k++) {
+      for (const ch of [a, b]) {
+        const r = apply_review_state_change(st, U, { set_suggested_owners: ch });
+        expect(r.changed).toBe(false);
+        st = r.next;
+      }
+    }
+  });
+
+  it("a sync that loaded the user's Plaid items drops the entries of an item that no longer exists, once", () => {
+    const w = world();
+    sync(w, "item1", [early("s2")]);
+    sync(w, "gone", [stream("g1", { raw_status: "EARLY_DETECTION", merchant_name: "Avant", description: "AVANT" })]);
+    expect(owners(w).map(([, it]) => it)).toEqual(["gone", "item1"]);
+    // No items loaded → nothing pruned (no extra read for it).
+    expect(sync(w, "item1", [early("s2")]).writes).toBe(0);
+    // Loaded (a track handoff asked for them): "gone" isn't among them → its entry is dropped.
+    const r = sync(w, "item1", [early("s2")], { other_item_doc_ids: [] });
+    expect(r.writes).toBe(1);
+    expect(owners(w).map(([, it]) => it)).toEqual(["item1"]);
+    expect(sync(w, "item1", [early("s2")], { other_item_doc_ids: [] }).writes).toBe(0);
+  });
+});

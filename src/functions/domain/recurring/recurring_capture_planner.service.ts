@@ -185,6 +185,8 @@ export interface BaseChange {
   add_pending_tracks?: PendingTrack[];
   /** This Plaid item's open suggested tiles, when they changed (defect 2). */
   set_suggested_owners?: { plaid_item_doc_id: string; item_ids: string[] };
+  /** Round 5: the user's live Plaid items, when loaded and an owner entry names another one. */
+  keep_owner_item_doc_ids?: string[];
 }
 
 /** base + effects → the state change; ids both held out and released end released (stream
@@ -200,6 +202,7 @@ export function compose_state_change(base: BaseChange, effects: SaveEffect[]): R
     ...(pending.length > 0 ? { remove_pending_track_ids: pending } : {}),
     ...(add_pending.length > 0 ? { add_pending_tracks: add_pending } : {}),
     ...(base.set_suggested_owners ? { set_suggested_owners: base.set_suggested_owners } : {}),
+    ...(base.keep_owner_item_doc_ids ? { keep_owner_item_doc_ids: base.keep_owner_item_doc_ids } : {}),
   };
 }
 
@@ -786,6 +789,14 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     .filter((o) => o.plaid_item_doc_id === input.plaid_item_doc_id).map((o) => o.item_id).sort();
   if (owned_now.join("\n") !== owned_before.join("\n")) {
     base_change.set_suggested_owners = { plaid_item_doc_id: input.plaid_item_doc_id, item_ids: owned_now };
+  }
+  // Round 5: owner entries of a Plaid item the user no longer has are dropped — only when this
+  // sync already loaded the user's items (no extra read for it).
+  if (input.other_item_doc_ids !== undefined) {
+    const live = new Set([input.plaid_item_doc_id, ...input.other_item_doc_ids]);
+    if ((input.state?.suggested_owners ?? []).some((o) => !live.has(o.plaid_item_doc_id))) {
+      base_change.keep_owner_item_doc_ids = [...live].sort();
+    }
   }
 
   // Ids both suppressed and saved this round end saved (stream membership wins).

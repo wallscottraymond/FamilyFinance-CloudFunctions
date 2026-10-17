@@ -214,7 +214,8 @@ describe("round 4 — state: owned tiles + handed-off tracks", () => {
     const r = apply_review_state_change(st, U, { set_suggested_owners: { plaid_item_doc_id: "item", item_ids: ["c", "c"] } });
     expect(r.changed).toBe(true);
     expect(r.suppressed_changed).toBe(false); // no derive bump
-    expect(r.next.suggested_owners).toEqual([{ item_id: "b", plaid_item_doc_id: "item2" }, { item_id: "c", plaid_item_doc_id: "item" }]);
+    // Round 5: one deterministic order (Plaid item, then tile).
+    expect(r.next.suggested_owners).toEqual([{ item_id: "c", plaid_item_doc_id: "item" }, { item_id: "b", plaid_item_doc_id: "item2" }]);
     expect(apply_review_state_change(r.next, U, { set_suggested_owners: { plaid_item_doc_id: "item", item_ids: ["c"] } }).changed).toBe(false);
   });
 
