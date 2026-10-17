@@ -19,6 +19,8 @@ import {
   RecurringReviewState,
   ReviewItem,
   apply_review_state_change,
+  make_review_item,
+  resolve_review_item,
   changed_items,
   suggested_subject,
 } from "../review_item.service";
@@ -181,5 +183,54 @@ describe("round 5 — owners list: deterministic cap + entries of removed Plaid 
     expect(r.writes).toBe(1);
     expect(owners(w).map(([, it]) => it)).toEqual(["item1"]);
     expect(sync(w, "item1", [early("s2")], { other_item_doc_ids: [] }).writes).toBe(0);
+  });
+});
+
+describe("round 5 test 7 — a hand-off awaited by two items that sync at the same time still ends", () => {
+  const s = early("tr");
+  const tile = make_review_item({
+    user_id: U, kind: "suggested", direction: "outflow", source: "plaid", status: "open", answer: null,
+    subject_key: suggested_subject("outflow", stream_vendor(s)), vendor_key: stream_vendor(s), account_id: "chk",
+    plaid_item_doc_id: "item", stream_id: "tr", record_id: null, name: "x", amount: 10, frequency: "monthly",
+    plaid_status: "EARLY_DETECTION", category: null, transaction_ids: s.transaction_ids, next_due_ms: null,
+    user_frequency: null, resolved_at_ms: null,
+  }, NOW - 1000);
+  const tracked = resolve_review_item(tile, "track", NOW - 10, { user_frequency: "monthly" });
+  const off = { item_id: tracked.id, plaid_item_doc_id: null, account_id: "chk", stream_id: "tr", since_ms: NOW - 10,
+    handed_off_ms: NOW - 5, awaiting_item_doc_ids: ["itemA", "itemB"] };
+  const st0 = state({ suppressed_txn_ids: tracked.transaction_ids, pending_tracks: [off] });
+  const items = new Map([[tracked.id, tracked]]);
+  const plan_of = (item: string, st: RecurringReviewState, now = NOW) =>
+    plan({ plaid_item_doc_id: item, now_ms: now, streams: [], review_items: items, state: st });
+
+  for (const order of [["itemA", "itemB"], ["itemB", "itemA"]]) {
+    it(`both plan from the same state, applied ${order.join(" then ")} → nobody awaited; the next sync of ANY item closes it`, () => {
+      const plans = Object.fromEntries(["itemA", "itemB"].map((i) => [i, plan_of(i, st0)]));
+      for (const i of ["itemA", "itemB"]) expect(plans[i].review_items).toEqual([]); // each: the other is still awaited
+      let st = st0;
+      for (const i of order) st = apply_review_state_change(st, U, plans[i].state_change).next;
+      expect(st.pending_tracks?.map((p) => p.awaiting_item_doc_ids)).toEqual([[]]);
+      for (const next of ["itemA", "itemB", "itemC"]) {
+        const p = plan_of(next, st);
+        expect(p.review_items.map((i) => [i.id, i.answer])).toEqual([[tracked.id, "track_unavailable"]]);
+        const done = apply_review_state_change(st, U, p.state_change).next;
+        expect(done.pending_tracks).toEqual([]);
+        expect(done.suppressed_txn_ids).toEqual([]);
+      }
+    });
+  }
+
+  it("a fulfilled outcome wins the same way: one item's live stream of the vendor saves the bill", () => {
+    const pA = plan({ plaid_item_doc_id: "itemA", streams: [early("a1")], review_items: items, state: st0 });
+    const pB = plan_of("itemB", st0);
+    expect(pA.save_outflows.map((o) => o.id)).toEqual(["a1"]);
+    let st = apply_review_state_change(st0, U, pB.state_change).next;
+    st = apply_review_state_change(st, U, pA.state_change).next;
+    expect(st.pending_tracks).toEqual([]);
+  });
+
+  it("…and whatever is still awaited closes at the hand-off TTL, at the next sync of any item", () => {
+    const p = plan_of("itemZ", st0, NOW - 5 + 7 * 86400000);
+    expect(p.review_items.map((i) => i.answer)).toEqual(["track_unavailable"]);
   });
 });

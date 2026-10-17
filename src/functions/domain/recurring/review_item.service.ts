@@ -327,9 +327,21 @@ export function apply_review_state_change(
     ...(change.remove_pending_track_ids ?? []),
     ...(change.add_pending_tracks ?? []).map((p) => p.item_id),
   ]);
+  // Round 5 test 7: two awaited Plaid items syncing at the same time each plan "the others, minus
+  // me" from the SAME state — applied (in a transaction, one after the other) the second would put
+  // back the first item. The SAME hand-off (same handed_off_ms) only ever shrinks: its awaited
+  // items are the intersection, so the track ends with nobody awaited and the next sync of any
+  // item closes it (or a live stream / bill of the vendor fulfils it first).
+  const base_pending = new Map((base.pending_tracks ?? []).map((p) => [p.item_id, p]));
+  const narrowed = (p: PendingTrack): PendingTrack => {
+    const q = base_pending.get(p.item_id);
+    if (!q || typeof q.handed_off_ms !== "number" || q.handed_off_ms !== p.handed_off_ms) return p;
+    const still = new Set(q.awaiting_item_doc_ids ?? []);
+    return { ...p, awaiting_item_doc_ids: (p.awaiting_item_doc_ids ?? []).filter((id) => still.has(id)) };
+  };
   const pending = [
     ...(base.pending_tracks ?? []).filter((p) => !drop_pending.has(p.item_id)),
-    ...(change.add_pending_tracks ?? []),
+    ...(change.add_pending_tracks ?? []).map(narrowed),
   ].slice(-MAX_PENDING_TRACKS);
   const owners_change = change.set_suggested_owners;
   const keep_items = change.keep_owner_item_doc_ids ? new Set(change.keep_owner_item_doc_ids) : null;
