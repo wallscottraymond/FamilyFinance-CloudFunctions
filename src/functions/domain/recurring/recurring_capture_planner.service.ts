@@ -644,14 +644,27 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   //    response: no sync will ever see that stream again, and another item's live stream of the
   //    vendor can't take a tile this item owns. Closed `stream_gone` (a system close: the vendor's
   //    next live stream reopens it, owned by its item); its held-out payments are released.
+  //    Round 5 defects 1 + 2: a stream still IN the response but no longer a suggest candidate for
+  //    the tile's OWN subject — tombstoned, an invalid entity, first seen inactive, or renamed to
+  //    another vendor (merchant rename: it now builds the new vendor's tile) — lets go of the tile
+  //    too. Skipping it on "in the response" left the tile open, dropped from the owners list
+  //    (it wasn't rebuilt), so once the stream vanished no sync loaded it again: stranded open
+  //    forever, and no other item's live stream could take it over; after a rename it stayed a
+  //    second open tile of the same stream. With the flag off no candidates are built at all, so
+  //    "in the response" still keeps the tile as it is (today's handling).
   const in_response_ids = new Set(input.streams.map((x) => x.stream_id));
+  const candidate_for = (it: ReviewItem): boolean =>
+    suggest_candidates.some((c) => c.s.stream_id === it.stream_id && c.subject === it.subject_key);
   const planned = new Set(plan.review_items.map((i) => i.id));
+  // Payments held out again this round (the renamed vendor's new tile, a tombstoned stream — D17)
+  // stay held: only the rest of the let-go tile's ids are released.
+  const held_now = new Set(base_change.add_suppressed);
   for (const it of input.review_items.values()) {
     if (it.kind !== "suggested" || it.status !== "open" || it.source !== "plaid") continue;
     if (it.plaid_item_doc_id !== input.plaid_item_doc_id || planned.has(it.id)) continue;
-    if (it.stream_id && in_response_ids.has(it.stream_id)) continue;
+    if (it.stream_id && in_response_ids.has(it.stream_id) && (!input.flag_on || candidate_for(it))) continue;
     plan.review_items.push(resolve_review_item(it, "stream_gone", input.now_ms));
-    base_change.remove_suppressed.push(...it.transaction_ids);
+    base_change.remove_suppressed.push(...it.transaction_ids.filter((id) => !held_now.has(id)));
   }
 
   function create_v2(s: PlannerStream, user_frequency: string | null): void {
@@ -761,9 +774,14 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   if (handoff.size > 0) plan.handoff_item_doc_ids = [...handoff].sort();
 
   // ── The open suggested tiles this item now owns (defect 2): stored only when they changed.
-  const owned_now = [...new Set(plan.review_items
+  //    Round 5 defect 1: from the FINAL view — the loaded items overlaid by this plan's — so a tile
+  //    this item still owns and leaves open (not rebuilt this sync) stays on the list, and the
+  //    item's next sync can always load it (close it / let it go) once its stream is gone.
+  const final_view = new Map(input.review_items);
+  for (const i of plan.review_items) final_view.set(i.id, i);
+  const owned_now = [...final_view.values()]
     .filter((i) => i.kind === "suggested" && i.status === "open" && i.source === "plaid" && i.plaid_item_doc_id === input.plaid_item_doc_id)
-    .map((i) => i.id))].sort();
+    .map((i) => i.id).sort();
   const owned_before = (input.state?.suggested_owners ?? [])
     .filter((o) => o.plaid_item_doc_id === input.plaid_item_doc_id).map((o) => o.item_id).sort();
   if (owned_now.join("\n") !== owned_before.join("\n")) {

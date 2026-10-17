@@ -10,12 +10,20 @@
  *   5. a v2 record is never stale-marked.
  * The world mirrors the orchestrator: `existing` = records of the VALID streams, stale candidates =
  * this item's active records not among them.
+ *
+ * Round 5: a second, MULTI-ITEM world (two Plaid items sharing vendors; merchant renames,
+ * tombstones, invalid entities, inactive flips, streams vanishing, Track / Not-a-bill answers and
+ * the hand-off to the other item) loads exactly what the resolver loads (`review_ids_for_sync` +
+ * the state's owned tiles + pending tracks). After EVERY sync, besides "identical input → no
+ * write": no open Plaid tile is stranded (each is listed under its own item, so that item's next
+ * sync loads it), and at most one open tile per stream.
  */
 import {
   CapturePlanInput,
   PlannerRecord,
   PlannerStream,
   plan_recurring_capture,
+  review_ids_for_sync,
 } from "../recurring_capture_planner.service";
 import {
   RecurringReviewState,
@@ -196,6 +204,107 @@ describe("planner + state reducer property (seeded)", () => {
         expect({ ctx, state: apply_review_state_change(state, U, again.state_change).changed }).toEqual({ ctx, state: false });
         expect({ ctx, stale: [...again.stale_outflow_ids, ...again.stale_inflow_ids], inactive: [...again.plaid_inactive_outflow_ids, ...again.plaid_inactive_inflow_ids] })
           .toEqual({ ctx, stale: [], inactive: [] });
+      }
+    });
+  }
+});
+
+describe("round 5 — multi-item ownership property (seeded): never stranded, one tile per stream, no churn", () => {
+  const ITEMS = ["itemA", "itemB"];
+  const SEEDS = Array.from({ length: 150 }, (_, i) => 31 + i * 7907);
+  for (const seed of SEEDS) {
+    it(`seed ${seed}`, () => {
+      const rnd = mulberry32(seed);
+      const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
+      const vendors = ["sunbit", "avant", "sunbit inc", "affirm"];
+      const LOW = ["EARLY_DETECTION", "EARLY_DETECTION", "UNKNOWN", "TOMBSTONED", "MATURE"];
+      const specs = ITEMS.flatMap((item) => Array.from({ length: 3 }, (_, i) => ({
+        item, id: `${item}_s${i}`, direction: "outflow" as const, vendor: pick(vendors),
+        category: "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT", account: `${item}_chk`, txns: [`${item}_s${i}_t0`, `${item}_s${i}_t1`],
+        status: pick(LOW), frequency: rnd() < 0.8 ? "MONTHLY" : "UNKNOWN", active: rnd() < 0.9, present: true, rejected: false,
+      })));
+      const records = new Map<string, PlannerRecord>();
+      let items = new Map<string, ReviewItem>();
+      let state: RecurringReviewState | null = null;
+      let now = T0;
+      for (let step = 0; step < 20; step++) {
+        now += DAY;
+        for (const s of specs) {
+          if (rnd() < 0.2) s.status = pick(LOW);
+          if (rnd() < 0.1) s.vendor = pick(vendors); // merchant rename
+          if (rnd() < 0.1) s.active = !s.active;
+          s.rejected = rnd() < 0.08;
+          s.present = rnd() < 0.85;
+        }
+        for (const it of [...items.values()].filter((i) => i.status === "open")) {
+          if (rnd() < 0.8) continue;
+          const answer = it.kind === "suggested" ? pick(["track", "not_bill"] as const) : it.kind === "still_a_bill" ? "still_a_bill" : "keep_separate";
+          const r = plan_review_answer(it, answer, now, { frequency: "monthly" });
+          if (!r.ok || r.plan.no_op) continue;
+          items = new Map(items).set(it.id, r.plan.item!);
+          state = apply_review_state_change(state, U, r.plan.state_change).next;
+        }
+        const item = pick(ITEMS);
+        const mine = specs.filter((s) => s.item === item);
+        const streams = mine.filter((s) => s.present).map((s) => {
+          const st = to_stream(s, now);
+          return st.entity ? { ...st, entity: { ...st.entity, plaid_item_id: item } } : st;
+        });
+        const valid = new Set(streams.filter((s) => s.entity).map((s) => s.stream_id));
+        const existing = new Map([...records].filter(([id]) => valid.has(id)));
+        const stale = [...records.values()].filter((r) => r.is_active && r.plaid_item_id === item && !valid.has(r.id));
+        // The resolver's loading rule.
+        const load = (st: RecurringReviewState | null) => {
+          const ids = new Set([
+            ...review_ids_for_sync(U, streams, [...existing.values(), ...stale]),
+            ...(st?.pending_tracks ?? []).filter((p) => p.plaid_item_doc_id === item || typeof p.handed_off_ms === "number").map((p) => p.item_id),
+            ...(st?.suggested_owners ?? []).filter((o) => o.plaid_item_doc_id === item).map((o) => o.item_id),
+          ]);
+          return new Map([...items].filter(([id]) => ids.has(id)));
+        };
+        const base_input: CapturePlanInput = {
+          user_id: U, plaid_item_doc_id: item, now_ms: now, flag_on: rnd() < 0.9, streams, existing, stale_candidates: stale,
+          review_items: load(state), state,
+        };
+        let plan = plan_recurring_capture(base_input);
+        let input = base_input;
+        if (plan.wants_other_items) {
+          input = { ...input, other_item_doc_ids: ITEMS.filter((x) => x !== item) };
+          plan = plan_recurring_capture(input);
+        }
+        const ctx = `seed ${seed} step ${step} ${item}`;
+        const saved = plan.save_outflows as OutflowForPersistence[];
+        for (const e of saved) {
+          const r = record_from(e, "outflow", records.get(e.id));
+          records.set(e.id, { ...r, plaid_item_id: item });
+        }
+        for (const id of plan.stale_outflow_ids) { const r = records.get(id)!; records.set(id, { ...r, is_active: false }); }
+        for (const id of plan.plaid_inactive_outflow_ids) { const r = records.get(id)!; records.set(id, { ...r, plaid_is_active: false }); }
+        for (const i of changed_items(plan.review_items, input.review_items)) items = new Map(items).set(i.id, i);
+        state = apply_review_state_change(state, U, plan.state_change).next;
+
+        // Never stranded: every open Plaid tile is listed under its own item.
+        const listed = new Set((state.suggested_owners ?? []).map((o) => `${o.item_id}@${o.plaid_item_doc_id}`));
+        const open = [...items.values()].filter((i) => i.kind === "suggested" && i.status === "open" && i.source === "plaid");
+        expect({ ctx, stranded: open.filter((i) => !listed.has(`${i.id}@${i.plaid_item_doc_id}`)).map((i) => i.id) })
+          .toEqual({ ctx, stranded: [] });
+        // At most one open tile per stream.
+        const per_stream = new Map<string, number>();
+        for (const i of open) per_stream.set(i.stream_id!, (per_stream.get(i.stream_id!) ?? 0) + 1);
+        expect({ ctx, dup: [...per_stream].filter(([, n]) => n > 1).map(([sid]) => sid) }).toEqual({ ctx, dup: [] });
+
+        // Identical input again → nothing to write.
+        const again_input = {
+          ...input,
+          existing: new Map([...records].filter(([id]) => valid.has(id))),
+          stale_candidates: [...records.values()].filter((r) => r.is_active && r.plaid_item_id === item && !valid.has(r.id)),
+          review_items: load(state),
+          state,
+        };
+        const again = plan_recurring_capture(again_input);
+        expect({ ctx, items: changed_items(again.review_items, again_input.review_items).map((i) => `${i.id}:${i.status}:${i.answer}`) })
+          .toEqual({ ctx, items: [] });
+        expect({ ctx, state: apply_review_state_change(state, U, again.state_change).changed }).toEqual({ ctx, state: false });
       }
     });
   }
