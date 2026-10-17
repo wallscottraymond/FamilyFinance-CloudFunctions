@@ -20,6 +20,7 @@ import {
   ReviewItem,
   make_review_item,
   apply_review_state_change,
+  changed_items,
   resolve_review_item,
   suggested_subject,
 } from "../review_item.service";
@@ -223,5 +224,24 @@ describe("round 4 — state: owned tiles + handed-off tracks", () => {
     const off = { ...p, plaid_item_doc_id: null, handed_off_ms: 5, awaiting_item_doc_ids: ["item2"] };
     const r = apply_review_state_change(st, U, { add_pending_tracks: [off] });
     expect(r.next.pending_tracks).toEqual([off]);
+  });
+});
+
+describe("round 4 — test 8 (a >60-payment item is stable under Plaid's reordering)", () => {
+  it("make_review_item sorts before it caps: a shuffled 75-id list → identical ids + hash → 0 rewrites", () => {
+    const many = Array.from({ length: 75 }, (_, i) => `t${String(i).padStart(3, "0")}`);
+    const s = early("big", { transaction_ids: many });
+    const a = sugg(s);
+    const shuffled = [...many].reverse();
+    shuffled.push(shuffled.shift()!);
+    const b = sugg({ ...s, transaction_ids: shuffled });
+    expect(a.transaction_ids).toHaveLength(60);
+    expect(b.transaction_ids).toEqual(a.transaction_ids);
+    expect(b.content_hash).toBe(a.content_hash);
+    // Through the planner: the stored item is not rewritten.
+    const first = plan({ streams: [s] }).review_items[0];
+    const again = plan({ streams: [{ ...s, transaction_ids: shuffled }], review_items: by_id(first) }).review_items;
+    expect(again.map((i) => i.content_hash)).toEqual([first.content_hash]);
+    expect(changed_items(again, by_id(first))).toEqual([]);
   });
 });

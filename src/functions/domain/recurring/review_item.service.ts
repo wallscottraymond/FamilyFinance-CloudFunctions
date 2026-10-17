@@ -193,7 +193,9 @@ export function make_review_item(
   now_ms: number,
   existing?: ReviewItem | null
 ): ReviewItem {
-  const transaction_ids = parts.transaction_ids.slice(-MAX_ITEM_TRANSACTION_IDS);
+  // Sorted BEFORE the cap (round 4 test 8): capping Plaid's order kept a different 60 of a longer
+  // list each time Plaid reordered it — a rewrite per sync. Same input set → same stored ids.
+  const transaction_ids = [...new Set(parts.transaction_ids)].sort().slice(-MAX_ITEM_TRANSACTION_IDS);
   const body = { ...parts, transaction_ids };
   return {
     ...body,

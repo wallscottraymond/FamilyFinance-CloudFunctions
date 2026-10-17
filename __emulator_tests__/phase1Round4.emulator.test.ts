@@ -164,4 +164,26 @@ describe('round 4 — cross-item tiles + tracks (emulator)', () => {
     expect(all.filter((i) => i.kind === 'suggested' && i.status === 'open' && /sunbit/.test(i.vendorKey ?? ''))).toEqual([]);
     expect(all.find((i) => i.id === tile.id)?.answer).toBe('track');
   }, 240000);
+
+  it('test 8: a review item with >60 payments under a reordered Plaid list → 0 rewrites', async () => {
+    const h = await makeHarness(db, 'qzr4t8', mocks, { flag: true });
+    const keys = Array.from({ length: 70 }, (_, i) => `big${i}`);
+    const base = scenarioRecurring(h.ids);
+    const big = sunbit(h.ids, 'BIG', 'chk', keys, { merchant: 'Bigvendor', description: 'BIGVENDOR' });
+    h.setRecurring({ ...base, outflow_streams: [...base.outflow_streams, big] });
+    await h.sync('link');
+    const id_of = async () => (await db.collection('recurring_review_items').where('userId', '==', h.ids.userId).get()).docs
+      .map((d) => d.data()).find((i) => i.vendorKey === 'bigvendor');
+    const before = await id_of();
+    expect(before?.transactionIds).toHaveLength(60);
+    const c = startCounting();
+    for (let n = 0; n < 3; n++) {
+      const order = n % 2 ? [...big.transaction_ids].reverse() : [...big.transaction_ids.slice(35), ...big.transaction_ids.slice(0, 35)];
+      h.setRecurring({ ...base, outflow_streams: [{ ...big, transaction_ids: order }, ...base.outflow_streams] });
+      await h.sync(`s${n}`);
+    }
+    expect(c.stop().writes_by.recurring_review_items ?? 0).toBe(0);
+    expect((await id_of())?.transactionIds).toEqual(before?.transactionIds);
+  }, 240000);
 });
+
