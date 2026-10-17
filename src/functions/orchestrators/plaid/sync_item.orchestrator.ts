@@ -173,6 +173,13 @@ async function run_round(
     );
     streams_written.push(...r.written);
     for (const id of r.newly_suppressed_plaid_ids ?? []) newly_suppressed.add(id);
+    // A "Track" whose stream is gone from this item was handed to the user's other items (round 4
+    // defect 2): re-sync them now so one with a live stream of the vendor creates the bill.
+    for (const other of r.handoff_item_doc_ids ?? []) {
+      await enqueue_item_sync({
+        item_doc_id: other, user_id: input.user_id, recurring: true, reason: "track_handoff", trace_id: ctx.trace_id,
+      }).catch((e) => console.warn(`[${ctx.trace_id}] track hand-off sync of ${other} not enqueued:`, e));
+    }
     // A brand-new item's recurring data often isn't ready yet (PRODUCT_NOT_READY) — not an error.
     return r.success !== false;
   };

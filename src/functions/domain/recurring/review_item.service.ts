@@ -43,7 +43,10 @@ export type ReviewAnswer =
   | "track_unavailable"
   /** A "Still a bill?" about a bill the user no longer sees (removed / paused / merged): the
    *  question is moot (defect 5). */
-  | "not_shown";
+  | "not_shown"
+  /** A Plaid suggestion whose stream its own Plaid item no longer returns: the item lets go of the
+   *  tile (round 4 defect 2) so another item's live stream of the vendor can take it over. */
+  | "stream_gone";
 
 /** A review item (snake_case domain shape; the repo maps it to the camelCase doc). */
 export interface ReviewItem {
@@ -99,6 +102,19 @@ export interface RecurringReviewState {
    * are never orphaned.
    */
   pending_tracks?: PendingTrack[];
+  /**
+   * The OPEN Plaid suggested tiles each Plaid item owns (round 4 defect 2). A sync loads its own
+   * item's tiles even when the vendor is gone from the response, so a tile whose stream vanished
+   * is let go (`stream_gone`) instead of staying owned by a stream no sync will ever see again
+   * (another item's live stream of the vendor could never take it over). Absent on old docs.
+   */
+  suggested_owners?: SuggestedOwner[];
+}
+
+/** One open Plaid suggested tile and the Plaid item that owns it. */
+export interface SuggestedOwner {
+  item_id: string;
+  plaid_item_doc_id: string;
 }
 
 /** A tracked item waiting for its bill (see `RecurringReviewState.pending_tracks`). */
@@ -108,6 +124,14 @@ export interface PendingTrack {
   account_id: string | null;
   stream_id: string | null;
   since_ms: number;
+  /**
+   * Set when the track's own stream was gone from its Plaid item while the user has OTHER Plaid
+   * items (round 4 defect 2): the track waits for one of them (`awaiting_item_doc_ids`) to save a
+   * stream of the same vendor — or closes `track_unavailable` once every one of them has synced
+   * without it, or after PENDING_HANDOFF_TTL_MS. `plaid_item_doc_id` is null then.
+   */
+  handed_off_ms?: number;
+  awaiting_item_doc_ids?: string[];
 }
 
 /**
@@ -122,6 +146,11 @@ export const MAX_SUPPRESSED_TXN_IDS = 5000;
 export const MAX_DISMISSED_VENDOR_KEYS = 1000;
 export const MAX_ITEM_TRANSACTION_IDS = 60;
 export const MAX_PENDING_TRACKS = 200;
+export const MAX_SUGGESTED_OWNERS = 1000;
+/** A handed-off track no other item fulfilled within this is closed `track_unavailable`. */
+export const PENDING_HANDOFF_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Backstop: no track stays pending longer than this (round 4 test 7 — never pending forever). */
+export const PENDING_TRACK_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 /** Resolved items expire (console TTL policy on `expireAt`); open + dismissed never carry it. */
 export const RESOLVED_ITEM_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
@@ -190,7 +219,7 @@ export function changed_items(next: ReviewItem[], existing: Map<string, ReviewIt
 
 /** Answers the system writes itself — an item closed this way may open again. */
 export const SYSTEM_CLOSE_ANSWERS: ReadonlySet<string> = new Set([
-  "matured", "auto_active", "account_removed", "track_unavailable", "not_shown",
+  "matured", "auto_active", "account_removed", "track_unavailable", "not_shown", "stream_gone",
 ]);
 
 /** Has the USER answered this item (closed with a user answer)? A background writer (sync,
@@ -244,7 +273,10 @@ export function resolve_review_item(
 }
 
 export function empty_review_state(user_id: string): RecurringReviewState {
-  return { user_id, suppressed_txn_ids: [], dismissed_vendor_keys: [], detector_last_run_day: null, pending_tracks: [] };
+  return {
+    user_id, suppressed_txn_ids: [], dismissed_vendor_keys: [], detector_last_run_day: null, pending_tracks: [],
+    suggested_owners: [],
+  };
 }
 
 /** Hash of the derive-relevant part of the state: only the suppressed ids feed the derive. */
@@ -260,6 +292,8 @@ export interface ReviewStateChange {
   /** Track answers waiting for their bill (defect 4); an item id already pending is replaced. */
   add_pending_tracks?: PendingTrack[];
   remove_pending_track_ids?: string[];
+  /** Replace the open suggested tiles one Plaid item owns (round 4 defect 2). */
+  set_suggested_owners?: { plaid_item_doc_id: string; item_ids: string[] };
 }
 
 /**
@@ -292,12 +326,20 @@ export function apply_review_state_change(
     ...(base.pending_tracks ?? []).filter((p) => !drop_pending.has(p.item_id)),
     ...(change.add_pending_tracks ?? []),
   ].slice(-MAX_PENDING_TRACKS);
+  const owners_change = change.set_suggested_owners;
+  const owners: SuggestedOwner[] = owners_change
+    ? [
+      ...(base.suggested_owners ?? []).filter((o) => o.plaid_item_doc_id !== owners_change.plaid_item_doc_id),
+      ...[...new Set(owners_change.item_ids)].sort().map((item_id) => ({ item_id, plaid_item_doc_id: owners_change.plaid_item_doc_id })),
+    ].slice(-MAX_SUGGESTED_OWNERS)
+    : base.suggested_owners ?? [];
   const next: RecurringReviewState = {
     user_id,
     suppressed_txn_ids: suppressed,
     dismissed_vendor_keys: dismissed.slice(-MAX_DISMISSED_VENDOR_KEYS),
     detector_last_run_day: change.detector_last_run_day ?? base.detector_last_run_day,
     pending_tracks: pending,
+    suggested_owners: owners,
   };
   const suppressed_changed = suppressed_hash(next) !== suppressed_hash(current);
   const pending_key = (list: PendingTrack[] | undefined) => JSON.stringify(list ?? []);
@@ -306,13 +348,15 @@ export function apply_review_state_change(
     suppressed_changed ||
     next.dismissed_vendor_keys.join("\n") !== base.dismissed_vendor_keys.join("\n") ||
     next.detector_last_run_day !== base.detector_last_run_day ||
-    pending_key(next.pending_tracks) !== pending_key(base.pending_tracks);
+    pending_key(next.pending_tracks) !== pending_key(base.pending_tracks) ||
+    JSON.stringify(next.suggested_owners ?? []) !== JSON.stringify(base.suggested_owners ?? []);
   // A brand-new state that holds nothing is not worth a write.
   const is_empty =
     next.suppressed_txn_ids.length === 0 &&
     next.dismissed_vendor_keys.length === 0 &&
     next.detector_last_run_day === null &&
-    pending.length === 0;
+    pending.length === 0 &&
+    owners.length === 0;
   return { next, changed: changed && !(current === null && is_empty), suppressed_changed };
 }
 

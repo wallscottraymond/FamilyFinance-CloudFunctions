@@ -78,7 +78,11 @@ interface ReviewStateDoc {
     accountId: string | null;
     streamId: string | null;
     sinceMs: number;
+    handedOffMs?: number;
+    awaitingItemDocIds?: string[];
   }>;
+  /** Open Plaid suggested tiles per owning Plaid item (round 4 defect 2). Absent on old docs. */
+  suggestedOwners?: Array<{ itemId: string; plaidItemDocId: string }>;
   updatedAt: Timestamp;
 }
 
@@ -94,7 +98,11 @@ function state_from_doc(user_id: string, d: ReviewStateDoc): RecurringReviewStat
       account_id: p.accountId ?? null,
       stream_id: p.streamId ?? null,
       since_ms: p.sinceMs ?? 0,
+      ...(typeof p.handedOffMs === "number"
+        ? { handed_off_ms: p.handedOffMs, awaiting_item_doc_ids: p.awaitingItemDocIds ?? [] }
+        : {}),
     })),
+    suggested_owners: (d.suggestedOwners ?? []).map((o) => ({ item_id: o.itemId, plaid_item_doc_id: o.plaidItemDocId })),
   };
 }
 
@@ -112,7 +120,11 @@ function state_to_doc(state: RecurringReviewState): ReviewStateDoc {
       accountId: p.account_id,
       streamId: p.stream_id,
       sinceMs: p.since_ms,
+      ...(typeof p.handed_off_ms === "number"
+        ? { handedOffMs: p.handed_off_ms, awaitingItemDocIds: p.awaiting_item_doc_ids ?? [] }
+        : {}),
     })),
+    suggestedOwners: (state.suggested_owners ?? []).map((o) => ({ itemId: o.item_id, plaidItemDocId: o.plaid_item_doc_id })),
     updatedAt: Timestamp.now(),
   };
   /* eslint-enable @typescript-eslint/naming-convention */

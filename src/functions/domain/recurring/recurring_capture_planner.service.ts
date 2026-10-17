@@ -41,6 +41,9 @@ import {
   may_suggest_stream,
 } from "./capture_rules";
 import {
+  PENDING_HANDOFF_TTL_MS,
+  PENDING_TRACK_MAX_AGE_MS,
+  PendingTrack,
   RecurringReviewState,
   ReviewDirection,
   ReviewItem,
@@ -126,6 +129,12 @@ export interface CapturePlanInput {
     active_account_ids: Set<string>;
     inactive_loaded: boolean;
   };
+  /**
+   * The user's OTHER active Plaid items (round 4 defect 2) — loaded only when the plan asks
+   * (`wants_other_items`): a track whose stream is gone from this item is handed to them rather
+   * than lost. Undefined = not loaded.
+   */
+  other_item_doc_ids?: string[];
 }
 
 export interface CapturePlan {
@@ -148,6 +157,11 @@ export interface CapturePlan {
   /** What each save brings with it (released ids, closed items) — dropped when its save fails
    *  (review round 3 defect 3). `state_change` = base_change + every effect. */
   save_effects?: SaveEffect[];
+  /** A track's stream is gone from this item and no other stream / bill of its vendor is known:
+   *  load the user's other Plaid items and plan again (round 4 defect 2 — ≈ never). */
+  wants_other_items?: boolean;
+  /** Other Plaid items a track was just handed to: the caller re-syncs them now. */
+  handoff_item_doc_ids?: string[];
 }
 
 /** The state / item changes that follow from saving one stream's record. */
@@ -167,6 +181,10 @@ export interface BaseChange {
   add_suppressed: string[];
   remove_suppressed: string[];
   remove_pending_track_ids: string[];
+  /** Pending tracks replaced in place (handed off / one fewer item awaited — defect 2). */
+  add_pending_tracks?: PendingTrack[];
+  /** This Plaid item's open suggested tiles, when they changed (defect 2). */
+  set_suggested_owners?: { plaid_item_doc_id: string; item_ids: string[] };
 }
 
 /** base + effects → the state change; ids both held out and released end released (stream
@@ -174,10 +192,14 @@ export interface BaseChange {
 export function compose_state_change(base: BaseChange, effects: SaveEffect[]): ReviewStateChange {
   const remove = new Set<string>([...base.remove_suppressed, ...effects.flatMap((e) => e.release)]);
   const pending = [...new Set([...base.remove_pending_track_ids, ...effects.flatMap((e) => e.remove_pending)])];
+  const removed_pending = new Set(pending);
+  const add_pending = (base.add_pending_tracks ?? []).filter((p) => !removed_pending.has(p.item_id));
   return {
     add_suppressed: [...new Set(base.add_suppressed)].filter((id) => !remove.has(id)),
     remove_suppressed: [...remove],
     ...(pending.length > 0 ? { remove_pending_track_ids: pending } : {}),
+    ...(add_pending.length > 0 ? { add_pending_tracks: add_pending } : {}),
+    ...(base.set_suggested_owners ? { set_suggested_owners: base.set_suggested_owners } : {}),
   };
 }
 
@@ -415,13 +437,18 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   };
   // Every saved stream releases its own ids: a saved stream's payments are never held out
   // (stream membership wins — this is also what frees a track saved UNSTAMPED, defect 4).
-  const save = (s: PlannerStream, e: OutflowForPersistence | InflowForPersistence) => {
+  const save = (s: PlannerStream, e: OutflowForPersistence | InflowForPersistence, v2 = false) => {
     if (s.direction === "outflow") plan.save_outflows.push(e as OutflowForPersistence);
     else plan.save_inflows.push(e as InflowForPersistence);
     saved_ids.add(s.stream_id);
+    const subject = suggested_subject(s.direction, stream_vendor(s));
+    if (v2 && !saved_by_subject.has(subject)) saved_by_subject.set(subject, s);
     effect(s).release.push(...s.transaction_ids);
   };
   const saved_ids = new Set<string>();
+  /** The first stream of each (direction, vendor) saved as a v2 bill this round — fulfils that
+   *  vendor's tracks whose own stream is gone (defect 2). An OLD bill of the vendor never does. */
+  const saved_by_subject = new Map<string, PlannerStream>();
   const item_at = (kind: ReviewItem["kind"], subject: string) =>
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
   const suggest_candidates: SuggestCandidate[] = [];
@@ -451,6 +478,16 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     stopped_in_sync,
   };
 
+  // This item's pending "Track" / "Keep separate" answers by their stream (round 4 test 7): the
+  // stream is tracked by ID, so a vendor rename (merchant renamed → a new vendor key, a new tile)
+  // still creates the bill the user asked for instead of leaving the track pending forever.
+  const pending_by_stream = new Map<string, ReviewItem>();
+  for (const pt of input.state?.pending_tracks ?? []) {
+    if (pt.plaid_item_doc_id !== input.plaid_item_doc_id || !pt.stream_id || typeof pt.handed_off_ms === "number") continue;
+    const it = input.review_items.get(pt.item_id);
+    if (it && it.status === "resolved" && (it.answer === "track" || it.answer === "keep_separate")) pending_by_stream.set(pt.stream_id, it);
+  }
+
   for (const s of input.streams) {
     const ex = input.existing.get(s.stream_id);
 
@@ -471,7 +508,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
         // An UNKNOWN frequency would be invented as monthly by the transformer: keep ours.
         ...(unknown_freq ? { frequency: ex.frequency as OutflowForPersistence["frequency"] } : {}),
       } as OutflowForPersistence | InflowForPersistence;
-      save(s, saved_entity);
+      save(s, saved_entity, true);
       const cur = as_saved(ex, s, saved_entity);
       const open = item_at("still_a_bill", ex.id);
       if (open?.status === "open" && !is_shown(ex, input.now_ms)) {
@@ -504,16 +541,24 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     const vk = stream_vendor(s);
     const suggested = item_at("suggested", suggested_subject(s.direction, vk));
     const same_bill = item_at("same_bill", s.stream_id);
+    const pending_item = pending_by_stream.get(s.stream_id);
     const tracked =
       (suggested && suggested.answer === "track" && suggested.status === "resolved") ||
-      (same_bill && same_bill.answer === "keep_separate" && same_bill.status === "resolved");
+      (same_bill && same_bill.answer === "keep_separate" && same_bill.status === "resolved") ||
+      !!pending_item;
     if (tracked) {
-      create_v2(s, suggested?.answer === "track" ? suggested.user_frequency : null);
+      const picked =
+        suggested?.answer === "track" && suggested.status === "resolved"
+          ? suggested.user_frequency
+          : pending_item?.answer === "track"
+            ? pending_item.user_frequency
+            : null;
+      create_v2(s, picked);
       // The answered item's held-out payments are released now that the bill exists (not at
       // answer time — fix round: the hold-out must cover the gap until creation).
       // Only the item's OWN stream releases its ids (another item's stream of the same vendor
       // may be tracked too; the item's stream is resolved by its pending track, defect 4).
-      for (const it of [suggested, same_bill]) {
+      for (const it of new Set([suggested, same_bill, pending_item])) {
         if (it && it.status === "resolved" && it.source === "plaid" && it.stream_id === s.stream_id) {
           effect(s).release.push(...it.transaction_ids);
         }
@@ -572,8 +617,15 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     if (!by_subject.has(c.subject)) by_subject.set(c.subject, []);
     by_subject.get(c.subject)!.push(c);
   }
+  // An OPEN tile owned by ANOTHER Plaid item's stream (round 4 defect 1): that item's stream is
+  // still low-confidence (its sync keeps the tile) — this item's stream maturing must not close
+  // it (the other item's next sync reopened it: a close + reopen on every pair of syncs).
+  const owned_elsewhere = (ex: ReviewItem | undefined): boolean =>
+    !!ex && ex.status === "open" && ex.source === "plaid" && !!ex.plaid_item_doc_id &&
+    ex.plaid_item_doc_id !== input.plaid_item_doc_id;
   for (const [subject, m] of matured) {
     if (by_subject.has(subject)) continue; // still suggested via another stream (below)
+    if (owned_elsewhere(m.item)) continue;
     const closed = resolve_review_item(m.item, "matured", input.now_ms);
     plan.review_items.push(closed);
     effect(m.s).item_ids.push(closed.id);
@@ -581,13 +633,25 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   }
   for (const [, group] of by_subject) {
     const ex = group[0].existing;
-    const other_item_owns =
-      !!ex && ex.status === "open" && ex.source === "plaid" && !!ex.plaid_item_doc_id &&
-      ex.plaid_item_doc_id !== input.plaid_item_doc_id;
-    if (other_item_owns) continue;
+    if (owned_elsewhere(ex)) continue;
     const sorted = [...group].sort((a, b) => (a.s.stream_id < b.s.stream_id ? -1 : a.s.stream_id > b.s.stream_id ? 1 : 0));
     const pick = (ex?.stream_id && sorted.find((c) => c.s.stream_id === ex.stream_id)) || sorted[0];
     plan.review_items.push(suggested_item(input, pick.s, ex));
+  }
+
+  // ── Let go of this item's tiles whose stream it no longer sees (round 4 defect 2). An OPEN
+  //    Plaid tile owned by this item, not rebuilt or closed above, whose stream isn't in this
+  //    response: no sync will ever see that stream again, and another item's live stream of the
+  //    vendor can't take a tile this item owns. Closed `stream_gone` (a system close: the vendor's
+  //    next live stream reopens it, owned by its item); its held-out payments are released.
+  const in_response_ids = new Set(input.streams.map((x) => x.stream_id));
+  const planned = new Set(plan.review_items.map((i) => i.id));
+  for (const it of input.review_items.values()) {
+    if (it.kind !== "suggested" || it.status !== "open" || it.source !== "plaid") continue;
+    if (it.plaid_item_doc_id !== input.plaid_item_doc_id || planned.has(it.id)) continue;
+    if (it.stream_id && in_response_ids.has(it.stream_id)) continue;
+    plan.review_items.push(resolve_review_item(it, "stream_gone", input.now_ms));
+    base_change.remove_suppressed.push(...it.transaction_ids);
   }
 
   function create_v2(s: PlannerStream, user_frequency: string | null): void {
@@ -599,7 +663,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
       // the v2 classifier keeps it hidden.
       ...(s.direction === "inflow" && is_card_payment_inflow(s.detailed_category) ? { is_hidden: true } : {}),
       ...(user_frequency ? { user_frequency: user_frequency as OutflowForPersistence["frequency"] } : {}),
-    } as OutflowForPersistence | InflowForPersistence);
+    } as OutflowForPersistence | InflowForPersistence, true);
   }
 
   // ── Stale candidates (this item's active records Plaid didn't return as valid).
@@ -631,22 +695,79 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   //    are released (normal transactions again) and the item is closed `track_unavailable` (a
   //    system close: the vendor may be suggested again if Plaid brings it back).
   const by_stream = new Map(input.streams.map((x) => [x.stream_id, x]));
+  const record_vendor = (r: PlannerRecord) => vendor_key({ merchant_name: r.merchant_name, name: r.description });
+  // A bill of the vendor that exists already (made by another item's sync, say) fulfils the track.
+  const has_vendor_bill = (it: ReviewItem): boolean =>
+    !!it.vendor_key &&
+    same_bill_pool.some((r) => r.v2 && r.is_active && !r.merged_into_id && r.direction === it.direction && record_vendor(r) === it.vendor_key);
+  const handoff = new Set<string>();
+  const close_unavailable = (pt: PendingTrack, item: ReviewItem | undefined, s: PlannerStream | undefined) => {
+    base_change.remove_pending_track_ids.push(pt.item_id);
+    if (!item) return;
+    base_change.remove_suppressed.push(...item.transaction_ids, ...(s?.transaction_ids ?? []));
+    if (item.status === "resolved" && (item.answer === "track" || item.answer === "keep_separate")) {
+      plan.review_items.push(resolve_review_item(item, "track_unavailable", input.now_ms));
+    }
+  };
   for (const pt of input.state?.pending_tracks ?? []) {
-    if (pt.plaid_item_doc_id !== input.plaid_item_doc_id) continue;
+    const handed_off = typeof pt.handed_off_ms === "number";
+    if (!handed_off && pt.plaid_item_doc_id !== input.plaid_item_doc_id) continue;
     const item = input.review_items.get(pt.item_id);
-    const s = pt.stream_id ? by_stream.get(pt.stream_id) : undefined;
+    const s = !handed_off && pt.stream_id ? by_stream.get(pt.stream_id) : undefined;
     if (s && saved_ids.has(s.stream_id)) {
       effect(s).remove_pending.push(pt.item_id);
       if (item) effect(s).release.push(...item.transaction_ids);
       continue;
     }
-    if (s && s.entity) continue; // present + valid but not saved this round: still pending
-    base_change.remove_pending_track_ids.push(pt.item_id);
-    if (!item) continue;
-    base_change.remove_suppressed.push(...item.transaction_ids, ...(s?.transaction_ids ?? []));
-    if (item.status === "resolved" && (item.answer === "track" || item.answer === "keep_separate")) {
-      plan.review_items.push(resolve_review_item(item, "track_unavailable", input.now_ms));
+    const aged = input.now_ms - pt.since_ms >= PENDING_TRACK_MAX_AGE_MS;
+    if (s && s.entity && !aged) continue; // still pending (backstop: never forever)
+    // Its own stream is gone / rejected (or the track was handed off): another stream of the same
+    // vendor saved this round, or a bill of the vendor that already exists, fulfils it (defect 2).
+    const subject = item?.vendor_key ? suggested_subject(item.direction, item.vendor_key) : null;
+    const by_vendor = subject ? saved_by_subject.get(subject) : undefined;
+    if (item && by_vendor) {
+      effect(by_vendor).remove_pending.push(pt.item_id);
+      effect(by_vendor).release.push(...item.transaction_ids);
+      continue;
     }
+    if (item && has_vendor_bill(item)) {
+      base_change.remove_pending_track_ids.push(pt.item_id);
+      base_change.remove_suppressed.push(...item.transaction_ids);
+      continue;
+    }
+    if (handed_off) {
+      // Waiting on the user's other items: this one has synced without the vendor.
+      const awaiting = (pt.awaiting_item_doc_ids ?? []).filter((id) => id !== input.plaid_item_doc_id);
+      if (awaiting.length === 0 || input.now_ms - pt.handed_off_ms! >= PENDING_HANDOFF_TTL_MS) {
+        close_unavailable(pt, item, undefined);
+      } else if (awaiting.length !== (pt.awaiting_item_doc_ids ?? []).length) {
+        (base_change.add_pending_tracks ??= []).push({ ...pt, awaiting_item_doc_ids: awaiting });
+      }
+      continue;
+    }
+    // Gone from THIS item: another of the user's Plaid items may have a live stream of the vendor
+    // (the tile could be owned by a stream that vanished) — hand the track to them, never lose it.
+    const others = (input.other_item_doc_ids ?? []).filter((id) => id !== input.plaid_item_doc_id);
+    if (item && others.length > 0 && !aged) {
+      (base_change.add_pending_tracks ??= []).push({
+        ...pt, plaid_item_doc_id: null, handed_off_ms: input.now_ms, awaiting_item_doc_ids: [...others].sort(),
+      });
+      for (const id of others) handoff.add(id);
+      continue;
+    }
+    if (item && !aged && input.other_item_doc_ids === undefined) plan.wants_other_items = true;
+    close_unavailable(pt, item, s);
+  }
+  if (handoff.size > 0) plan.handoff_item_doc_ids = [...handoff].sort();
+
+  // ── The open suggested tiles this item now owns (defect 2): stored only when they changed.
+  const owned_now = [...new Set(plan.review_items
+    .filter((i) => i.kind === "suggested" && i.status === "open" && i.source === "plaid" && i.plaid_item_doc_id === input.plaid_item_doc_id)
+    .map((i) => i.id))].sort();
+  const owned_before = (input.state?.suggested_owners ?? [])
+    .filter((o) => o.plaid_item_doc_id === input.plaid_item_doc_id).map((o) => o.item_id).sort();
+  if (owned_now.join("\n") !== owned_before.join("\n")) {
+    base_change.set_suggested_owners = { plaid_item_doc_id: input.plaid_item_doc_id, item_ids: owned_now };
   }
 
   // Ids both suppressed and saved this round end saved (stream membership wins).

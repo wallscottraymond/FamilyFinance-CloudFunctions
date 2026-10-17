@@ -34,11 +34,15 @@ export async function resolve_capture_review_context(
     recurring_review_repo.get_state(ctx, user_id),
     recurring_review_repo.get_items_by_ids(ctx, review_ids),
   ]);
-  // Pending tracks of this Plaid item whose item wasn't among the subjects in hand (its stream is
-  // gone from the response): one more getAll, only then (defect 4 — ≈ never in steady state).
-  const missing = (state?.pending_tracks ?? [])
-    .filter((p) => p.plaid_item_doc_id === plaid_item_doc_id && !items.has(p.item_id))
-    .map((p) => p.item_id);
+  // Pending tracks of this Plaid item (or handed off by another item — round 4 defect 2) and the
+  // open suggested tiles this item owns, whose item wasn't among the subjects in hand (the stream
+  // is gone from the response): one more getAll, only then (≈ never in steady state).
+  const missing = [
+    ...(state?.pending_tracks ?? [])
+      .filter((p) => p.plaid_item_doc_id === plaid_item_doc_id || typeof p.handed_off_ms === "number")
+      .map((p) => p.item_id),
+    ...(state?.suggested_owners ?? []).filter((o) => o.plaid_item_doc_id === plaid_item_doc_id).map((o) => o.item_id),
+  ].filter((id) => !items.has(id));
   if (missing.length > 0) {
     for (const [id, item] of await recurring_review_repo.get_items_by_ids(ctx, missing)) items.set(id, item);
   }

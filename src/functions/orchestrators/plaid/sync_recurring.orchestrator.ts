@@ -66,6 +66,7 @@ import {
 import type { CaptureRecordInfo } from "../../resolvers/plaid/recurring_sync.resolver";
 import {
   CapturePlan,
+  CapturePlanInput,
   PlannerStream,
   drop_failed_saves,
   plan_recurring_capture,
@@ -161,6 +162,8 @@ export async function sync_recurring_orchestrator(
   /** Plaid txn ids newly held out of fuzzy bill matching — the item sync re-assigns them (X3). */
   newly_suppressed_plaid_ids?: string[];
   review_items_written?: number;
+  /** Other Plaid items a "Track" was handed to (round 4 defect 2): the item sync re-syncs them. */
+  handoff_item_doc_ids?: string[];
 }> {
   const written: RecurringWrittenDoc[] = [];
   const start_time = Date.now();
@@ -365,19 +368,28 @@ export async function sync_recurring_orchestrator(
         inactive_loaded: false,
       },
     };
-    plan = plan_recurring_capture(plan_input);
+    let current_input: CapturePlanInput = plan_input;
+    plan = plan_recurring_capture(current_input);
     if (plan.wants_inactive_records) {
       // X9: only when a new v2 stream found no same-bill candidate among what's loaded — the
       // user's inactive records (stopped bills, other items) + their active accounts, then replan.
       const inactive = await resolve_inactive_capture_records(create_child_span(ctx), ctx.user_id);
-      plan = plan_recurring_capture({
-        ...plan_input,
+      current_input = {
+        ...current_input,
         same_bill: {
           candidates: [...deps.active_records, ...inactive.records],
           active_account_ids: inactive.active_account_ids,
           inactive_loaded: true,
         },
-      });
+      };
+      plan = plan_recurring_capture(current_input);
+    }
+    if (plan.wants_other_items) {
+      // Round 4 defect 2: a track's stream is gone from this item and nothing here fulfils it —
+      // the user's other Plaid items (one query, ≈ never) may have a live stream of the vendor.
+      const ids = await plaid_item_repo.get_active_doc_ids_by_user(create_child_span(ctx), ctx.user_id);
+      current_input = { ...current_input, other_item_doc_ids: ids.filter((id) => id !== deps.plaid_item.doc_id) };
+      plan = plan_recurring_capture(current_input);
     }
   }
 
@@ -580,7 +592,10 @@ export async function sync_recurring_orchestrator(
     `merge_suggestions=${total_merge_suggestions}, errors=${errors.length}`
   );
 
-  return { ...response, written, newly_suppressed_plaid_ids: newly_suppressed, review_items_written };
+  return {
+    ...response, written, newly_suppressed_plaid_ids: newly_suppressed, review_items_written,
+    ...(plan.handoff_item_doc_ids?.length ? { handoff_item_doc_ids: plan.handoff_item_doc_ids } : {}),
+  };
 }
 
 // ============================================================================
