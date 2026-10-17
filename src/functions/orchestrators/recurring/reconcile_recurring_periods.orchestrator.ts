@@ -103,14 +103,16 @@ export async function reconcile_recurring_periods_orchestrator(
       // (suppressed as a whole, no occurrence in a kept month) — one off for any other reason stays
       // off, and the payment is placed as any other.
       const off_by_id = new Map((inactive_by_type.get(type) ?? []).map((p) => [p.period_id, p]));
-      const carriable = (period_id: string): boolean => {
-        const off = off_by_id.get(period_id);
+      // D31: a late payment goes to the (active) period holding the occurrence it pays.
+      const carriable = (c: { period_id: string; late?: true }): boolean => {
+        const off = off_by_id.get(c.period_id);
+        if (c.late) return !off;
         return !off || (is_suppressed_in_period(intervals!, off.end_ms) &&
           !is_stored_period_active(intervals, off.end_ms, off.occurrence_due_dates_ms));
       };
       const carried = intervals?.length
         ? carried_payments([...type_periods, ...(inactive_by_type.get(type) ?? [])], resolved.splits, intervals)
-          .filter((c) => carriable(c.period_id))
+          .filter(carriable)
         : [];
       const carried_idx = new Set(carried.map((c) => c.index));
       for (const c of carried) {
@@ -118,6 +120,7 @@ export async function reconcile_recurring_periods_orchestrator(
         const arr = by_period.get(c.period_id) ?? [];
         arr.push({ transaction_id: s.transaction_id, split_id: s.split_id, amount: s.amount, is_pending: s.is_pending, date_ms: s.date_ms });
         by_period.set(c.period_id, arr);
+        if (c.late) continue; // D31: its occurrence keeps its due date (a kept month's)
         const list = carried_into.get(c.period_id) ?? [];
         list.push({ due_ms: c.carried_due_ms, payment_ms: s.date_ms });
         carried_into.set(c.period_id, list);

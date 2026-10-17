@@ -22,6 +22,8 @@
  *   S_PSE     bill    MATURE  MONTHLY  active          Iron Gym, due 29th, paid Jul–Sep    → paused Sep 1 → Oct 2
  *   S_ERL     bill    MATURE  MONTHLY  active          Mortgage Co, due 1st, paid Aug 1, Sep 1 + Sep 29
  *                                                       (early, for Oct 1)                  → removed from Oct 1 (D28)
+ *   S_LTE     bill    MATURE  MONTHLY  active          Home Lender, due 29th, paid Jul 29, Aug 29 + Oct 2
+ *                                                       (late, for Sep 29)                  → removed from Oct 1 (D31)
  *
  * Everything is deterministic for a fixed clock (`NOW_ISO`, frozen via jest
  * fake Date in the suites), and ids are prefixed with `tag` so many scenarios share one emulator.
@@ -77,7 +79,7 @@ interface PlaidTxnSpec {
   detailed: string;
 }
 
-/** The three OLD bills the golden removes / restores / pauses (`{ removals: true }`). Categories are
+/** The OLD bills the golden removes / restores / pauses (`{ removals: true }`). Categories are
  *  among SCENARIO_CATEGORY_CODES (read as unmapped, as on the base golden run). */
 export const REMOVAL_BILLS = {
   RMV: { name: 'CITY WATER', merchant: 'City Water', primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_WATER', amount: 61, paid_days_ago: [78, 47, 16], first_days_ago: 78, last_days_ago: 16, next_days: 14 },
@@ -85,6 +87,8 @@ export const REMOVAL_BILLS = {
   PSE: { name: 'IRON GYM', merchant: 'Iron Gym', primary: 'PERSONAL_CARE', detailed: 'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS', amount: 45, paid_days_ago: [78, 47, 16], first_days_ago: 78, last_days_ago: 16, next_days: 14 },
   // D28 (round 4): due the 1st, paid Aug 1, Sep 1 and EARLY on Sep 29 for Oct 1 → removed from Oct 1.
   ERL: { name: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 120, paid_days_ago: [75, 44, 16], first_days_ago: 75, last_days_ago: 16, next_days: 17 },
+  // D31 (round 5): due the 29th, paid Jul 29, Aug 29 and LATE on Oct 2 for Sep 29 → removed from Oct 1.
+  LTE: { name: 'HOME LENDER', merchant: 'Home Lender', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 88, paid_days_ago: [78, 47, 13], first_days_ago: 78, last_days_ago: 13, next_days: 14 },
 } as const;
 
 /** The scenario's transactions (keys are stable; ids come from `ids.txn(key)`). */

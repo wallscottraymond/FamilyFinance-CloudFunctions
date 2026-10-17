@@ -1,12 +1,12 @@
 {
  "results": [
   {
-   "added": 58,
+   "added": 61,
    "modified": 0,
    "removed": 0,
    "rounds": 1,
    "status": "synced",
-   "streams_written": 13
+   "streams_written": 14
   },
   {
    "added": 0,
@@ -208,6 +208,55 @@
      "TAG_t_gym0",
      "TAG_t_gym1",
      "TAG_t_gym2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
+   "TAG_S_LTE": {
+    "accountId": "TAG_chk",
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_LTE",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 88,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Home Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_lte0",
+     "TAG_t_lte1",
+     "TAG_t_lte2"
     ],
     "type": "recurring",
     "updatedBy": "TAG_u",
@@ -662,7 +711,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 57,
+  "outflow_periods": 63,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -2654,6 +2703,708 @@
     "totalAmountDue": 120,
     "totalAmountPaid": 0,
     "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 88,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 88,
+     "matchedSplits": [
+      {
+       "amount": 88,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_lte1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 88,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_lte1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 88,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 90.93,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 88,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 88,
+     "matchedSplits": [
+      {
+       "amount": 88,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_lte2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 88,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_lte2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 88,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 90.93,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
     "transactionIds": [],
     "transactionSplits": [],
     "type": "rent",
@@ -11301,6 +12052,288 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "hulu"
+   },
+   "plaid_TAG_t_lte0": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_lte0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
+   "plaid_TAG_t_lte1": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_lte1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
+   "plaid_TAG_t_lte2": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_lte2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
    },
    "plaid_TAG_t_pay0": {
     "accountId": "TAG_chk",
@@ -14367,6 +15400,55 @@
     "updatedBy": "TAG_u",
     "userCustomName": null
    },
+   "TAG_S_LTE": {
+    "accountId": "TAG_chk",
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_LTE",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 88,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Home Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_lte0",
+     "TAG_t_lte1",
+     "TAG_t_lte2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
    "TAG_S_PSE": {
     "accountId": "TAG_chk",
     "averageAmount": 45,
@@ -14816,7 +15898,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 57,
+  "outflow_periods": 63,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -16808,6 +17890,708 @@
     "totalAmountDue": 120,
     "totalAmountPaid": 0,
     "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 88,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 88,
+     "matchedSplits": [
+      {
+       "amount": 88,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_lte1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 88,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_lte1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 88,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 90.93,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 88,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 88,
+     "matchedSplits": [
+      {
+       "amount": 88,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_lte2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 88,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_lte2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 88,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 90.93,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
     "transactionIds": [],
     "transactionSplits": [],
     "type": "rent",
@@ -25455,6 +27239,288 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "hulu"
+   },
+   "plaid_TAG_t_lte0": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_lte0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
+   "plaid_TAG_t_lte1": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_lte1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
+   "plaid_TAG_t_lte2": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_lte2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
    },
    "plaid_TAG_t_pay0": {
     "accountId": "TAG_chk",
@@ -28433,6 +30499,37 @@
       "is_partially_paid": false,
       "next_unpaid_due_ms": 2140387200000,
       "occurrence_ids": [
+       "TAG_S_LTE_2140387200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 88,
+        "due_ms": 2140387200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 88,
+      "total_paid": 0,
+      "total_unpaid": 88
+     }
+    ],
+    "name": "Home Lender",
+    "recurring_id": "TAG_S_LTE"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2140387200000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2140387200000,
+      "occurrence_ids": [
        "TAG_S_PSE_2140387200000"
       ],
       "occurrences": [
@@ -28618,16 +30715,16 @@
     "name": "Everything else",
     "periods": [
      {
-      "allocated_amount": 3359.52,
+      "allocated_amount": 3271.52,
       "budget_id": "TAG_ee_monthly",
-      "effective_amount": 3359.52,
+      "effective_amount": 3271.52,
       "end_ms": 2140646399999,
       "is_derived": true,
       "no_income": false,
       "pending_spent": 0,
       "period_id": "2037M10",
       "period_type": "monthly",
-      "remaining": 3278.52,
+      "remaining": 3190.52,
       "return_amount": 0,
       "spent": 81,
       "start_ms": 2137968000000
@@ -28805,6 +30902,37 @@
     ],
     "name": "Mortgage Co",
     "recurring_id": "TAG_S_ERL"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2137795200000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2137795200000,
+      "occurrence_ids": [
+       "TAG_S_LTE_2137795200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 88,
+        "due_ms": 2137795200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M09",
+      "status": "pending",
+      "total_due": 88,
+      "total_paid": 0,
+      "total_unpaid": 88
+     }
+    ],
+    "name": "Home Lender",
+    "recurring_id": "TAG_S_LTE"
    },
    {
     "groups": [
@@ -29005,16 +31133,16 @@
     "name": "Everything else",
     "periods": [
      {
-      "allocated_amount": 5359.52,
+      "allocated_amount": 5271.52,
       "budget_id": "TAG_ee_monthly",
-      "effective_amount": 5359.52,
+      "effective_amount": 5271.52,
       "end_ms": 2137967999999,
       "is_derived": true,
       "no_income": false,
       "pending_spent": 0,
       "period_id": "2037M09",
       "period_type": "monthly",
-      "remaining": 5230.52,
+      "remaining": 5142.52,
       "return_amount": 0,
       "spent": 129,
       "start_ms": 2135376000000
@@ -29301,6 +31429,61 @@
      "TAG_t_gym0",
      "TAG_t_gym1",
      "TAG_t_gym2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
+   "TAG_S_LTE": {
+    "accountId": "TAG_chk",
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_LTE",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 88,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Home Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [
+     {
+      "fromMs": 2137968000000,
+      "mode": "going_forward",
+      "toMs": null
+     }
+    ],
+    "removedByUser": true,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_lte0",
+     "TAG_t_lte1",
+     "TAG_t_lte2"
     ],
     "type": "recurring",
     "updatedBy": "TAG_u",
@@ -29773,7 +31956,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 57,
+  "outflow_periods": 63,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -31765,6 +33948,708 @@
     "totalAmountDue": 120,
     "totalAmountPaid": 0,
     "totalAmountUnpaid": 120,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 88,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 88,
+     "matchedSplits": [
+      {
+       "amount": 88,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_lte1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 88,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_lte1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 88,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 90.93,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 88,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 88,
+     "matchedSplits": [
+      {
+       "amount": 88,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_lte2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 88,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_lte2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 88,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 90.93,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_LTE_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 88,
+    "amountWithheld": 93.87,
+    "averageAmount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.933333333333333,
+    "description": "HOME LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 88,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_LTE_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Home Lender",
+    "merchantName": "Home Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_LTE",
+    "ownerId": "TAG_u",
+    "payee": "Home Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 88,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 88,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 88,
     "transactionIds": [],
     "transactionSplits": [],
     "type": "rent",
@@ -40413,6 +43298,288 @@
     "userId": "TAG_u",
     "vendorKey": "hulu"
    },
+   "plaid_TAG_t_lte0": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_lte0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
+   "plaid_TAG_t_lte1": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_lte1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
+   "plaid_TAG_t_lte2": {
+    "accountId": "TAG_chk",
+    "amount": 88,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "HOME LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_lte2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Home Lender",
+     "plaidName": "HOME LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_lte2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Home Lender",
+    "name": "HOME LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_LTE"
+    ],
+    "splits": [
+     {
+      "amount": 88,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_LTE",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_lte2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "home lender"
+   },
    "plaid_TAG_t_pay0": {
     "accountId": "TAG_chk",
     "amount": 2000,
@@ -43385,6 +46552,37 @@
      "recurring_id": "TAG_S_ERL"
     },
     {
+     "groups": [
+      {
+       "count_in_period": 1,
+       "count_paid": 0,
+       "count_unpaid": 1,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": 2137795200000,
+       "occurrence_ids": [
+        "TAG_S_LTE_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 88,
+         "due_ms": 2137795200000,
+         "paid": false
+        }
+       ],
+       "period_id": "2037M09",
+       "status": "pending",
+       "total_due": 88,
+       "total_paid": 0,
+       "total_unpaid": 88
+      }
+     ],
+     "name": "Home Lender",
+     "recurring_id": "TAG_S_LTE"
+    },
+    {
      "groups": [],
      "name": "Iron Gym",
      "recurring_id": "TAG_S_PSE"
@@ -43529,16 +46727,16 @@
      "name": "Everything else",
      "periods": [
       {
-       "allocated_amount": 5637.52,
+       "allocated_amount": 5549.52,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 5637.52,
+       "effective_amount": 5549.52,
        "end_ms": 2137967999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037M09",
        "period_type": "monthly",
-       "remaining": 5230.52,
+       "remaining": 5142.52,
        "return_amount": 0,
        "spent": 407,
        "start_ms": 2135376000000
@@ -43697,6 +46895,11 @@
      "groups": [],
      "name": "Mortgage Co",
      "recurring_id": "TAG_S_ERL"
+    },
+    {
+     "groups": [],
+     "name": "Home Lender",
+     "recurring_id": "TAG_S_LTE"
     },
     {
      "groups": [
@@ -43878,9 +47081,9 @@
        "pending_spent": 0,
        "period_id": "2037M10",
        "period_type": "monthly",
-       "remaining": 3459.52,
+       "remaining": 3371.52,
        "return_amount": 0,
-       "spent": 81,
+       "spent": 169,
        "start_ms": 2137968000000
       }
      ]
@@ -44396,6 +47599,80 @@
      ],
      "name": "Mortgage Co",
      "recurring_id": "TAG_S_ERL"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW01",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW02",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW03",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW04",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Home Lender",
+     "recurring_id": "TAG_S_LTE"
     },
     {
      "groups": [
@@ -45234,9 +48511,9 @@
        "pending_spent": 0,
        "period_id": "2037SW05",
        "period_type": "weekly",
-       "remaining": 1851.01,
+       "remaining": 1763.01,
        "return_amount": 0,
-       "spent": 86,
+       "spent": 174,
        "start_ms": 2137622400000
       },
       {
@@ -45932,6 +49209,54 @@
        "next_unpaid_due_ms": null,
        "occurrence_ids": [],
        "occurrences": [],
+       "period_id": "2037SBM9A",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 1,
+       "count_paid": 0,
+       "count_unpaid": 1,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": 2137795200000,
+       "occurrence_ids": [
+        "TAG_S_LTE_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 88,
+         "due_ms": 2137795200000,
+         "paid": false
+        }
+       ],
+       "period_id": "2037SBM9B",
+       "status": "pending",
+       "total_due": 88,
+       "total_paid": 0,
+       "total_unpaid": 88
+      }
+     ],
+     "name": "Home Lender",
+     "recurring_id": "TAG_S_LTE"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
        "period_id": "2037SBM10A",
        "status": "none",
        "total_due": 0,
@@ -46337,16 +49662,16 @@
        "start_ms": 2135376000000
       },
       {
-       "allocated_amount": 1921.01,
+       "allocated_amount": 1833.01,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 1921.01,
+       "effective_amount": 1833.01,
        "end_ms": 2137967999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SBM9B",
        "period_type": "bi_monthly",
-       "remaining": 1834.01,
+       "remaining": 1746.01,
        "return_amount": 0,
        "spent": 87,
        "start_ms": 2136672000000
@@ -46361,9 +49686,9 @@
        "pending_spent": 0,
        "period_id": "2037SBM10A",
        "period_type": "bi_monthly",
-       "remaining": 1755.51,
+       "remaining": 1667.51,
        "return_amount": 0,
-       "spent": 81,
+       "spent": 169,
        "start_ms": 2137968000000
       },
       {
@@ -46598,35 +49923,35 @@
  },
  "counts": [
   {
-   "reads": 741,
-   "writes": 228,
-   "audit_writes": 83,
+   "reads": 791,
+   "writes": 244,
+   "audit_writes": 90,
    "reads_by": {
     "purge_status": 1,
     "_item_sync_leases": 2,
     "plaid_items": 3,
     "users": 6,
     "inflows": 13,
-    "outflows": 65,
+    "outflows": 71,
     "accounts": 9,
-    "transactions": 245,
+    "transactions": 261,
     "rules": 1,
     "categories": 1,
     "budgets": 12,
+    "source_periods": 106,
     "inflow_periods": 43,
-    "outflow_periods": 237,
-    "source_periods": 100,
+    "outflow_periods": 259,
     "budget_periods": 3,
     "_transfer_classification_state": 1
    },
    "writes_by": {
     "_item_sync_leases": 2,
     "inflows": 2,
-    "_audit": 83,
-    "outflows": 12,
+    "_audit": 90,
+    "outflows": 13,
     "plaid_items": 2,
-    "transactions": 64,
-    "outflow_periods": 120,
+    "transactions": 67,
+    "outflow_periods": 132,
     "inflow_periods": 22,
     "_logs_minimal": 1,
     "user_data_versions": 2,
@@ -46634,7 +49959,7 @@
    }
   },
   {
-   "reads": 42,
+   "reads": 44,
    "writes": 4,
    "audit_writes": 0,
    "reads_by": {
@@ -46643,7 +49968,7 @@
     "plaid_items": 3,
     "users": 2,
     "inflows": 4,
-    "outflows": 21,
+    "outflows": 23,
     "accounts": 6,
     "transactions": 2,
     "rules": 1

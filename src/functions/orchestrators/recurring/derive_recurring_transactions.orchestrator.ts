@@ -16,7 +16,7 @@
  * @module orchestrators/recurring/derive_recurring_transactions
  */
 
-import { is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
+import { bill_release_schedule, is_payment_released } from "../../domain/recurring/late_payment.service";
 import {
   compute_countable_split_net,
   CountableSplitInput,
@@ -65,6 +65,9 @@ export async function derive_recurring_transactions_orchestrator(
       : await outflow_repo.get_by_id(ctx, recurring_id);
   if (!record || record.user_id !== user_id) return [];
   const plaid_ids = record.transaction_ids ?? [];
+  const release_schedule = kind === "outflow" && record.removal_intervals?.length
+    ? bill_release_schedule(record as Parameters<typeof bill_release_schedule>[0])
+    : null;
 
   // 2. Candidates: the Plaid stream's transactions + the ones linked by split (one
   //    `array-contains` query on the durable denorm), deduped by doc id.
@@ -85,12 +88,14 @@ export async function derive_recurring_transactions_orchestrator(
     .filter((data) => (data as { isActive?: boolean }).isActive !== false)
     // A payment in a month this bill / income is removed / paused for pays nothing (X9 — as the
     // period page, the engine and reconcile).
+    // D31: except a bill's LATE payment of its last occurrence before the cut-off.
     .filter(
       (data) =>
-        !is_payment_suppressed(
+        !is_payment_released(
           record.removal_intervals,
           ((data as unknown as Record<string, Timestamp | undefined>).transactionDate
-            ?.toMillis?.() ?? 0)
+            ?.toMillis?.() ?? 0),
+          release_schedule
         )
     )
     // Per SPLIT (the period page's rule): the splits paying this recurring — a "remove from bill"

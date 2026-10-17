@@ -17,7 +17,10 @@
  * same buckets, which follows the bills due there) — and nowhere else. Round 4 (D28, user-approved):
  * a fourth bill (ERL, due the 1st, paid EARLY Sep 29 for Oct 1, removed from Oct 1) — its early
  * payment now counts as paid in September: the ONLY monthly difference (Sep: that bill + EE's
- * leftover), plus its straddling week and Sep 16–30 half. Weekly / twice-a-month
+ * leftover), plus its straddling week and Sep 16–30 half. Round 5 (D31, user-approved): a fifth
+ * bill (LTE, due the 29th, paid LATE Oct 2 for Sep 29, removed from Oct 1) — paid in September
+ * (Sep: that bill + EE's leftover; its straddling week and Sep 16–30 half) and no longer October
+ * spend (Oct: EE's cell, spent − 88): the ONLY other monthly difference. Weekly / twice-a-month
  * source periods are added in-process only (spy on source_period_repo.get_overlapping during the
  * derive) so no other suite ever sees them.
  *
@@ -167,6 +170,7 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   await act('RST', { action: 'restore' }, Date.UTC(2037, 9, 20)); // restored Oct 20
   await act('PSE', { action: 'pause', resume_ms: Date.UTC(2037, 9, 2) }, Date.UTC(2037, 8, 10)); // Sep 1 → Oct 2
   await act('ERL', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid early Sep 29 (D28)
+  await act('LTE', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid late Oct 2 (D31)
   await new Promise((r) => setTimeout(r, 400));
   const after_removals = await dumpScenario(db, ids);
   const derive_removed = await withSyntheticPeriods(async () => ({
@@ -199,6 +203,8 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/** The (single) monthly period id of a one-month view. */
+const period_id_at_month = (view: any): string => (view.budgets as any[]).find((b) => b.is_everything_else).periods[0].period_id;
 /** Per (bill | budget | income) × period: the derived group / period, keyed for diffing. */
 function cells(view: any): Map<string, string> {
   const m = new Map<string, string>();
@@ -224,15 +230,26 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   const { derive_removed: got_removed, ...got_rest } = out;
   const { derive_removed: base_removed, ...base_rest } = golden_all;
   expect(got_rest).toEqual(base_rest);
-  // Monthly views byte-identical (D26) — except EXACTLY the D28 case (round 4, user-approved): the
-  // ERL bill's Sep 29 early payment for its Oct 1 occurrence (removed from Oct 1) now counts as
-  // paid in September, + Everything Else's leftover in September (it follows the bills due there).
-  expect(got_removed.monthly_oct).toEqual(base_removed.monthly_oct);
+  // Monthly views byte-identical (D26) — except EXACTLY the D28 and D31 cases (user-approved):
+  //  - D28 (round 4): the ERL bill's Sep 29 early payment for its Oct 1 occurrence (removed from
+  //    Oct 1) now counts as paid in September, + Everything Else's leftover in September;
+  //  - D31 (round 5): the LTE bill's Oct 2 LATE payment for its Sep 29 occurrence (removed from
+  //    Oct 1) now pays it in September — and is no longer October budget spend (Everything Else's
+  //    October cell: spent − 88).
   const M_SEP = (got_removed.monthly_sep.bills as any[]).find((b) => b.recurring_id === 'TAG_S_ERL')?.groups[0]?.period_id;
+  const M_OCT = period_id_at_month(got_removed.monthly_oct);
   const ee_m = (base_removed.monthly_sep.budgets as any[]).find((b) => b.is_everything_else)?.budget_id;
   const strip = (v: any) => ({ ...v, bills: undefined, income: undefined, budgets: undefined });
   expect(strip(got_removed.monthly_sep)).toEqual(strip(base_removed.monthly_sep));
-  expect(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)).toEqual([`bill:TAG_S_ERL@${M_SEP}`, `budget:${ee_m}@${M_SEP}`].sort());
+  expect(strip(got_removed.monthly_oct)).toEqual(strip(base_removed.monthly_oct));
+  expect(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep))
+    .toEqual([`bill:TAG_S_ERL@${M_SEP}`, `bill:TAG_S_LTE@${M_SEP}`, `budget:${ee_m}@${M_SEP}`].sort());
+  expect(diff_keys(got_removed.monthly_oct, base_removed.monthly_oct)).toEqual([`budget:${ee_m}@${M_OCT}`]);
+  const ee_cell = (v: any, pid: string) => (v.budgets as any[]).find((b) => b.budget_id === ee_m).periods.find((p: any) => p.period_id === pid);
+  const { spent: s_got, remaining: r_got, ...oct_got } = ee_cell(got_removed.monthly_oct, M_OCT);
+  const { spent: s_base, remaining: r_base, ...oct_base } = ee_cell(base_removed.monthly_oct, M_OCT);
+  expect(oct_got).toEqual(oct_base); // only spent / remaining move…
+  expect([Math.round((s_base - s_got) * 100) / 100, Math.round((r_got - r_base) * 100) / 100]).toEqual([88, 88]); // …by the late payment
   const W_SEP27 = period_id_at('weekly', Date.UTC(2037, 8, 27));
   const W_OCT11 = period_id_at('weekly', Date.UTC(2037, 9, 11));
   const BM_OCT_A = period_id_at('bi_monthly', Date.UTC(2037, 9, 1));
@@ -243,10 +260,11 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   const weekly_diff = diff_keys(got_removed.weekly, base_removed.weekly);
   expect(allowed(weekly_diff, [W_SEP27, W_OCT11])).toEqual([
     `bill:TAG_S_ERL@${W_SEP27}`, // D28
+    `bill:TAG_S_LTE@${W_SEP27}`, // D31
     `bill:TAG_S_PSE@${W_SEP27}`, `bill:TAG_S_RMV@${W_SEP27}`, `bill:TAG_S_RST@${W_OCT11}`,
   ].sort());
   const bm_diff = diff_keys(got_removed.bi_monthly, base_removed.bi_monthly);
-  expect(allowed(bm_diff, [BM_OCT_A, BM_SEP_B])).toEqual([`bill:TAG_S_ERL@${BM_SEP_B}`, `bill:TAG_S_RST@${BM_OCT_A}`].sort()); // D28 + (b)
+  expect(allowed(bm_diff, [BM_OCT_A, BM_SEP_B])).toEqual([`bill:TAG_S_ERL@${BM_SEP_B}`, `bill:TAG_S_LTE@${BM_SEP_B}`, `bill:TAG_S_RST@${BM_OCT_A}`].sort()); // D28 + D31 + (b)
   // …and each case went the right way.
   const group = (view: any, bill: string, pid: string) =>
     (view.bills as any[]).find((b) => b.recurring_id === bill)?.groups.find((g: any) => g.period_id === pid);
@@ -265,7 +283,13 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   expect(group(base_removed.weekly, 'TAG_S_ERL', W_SEP27)).toBeUndefined();
   expect(occ(group(got_removed.weekly, 'TAG_S_ERL', W_SEP27))).toEqual([['2037-09-29', true]]);
   expect(occ(group(got_removed.bi_monthly, 'TAG_S_ERL', BM_SEP_B))).toEqual([['2037-09-29', true]]);
-  console.log('[D28 golden diff] monthly_sep:', JSON.stringify(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)),
+  // D31: base — Sep 29 unpaid in every view (its Oct 2 payment was October spend); now paid by it.
+  expect(occ(group(base_removed.monthly_sep, 'TAG_S_LTE', M_SEP))).toEqual([['2037-09-29', false]]);
+  expect(occ(group(got_removed.monthly_sep, 'TAG_S_LTE', M_SEP))).toEqual([['2037-09-29', true]]);
+  expect(group(base_removed.weekly, 'TAG_S_LTE', W_SEP27)).toBeUndefined(); // base: the whole straddling week dropped
+  expect(occ(group(got_removed.weekly, 'TAG_S_LTE', W_SEP27))).toEqual([['2037-09-29', true]]);
+  expect(occ(group(got_removed.bi_monthly, 'TAG_S_LTE', BM_SEP_B))).toEqual([['2037-09-29', true]]);
+  console.log('[D28+D31 golden diff] monthly_oct:', JSON.stringify(diff_keys(got_removed.monthly_oct, base_removed.monthly_oct)), 'monthly_sep:', JSON.stringify(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)),
     'weekly:', JSON.stringify(weekly_diff), 'bi_monthly:', JSON.stringify(bm_diff));
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -405,10 +429,11 @@ describe('capture rules — flag off equals today (emulator)', () => {
     const { _audit: _a, categories: _c, ...by } = k.reads_by;
     void _a; void _c;
     // Measured on the BASE commit 2ae62e6 with this exact flow (throwaway worktree, harness copied in).
-    const BASE = { budgets: 6, inflows: 4, outflows: 20, users: 3, transactions: 25, inflow_periods: 10, source_periods: 3,
-      outflow_periods: 50, user_data_versions: 1, budget_periods: 1, goals: 1 };
+    // Round 5: re-measured there after the scenario gained the D31 bill (LTE: +2 outflows, +5 periods, +1 txn).
+    const BASE = { budgets: 6, inflows: 4, outflows: 22, users: 3, transactions: 26, inflow_periods: 10, source_periods: 3,
+      outflow_periods: 55, user_data_versions: 1, budget_periods: 1, goals: 1 };
     expect(by).toEqual(BASE);
-    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(124);
+    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(132);
   }, 120000);
 });
 

@@ -21,7 +21,7 @@ import {
   manual_settlement_amount,
 } from "./manual_settlement.service";
 import { reconcile_occurrences } from "./reconcile_occurrences.service";
-import { RemovalInterval, carried_early_payment_ms } from "./recurring_suppression.service";
+import { RemovalInterval, carried_early_payment_ms, is_payment_suppressed } from "./recurring_suppression.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -175,8 +175,12 @@ export interface CarriedPayment {
   index: number;
   /** The period (of this type, active or not) whose range holds the payment date. */
   period_id: string;
-  /** The suppressed-month occurrence it paid early. */
+  /** The suppressed-month occurrence it paid early — or (`late`) the kept one it paid late. */
   carried_due_ms: number;
+  /** D31: a payment made in a suppressed month that pays the occurrence before the cut-off LATE
+   *  (due Sep 29, paid Oct 2, removed from Oct 1) — placed in the period holding that occurrence
+   *  (which keeps its due date). Absent = early (D28). */
+  late?: true;
 }
 
 /** A payment below this is no payment (the derive drops it before matching — period page rule). */
@@ -201,20 +205,32 @@ export function carried_payments(
 ): CarriedPayment[] {
   const dues = [...new Set(periods.flatMap((p) =>
     p.occurrence_due_dates_ms.filter((d) => d >= p.start_ms && d <= p.end_ms)))].sort((a, b) => a - b);
+  // Only payments inside the stored periods' span: the occurrences before the first stored period
+  // aren't here, so an older payment would claim the next one and shift every match (the page's
+  // matcher sees the occurrences of its whole span).
+  const lo = Math.min(...periods.map((p) => p.start_ms));
+  const hi = Math.max(...periods.map((p) => p.end_ms));
   const matched = reconcile_occurrences(
     dues.map((d) => ({ occurrence_id: String(d), recurring_id: "", due_date_ms: d, amount_due: 0 })),
     payments
       .map((p, i) => ({ transaction_id: String(i), split_id: null, date_ms: p.date_ms, amount: p.amount }))
-      .filter((p) => p.amount > CARRY_PAYMENT_EPSILON)
+      .filter((p) => p.amount > CARRY_PAYMENT_EPSILON && p.date_ms >= lo && p.date_ms <= hi)
   );
   const out: CarriedPayment[] = [];
   for (const o of matched) {
     if (!o.is_paid || o.matched_transaction_id === null) continue;
     const index = Number(o.matched_transaction_id);
     const pay_ms = payments[index].date_ms;
-    if (carried_early_payment_ms(intervals, o.due_date_ms, pay_ms) === null) continue;
-    const home = periods.find((p) => pay_ms >= p.start_ms && pay_ms <= p.end_ms);
-    if (home) out.push({ index, period_id: home.period_id, carried_due_ms: o.due_date_ms });
+    if (carried_early_payment_ms(intervals, o.due_date_ms, pay_ms) !== null) {
+      const home = periods.find((p) => pay_ms >= p.start_ms && pay_ms <= p.end_ms);
+      if (home) out.push({ index, period_id: home.period_id, carried_due_ms: o.due_date_ms });
+    } else if (
+      pay_ms > o.due_date_ms && is_payment_suppressed(intervals, pay_ms) && !is_payment_suppressed(intervals, o.due_date_ms)
+    ) {
+      // D31: the matcher gave a payment made in a suppressed month to the kept occurrence before it.
+      const home = periods.find((p) => o.due_date_ms >= p.start_ms && o.due_date_ms <= p.end_ms);
+      if (home) out.push({ index, period_id: home.period_id, carried_due_ms: o.due_date_ms, late: true });
+    }
   }
   return out.sort((a, b) => a.index - b.index);
 }

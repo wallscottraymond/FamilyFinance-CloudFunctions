@@ -37,10 +37,9 @@ import { inflow_repo } from "../../repositories/inflow.repo";
 import { feature_flag_repo } from "../../repositories/feature_flag.repo";
 import { load_review_state_if_relevant } from "../recurring/review_holdout.resolver";
 import { build_stream_membership_map } from "../../domain/recurring/stream_membership";
-import {
-  RemovalInterval,
-  is_payment_suppressed,
-} from "../../domain/recurring/recurring_suppression.service";
+import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
+import { bill_release_schedule, is_payment_released } from "../../domain/recurring/late_payment.service";
+import type { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import {
   BudgetForMatch,
   PeriodLens,
@@ -108,8 +107,11 @@ export interface SharedAssignmentContext {
   /** Active, non-hidden bills — a manual pin to anything else (deleted / hidden) is stale. */
   active_outflow_ids: Set<string>;
   /** Bill / income id → its remove / pause spans (only items that have any). A payment in a
-   *  removed / paused month is released to budgets (`is_payment_suppressed`). */
+   *  removed / paused month is released to budgets (`is_payment_released`). */
   removal_intervals_by_id: Map<string, RemovalInterval[]>;
+  /** D31: a removed BILL's schedule — its late payment of the last occurrence before the cut-off
+   *  is not released (`is_payment_released`). Only bills that have removal intervals. */
+  release_schedule_by_id?: Map<string, RecurringScheduleForGeneration>;
   /**
    * Plaid transaction ids held out of FUZZY bill / income matching (Convert-To-Recurring X3): the
    * payments of streams Plaid is unsure of (suggested, not saved) or the user said aren't a bill.
@@ -184,6 +186,10 @@ export async function resolve_shared_assignment_context(
   for (const r of [...outflows, ...inflows]) {
     if (r.removal_intervals?.length) removal_intervals_by_id.set(r.id, r.removal_intervals);
   }
+  const release_schedule_by_id = new Map<string, RecurringScheduleForGeneration>();
+  for (const o of outflows) {
+    if (o.removal_intervals?.length) release_schedule_by_id.set(o.id, bill_release_schedule(o));
+  }
   const v2_account_by_recurring_id = new Map<string, string>();
   for (const r of [...outflows, ...inflows]) {
     if (is_v2_record(r) && r.account_id) v2_account_by_recurring_id.set(r.id, r.account_id);
@@ -200,6 +206,7 @@ export async function resolve_shared_assignment_context(
     recurring_view_by_id,
     active_outflow_ids,
     removal_intervals_by_id,
+    release_schedule_by_id,
     fuzzy_excluded_plaid_ids: new Set(review_state?.suppressed_txn_ids ?? []),
     v2_account_by_recurring_id,
   };
@@ -354,8 +361,13 @@ export async function resolve_assignment_context(
   // money counts as ordinary spending / money in (the period page applies the same rule).
   const of_view = (recurring_id: string): boolean =>
     (resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id;
+  // D31: a bill's late payment of its last occurrence before the cut-off is not released.
   const released = (recurring_id: string): boolean =>
-    is_payment_suppressed(resolved_shared.removal_intervals_by_id?.get(recurring_id), txn_date_ms);
+    is_payment_released(
+      resolved_shared.removal_intervals_by_id?.get(recurring_id),
+      txn_date_ms,
+      resolved_shared.release_schedule_by_id?.get(recurring_id)
+    );
   const in_view = (recurring_id: string | null): boolean =>
     !recurring_id || (of_view(recurring_id) && !released(recurring_id));
 

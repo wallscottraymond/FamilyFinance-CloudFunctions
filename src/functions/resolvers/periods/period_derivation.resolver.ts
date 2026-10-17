@@ -14,10 +14,8 @@
  * @module resolvers/periods/period_derivation
  */
 
-import {
-  RemovalInterval,
-  is_payment_suppressed,
-} from "../../domain/recurring/recurring_suppression.service";
+import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
+import { LATE_PAYMENT_MAX_MS, is_payment_released } from "../../domain/recurring/late_payment.service";
 import {
   compute_countable_split_net,
   CountableSplitInput,
@@ -319,7 +317,13 @@ export async function load_period_derivation_raw(
   // Padded by the transfer pairing slack: a transfer's other leg just outside the span still
   // pairs (only the span is counted — see shape).
   const txn_start_ms = Math.min(...spans.map((sp) => sp.span_start_ms)) - TRANSFER_PAIRING_BUFFER_MS;
-  const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms)) + TRANSFER_PAIRING_BUFFER_MS;
+  // D31: a removed / paused / ended bill's last occurrence may be paid up to 7 days AFTER the
+  // span (due Sep 29, paid Oct 2, removed from Oct 1) — that payment pays it in this view; the
+  // read reaches that far only when some bill has a removal (no extra read for anyone else).
+  const late_reach_ms = outflows.some((o) => o.removal_intervals?.length)
+    ? Math.max(0, LATE_PAYMENT_MAX_MS - TRANSFER_PAIRING_BUFFER_MS)
+    : 0;
+  const txn_end_ms = Math.max(...spans.map((sp) => sp.span_end_ms)) + TRANSFER_PAIRING_BUFFER_MS + late_reach_ms;
   const [member_txns, pairing_extra] = await Promise.all([
     per_member(scope, (m) =>
       transaction_repo.get_active_in_date_range(ctx, m, txn_start_ms, txn_end_ms)
@@ -584,6 +588,8 @@ export function shape_period_derivation_deps(
   // Included bills' Plaid `transactionIds` → map built AFTER the loop (conflict-safe).
   // Bill / income id → its remove / pause spans (only items that have any).
   const removal_by_id = new Map<string, RemovalInterval[]>();
+  // D31: a removed bill's schedule — a LATE payment of its last occurrence isn't released.
+  const bill_schedule_by_id = new Map<string, RecurringForDerivation["schedule"]>();
   // Lets a bill's payments be attributed DETERMINISTICALLY from Plaid's own stream, not
   // only the sparse `split.outflowId` link — the fix for "paid bills read unpaid".
   const outflow_stream_items: Array<{ id: string; transaction_ids: string[] }> = [];
@@ -620,7 +626,10 @@ export function shape_period_derivation_deps(
       manual_settled_occurrences: o.manual_settled_occurrences,
       ...owner_of(o.user_id),
     });
-    if (o.removal_intervals?.length) removal_by_id.set(o.id, o.removal_intervals);
+    if (o.removal_intervals?.length) {
+      removal_by_id.set(o.id, o.removal_intervals);
+      bill_schedule_by_id.set(o.id, recurring[recurring.length - 1].schedule);
+    }
     payments_by_id.set(o.id, []);
     outflow_stream_items.push({ id: o.id, transaction_ids: o.transaction_ids ?? [] });
   }
@@ -673,10 +682,12 @@ export function shape_period_derivation_deps(
   const outflow_tx_to_id = build_stream_membership_map(outflow_stream_items);
   const inflow_tx_to_id = build_stream_membership_map(inflow_stream_items);
   // The bills / income removed or paused for a payment's month (usually none).
+  // D31: a bill's late payment of its last occurrence before the cut-off is not released (the
+  // engine stores the same — is_payment_released).
   const released_at = (txn_date_ms: number): Set<string> => {
     const ids = new Set<string>();
     for (const [rid, intervals] of removal_by_id) {
-      if (is_payment_suppressed(intervals, txn_date_ms)) ids.add(rid);
+      if (is_payment_released(intervals, txn_date_ms, bill_schedule_by_id.get(rid))) ids.add(rid);
     }
     return ids;
   };
@@ -723,7 +734,7 @@ export function shape_period_derivation_deps(
     // budget pin takes that split off it (canon A4) — see `is_split_on_stream` below.
     const plaid_txn_id = (data.transactionId as string | null) ?? null;
     // A bill / income removed or paused for this payment's month isn't paid by it: the money
-    // counts as ordinary spending / money in (the engine stores the same — is_payment_suppressed).
+    // counts as ordinary spending / money in (the engine stores the same — is_payment_released).
     const released = released_at(txn_date_ms);
     const live = (rid: string | undefined): string | undefined =>
       rid && !released.has(rid) ? rid : undefined;
@@ -890,6 +901,36 @@ export function shape_period_derivation_deps(
         date_ms: mid(pinned),
         amount: n.amount,
       });
+    }
+  }
+  // D31: a removed / paused / ended bill's LATE payment of its last occurrence (due Sep 29, paid
+  // Oct 2, removed from Oct 1) is dated just after the span but pays that occurrence here — the
+  // matcher pairs it (the Oct view counts it nowhere: nothing it pays is in Oct). Only payments
+  // the release rule keeps (late payments) of bills with a removal; pinned ones are placed above.
+  if (bill_schedule_by_id.size > 0) {
+    const late_end = span_end_ms + LATE_PAYMENT_MAX_MS;
+    for (const { id, data } of raw.txns) {
+      const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
+      if (txn_date_ms <= span_end_ms || txn_date_ms > late_end || counted_ids.has(id) || crossing.ids.has(id)) continue;
+      const released = released_at(txn_date_ms);
+      const kept = [...bill_schedule_by_id.keys()].filter((rid) => !released.has(rid));
+      if (kept.length === 0) continue;
+      const plaid_txn_id = (data.transactionId as string | null) ?? null;
+      const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
+      const splits = without_out_of_view_links(
+        plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits) : stored_splits,
+        released.size ? new Set([...out_of_view_recurring_ids, ...released]) : out_of_view_recurring_ids
+      ).filter((sp) => !sp.outflowPinnedPeriodId);
+      const stream_bill = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
+      for (const rid of kept) {
+        const linked = splits.filter((sp) => sp.outflowId === rid);
+        const paying = linked.length
+          ? linked
+          : stream_bill === rid ? splits_paying_recurring(splits, "outflow", rid, true) : [];
+        if (paying.length === 0) continue;
+        const n = compute_countable_split_net(paying as CountableSplitInput[], id);
+        push_payment(rid, { transaction_id: id, split_id: linked.length ? n.split_id : null, date_ms: txn_date_ms, amount: n.amount });
+      }
     }
   }
   for (const r of recurring) {

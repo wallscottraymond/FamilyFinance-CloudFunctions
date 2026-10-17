@@ -174,4 +174,80 @@ describe('round 5 — stored periods carry what the page\'s matcher assigns (emu
     for (let i = 0; i < 3; i++) expect(await round()).toBe(0);
     expect([(await period(bill, wk_id))?.isActive, (await period(bill, wk_id))?.carryActive]).toEqual([true, true]);
   }, 240000);
+
+  // ── Test 9 (D31): a LATE payment of the last bill before a cut-off counts, exactly once.
+  const LATE = 777.77;
+  /** A bill synced without its late payment, cut off, then the late payment arrives (2nd sync). */
+  async function lateCase(tag: string, flag: boolean, shape: 'monthly' | 'weekly', action: 'remove' | 'pause' | 'end') {
+    const monthly = shape === 'monthly';
+    const paid = monthly ? [U12(7, 29), U12(8, 29)] : [5, 12, 19, 26].map((d) => U12(8, d)).concat([2, 9, 16, 23].map((d) => U12(9, d)));
+    const late_ms = U12(10, 2); // monthly: Sep 29 + 3 days; weekly (Tuesdays): Sep 30 + 2 days (Oct 7 is 5 away)
+    const due_ms = monthly ? U12(9, 29) : U12(9, 30);
+    const h = await makeHarness(db, tag, mocks, { flag });
+    h.ids.streams.B = `${tag}_S_B`;
+    const keys = paid.map((_, i) => `b${i}`);
+    const txn = (key: string, ms: number, amount: number) => plaidTxn(h.ids, { key, account: 'chk', amount, days_ago: days_ago(ms),
+      name: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT' }, T);
+    const stream = (ks: string[], last_ms: number, amount: number) => ({ ...scenarioRecurring(h.ids, {}, T), outflow_streams: [plaidStream(h.ids, 'B', {
+      account: 'chk', keys: ks, amount, description: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS',
+      detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', frequency: monthly ? 'MONTHLY' : 'WEEKLY', status: 'MATURE', is_active: true,
+      first_days_ago: days_ago(paid[0]), last_days_ago: days_ago(last_ms), next_days: Math.round(((monthly ? U12(10, 29) : U12(10, 7)) - T) / DAY),
+    } as any, T)], inflow_streams: [] });
+    h.postTxns(paid.map((ms, i) => txn(keys[i], ms, LATE)));
+    h.setRecurring(stream(keys, paid[paid.length - 1], LATE));
+    await h.sync('link');
+    const uid = h.ids.userId;
+    const bill = h.ids.streams.B;
+    const input = action === 'remove' ? { action: 'remove', mode: 'going_forward' }
+      : action === 'pause' ? { action: 'pause', resume_ms: Date.UTC(2042, 10, 15) } : { action: 'end' };
+    // "It ended" is answered on Sep 30 (last payment Sep 23 → ends from Oct 1); the others at T.
+    await manage(ctx(), uid, [], { id: bill, ...input }, action === 'end' ? U12(9, 30) : T, outflow_repo, 'recurring_outflow');
+    const intervals = (await db.collection('outflows').doc(bill).get()).data()?.removalIntervals;
+    expect(intervals.map((i: any) => i.fromMs)).toEqual([Date.UTC(2042, 9, 1)]);
+    const oct_spent = async () => {
+      const r = await view(uid, 'monthly', OCT_2042);
+      return Math.round(r.budgets.reduce((t: number, b: any) => t + b.periods.reduce((x: number, p: any) => x + (p.spent ?? 0), 0), 0) * 100) / 100;
+    };
+    const spent_before = await oct_spent();
+    h.postTxns([txn('late', late_ms, LATE)]);
+    h.setRecurring(stream([...keys, 'late'], late_ms, LATE));
+    await h.sync('late');
+    return { uid, bill, due_ms, late_doc: `plaid_${h.ids.txn('late')}`, spent_before, oct_spent };
+  }
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const paidBy = (r: any, bill: string, doc: string) =>
+    r.bills.filter((b: any) => b.recurring_id === bill).flatMap((b: any) => b.groups.flatMap((g: any) =>
+      g.occurrences.filter((o: any) => o.paid && o.transaction_id === doc).map((o: any) => [g.period_id, iso(o.due_ms)])));
+
+  for (const flag of [false, true]) {
+    for (const [shape, action] of [['monthly', 'remove'], ['monthly', 'pause'], ['weekly', 'end']] as const) {
+      it(`test 9 (D31): ${flag ? 'v2' : 'old'} ${shape} bill, ${action === 'end' ? '"It ended"' : action}: the Oct 2 payment pays the last bill once — every view, stored, never spend`, async () => {
+        const c = await lateCase(`qzr5l${flag ? 'v' : 'o'}${shape[0]}${action[0]}`, flag, shape, action);
+        // Engine: linked to the bill (not released) → never budget spend.
+        const t = (await db.collection('transactions').doc(c.late_doc).get()).data()!;
+        expect(t.splits.map((s: any) => s.outflowId)).toEqual([c.bill]);
+        expect(await c.oct_spent()).toBe(c.spent_before);
+        // Derive: paid exactly once, on the last occurrence before the cut-off, in each cadence.
+        const W = WEEKS.find((x) => x.start === Date.UTC(2042, 8, 28))!;
+        const cases: Array<[string, { start: number; end: number }, string]> = [
+          ['monthly', SEP, '2042M09'], ['monthly', { start: SEP.start, end: OCT_2042.end }, '2042M09'],
+          ['weekly', { start: W.start, end: W.end }, W.id], ['weekly', { start: SEP.start, end: OCT_2042.end }, W.id],
+          ['bi_monthly', { start: SEP.start, end: OCT_2042.end }, '2042BM09B'],
+        ];
+        for (const [cad, w, pid] of cases) {
+          expect({ cad, w: w.start, got: paidBy(await view(c.uid, cad, w), c.bill, c.late_doc) }).toEqual({ cad, w: w.start, got: [[pid, iso(c.due_ms)]] });
+        }
+        expect(paidBy(await view(c.uid, 'monthly', OCT_2042), c.bill, c.late_doc)).toEqual([]); // the Oct view: counted in Sep, not here
+        // Stored: the Sep month / Sep 16–30 / the straddling week hold it paid; idempotent.
+        await runReconcile(c.uid, c.bill);
+        const sep = await period(c.bill, '2042M09');
+        expect(sep?.reconciliation?.occurrences?.find((o: any) => o.transactionId === c.late_doc)).toBeTruthy();
+        expect((await period(c.bill, '2042BM09B'))?.reconciliation?.occurrences?.some((o: any) => o.transactionId === c.late_doc)).toBe(true);
+        expect((await period(c.bill, W.id))?.reconciliation?.occurrences?.some((o: any) => o.transactionId === c.late_doc)).toBe(true);
+        const k = startCounting();
+        await runReconcile(c.uid, c.bill);
+        expect(k.stop().writes_by.outflow_periods ?? 0).toBe(0);
+      }, 240000);
+    }
+  }
 });

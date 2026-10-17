@@ -19,10 +19,8 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { compute_countable_split_net } from "../../domain/recurring/period_reconciliation.service";
-import {
-  RemovalInterval,
-  is_payment_suppressed,
-} from "../../domain/recurring/recurring_suppression.service";
+import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
+import { bill_release_schedule, is_payment_released } from "../../domain/recurring/late_payment.service";
 import {
   is_edge_money,
   splits_paying_recurring,
@@ -242,9 +240,13 @@ export async function resolve_recurring_reconciliation(
   // ordinary spending / money in (X9; the engine and the period page apply the same rule).
   const removal_intervals = (recurring as { removal_intervals?: RemovalInterval[] })
     .removal_intervals;
+  const release_schedule = is_outflow && removal_intervals?.length
+    ? bill_release_schedule(recurring as Parameters<typeof bill_release_schedule>[0])
+    : null;
   for (const txn of txns) {
     if (txn.isActive === false) continue;
-    if (is_payment_suppressed(removal_intervals, to_ms(txn.transactionDate) ?? 0)) continue;
+    // D31: except a bill's LATE payment of its last occurrence before the cut-off.
+    if (is_payment_released(removal_intervals, to_ms(txn.transactionDate) ?? 0, release_schedule)) continue;
     // Honor a manual PERIOD PIN for THIS outflow: align by the pinned period's midpoint
     // (forces placement into that period) instead of the transaction date.
     let date_ms = to_ms(txn.transactionDate) ?? 0;

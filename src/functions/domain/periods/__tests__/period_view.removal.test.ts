@@ -141,3 +141,51 @@ describe("D28 — an early payment before a removal / end cut-off counts (pure)"
     expect(occ(derive([live], "monthly", SEP), "e", "M_2026_8")).toEqual([["2026-09-01", true]]);
   });
 });
+
+describe("D31 — a late payment after a removal / pause / end cut-off pays the last bill (pure)", () => {
+  // Due the 29th; paid Aug 29 on time and Oct 2 LATE for Sep 29; removed / ended / paused from Oct 1.
+  const make = (mode: "going_forward" | "paused", payments = [{ id: "p_aug", date_ms: U(8, 29), amount: 100 }, { id: "p_oct2", date_ms: U(10, 2), amount: 100 }]): BillSpec => ({
+    id: "l", frequency: "monthly", amount: 100, anchor_ms: U(11, 29), first_ms: U(1, 29),
+    removal_intervals: [{ from_ms: Date.UTC(2026, 9, 1), to_ms: mode === "paused" ? Date.UTC(2026, 10, 15) : null, mode }],
+    payments,
+  });
+  for (const mode of ["going_forward", "paused"] as const) {
+    it(`${mode}: Sep 29 paid in every cadence, counted exactly once, never budget spend; Oct hidden`, () => {
+      const bill = make(mode);
+      const SEP = { start: Date.UTC(2026, 8, 1), end: Date.UTC(2026, 9, 1) - 1 };
+      for (const w of [SEP, SEP_OCT]) {
+        const m = derive([bill], "monthly", w);
+        expect(occ(m, "l", "M_2026_8")).toEqual([["2026-09-29", true]]);
+        expect(payment_counts(m, [bill]).get("p_oct2")).toBe(1);
+        const bm = derive([bill], "bi_monthly", w);
+        expect(occ(bm, "l", "BM_2026_8_B")).toEqual([["2026-09-29", true]]);
+      }
+      const m = derive([bill], "monthly", SEP_OCT);
+      expect(visible(m, "l", "M_2026_9")).toBe(false);
+      expect(by_bucket(m, "l").get("M_2026_9")?.ee).toBe(0); // not also budget spend (was 100)
+      const wk = derive([bill], "weekly", SEP_OCT);
+      expect(occ(wk, "l", W_SEP27)).toEqual([["2026-09-29", true]]);
+      expect(payment_counts(wk, [bill]).get("p_oct2")).toBe(1);
+    });
+  }
+
+  it("weekly bill (Tuesdays): Oct 2 pays Sep 29 late (nearer); Oct 4 is nearer the removed Oct 6 → released", () => {
+    const bill: BillSpec = {
+      id: "w", frequency: "weekly", amount: 20, anchor_ms: U(10, 13), first_ms: U(1, 6),
+      removal_intervals: [{ from_ms: Date.UTC(2026, 9, 1), to_ms: null, mode: "going_forward" }],
+      payments: [{ id: "p_oct2", date_ms: U(10, 2), amount: 20 }, { id: "p_oct4", date_ms: U(10, 4), amount: 20 }],
+    };
+    const wk = derive([bill], "weekly", SEP_OCT);
+    expect(occ(wk, "w", W_SEP27)).toEqual([["2026-09-29", true]]);
+    const counts = payment_counts(wk, [bill]);
+    expect([counts.get("p_oct2"), counts.get("p_oct4")]).toEqual([1, 0]);
+    expect(by_bucket(wk, "w").get(W_OCT4)?.ee).toBe(20);
+  });
+
+  it("more than 7 days late, or the payment's nearest occurrence is the removed one → released, as before", () => {
+    const far = make("going_forward", [{ id: "p_oct7", date_ms: U(10, 7), amount: 100 }]);
+    expect(by_bucket(derive([far], "monthly", SEP_OCT), "l").get("M_2026_9")?.ee).toBe(100);
+    const early_due: BillSpec = { ...make("going_forward", [{ id: "p_oct2", date_ms: U(10, 2), amount: 100 }]), anchor_ms: U(11, 1), first_ms: U(1, 1) };
+    expect(by_bucket(derive([early_due], "monthly", SEP_OCT), "l").get("M_2026_9")?.ee).toBe(100);
+  });
+});

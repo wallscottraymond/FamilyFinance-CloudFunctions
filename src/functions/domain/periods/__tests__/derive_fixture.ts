@@ -2,13 +2,15 @@
  * Pure fixture for `compute_period_view` tests (review round 3): one bill + Everything Else, the
  * view buckets of a cadence, and each payment routed the way the assignment engine routes it — a
  * payment in a removed / paused (UTC) month is released (no bill link → Everything Else spend),
- * every other payment is linked to the bill (excluded from budgets, settles an occurrence).
+ * except (D31) a LATE payment of the bill's last occurrence before the cut-off; every other payment
+ * is linked to the bill (excluded from budgets, settles an occurrence) — `is_payment_released`.
  * Not a test file (no `.test.`): helpers only.
  */
 import { Timestamp } from "firebase-admin/firestore";
 import { compute_period_view, DerivePeriodResult } from "../period_view.service";
 import { PeriodDerivationDeps } from "../period_derivation.types";
-import { RemovalInterval, is_payment_suppressed } from "../../recurring/recurring_suppression.service";
+import { RemovalInterval } from "../../recurring/recurring_suppression.service";
+import { is_payment_released } from "../../recurring/late_payment.service";
 
 export const DAY = 86400000;
 export type Cadence = "monthly" | "weekly" | "bi_monthly";
@@ -47,6 +49,15 @@ export interface BillSpec {
   payments: Array<{ id: string; date_ms: number; amount: number }>;
 }
 
+/** The bill's schedule (as the period page builds it). */
+export const schedule_of = (bill: BillSpec) => ({
+  frequency: bill.frequency, average_amount: bill.amount, first_date: Timestamp.fromMillis(bill.first_ms),
+  last_date: Timestamp.fromMillis(bill.anchor_ms), predicted_next_date: Timestamp.fromMillis(bill.anchor_ms),
+});
+/** The engine's routing: is this payment released from the bill (→ Everything Else)? */
+export const is_released = (bill: BillSpec, date_ms: number) =>
+  is_payment_released(bill.removal_intervals, date_ms, schedule_of(bill));
+
 export function derive(bills: BillSpec[], cadence: Cadence, window: { start: number; end: number }): DerivePeriodResult {
   const b = buckets(cadence, window.start, window.end + 1);
   const deps: PeriodDerivationDeps = {
@@ -57,7 +68,7 @@ export function derive(bills: BillSpec[], cadence: Cadence, window: { start: num
     monthly_ee_id: "ee",
     any_ee_id: "ee",
     splits_for_match: bills.flatMap((bill) => bill.payments.map((p) => {
-      const released = is_payment_suppressed(bill.removal_intervals, p.date_ms);
+      const released = is_released(bill, p.date_ms);
       return {
         amount: p.amount, txn_date_ms: p.date_ms, is_pending: false, is_transfer: false, is_income: false,
         spend_status: "counted" as const, outflow_id: released ? null : bill.id, inflow_id: null,
@@ -68,12 +79,9 @@ export function derive(bills: BillSpec[], cadence: Cadence, window: { start: num
       id: bill.id,
       name: bill.id,
       kind: "outflow" as const,
-      schedule: {
-        frequency: bill.frequency, average_amount: bill.amount, first_date: Timestamp.fromMillis(bill.first_ms),
-        last_date: Timestamp.fromMillis(bill.anchor_ms), predicted_next_date: Timestamp.fromMillis(bill.anchor_ms),
-      },
+      schedule: schedule_of(bill),
       payments: bill.payments
-        .filter((p) => !is_payment_suppressed(bill.removal_intervals, p.date_ms))
+        .filter((p) => !is_released(bill, p.date_ms))
         .map((p) => ({ transaction_id: p.id, split_id: null, date_ms: p.date_ms, amount: p.amount })),
       removal_intervals: bill.removal_intervals,
     })),
