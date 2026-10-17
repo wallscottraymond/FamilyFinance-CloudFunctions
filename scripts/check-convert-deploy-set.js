@@ -66,7 +66,11 @@ function check_deploy_set(root = ROOT) {
   const exported = collect_exports(path.join(root, "src", "index.ts"));
   const missing = DEPLOY_SET.filter((f) => !exported.has(f));
   const derive_not_in_set = DERIVE_FUNCTIONS.filter((f) => !DEPLOY_SET.includes(f));
-  const command = `firebase deploy --only ${DEPLOY_SET.map((f) => `functions:${f}`).join(",")}`;
+  // The assignment engine, the derive, the recurring planner and the repos are bundled into most
+  // functions: a partial deploy leaves old instances that overwrite new fields (e.g. a manual income
+  // pin) or mis-read them. DEPLOY ALL FUNCTIONS from one commit; DEPLOY_SET is only the
+  // "is it exported" check.
+  const command = "firebase deploy --only functions   # deploy ALL functions (one commit); then: firebase functions:delete createManualOutflow";
   return { ok: missing.length === 0 && derive_not_in_set.length === 0, missing, derive_not_in_set, command, exported_count: exported.size };
 }
 

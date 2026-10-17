@@ -25,7 +25,10 @@ describe("N8 deploy set", () => {
     for (const f of ["derive_period", "derive_period_range", "derive_budget_view", "derive_recurring_view", "widget_snapshot"]) {
       expect(checker.DEPLOY_SET).toContain(f);
     }
-    expect(r.command.startsWith("firebase deploy --only functions:")).toBe(true);
+    expect(r.command).toContain("deploy ALL functions");
+    for (const f of ["convert_transaction_to_recurring", "preview_convert_transaction", "get_recurring_capabilities", "assign_split_to_inflow", "undo_recurring_merge"]) {
+      expect(checker.DEPLOY_SET).toContain(f);
+    }
   });
 
   it("the checker catches an export that only a barrel it isn't in would provide", () => {
