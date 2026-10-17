@@ -263,11 +263,18 @@ export function select_retro_payments(input: {
   // payment just after the floor that pays an occurrence before it belongs to history we don't
   // reach (D40 / D45), and a past payment never claims an occurrence that isn't due yet (only the
   // source — the payment the user tapped — may be early).
+  // One exception (an early payment): the NEXT occurrence, if it falls due within the early pad,
+  // may be claimed by a payment already made (dated ≤ now) — at most that one occurrence.
+  const first_future = dues.filter((d) => d > input.now_ms).reduce<number | null>((m, d) => (m === null || d < m ? d : m), null);
+  const early_ok = first_future !== null && first_future <= input.now_ms + D1_EARLY_PAD_MS;
   const nearest = (date_ms: number, in_window_only: boolean): number | null => {
     let best: number | null = null;
     let best_diff = Infinity;
     for (const d of dues) {
-      if (in_window_only && (d < floor_ms || d > input.now_ms)) continue;
+      if (in_window_only) {
+        if (d < floor_ms) continue;
+        if (d > input.now_ms && !(early_ok && d === first_future && date_ms <= input.now_ms)) continue;
+      }
       const diff = Math.abs(date_ms - d);
       if (diff <= MATCH_TOLERANCE_MS && diff < best_diff) {
         best = d;

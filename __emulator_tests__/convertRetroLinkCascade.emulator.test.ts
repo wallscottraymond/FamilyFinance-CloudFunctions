@@ -154,7 +154,7 @@ describe('convert / retro-link cascade is bounded (emulator)', () => {
     }
   }, 600000);
 
-  it('D46: a daily coffee converted monthly links exactly 12 payments; twice-a-month links 24; the rerun is identical', async () => {
+  it('D46: a daily coffee converted monthly links exactly 12 payments; twice-a-month links 24 + the one early occurrence; the rerun is identical', async () => {
     const { h } = await seed_vendor('qzr8e', COFFEE, 360, 1, 4.5, 1);
     const uid = h.ids.userId;
     const src = (await h.txn('v0'));
@@ -176,13 +176,14 @@ describe('convert / retro-link cascade is bounded (emulator)', () => {
     const p2 = plan_convert(f1.facts, { name: 'C', amount: 4.5, frequency: 'monthly', next_due_date: '2037-11-04', link_past: true }, 'x');
     expect(p1.selection.chosen.map((c: any) => c.id)).toEqual(p2.selection.chosen.map((c: any) => c.id));
     expect(p1.selection.chosen.length).toBe(12);
-    // twice a month: 24 links
+    // twice a month: 24 past occurrences, +1 — the newest coffee (Oct 14) already paid the next one
+    // (Oct 19, due in 4 days, inside the early pad): at most one early occurrence (item 7)
     const semi = await seed_vendor('qzr8g', COFFEE, 360, 1, 4.5, 1);
     const sr = await convert(ctx(), semi.h.ids.userId, {
       transaction_id: `plaid_${semi.h.ids.txn('v10')}`, name: 'Coffee2', amount: 4.5, frequency: 'semimonthly', next_due_date: '2037-10-19', link_past: true,
     }, Date.now());
     const linked2 = (await db.collection('transactions').where('splitOutflowIds', 'array-contains', sr.id).get()).docs;
-    expect(linked2.length).toBe(24);
+    expect(linked2.length).toBe(25);
     void ids_a;
     // the other 340+ coffees stay normal transactions in their budgets (still unlinked after a re-assign)
     const { assign_transactions_batch_orchestrator } = require('../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator');

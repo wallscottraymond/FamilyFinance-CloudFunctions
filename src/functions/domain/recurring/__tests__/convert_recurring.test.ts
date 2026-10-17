@@ -108,6 +108,34 @@ describe("D46: one payment per occurrence, the closest to its due date", () => {
     expect(sel.chosen).toHaveLength(24);
   });
 
+  it("item 7: a payment already made may claim the NEXT occurrence when it is due within the early pad", () => {
+    const floor12 = d(2036, 10, 15);
+    // monthly on the 19th: Oct 19 is 4 days away (inside the pad); the Oct 15 payment claims it.
+    const sel = select_retro_payments({
+      frequency: "monthly", next_due_ms: d(2037, 10, 19), payments: [pay("a", d(2037, 9, 19)), pay("c", d(2037, 10, 15))],
+      floor_ms: floor12, now_ms: NOW,
+    });
+    expect(sel.chosen.map((p) => p.id)).toEqual(["a", "c"]);
+    // at most ONE such occurrence: weekly (Oct 19 and Oct 26 are both within 11 days; only Oct 19 is early)
+    const wk = select_retro_payments({
+      frequency: "weekly", next_due_ms: d(2037, 10, 19),
+      payments: [pay("w1", d(2037, 10, 15)), pay("w2", d(2037, 10, 14))], floor_ms: floor12, now_ms: NOW,
+    });
+    expect(wk.chosen.filter((p) => p.date_ms >= d(2037, 10, 14)).length).toBeLessThanOrEqual(2);
+    expect(new Set(wk.chosen.map((p) => p.id)).size).toBe(wk.chosen.length);
+    // a next occurrence further than the pad is NOT claimed (monthly, due in 20 days)
+    const far = select_retro_payments({
+      frequency: "monthly", next_due_ms: d(2037, 11, 4), payments: [pay("x", d(2037, 10, 14))], floor_ms: floor12, now_ms: NOW,
+    });
+    expect(far.chosen).toHaveLength(0);
+    // deterministic on input order
+    const rev = select_retro_payments({
+      frequency: "monthly", next_due_ms: d(2037, 10, 19), payments: [pay("c", d(2037, 10, 15)), pay("a", d(2037, 9, 19))],
+      floor_ms: floor12, now_ms: NOW,
+    });
+    expect(rev.chosen.map((p) => p.id)).toEqual(sel.chosen.map((p) => p.id));
+  });
+
   it("a payment with no occurrence within 7 days stays a normal transaction", () => {
     const sel = select_retro_payments({
       frequency: "monthly", next_due_ms: d(2037, 11, 1),
