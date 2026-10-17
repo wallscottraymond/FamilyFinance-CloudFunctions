@@ -373,4 +373,42 @@ describe('capture rules — flag off equals today (emulator)', () => {
     expect(a_cold.reads).toBe(a_warm.reads + 1);
     console.log('[R4 honest] sync cold/warm/base:', cold.reads, warm.reads, golden.counts[1].reads, ' assign+derive cold/warm:', a_cold.reads, a_warm.reads);
   }, 180000);
+
+  it('round 4 test 10: assign + derive with the flag OFF and a warm cache read exactly what the base reads', async () => {
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').delete();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
+    const tag = 'qzoffr10';
+    const ids = scenarioIds(tag);
+    await seedScenario(db, ids);
+    const mocks = scenarioMocks(ids, NOW_MS, { removals: true });
+    mockSync.mockReset();
+    mockSync.mockImplementation(mocks.sync);
+    mockRecurring.mockReset();
+    mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
+    const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: 's' });
+    const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test' });
+    await sync('run1');
+    await sync('run2');
+    await new Promise((r) => setTimeout(r, 400));
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { assign_transactions_batch_orchestrator } = require('../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator');
+    const run = async () => {
+      await assign_transactions_batch_orchestrator(ctx('assign'), { user_id: ids.userId, transaction_ids: [`plaid_${ids.txn('spot0')}`, `plaid_${ids.txn('groc0')}`] });
+      await derive_period_orchestrator(ctx('derive'), ids.userId, { view_cadence: 'monthly', window_start_ms: OCT.start, window_end_ms: OCT.end, force: true });
+    };
+    await run(); // warms every per-instance cache (the flag included)
+    const c = startCounting();
+    await run();
+    await new Promise((r) => setTimeout(r, 400));
+    const k = c.stop();
+    const { _audit: _a, categories: _c, ...by } = k.reads_by;
+    void _a; void _c;
+    // Measured on the BASE commit 2ae62e6 with this exact flow (throwaway worktree, harness copied in).
+    const BASE = { budgets: 6, inflows: 4, outflows: 20, users: 3, transactions: 25, inflow_periods: 10, source_periods: 3,
+      outflow_periods: 50, user_data_versions: 1, budget_periods: 1, goals: 1 };
+    expect(by).toEqual(BASE);
+    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(124);
+  }, 120000);
 });
+
