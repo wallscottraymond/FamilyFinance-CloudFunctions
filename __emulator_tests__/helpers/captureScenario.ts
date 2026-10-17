@@ -24,6 +24,10 @@
  *                                                       (early, for Oct 1)                  → removed from Oct 1 (D28)
  *   S_LTE     bill    MATURE  MONTHLY  active          Home Lender, due 29th, paid Jul 29, Aug 29 + Oct 2
  *                                                       (late, for Sep 29)                  → removed from Oct 1 (D31)
+ *   S_PPA     bill    MATURE  MONTHLY  active          Auto Lender, due 29th, paid Jul 29, Aug 29 + Oct 2
+ *                                                       (late, for Sep 29)                  → a PAST pause, Mar 2037 (D37 #1)
+ *   S_XTR     bill    MATURE  MONTHLY  active          Student Lender, due 29th, paid Jul 29, Aug 29, Sep 29
+ *                                                       + an extra charge Oct 2             → removed from Oct 1 (D37 #2)
  *
  * Everything is deterministic for a fixed clock (`NOW_ISO`, frozen via jest
  * fake Date in the suites), and ids are prefixed with `tag` so many scenarios share one emulator.
@@ -89,6 +93,10 @@ export const REMOVAL_BILLS = {
   ERL: { name: 'MORTGAGE CO', merchant: 'Mortgage Co', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 120, paid_days_ago: [75, 44, 16], first_days_ago: 75, last_days_ago: 16, next_days: 17 },
   // D31 (round 5): due the 29th, paid Jul 29, Aug 29 and LATE on Oct 2 for Sep 29 → removed from Oct 1.
   LTE: { name: 'HOME LENDER', merchant: 'Home Lender', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 88, paid_days_ago: [78, 47, 13], first_days_ago: 78, last_days_ago: 13, next_days: 14 },
+  // D37 #1 (round 6): a LIVE bill with a past pause (Mar 2037), paid Jul 29, Aug 29 and Oct 2 — no different from a never-paused bill.
+  PPA: { name: 'AUTO LENDER', merchant: 'Auto Lender', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 66, paid_days_ago: [78, 47, 13], first_days_ago: 78, last_days_ago: 13, next_days: 14 },
+  // D37 #2 (round 6): paid on time Sep 29, plus an extra charge Oct 2 → removed from Oct 1: the Oct 2 charge stays October spend.
+  XTR: { name: 'STUDENT LENDER', merchant: 'Student Lender', primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT', amount: 77, paid_days_ago: [78, 47, 16, 13], first_days_ago: 78, last_days_ago: 13, next_days: 14 },
 } as const;
 
 /** The scenario's transactions (keys are stable; ids come from `ids.txn(key)`). */

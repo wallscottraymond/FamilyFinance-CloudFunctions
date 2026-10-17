@@ -20,7 +20,10 @@
  * leftover), plus its straddling week and Sep 16–30 half. Round 5 (D31, user-approved): a fifth
  * bill (LTE, due the 29th, paid LATE Oct 2 for Sep 29, removed from Oct 1) — paid in September
  * (Sep: that bill + EE's leftover; its straddling week and Sep 16–30 half) and no longer October
- * spend (Oct: EE's cell, spent − 88): the ONLY other monthly difference. Weekly / twice-a-month
+ * spend (Oct: EE's cell, spent − 88): the ONLY other monthly difference. Round 6 (D37): two more
+ * bills IDENTICAL to the base in the monthly views — PPA (a live bill with a past pause, paid Oct 2)
+ * and XTR (paid Sep 29 + an extra charge Oct 2, removed from Oct 1: the charge stays October
+ * spend); XTR's straddling week is the same (a) cell as RMV's. Weekly / twice-a-month
  * source periods are added in-process only (spy on source_period_repo.get_overlapping during the
  * derive) so no other suite ever sees them.
  *
@@ -171,6 +174,10 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   await act('PSE', { action: 'pause', resume_ms: Date.UTC(2037, 9, 2) }, Date.UTC(2037, 8, 10)); // Sep 1 → Oct 2
   await act('ERL', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid early Sep 29 (D28)
   await act('LTE', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid late Oct 2 (D31)
+  await act('XTR', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid Sep 29 + an extra Oct 2 (D37 #2)
+  // D37 #1: a PAST pause (Mar 2037) on a live bill paid Jul 29, Aug 29, Oct 2.
+  await outflow_repo.set_removal_intervals(ctx('rm_PPA'), ids.streams.PPA,
+    [{ from_ms: Date.UTC(2037, 2, 1), to_ms: Date.UTC(2037, 3, 1), mode: 'paused' }], false, ids.userId);
   await new Promise((r) => setTimeout(r, 400));
   const after_removals = await dumpScenario(db, ids);
   const derive_removed = await withSyntheticPeriods(async () => ({
@@ -262,6 +269,7 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
     `bill:TAG_S_ERL@${W_SEP27}`, // D28
     `bill:TAG_S_LTE@${W_SEP27}`, // D31
     `bill:TAG_S_PSE@${W_SEP27}`, `bill:TAG_S_RMV@${W_SEP27}`, `bill:TAG_S_RST@${W_OCT11}`,
+    `bill:TAG_S_XTR@${W_SEP27}`, // D37 #2: the same (a) cell as RMV — removed from Oct 1, its kept Sep 29 shows in the week
   ].sort());
   const bm_diff = diff_keys(got_removed.bi_monthly, base_removed.bi_monthly);
   expect(allowed(bm_diff, [BM_OCT_A, BM_SEP_B])).toEqual([`bill:TAG_S_ERL@${BM_SEP_B}`, `bill:TAG_S_LTE@${BM_SEP_B}`, `bill:TAG_S_RST@${BM_OCT_A}`].sort()); // D28 + D31 + (b)
@@ -289,6 +297,10 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   expect(group(base_removed.weekly, 'TAG_S_LTE', W_SEP27)).toBeUndefined(); // base: the whole straddling week dropped
   expect(occ(group(got_removed.weekly, 'TAG_S_LTE', W_SEP27))).toEqual([['2037-09-29', true]]);
   expect(occ(group(got_removed.bi_monthly, 'TAG_S_LTE', BM_SEP_B))).toEqual([['2037-09-29', true]]);
+  // D37 #2: like RMV — base drops the straddling week; now Sep 29 shows, paid by its Sep 29 payment
+  // (the Oct 2 extra charge pays nothing: October spend in both, monthly views identical).
+  expect(group(base_removed.weekly, 'TAG_S_XTR', W_SEP27)).toBeUndefined();
+  expect(occ(group(got_removed.weekly, 'TAG_S_XTR', W_SEP27))).toEqual([['2037-09-29', true]]);
   console.log('[D28+D31 golden diff] monthly_oct:', JSON.stringify(diff_keys(got_removed.monthly_oct, base_removed.monthly_oct)), 'monthly_sep:', JSON.stringify(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)),
     'weekly:', JSON.stringify(weekly_diff), 'bi_monthly:', JSON.stringify(bm_diff));
 }
@@ -430,10 +442,11 @@ describe('capture rules — flag off equals today (emulator)', () => {
     void _a; void _c;
     // Measured on the BASE commit 2ae62e6 with this exact flow (throwaway worktree, harness copied in).
     // Round 5: re-measured there after the scenario gained the D31 bill (LTE: +2 outflows, +5 periods, +1 txn).
-    const BASE = { budgets: 6, inflows: 4, outflows: 22, users: 3, transactions: 26, inflow_periods: 10, source_periods: 3,
-      outflow_periods: 55, user_data_versions: 1, budget_periods: 1, goals: 1 };
+    // Round 6: re-measured there after the D37 bills (PPA + XTR: +4 outflows, +10 periods, +3 txns).
+    const BASE = { budgets: 6, inflows: 4, outflows: 26, users: 3, transactions: 29, inflow_periods: 10, source_periods: 3,
+      outflow_periods: 65, user_data_versions: 1, budget_periods: 1, goals: 1 };
     expect(by).toEqual(BASE);
-    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(132);
+    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(149);
   }, 120000);
 });
 

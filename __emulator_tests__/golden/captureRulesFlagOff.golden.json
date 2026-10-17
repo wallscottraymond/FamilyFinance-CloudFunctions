@@ -1,12 +1,12 @@
 {
  "results": [
   {
-   "added": 61,
+   "added": 68,
    "modified": 0,
    "removed": 0,
    "rounds": 1,
    "status": "synced",
-   "streams_written": 14
+   "streams_written": 16
   },
   {
    "added": 0,
@@ -262,6 +262,55 @@
     "updatedBy": "TAG_u",
     "userCustomName": null
    },
+   "TAG_S_PPA": {
+    "accountId": "TAG_chk",
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_PPA",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 66,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Auto Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_ppa0",
+     "TAG_t_ppa1",
+     "TAG_t_ppa2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
    "TAG_S_PSE": {
     "accountId": "TAG_chk",
     "averageAmount": 45,
@@ -606,6 +655,56 @@
     "type": "recurring",
     "updatedBy": "TAG_u",
     "userCustomName": null
+   },
+   "TAG_S_XTR": {
+    "accountId": "TAG_chk",
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_XTR",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 77,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Student Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_xtr0",
+     "TAG_t_xtr1",
+     "TAG_t_xtr2",
+     "TAG_t_xtr3"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
    }
   },
   "inflows": {
@@ -711,7 +810,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 63,
+  "outflow_periods": 75,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -3405,6 +3504,708 @@
     "totalAmountDue": 88,
     "totalAmountPaid": 0,
     "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 66,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 66,
+     "matchedSplits": [
+      {
+       "amount": 66,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_ppa1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 66,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_ppa1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 66,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 68.2,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 66,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 66,
+     "matchedSplits": [
+      {
+       "amount": 66,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_ppa2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 66,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_ppa2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 66,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 68.2,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
     "transactionIds": [],
     "transactionSplits": [],
     "type": "rent",
@@ -8110,6 +8911,714 @@
     "transactionIds": [],
     "transactionSplits": [],
     "type": "subscription",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 79.57,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr3"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr3"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 79.57,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
     "updatedBy": "TAG_u",
     "userCustomName": null,
     "userId": "TAG_u"
@@ -12881,6 +14390,288 @@
     "userId": "TAG_u",
     "vendorKey": "acme"
    },
+   "plaid_TAG_t_ppa0": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_ppa0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
+   "plaid_TAG_t_ppa1": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_ppa1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
+   "plaid_TAG_t_ppa2": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_ppa2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
    "plaid_TAG_t_pse0": {
     "accountId": "TAG_chk",
     "amount": 45,
@@ -15198,6 +16989,382 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "transfer to savings"
+   },
+   "plaid_TAG_t_xtr0": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_xtr0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr1": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_xtr1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr2": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2137795200000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2137795200000
+    },
+    "transactionId": "TAG_t_xtr2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr3": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr3",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr3",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_xtr3",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
    }
   },
   "review_items": 0,
@@ -15449,6 +17616,55 @@
     "updatedBy": "TAG_u",
     "userCustomName": null
    },
+   "TAG_S_PPA": {
+    "accountId": "TAG_chk",
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_PPA",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 66,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Auto Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_ppa0",
+     "TAG_t_ppa1",
+     "TAG_t_ppa2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
    "TAG_S_PSE": {
     "accountId": "TAG_chk",
     "averageAmount": 45,
@@ -15793,6 +18009,56 @@
     "type": "recurring",
     "updatedBy": "TAG_u",
     "userCustomName": null
+   },
+   "TAG_S_XTR": {
+    "accountId": "TAG_chk",
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_XTR",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 77,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Student Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_xtr0",
+     "TAG_t_xtr1",
+     "TAG_t_xtr2",
+     "TAG_t_xtr3"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
    }
   },
   "inflows": {
@@ -15898,7 +18164,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 63,
+  "outflow_periods": 75,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -18592,6 +20858,708 @@
     "totalAmountDue": 88,
     "totalAmountPaid": 0,
     "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 66,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 66,
+     "matchedSplits": [
+      {
+       "amount": 66,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_ppa1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 66,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_ppa1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 66,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 68.2,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 66,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 66,
+     "matchedSplits": [
+      {
+       "amount": 66,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_ppa2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 66,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_ppa2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 66,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 68.2,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
     "transactionIds": [],
     "transactionSplits": [],
     "type": "rent",
@@ -23297,6 +26265,714 @@
     "transactionIds": [],
     "transactionSplits": [],
     "type": "subscription",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 79.57,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr3"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr3"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 79.57,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
     "updatedBy": "TAG_u",
     "userCustomName": null,
     "userId": "TAG_u"
@@ -28068,6 +31744,288 @@
     "userId": "TAG_u",
     "vendorKey": "acme"
    },
+   "plaid_TAG_t_ppa0": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_ppa0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
+   "plaid_TAG_t_ppa1": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_ppa1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
+   "plaid_TAG_t_ppa2": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_ppa2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
    "plaid_TAG_t_pse0": {
     "accountId": "TAG_chk",
     "amount": 45,
@@ -30385,6 +34343,382 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "transfer to savings"
+   },
+   "plaid_TAG_t_xtr0": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_xtr0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr1": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_xtr1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr2": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2137795200000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2137795200000
+    },
+    "transactionId": "TAG_t_xtr2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr3": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr3",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr3",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_xtr3",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
    }
   },
   "review_items": 0,
@@ -30517,6 +34851,37 @@
     ],
     "name": "Home Lender",
     "recurring_id": "TAG_S_LTE"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2140387200000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2140387200000,
+      "occurrence_ids": [
+       "TAG_S_PPA_2140387200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 66,
+        "due_ms": 2140387200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 66,
+      "total_paid": 0,
+      "total_unpaid": 66
+     }
+    ],
+    "name": "Auto Lender",
+    "recurring_id": "TAG_S_PPA"
    },
    {
     "groups": [
@@ -30706,6 +35071,37 @@
     ],
     "name": "Hulu",
     "recurring_id": "TAG_S_TOMB"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2140387200000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2140387200000,
+      "occurrence_ids": [
+       "TAG_S_XTR_2140387200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 77,
+        "due_ms": 2140387200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M10",
+      "status": "pending",
+      "total_due": 77,
+      "total_paid": 0,
+      "total_unpaid": 77
+     }
+    ],
+    "name": "Student Lender",
+    "recurring_id": "TAG_S_XTR"
    }
   ],
   "budgets": [
@@ -30715,16 +35111,16 @@
     "name": "Everything else",
     "periods": [
      {
-      "allocated_amount": 3271.52,
+      "allocated_amount": 3128.52,
       "budget_id": "TAG_ee_monthly",
-      "effective_amount": 3271.52,
+      "effective_amount": 3128.52,
       "end_ms": 2140646399999,
       "is_derived": true,
       "no_income": false,
       "pending_spent": 0,
       "period_id": "2037M10",
       "period_type": "monthly",
-      "remaining": 3190.52,
+      "remaining": 3047.52,
       "return_amount": 0,
       "spent": 81,
       "start_ms": 2137968000000
@@ -30938,6 +35334,37 @@
     "groups": [
      {
       "count_in_period": 1,
+      "count_paid": 0,
+      "count_unpaid": 1,
+      "first_due_ms": 2137795200000,
+      "is_due_period": true,
+      "is_fully_paid": false,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": 2137795200000,
+      "occurrence_ids": [
+       "TAG_S_PPA_2137795200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 66,
+        "due_ms": 2137795200000,
+        "paid": false
+       }
+      ],
+      "period_id": "2037M09",
+      "status": "pending",
+      "total_due": 66,
+      "total_paid": 0,
+      "total_unpaid": 66
+     }
+    ],
+    "name": "Auto Lender",
+    "recurring_id": "TAG_S_PPA"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
       "count_paid": 1,
       "count_unpaid": 0,
       "first_due_ms": 2137795200000,
@@ -31124,6 +35551,38 @@
     ],
     "name": "Hulu",
     "recurring_id": "TAG_S_TOMB"
+   },
+   {
+    "groups": [
+     {
+      "count_in_period": 1,
+      "count_paid": 1,
+      "count_unpaid": 0,
+      "first_due_ms": 2137795200000,
+      "is_due_period": true,
+      "is_fully_paid": true,
+      "is_partially_paid": false,
+      "next_unpaid_due_ms": null,
+      "occurrence_ids": [
+       "TAG_S_XTR_2137795200000"
+      ],
+      "occurrences": [
+       {
+        "amount": 77,
+        "due_ms": 2137795200000,
+        "paid": true,
+        "transaction_id": "plaid_TAG_t_xtr2"
+       }
+      ],
+      "period_id": "2037M09",
+      "status": "paid",
+      "total_due": 77,
+      "total_paid": 77,
+      "total_unpaid": 0
+     }
+    ],
+    "name": "Student Lender",
+    "recurring_id": "TAG_S_XTR"
    }
   ],
   "budgets": [
@@ -31133,16 +35592,16 @@
     "name": "Everything else",
     "periods": [
      {
-      "allocated_amount": 5271.52,
+      "allocated_amount": 5128.52,
       "budget_id": "TAG_ee_monthly",
-      "effective_amount": 5271.52,
+      "effective_amount": 5128.52,
       "end_ms": 2137967999999,
       "is_derived": true,
       "no_income": false,
       "pending_spent": 0,
       "period_id": "2037M09",
       "period_type": "monthly",
-      "remaining": 5142.52,
+      "remaining": 4999.52,
       "return_amount": 0,
       "spent": 129,
       "start_ms": 2135376000000
@@ -31484,6 +35943,61 @@
      "TAG_t_lte0",
      "TAG_t_lte1",
      "TAG_t_lte2"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
+   },
+   "TAG_S_PPA": {
+    "accountId": "TAG_chk",
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_PPA",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 66,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Auto Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [
+     {
+      "fromMs": 2119478400000,
+      "mode": "paused",
+      "toMs": 2122156800000
+     }
+    ],
+    "removedByUser": false,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_ppa0",
+     "TAG_t_ppa1",
+     "TAG_t_ppa2"
     ],
     "type": "recurring",
     "updatedBy": "TAG_u",
@@ -31851,6 +36365,62 @@
     "type": "recurring",
     "updatedBy": "TAG_u",
     "userCustomName": null
+   },
+   "TAG_S_XTR": {
+    "accountId": "TAG_chk",
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "expectedAmountOverride": null,
+    "expenseType": "rent",
+    "firstDate": {
+     "__ts": 2132438400000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "id": "TAG_S_XTR",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isEssential": true,
+    "isHidden": false,
+    "isUserModified": false,
+    "lastAmount": 77,
+    "lastDate": {
+     "__ts": 2138054400000
+    },
+    "merchantName": "Student Lender",
+    "ownerId": "TAG_u",
+    "plaidConfidenceLevel": "HIGH",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "plaidStatus": "MATURE",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "removalIntervals": [
+     {
+      "fromMs": 2137968000000,
+      "mode": "going_forward",
+      "toMs": null
+     }
+    ],
+    "removedByUser": true,
+    "rules": [],
+    "source": "plaid",
+    "tags": [],
+    "transactionIds": [
+     "TAG_t_xtr0",
+     "TAG_t_xtr1",
+     "TAG_t_xtr2",
+     "TAG_t_xtr3"
+    ],
+    "type": "recurring",
+    "updatedBy": "TAG_u",
+    "userCustomName": null
    }
   },
   "inflows": {
@@ -31956,7 +36526,7 @@
     "userCustomName": null
    }
   },
-  "outflow_periods": 63,
+  "outflow_periods": 75,
   "outflow_period_docs": {
    "TAG_S_AVANT_2037M09": {
     "accountId": "TAG_chk",
@@ -34650,6 +39220,708 @@
     "totalAmountDue": 88,
     "totalAmountPaid": 0,
     "totalAmountUnpaid": 88,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 66,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 66,
+     "matchedSplits": [
+      {
+       "amount": 66,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_ppa1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 66,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_ppa1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 66,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 68.2,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 66,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 66,
+     "matchedSplits": [
+      {
+       "amount": 66,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_ppa2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 66,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_ppa2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 66,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 68.2,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_PPA_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 66,
+    "amountWithheld": 70.4,
+    "averageAmount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.2,
+    "description": "AUTO LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 66,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_PPA_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Auto Lender",
+    "merchantName": "Auto Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_PPA",
+    "ownerId": "TAG_u",
+    "payee": "Auto Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 66,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 66,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 66,
     "transactionIds": [],
     "transactionSplits": [],
     "type": "rent",
@@ -39355,6 +44627,714 @@
     "transactionIds": [],
     "transactionSplits": [],
     "type": "subscription",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M08": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M08",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2135116800000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2135116800000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2135116800000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2135375999999
+    },
+    "periodStartDate": {
+     "__ts": 2132697600000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2137795200000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr1"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2135116800000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr1"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M08",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M09": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 79.57,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M09",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2137795200000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2137795200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2137795200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2137967999999
+    },
+    "periodStartDate": {
+     "__ts": 2135376000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2140387200000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr2"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2137795200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr2"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M09",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M10": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 77,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M10",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": true,
+    "isHidden": false,
+    "isPaid": true,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2140387200000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2140387200000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 1,
+    "numberOfOccurrencesUnpaid": 0,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2140387200000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2140646399999
+    },
+    "periodStartDate": {
+     "__ts": 2137968000000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2143065600000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 77,
+     "matchedSplits": [
+      {
+       "amount": 77,
+       "isPending": false,
+       "transactionId": "plaid_TAG_t_xtr3"
+      }
+     ],
+     "occurrences": [
+      {
+       "amount": 77,
+       "dueDate": {
+        "__ts": 2140387200000
+       },
+       "manual": false,
+       "paid": true,
+       "pending": false,
+       "transactionId": "plaid_TAG_t_xtr3"
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 1,
+     "pendingAmount": 0,
+     "status": "complete"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M10",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 77,
+    "totalAmountUnpaid": 0,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M11": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 79.57,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M11",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2143065600000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2143065600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2143065600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2143238399999
+    },
+    "periodStartDate": {
+     "__ts": 2140646400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2145657600000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2143065600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M11",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2037M12": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2037M12",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2145657600000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2145657600000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2145657600000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2145916799999
+    },
+    "periodStartDate": {
+     "__ts": 2143238400000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2148336000000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2145657600000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2037M12",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
+    "updatedBy": "TAG_u",
+    "userCustomName": null,
+    "userId": "TAG_u"
+   },
+   "TAG_S_XTR_2038M01": {
+    "accountId": "TAG_chk",
+    "actualAmount": null,
+    "amountPaid": 0,
+    "amountPerOccurrence": 77,
+    "amountWithheld": 82.13,
+    "averageAmount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "cycleDays": 30,
+    "cycleEndDate": {
+     "__ts": 2140387200000
+    },
+    "cycleStartDate": {
+     "__ts": 2137795200000
+    },
+    "dailyWithholdingRate": 2.566666666666667,
+    "description": "STUDENT LENDER",
+    "dollarProgressPercentage": 0,
+    "expectedAmount": 77,
+    "expenseType": "rent",
+    "firstDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "frequency": "monthly",
+    "groupId": null,
+    "groupIds": [],
+    "hasPending": false,
+    "id": "TAG_S_XTR_2038M01",
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": false,
+    "isDuePeriod": true,
+    "isEssential": true,
+    "isFullyPaid": false,
+    "isHidden": false,
+    "isPaid": false,
+    "isPartiallyPaid": false,
+    "itemId": "TAG_item",
+    "lastDueDateInPeriod": {
+     "__ts": 2148336000000
+    },
+    "merchant": "Student Lender",
+    "merchantName": "Student Lender",
+    "nextUnpaidDueDate": {
+     "__ts": 2148336000000
+    },
+    "note": null,
+    "numberOfOccurrencesInPeriod": 1,
+    "numberOfOccurrencesPaid": 0,
+    "numberOfOccurrencesUnpaid": 1,
+    "occurrenceDueDates": [
+     {
+      "__ts": 2148336000000
+     }
+    ],
+    "occurrencePaidFlags": [
+     false
+    ],
+    "occurrenceTransactionIds": [
+     null
+    ],
+    "outflowId": "TAG_S_XTR",
+    "ownerId": "TAG_u",
+    "payee": "Student Lender",
+    "paymentProgressPercentage": 0,
+    "periodEndDate": {
+     "__ts": 2148595199999
+    },
+    "periodStartDate": {
+     "__ts": 2145916800000
+    },
+    "periodType": "monthly",
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "predictedNextDate": {
+     "__ts": 2150928000000
+    },
+    "reconciliation": {
+     "expectedAmount": 77,
+     "hasPending": false,
+     "manualAmount": 0,
+     "matchedAmount": 0,
+     "matchedSplits": [],
+     "occurrences": [
+      {
+       "amount": null,
+       "dueDate": {
+        "__ts": 2148336000000
+       },
+       "manual": false,
+       "paid": false,
+       "pending": false,
+       "transactionId": null
+      }
+     ],
+     "occurrencesExpected": 1,
+     "occurrencesPaid": 0,
+     "pendingAmount": 0,
+     "status": "none"
+    },
+    "rules": [],
+    "source": "plaid",
+    "sourcePeriodId": "2038M01",
+    "tags": [],
+    "totalAmountDue": 77,
+    "totalAmountPaid": 0,
+    "totalAmountUnpaid": 77,
+    "transactionIds": [],
+    "transactionSplits": [],
+    "type": "rent",
     "updatedBy": "TAG_u",
     "userCustomName": null,
     "userId": "TAG_u"
@@ -44126,6 +50106,288 @@
     "userId": "TAG_u",
     "vendorKey": "acme"
    },
+   "plaid_TAG_t_ppa0": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_ppa0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
+   "plaid_TAG_t_ppa1": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_ppa1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
+   "plaid_TAG_t_ppa2": {
+    "accountId": "TAG_chk",
+    "amount": 66,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "AUTO LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_ppa2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Auto Lender",
+     "plaidName": "AUTO LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_ppa2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Auto Lender",
+    "name": "AUTO LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_PPA"
+    ],
+    "splits": [
+     {
+      "amount": 66,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_PPA",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_ppa2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "auto lender"
+   },
    "plaid_TAG_t_pse0": {
     "accountId": "TAG_chk",
     "amount": 45,
@@ -46443,6 +52705,382 @@
     "updatedBy": "TAG_u",
     "userId": "TAG_u",
     "vendorKey": "transfer to savings"
+   },
+   "plaid_TAG_t_xtr0": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr0",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr0",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M07",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2132438400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2132438400000
+    },
+    "transactionId": "TAG_t_xtr0",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr1": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr1",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr1",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M08",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2135116800000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2135116800000
+    },
+    "transactionId": "TAG_t_xtr1",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr2": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr2",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr2",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M09",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2137795200000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2137795200000
+    },
+    "transactionId": "TAG_t_xtr2",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
+   },
+   "plaid_TAG_t_xtr3": {
+    "accountId": "TAG_chk",
+    "amount": 77,
+    "createdBy": "TAG_u",
+    "currency": "USD",
+    "description": "STUDENT LENDER",
+    "groupId": null,
+    "groupIds": [],
+    "id": "plaid_TAG_t_xtr3",
+    "initialPlaidData": {
+     "plaidAccountId": "TAG_chk",
+     "plaidMerchantName": "Student Lender",
+     "plaidName": "STUDENT LENDER",
+     "plaidPending": false,
+     "plaidTransactionId": "TAG_t_xtr3",
+     "source": "plaid"
+    },
+    "internalDetailedCategory": null,
+    "internalPrimaryCategory": null,
+    "isActive": true,
+    "isDeleted": false,
+    "isPending": false,
+    "isPrivate": true,
+    "merchantName": "Student Lender",
+    "name": "STUDENT LENDER",
+    "needsNote": false,
+    "needsReview": false,
+    "ownerId": "TAG_u",
+    "pendingTransactionId": null,
+    "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+    "plaidItemId": "TAG_item",
+    "plaidPrimaryCategory": "LOAN_PAYMENTS",
+    "source": "plaid",
+    "splitBudgetIds": [
+     "TAG_ee_monthly",
+     "TAG_ee_weekly",
+     "TAG_ee_bi_monthly"
+    ],
+    "splitInflowIds": [],
+    "splitOutflowIds": [
+     "TAG_S_XTR"
+    ],
+    "splits": [
+     {
+      "amount": 77,
+      "biWeeklyBudgetId": "TAG_ee_bi_monthly",
+      "biWeeklyBudgetName": "Everything else",
+      "biWeeklyBudgetSource": "category",
+      "biWeeklyPeriodId": null,
+      "budgetAssignmentSource": "category",
+      "budgetId": "TAG_ee_monthly",
+      "budgetName": "Everything else",
+      "categorySource": "plaid",
+      "firstCategoryId": null,
+      "inflowId": null,
+      "internalDetailedCategory": null,
+      "internalPrimaryCategory": null,
+      "isDefault": true,
+      "isIgnored": false,
+      "isRefund": false,
+      "isTaxDeductible": false,
+      "monthlyBudgetId": "TAG_ee_monthly",
+      "monthlyBudgetName": "Everything else",
+      "monthlyBudgetSource": "category",
+      "monthlyPeriodId": "2037M10",
+      "outflowAssignmentSource": "auto",
+      "outflowId": "TAG_S_XTR",
+      "overallCategoryId": null,
+      "paymentDate": {
+       "__ts": 2138054400000
+      },
+      "plaidDetailedCategory": "LOAN_PAYMENTS_MORTGAGE_PAYMENT",
+      "plaidPrimaryCategory": "LOAN_PAYMENTS",
+      "rules": [],
+      "secondCategoryId": null,
+      "suspendedOutflowPinId": null,
+      "tags": [],
+      "weeklyBudgetId": "TAG_ee_weekly",
+      "weeklyBudgetName": "Everything else",
+      "weeklyBudgetSource": "category",
+      "weeklyPeriodId": null
+     }
+    ],
+    "tagIds": [],
+    "transactionDate": {
+     "__ts": 2138054400000
+    },
+    "transactionId": "TAG_t_xtr3",
+    "transactionStatus": "approved",
+    "type": "expense",
+    "updatedBy": "TAG_u",
+    "userId": "TAG_u",
+    "vendorKey": "student lender"
    }
   },
   "review_items": 0,
@@ -46583,6 +53221,37 @@
      "recurring_id": "TAG_S_LTE"
     },
     {
+     "groups": [
+      {
+       "count_in_period": 1,
+       "count_paid": 0,
+       "count_unpaid": 1,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": 2137795200000,
+       "occurrence_ids": [
+        "TAG_S_PPA_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 66,
+         "due_ms": 2137795200000,
+         "paid": false
+        }
+       ],
+       "period_id": "2037M09",
+       "status": "pending",
+       "total_due": 66,
+       "total_paid": 0,
+       "total_unpaid": 66
+      }
+     ],
+     "name": "Auto Lender",
+     "recurring_id": "TAG_S_PPA"
+    },
+    {
      "groups": [],
      "name": "Iron Gym",
      "recurring_id": "TAG_S_PSE"
@@ -46718,6 +53387,38 @@
      ],
      "name": "Hulu",
      "recurring_id": "TAG_S_TOMB"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_XTR_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 77,
+         "due_ms": 2137795200000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_xtr2"
+        }
+       ],
+       "period_id": "2037M09",
+       "status": "paid",
+       "total_due": 77,
+       "total_paid": 77,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Student Lender",
+     "recurring_id": "TAG_S_XTR"
     }
    ],
    "budgets": [
@@ -46727,16 +53428,16 @@
      "name": "Everything else",
      "periods": [
       {
-       "allocated_amount": 5549.52,
+       "allocated_amount": 5406.52,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 5549.52,
+       "effective_amount": 5406.52,
        "end_ms": 2137967999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037M09",
        "period_type": "monthly",
-       "remaining": 5142.52,
+       "remaining": 4999.52,
        "return_amount": 0,
        "spent": 407,
        "start_ms": 2135376000000
@@ -46913,6 +53614,37 @@
        "is_partially_paid": false,
        "next_unpaid_due_ms": 2140387200000,
        "occurrence_ids": [
+        "TAG_S_PPA_2140387200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 66,
+         "due_ms": 2140387200000,
+         "paid": false
+        }
+       ],
+       "period_id": "2037M10",
+       "status": "pending",
+       "total_due": 66,
+       "total_paid": 0,
+       "total_unpaid": 66
+      }
+     ],
+     "name": "Auto Lender",
+     "recurring_id": "TAG_S_PPA"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 1,
+       "count_paid": 0,
+       "count_unpaid": 1,
+       "first_due_ms": 2140387200000,
+       "is_due_period": true,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": 2140387200000,
+       "occurrence_ids": [
         "TAG_S_PSE_2140387200000"
        ],
        "occurrences": [
@@ -47063,6 +53795,11 @@
      ],
      "name": "Hulu",
      "recurring_id": "TAG_S_TOMB"
+    },
+    {
+     "groups": [],
+     "name": "Student Lender",
+     "recurring_id": "TAG_S_XTR"
     }
    ],
    "budgets": [
@@ -47072,18 +53809,18 @@
      "name": "Everything else",
      "periods": [
       {
-       "allocated_amount": 3540.52,
+       "allocated_amount": 3474.52,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 3540.52,
+       "effective_amount": 3474.52,
        "end_ms": 2140646399999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037M10",
        "period_type": "monthly",
-       "remaining": 3371.52,
+       "remaining": 3228.52,
        "return_amount": 0,
-       "spent": 169,
+       "spent": 246,
        "start_ms": 2137968000000
       }
      ]
@@ -47673,6 +54410,182 @@
      ],
      "name": "Home Lender",
      "recurring_id": "TAG_S_LTE"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW01",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW02",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW03",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW04",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_PPA_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 66,
+         "due_ms": 2137795200000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_ppa2"
+        }
+       ],
+       "period_id": "2037SW05",
+       "status": "paid",
+       "total_due": 66,
+       "total_paid": 66,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW06",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW07",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW08",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 1,
+       "count_paid": 0,
+       "count_unpaid": 1,
+       "first_due_ms": 2140387200000,
+       "is_due_period": true,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": 2140387200000,
+       "occurrence_ids": [
+        "TAG_S_PPA_2140387200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 66,
+         "due_ms": 2140387200000,
+         "paid": false
+        }
+       ],
+       "period_id": "2037SW09",
+       "status": "pending",
+       "total_due": 66,
+       "total_paid": 0,
+       "total_unpaid": 66
+      }
+     ],
+     "name": "Auto Lender",
+     "recurring_id": "TAG_S_PPA"
     },
     {
      "groups": [
@@ -48433,6 +55346,80 @@
      ],
      "name": "Hulu",
      "recurring_id": "TAG_S_TOMB"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW01",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW02",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW03",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SW04",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Student Lender",
+     "recurring_id": "TAG_S_XTR"
     }
    ],
    "budgets": [
@@ -48502,18 +55489,18 @@
        "start_ms": 2137017600000
       },
       {
-       "allocated_amount": 1937.01,
+       "allocated_amount": 1871.01,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 1937.01,
+       "effective_amount": 1871.01,
        "end_ms": 2138227199999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SW05",
        "period_type": "weekly",
-       "remaining": 1763.01,
+       "remaining": 1620.01,
        "return_amount": 0,
-       "spent": 174,
+       "spent": 251,
        "start_ms": 2137622400000
       },
       {
@@ -48562,16 +55549,16 @@
        "start_ms": 2139436800000
       },
       {
-       "allocated_amount": 1937.01,
+       "allocated_amount": 1871.01,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 1937.01,
+       "effective_amount": 1871.01,
        "end_ms": 2140646399999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SW09",
        "period_type": "weekly",
-       "remaining": 1937.01,
+       "remaining": 1871.01,
        "return_amount": 0,
        "spent": 0,
        "start_ms": 2140041600000
@@ -49257,6 +56244,97 @@
        "next_unpaid_due_ms": null,
        "occurrence_ids": [],
        "occurrences": [],
+       "period_id": "2037SBM9A",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_PPA_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 66,
+         "due_ms": 2137795200000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_ppa2"
+        }
+       ],
+       "period_id": "2037SBM9B",
+       "status": "paid",
+       "total_due": 66,
+       "total_paid": 66,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SBM10A",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 1,
+       "count_paid": 0,
+       "count_unpaid": 1,
+       "first_due_ms": 2140387200000,
+       "is_due_period": true,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": 2140387200000,
+       "occurrence_ids": [
+        "TAG_S_PPA_2140387200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 66,
+         "due_ms": 2140387200000,
+         "paid": false
+        }
+       ],
+       "period_id": "2037SBM10B",
+       "status": "pending",
+       "total_due": 66,
+       "total_paid": 0,
+       "total_unpaid": 66
+      }
+     ],
+     "name": "Auto Lender",
+     "recurring_id": "TAG_S_PPA"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
        "period_id": "2037SBM10A",
        "status": "none",
        "total_due": 0,
@@ -49638,6 +56716,55 @@
      ],
      "name": "Hulu",
      "recurring_id": "TAG_S_TOMB"
+    },
+    {
+     "groups": [
+      {
+       "count_in_period": 0,
+       "count_paid": 0,
+       "count_unpaid": 0,
+       "first_due_ms": null,
+       "is_due_period": false,
+       "is_fully_paid": false,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [],
+       "occurrences": [],
+       "period_id": "2037SBM9A",
+       "status": "none",
+       "total_due": 0,
+       "total_paid": 0,
+       "total_unpaid": 0
+      },
+      {
+       "count_in_period": 1,
+       "count_paid": 1,
+       "count_unpaid": 0,
+       "first_due_ms": 2137795200000,
+       "is_due_period": true,
+       "is_fully_paid": true,
+       "is_partially_paid": false,
+       "next_unpaid_due_ms": null,
+       "occurrence_ids": [
+        "TAG_S_XTR_2137795200000"
+       ],
+       "occurrences": [
+        {
+         "amount": 77,
+         "due_ms": 2137795200000,
+         "paid": true,
+         "transaction_id": "plaid_TAG_t_xtr2"
+        }
+       ],
+       "period_id": "2037SBM9B",
+       "status": "paid",
+       "total_due": 77,
+       "total_paid": 77,
+       "total_unpaid": 0
+      }
+     ],
+     "name": "Student Lender",
+     "recurring_id": "TAG_S_XTR"
     }
    ],
    "budgets": [
@@ -49662,16 +56789,16 @@
        "start_ms": 2135376000000
       },
       {
-       "allocated_amount": 1833.01,
+       "allocated_amount": 1690.01,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 1833.01,
+       "effective_amount": 1690.01,
        "end_ms": 2137967999999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SBM9B",
        "period_type": "bi_monthly",
-       "remaining": 1746.01,
+       "remaining": 1603.01,
        "return_amount": 0,
        "spent": 87,
        "start_ms": 2136672000000
@@ -49686,22 +56813,22 @@
        "pending_spent": 0,
        "period_id": "2037SBM10A",
        "period_type": "bi_monthly",
-       "remaining": 1667.51,
+       "remaining": 1590.51,
        "return_amount": 0,
-       "spent": 169,
+       "spent": 246,
        "start_ms": 2137968000000
       },
       {
-       "allocated_amount": 1937.01,
+       "allocated_amount": 1871.01,
        "budget_id": "TAG_ee_monthly",
-       "effective_amount": 1937.01,
+       "effective_amount": 1871.01,
        "end_ms": 2140646399999,
        "is_derived": true,
        "no_income": false,
        "pending_spent": 0,
        "period_id": "2037SBM10B",
        "period_type": "bi_monthly",
-       "remaining": 1937.01,
+       "remaining": 1871.01,
        "return_amount": 0,
        "spent": 0,
        "start_ms": 2139264000000
@@ -49923,43 +57050,43 @@
  },
  "counts": [
   {
-   "reads": 791,
-   "writes": 244,
-   "audit_writes": 90,
+   "reads": 894,
+   "writes": 277,
+   "audit_writes": 104,
    "reads_by": {
     "purge_status": 1,
     "_item_sync_leases": 2,
     "plaid_items": 3,
     "users": 6,
     "inflows": 13,
-    "outflows": 71,
+    "outflows": 83,
     "accounts": 9,
-    "transactions": 261,
+    "transactions": 296,
     "rules": 1,
     "categories": 1,
     "budgets": 12,
-    "source_periods": 106,
     "inflow_periods": 43,
-    "outflow_periods": 259,
+    "outflow_periods": 303,
+    "source_periods": 118,
     "budget_periods": 3,
     "_transfer_classification_state": 1
    },
    "writes_by": {
     "_item_sync_leases": 2,
     "inflows": 2,
-    "_audit": 90,
-    "outflows": 13,
+    "_audit": 104,
+    "outflows": 15,
     "plaid_items": 2,
-    "transactions": 67,
-    "outflow_periods": 132,
-    "inflow_periods": 22,
+    "transactions": 74,
     "_logs_minimal": 1,
+    "inflow_periods": 22,
+    "outflow_periods": 156,
     "user_data_versions": 2,
     "_transfer_classification_state": 1
    }
   },
   {
-   "reads": 44,
+   "reads": 48,
    "writes": 4,
    "audit_writes": 0,
    "reads_by": {
@@ -49968,7 +57095,7 @@
     "plaid_items": 3,
     "users": 2,
     "inflows": 4,
-    "outflows": 23,
+    "outflows": 27,
     "accounts": 6,
     "transactions": 2,
     "rules": 1
