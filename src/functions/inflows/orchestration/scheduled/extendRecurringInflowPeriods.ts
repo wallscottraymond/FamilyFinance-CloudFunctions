@@ -324,6 +324,7 @@ export async function extendInflowPeriodsFor(
       ),
       // A hidden income's periods are created hidden (as the outflow creator does since 2ae62e6):
       // a hard-coded false resurfaced hidden card-payment credits / internal transfers in the picker.
+      // An approved existing-behavior change (D30, 2026-10-16; f3fcf7a).
       isHidden: inflow.isHidden === true,
 
       // === MERCHANT INFO ===

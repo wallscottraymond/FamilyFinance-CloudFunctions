@@ -293,6 +293,8 @@ describe('Phase 1 robustness (emulator)', () => {
   // (measured on the emulator: 20 jobs; run at once, 11 of them each ran a full sync — a fast
   // identical re-sync releases the item lease before the next claim). Sequential duplicates
   // coalesce to one (test above).
+  // D29 (2026-10-16): deliberately NOT fixed in this project — the atomic coalesce in the shared
+  // job queue is its own project right after this one (own branch, tests, review).
   it.todo('20 CONCURRENT duplicate recurring webhooks → 1 sync run (needs an atomic coalesce in job_queue)');
 
   it('extra: flag on → off → on — the detector and the callable stop and resume; v2 behavior persists while off', async () => {

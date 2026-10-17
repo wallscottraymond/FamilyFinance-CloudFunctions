@@ -5,6 +5,9 @@
  * into any pending sync_item job for that item — including a non-recurring one (a webhook's), so
  * the recurring refresh was dropped and the bill never appeared. Now a recurring request only
  * merges into a recurring pending run; everything else merges as before.
+ *
+ * D30 (user-approved 2026-10-16): this is a deliberate existing-behavior change for ALL users — a
+ * dropped refresh is fixed at the cost of at most one extra sync in a burst.
  */
 import * as admin from 'firebase-admin';
 

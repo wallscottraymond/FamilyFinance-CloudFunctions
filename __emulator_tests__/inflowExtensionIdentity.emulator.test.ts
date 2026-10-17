@@ -7,7 +7,8 @@
  * (ids normalized, `createdAt` / `updatedAt` / `lastCalculated` are the injected `now` on both).
  *   - a plain income → byte-identical;
  *   - a hidden income (deliberate) → identical except `isHidden`, now copied from the income like
- *     the outflow creator does since 2ae62e6 (base: hard-coded false);
+ *     the outflow creator does since 2ae62e6 (base: hard-coded false) — user-approved (D30,
+ *     2026-10-16; f3fcf7a);
  *   - a removed income (D27, deliberate) → identical except `isActive`, which now follows the
  *     month rule inside the removal window (base: every new period active).
  * Its own year (2044); source periods are passed in, never stored.

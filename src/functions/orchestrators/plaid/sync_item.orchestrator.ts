@@ -94,7 +94,8 @@ export async function enqueue_item_sync(input: {
       trace_id: input.trace_id,
       // A recurring request never merges into a pending NON-recurring run (it would drop the
       // recurring refresh — e.g. "Track" on a review item would never create the bill). Anything
-      // else merges as before.
+      // else merges as before. A deliberate change for all users (D30, approved 2026-10-16): at
+      // most one extra sync in a burst.
       can_merge_into: async (pending) => !!pending.recurring || !input.recurring,
     }
   );
