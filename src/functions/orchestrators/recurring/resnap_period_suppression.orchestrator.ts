@@ -4,10 +4,14 @@
  * creators now apply: a sub-month period of a removed / paused / ended bill or income is active
  * when any of its occurrences is in a month that isn't suppressed (the derive's rule, b6a8281).
  *
- * Input: every ACTIVE bill / income that carries removal intervals (all users, or one). For each,
- * its periods are compared with the rule; only periods whose `isActive` is wrong are counted and —
- * with `write` — flipped, writing ONLY `isActive` (no `updatedAt`, nothing else). Inactive records
- * (account removed / stale) are never touched: their periods are inactive for another reason.
+ * Input: every ACTIVE bill / income that carries removal intervals (all users, or one). SCOPE
+ * (round 4 defect 4, `resnap_period_decision`): a period is flipped ONLY when it is still in the
+ * state the OLD whole-period rule gave it AND the month rule now differs — a period inactive (or
+ * active) for any other reason is left alone. With `write` the flip writes ONLY `isActive` (no
+ * `updatedAt`, nothing else). Inactive records (account removed / stale) are never touched.
+ * The dry run also reports, SEPARATELY and never flipped, periods stored active although both
+ * rules say inactive (old incomes' periods the old creators made active inside the removal
+ * window: `old_income_in_window_periods`; anything else of that kind: `other_in_window_periods`).
  * Dry run by default. Idempotent: a second run finds nothing.
  *
  * CLI: `scripts/resnap-period-suppression.js` (dry run; `--write`; `--user <uid>`). NOT run against
@@ -24,6 +28,11 @@ export interface ResnapUserCounts {
   outflow_periods_to_flip: number;
   inflows: number;
   inflow_periods_to_flip: number;
+  /** Not flipped (reported only): an OLD (unstamped) income's periods stored active inside its
+   *  removal window — the old creators never suppressed them. */
+  old_income_in_window_periods: number;
+  /** Not flipped (reported only): the same for bills and v2 incomes. */
+  other_in_window_periods: number;
 }
 
 export interface ResnapResult {
@@ -40,17 +49,25 @@ export async function resnap_period_suppression_orchestrator(
   const write = opts.write === true;
   const result: ResnapResult = { write, records_checked: 0, periods_flipped: 0, by_user: {} };
   const counts = (uid: string): ResnapUserCounts =>
-    (result.by_user[uid] ??= { outflows: 0, outflow_periods_to_flip: 0, inflows: 0, inflow_periods_to_flip: 0 });
+    (result.by_user[uid] ??= {
+      outflows: 0, outflow_periods_to_flip: 0, inflows: 0, inflow_periods_to_flip: 0,
+      old_income_in_window_periods: 0, other_in_window_periods: 0,
+    });
 
   for (const [kind, repo] of [["outflow", outflow_repo], ["inflow", inflow_repo]] as const) {
     const records = await repo.list_active_with_removal_intervals(ctx, opts.user_id);
     for (const r of records) {
       result.records_checked++;
+      const stats = { in_window_active: 0 };
       const n = await repo.apply_period_suppression(ctx, r.id, r.removal_intervals, r.owner_id, {
         dry_run: !write,
         touch_updated_at: false,
+        resnap: true,
+        stats,
       });
       const c = counts(r.owner_id);
+      if (kind === "inflow" && !r.v2) c.old_income_in_window_periods += stats.in_window_active;
+      else c.other_in_window_periods += stats.in_window_active;
       if (kind === "outflow") {
         c.outflows++;
         c.outflow_periods_to_flip += n;

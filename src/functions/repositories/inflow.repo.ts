@@ -25,6 +25,7 @@ import {
   RemovalInterval,
   RemovalMode,
   is_stored_period_active,
+  resnap_period_decision,
   stored_occurrence_due_ms,
 } from "../domain/recurring/recurring_suppression.service";
 import { record_audit_entry_async } from "../audit";
@@ -496,7 +497,15 @@ export const inflow_repo = {
     id: string,
     intervals: RemovalInterval[],
     user_id: string,
-    opts: { dry_run?: boolean; touch_updated_at?: boolean } = {}
+    opts: {
+      dry_run?: boolean;
+      touch_updated_at?: boolean;
+      /** The one-off re-snap's scope (round 4 defect 4, `resnap_period_decision`): flip only
+       *  periods still in the old whole-period rule's state where the month rule differs. */
+      resnap?: boolean;
+      /** Re-snap only: counts stored-active periods both rules say are inactive (not flipped). */
+      stats?: { in_window_active: number };
+    } = {}
   ): Promise<number> {
     const db = getFirestore();
     const snap = await db.collection("inflow_periods").where("inflowId", "==", id).get();
@@ -510,8 +519,16 @@ export const inflow_repo = {
       if (end_ms === undefined) continue;
       // D27: the derive's month rule (a sub-month period stays active while any of its
       // occurrences is in a month that isn't suppressed) — the picker matches the period page.
-      const next_active = is_stored_period_active(intervals, end_ms, stored_occurrence_due_ms(p));
-      if ((p.isActive !== false) === next_active) continue; // already in the right state
+      let next_active: boolean;
+      if (opts.resnap) {
+        const d = resnap_period_decision(intervals, end_ms, stored_occurrence_due_ms(p), p.isActive !== false);
+        if (d.in_window_active && opts.stats) opts.stats.in_window_active++;
+        if (!d.flip) continue;
+        next_active = d.next_active;
+      } else {
+        next_active = is_stored_period_active(intervals, end_ms, stored_occurrence_due_ms(p));
+        if ((p.isActive !== false) === next_active) continue; // already in the right state
+      }
       flipped++;
       if (opts.dry_run) continue;
       // The one-off re-snap writes ONLY the flag (`touch_updated_at: false`).
@@ -768,14 +785,15 @@ export const inflow_repo = {
   async list_active_with_removal_intervals(
     _ctx: TraceContext,
     user_id?: string
-  ): Promise<Array<{ id: string; owner_id: string; removal_intervals: RemovalInterval[] }>> {
+  ): Promise<Array<{ id: string; owner_id: string; removal_intervals: RemovalInterval[]; v2: boolean }>> {
     let q = getFirestore().collection(COLLECTION).where("isActive", "==", true);
     if (user_id) q = q.where("ownerId", "==", user_id);
-    const snap = await q.select("ownerId", "removalIntervals").get();
+    const snap = await q.select("ownerId", "removalIntervals", "captureRulesVersion").get();
     return snap.docs
       .map((d) => ({
         id: d.id,
         owner_id: String(d.get("ownerId") ?? ""),
+        v2: d.get("captureRulesVersion") === 2,
         removal_intervals: ((d.get("removalIntervals") ?? []) as Array<{ fromMs: number; toMs: number | null; mode: RemovalMode }>)
           .map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode })),
       }))

@@ -215,6 +215,29 @@ export function is_stored_period_active(
   return occurrence_due_ms.some((ms) => !is_payment_suppressed(intervals, ms));
 }
 
+/**
+ * The ONE-OFF re-snap's decision for one stored period (round 4 defect 4). The re-snap corrects
+ * only periods still in the state the OLD whole-period rule (judged by the period's end) gave them
+ * AND where the month rule now says otherwise — a period inactive or active for any OTHER reason
+ * (stored ≠ the old rule) is never touched. `in_window_active`: stored active although both rules
+ * say inactive (e.g. an old income's periods the old creators made active inside its removal
+ * window) — not flipped, reported separately by the dry run. PURE.
+ */
+export function resnap_period_decision(
+  intervals: RemovalInterval[] | undefined,
+  period_end_ms: number,
+  occurrence_due_ms: number[],
+  stored_active: boolean
+): { flip: boolean; next_active: boolean; in_window_active: boolean } {
+  const old_active = !intervals || intervals.length === 0 || !is_suppressed_in_period(intervals, period_end_ms);
+  const next_active = is_stored_period_active(intervals, period_end_ms, occurrence_due_ms);
+  return {
+    flip: stored_active === old_active && old_active !== next_active,
+    next_active,
+    in_window_active: stored_active && !old_active && !next_active,
+  };
+}
+
 /** The occurrence due dates a stored period doc carries (ms) — the legacy parallel array
  *  `occurrenceDueDates` or the `occurrences` objects' `dueDate`, whichever it has. PURE. */
 export function stored_occurrence_due_ms(doc: {

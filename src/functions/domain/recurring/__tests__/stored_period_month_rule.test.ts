@@ -8,6 +8,7 @@ import {
   is_payment_suppressed,
   is_stored_period_active,
   is_suppressed_in_period,
+  resnap_period_decision,
   stored_occurrence_due_ms,
 } from "../recurring_suppression.service";
 
@@ -86,5 +87,25 @@ describe("is_stored_period_active (D27)", () => {
     expect(stored_occurrence_due_ms({ occurrences: [{ dueDate: ts(3) }, { dueDate: null }] })).toEqual([3]);
     expect(stored_occurrence_due_ms({ occurrenceDueDates: [ts(3)], occurrences: [{ dueDate: ts(3) }] })).toEqual([3]);
     expect(stored_occurrence_due_ms({})).toEqual([]);
+  });
+});
+
+describe("round 4 defect 4 — the re-snap's scope (resnap_period_decision)", () => {
+  const removed: RemovalInterval[] = [{ from_ms: U(2037, 10, 1), to_ms: null, mode: "going_forward" }];
+  const straddle_end = week_end(2037, 9, 27);
+  it("flips only a period still in the OLD rule's state where the month rule differs", () => {
+    // Straddling week, stored inactive (old rule) with a Sep 29 occurrence → flip to active.
+    expect(resnap_period_decision(removed, straddle_end, [U(2037, 9, 29)], false)).toEqual({ flip: true, next_active: true, in_window_active: false });
+    // Same week already active (corrected, or never suppressed) → nothing.
+    expect(resnap_period_decision(removed, straddle_end, [U(2037, 9, 29)], true).flip).toBe(false);
+  });
+  it("a period inactive for another reason (both rules say active) is left alone", () => {
+    expect(resnap_period_decision(removed, U(2037, 9, 1) - 1, [U(2037, 8, 29)], false)).toEqual({ flip: false, next_active: true, in_window_active: false });
+  });
+  it("active inside the window (both rules inactive) → not flipped, reported", () => {
+    expect(resnap_period_decision(removed, U(2037, 11, 1) - 1, [U(2037, 10, 29)], true)).toEqual({ flip: false, next_active: false, in_window_active: true });
+  });
+  it("no intervals → never flips", () => {
+    expect(resnap_period_decision([], straddle_end, [], false)).toEqual({ flip: false, next_active: true, in_window_active: false });
   });
 });

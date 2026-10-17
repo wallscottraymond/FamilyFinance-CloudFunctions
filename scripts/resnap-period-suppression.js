@@ -16,9 +16,17 @@
 const path = require("path");
 const admin = require("firebase-admin");
 
-const WRITE = process.argv.includes("--write");
-const i = process.argv.indexOf("--user");
-const USER = i >= 0 ? process.argv[i + 1] : undefined;
+const { parse_resnap_args } = require("./resnap-args");
+
+let parsed;
+try {
+  parsed = parse_resnap_args(process.argv.slice(2));
+} catch (e) {
+  console.error(e.message);
+  process.exit(2);
+}
+const WRITE = parsed.write;
+const USER = parsed.user;
 
 if (!admin.apps.length) {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
@@ -40,7 +48,10 @@ const { resnap_period_suppression_orchestrator } = require(
   const r = await resnap_period_suppression_orchestrator({ trace_id: "resnap_cli", span_id: "cli" }, { write: WRITE, user_id: USER });
   for (const [uid, c] of Object.entries(r.by_user).sort()) {
     console.log(
-      `${uid}: bills ${c.outflows} → ${c.outflow_periods_to_flip} period(s); income ${c.inflows} → ${c.inflow_periods_to_flip} period(s)`
+      `${uid}: bills ${c.outflows} → ${c.outflow_periods_to_flip} period(s); income ${c.inflows} → ${c.inflow_periods_to_flip} period(s)` +
+        (c.old_income_in_window_periods || c.other_in_window_periods
+          ? `; NOT flipped, active inside a removal window: old income ${c.old_income_in_window_periods}, other ${c.other_in_window_periods}`
+          : "")
     );
   }
   console.log(`\nRecords checked: ${r.records_checked}; periods ${WRITE ? "flipped" : "to flip"}: ${r.periods_flipped}`);

@@ -216,7 +216,7 @@ describe('D27 — stored periods follow the month rule (emulator)', () => {
     }, 120000);
   }
 
-  it('the one-off re-snap: dry run by default, per-user counts, writes only isActive where it differs, idempotent', async () => {
+  it('the one-off re-snap: dry run by default, per-user counts, writes only isActive where it differs, idempotent; scoped to the old rule\'s state (round 4 test 4)', async () => {
     const owners = ['qzd27sa', 'qzd27sb'];
     const seedUser = async (owner: string, v2: boolean) => {
       // A removed bill + income whose stored periods were written under the OLD whole-period rule
@@ -237,6 +237,7 @@ describe('D27 — stored periods follow the month rule (emulator)', () => {
       });
       const OCT = months(MONTHS).find((m) => m.id === '2043M10')!;
       const SEP = months(MONTHS).find((m) => m.id === '2043M09')!;
+      const AUG = months(MONTHS).find((m) => m.id === '2043M08')!;
       const batch = db.batch();
       for (const kind of ['outflow', 'inflow'] as const) {
         const rid = `${owner}_${kind}`;
@@ -244,7 +245,9 @@ describe('D27 — stored periods follow the month rule (emulator)', () => {
         put(W_SEP27, false, [Date.UTC(2043, 8, 29)]); // WRONG under D27 → true
         put(W_OCT4, false, []); // right
         put(SEP, true, [Date.UTC(2043, 8, 29)]); // right
-        put(OCT, true, [Date.UTC(2043, 9, 29)]); // WRONG (both rules) → false
+        // Round 4 defect 4 — the re-snap flips ONLY periods still in the OLD whole-period rule's state:
+        put(OCT, true, [Date.UTC(2043, 9, 29)]); // active inside the window (both rules: inactive) → NOT flipped, reported
+        put(AUG, false, [Date.UTC(2043, 7, 29)]); // inactive for ANOTHER reason (both rules: active) → left alone
       }
       batch.set(db.collection('outflow_periods').doc(`${owner}_gone_${W_SEP27.id}`), period('outflow', `${owner}_gone`, W_SEP27 as any, false, [Date.UTC(2043, 8, 29)]));
       batch.set(db.collection('outflow_periods').doc(`${owner}_plain_${W_OCT4.id}`), period('outflow', `${owner}_plain`, W_OCT4 as any, false, []));
@@ -264,25 +267,29 @@ describe('D27 — stored periods follow the month rule (emulator)', () => {
     // Dry run (the default): counts per user, nothing written.
     const dry = await resnap(ctx(), { user_id: owners[0] });
     expect(dry.write).toBe(false);
-    expect(dry.by_user).toEqual({ [owners[0]]: { outflows: 1, outflow_periods_to_flip: 2, inflows: 1, inflow_periods_to_flip: 2 } });
+    // Old income's in-window period is reported on its own (not flipped); the old bill's under "other".
+    expect(dry.by_user).toEqual({ [owners[0]]: {
+      outflows: 1, outflow_periods_to_flip: 1, inflows: 1, inflow_periods_to_flip: 1, old_income_in_window_periods: 1, other_in_window_periods: 1,
+    } });
     expect(await snapshot()).toEqual(before);
     // All users, still a dry run: both test users reported with their counts (others may exist too).
     const all = await resnap(ctx(), {});
-    for (const owner of owners) {
-      expect(all.by_user[owner]).toEqual({ outflows: 1, outflow_periods_to_flip: 2, inflows: 1, inflow_periods_to_flip: 2 });
-    }
+    expect(all.by_user[owners[0]]).toEqual(dry.by_user[owners[0]]);
+    expect(all.by_user[owners[1]]).toEqual({ // v2 records: nothing is "old income"
+      outflows: 1, outflow_periods_to_flip: 1, inflows: 1, inflow_periods_to_flip: 1, old_income_in_window_periods: 0, other_in_window_periods: 2,
+    });
     expect(await snapshot()).toEqual(before);
 
     // Write, per user: only isActive changes, only where it was wrong.
     for (const owner of owners) {
       const w = await resnap(ctx(), { user_id: owner, write: true });
-      expect([w.write, w.periods_flipped]).toEqual([true, 4]);
+      expect([w.write, w.periods_flipped]).toEqual([true, 2]);
     }
     const after = await snapshot();
     const changed = Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k])).sort();
     expect(changed).toEqual(owners.flatMap((o) => ['outflow', 'inflow'].flatMap((k) => [
-      `${k}_periods/${o}_${k}_${W_SEP27.id}`, `${k}_periods/${o}_${k}_2043M10`,
-    ])).sort());
+      `${k}_periods/${o}_${k}_${W_SEP27.id}`,
+    ])).sort()); // never the in-window active OCT nor the otherwise-inactive AUG
     for (const k of changed) {
       const { isActive: a, ...rest_a } = before[k] as any;
       const { isActive: b, ...rest_b } = after[k] as any;
