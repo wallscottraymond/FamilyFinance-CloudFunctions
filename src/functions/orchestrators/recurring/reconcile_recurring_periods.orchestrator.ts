@@ -38,6 +38,7 @@ import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import {
   is_stored_period_active,
+  is_suppressed_in_period,
 } from "../../domain/recurring/recurring_suppression.service";
 
 export interface ReconcileRecurringPeriodInput {
@@ -98,8 +99,18 @@ export async function reconcile_recurring_periods_orchestrator(
     const activate = new Map<string, (typeof resolved.periods)[number]>();
     for (const type of new Set([...periods_by_type.keys(), ...inactive_by_type.keys()])) {
       const type_periods = periods_by_type.get(type) ?? [];
+      // Round 5 defect 5: an inactive period is turned on only when the removal is WHY it is off
+      // (suppressed as a whole, no occurrence in a kept month) — one off for any other reason stays
+      // off, and the payment is placed as any other.
+      const off_by_id = new Map((inactive_by_type.get(type) ?? []).map((p) => [p.period_id, p]));
+      const carriable = (period_id: string): boolean => {
+        const off = off_by_id.get(period_id);
+        return !off || (is_suppressed_in_period(intervals!, off.end_ms) &&
+          !is_stored_period_active(intervals, off.end_ms, off.occurrence_due_dates_ms));
+      };
       const carried = intervals?.length
         ? carried_payments([...type_periods, ...(inactive_by_type.get(type) ?? [])], resolved.splits, intervals)
+          .filter((c) => carriable(c.period_id))
         : [];
       const carried_idx = new Set(carried.map((c) => c.index));
       for (const c of carried) {
@@ -110,7 +121,7 @@ export async function reconcile_recurring_periods_orchestrator(
         const list = carried_into.get(c.period_id) ?? [];
         list.push({ due_ms: c.carried_due_ms, payment_ms: s.date_ms });
         carried_into.set(c.period_id, list);
-        const off = (inactive_by_type.get(type) ?? []).find((p) => p.period_id === c.period_id);
+        const off = off_by_id.get(c.period_id);
         if (off) activate.set(off.period_id, off);
       }
       if (type_periods.length === 0) continue;

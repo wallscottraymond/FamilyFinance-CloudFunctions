@@ -127,4 +127,30 @@ describe('round 5 — stored periods carry what the page\'s matcher assigns (emu
     expect(stored_counts(await period(bill, '2042M09'))).toEqual(derived_counts(m, bill, '2042M09'));
     expect((await period(bill, WEEKS.find((x) => x.start === Date.UTC(2042, 8, 28))!.id))?.carryActive ?? false).toBe(false);
   }, 240000);
+
+  describe('test 5: an early payment never turns on a period that is off for another reason', () => {
+    const W_SEP28 = () => WEEKS.find((x) => x.start === Date.UTC(2042, 8, 28))!.id;
+    const ERL = { paid: [U12(8, 1), U12(9, 1), U12(9, 29)], frequency: 'MONTHLY', next_ms: U12(11, 1) };
+
+    it('a STALE (inactive) record: the straddling week stays off, nothing marked', async () => {
+      const { uid, bill } = await billUser('qzr5t5a', false, ERL);
+      await removeFromOct(uid, bill);
+      await db.collection('outflows').doc(bill).update({ isActive: false }); // stale-marked / stopped
+      await runReconcile(uid, bill);
+      const wk = await period(bill, W_SEP28());
+      expect([wk?.isActive, wk?.carryActive ?? false]).toEqual([false, false]);
+    }, 240000);
+
+    it('a live record whose Sep month is off for another reason: it stays off (not carryActive)', async () => {
+      const { uid, bill } = await billUser('qzr5t5b', false, ERL);
+      await removeFromOct(uid, bill);
+      await db.collection('outflow_periods').doc(`${bill}_2042M09`).update({ isActive: false }); // e.g. stale rule / manual
+      await runReconcile(uid, bill);
+      const sep = await period(bill, '2042M09');
+      expect([sep?.isActive, sep?.carryActive ?? false]).toEqual([false, false]);
+      // …while the week the removal turned off IS turned on by the carried payment (the rule still works).
+      const wk = await period(bill, W_SEP28());
+      expect([wk?.isActive, wk?.carryActive]).toEqual([true, true]);
+    }, 240000);
+  });
 });

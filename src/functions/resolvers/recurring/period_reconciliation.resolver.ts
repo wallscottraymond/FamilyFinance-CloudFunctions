@@ -167,7 +167,11 @@ export async function resolve_recurring_reconciliation(
   };
   const periods: ResolvedReconciliationPeriod[] = period_docs.filter(({ data }) => data.isActive !== false).map(to_period);
   const removal_intervals_all = (recurring as { removal_intervals?: RemovalInterval[] }).removal_intervals;
-  const inactive_periods: ResolvedReconciliationPeriod[] = removal_intervals_all?.length
+  // Round 5 defect 5: only a LIVE item carries (a stale / stopped / hidden one shows nowhere on the
+  // period page — nothing of it may be turned on).
+  const record_live =
+    (recurring as { is_active?: boolean }).is_active !== false && (recurring as { is_hidden?: boolean }).is_hidden !== true;
+  const inactive_periods: ResolvedReconciliationPeriod[] = removal_intervals_all?.length && record_live
     ? period_docs.filter(({ data }) => data.isActive === false).map(to_period)
     : [];
 
