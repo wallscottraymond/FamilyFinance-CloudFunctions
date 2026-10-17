@@ -1041,6 +1041,27 @@ export const inflow_repo = {
     /* eslint-enable @typescript-eslint/naming-convention */
   },
 
+  /** Does this inflow have any stored period? (A resumed convert generates them only when none exist.) */
+  async has_periods(_ctx: TraceContext, id: string): Promise<boolean> {
+    const snap = await getFirestore().collection("inflow_periods").where("inflowId", "==", id).limit(1).select().get();
+    return !snap.empty;
+  },
+
+  /**
+   * Stamp "the convert's retro-link finished" on a converted record. Stamped with the creator's run
+   * id so the update trigger leaves the bump to the creator (no second bump, no reconcile).
+   */
+  async mark_retro_linked(_ctx: TraceContext, id: string, at_ms: number, run_id: string): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      retroLinkedAtMs: at_ms,
+      syncRunId: run_id,
+      lastWriteSource: "convert",
+      updatedAt: Timestamp.now(),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
   /**
    * Soft-deletes an inflow.
    */

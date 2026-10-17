@@ -41,14 +41,23 @@ export type WindowTxns = Awaited<ReturnType<typeof transaction_repo.get_active_i
  */
 export function create_window_txn_loader(
   ctx: TraceContext,
-  user_id: string
+  user_id: string,
+  /** One read of the user's transactions covering [lo_ms, hi_ms]: any window inside it is sliced
+   *  from memory instead of read (a convert touches ~100 windows of one year). Windows outside
+   *  it fall back to the per-window read. Same rows, same order. */
+  preloaded?: { lo_ms: number; hi_ms: number; txns: WindowTxns }
 ): (start_ms: number, end_ms: number) => Promise<WindowTxns> {
   const memo = new Map<string, Promise<WindowTxns>>();
   return (start_ms, end_ms) => {
     const key = `${start_ms}:${end_ms}`;
     let p = memo.get(key);
     if (!p) {
-      p = transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
+      p = preloaded && start_ms >= preloaded.lo_ms && end_ms <= preloaded.hi_ms
+        ? Promise.resolve(preloaded.txns.filter((t) => {
+          const d = (t.data.transactionDate as Timestamp).toMillis();
+          return d >= start_ms && d <= end_ms;
+        }))
+        : transaction_repo.get_active_in_date_range(ctx, user_id, start_ms, end_ms);
       memo.set(key, p);
     }
     return p;

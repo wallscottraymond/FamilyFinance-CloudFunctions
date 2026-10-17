@@ -715,6 +715,31 @@ export const transaction_repo = {
   },
 
   /**
+   * A user's ACTIVE transactions of one vendor from `from_ms` on, newest first, capped. Uses the
+   * existing composite index `(userId, isActive, vendorKey, transactionDate DESC)`; the caller
+   * filters the account in memory (no new index). Reads one doc per row returned — the cap bounds
+   * the busiest vendor. A transaction written before `vendorKey` was stored isn't found here.
+   */
+  async get_by_vendor_key(
+    _ctx: TraceContext,
+    user_id: string,
+    vendor_key: string,
+    from_ms: number,
+    limit = 600
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("userId", "==", user_id)
+      .where("isActive", "==", true)
+      .where("vendorKey", "==", vendor_key)
+      .where("transactionDate", ">=", Timestamp.fromMillis(from_ms))
+      .orderBy("transactionDate", "desc")
+      .limit(limit)
+      .get();
+    return snapshot.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
+  },
+
+  /**
    * Manually PIN a split to a recurring bill (outflow) or CLEAR the pin (outflow_id
    * = null), or DETACH it from bills (`outflow_id = null` + `detach`: a manual pin to
    * "none" — "remove from bill" — that beats auto/stream re-linking; see

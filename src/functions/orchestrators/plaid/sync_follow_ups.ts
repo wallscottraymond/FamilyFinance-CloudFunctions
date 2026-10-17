@@ -114,7 +114,11 @@ const RECONCILE_CONCURRENCY = 4;
 export async function run_sync_follow_ups(
   ctx: TraceContext,
   user_id: string,
-  f: SyncFollowUps
+  f: SyncFollowUps,
+  opts?: {
+    /** Read the user's transactions across all the affected budget periods once (a convert). */
+    preload_budget_window?: boolean;
+  }
 ): Promise<void> {
   const started = Date.now();
 
@@ -159,6 +163,7 @@ export async function run_sync_follow_ups(
         user_id,
         budget_ids,
         dates_ms_by_budget: f.budget_dates,
+        ...(opts?.preload_budget_window ? { preload_window: true } : {}),
       });
     } catch (error) {
       console.error(`[${ctx.trace_id}] follow-up recompute failed; queued a full recompute instead:`, error);

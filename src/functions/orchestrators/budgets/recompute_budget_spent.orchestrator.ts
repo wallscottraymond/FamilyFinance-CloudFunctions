@@ -28,6 +28,11 @@ import {
   create_window_txn_loader,
 } from "../../resolvers/budgets/budget_spend.resolver";
 import { create_job_if_not_exists } from "../../infrastructure/job_queue";
+import { transaction_repo } from "../../repositories/transaction.repo";
+import { TRANSFER_PAIRING_BUFFER_MS } from "../../domain/periods/edge_transfers.service";
+
+/** Budgets recomputed at once (their reads overlap; shared windows are read once). */
+const BUDGET_CONCURRENCY = 4;
 
 /** Payload from the assignment engine's fan-out. */
 export interface RecomputeBudgetSpentInput {
@@ -45,6 +50,12 @@ export interface RecomputeBudgetSpentInput {
    * budget's periods containing ANY of its dates, in one job — instead of one job per day.
    */
   dates_ms_by_budget?: Record<string, number[]>;
+  /**
+   * Read the user's transactions across ALL the affected periods ONCE and slice each window from
+   * memory (a convert touches ~100 windows of one year; each was its own read). Opt-in: callers
+   * that don't pass it read exactly as before.
+   */
+  preload_window?: boolean;
 }
 
 function round2(value: number): number {
@@ -66,10 +77,9 @@ export async function recompute_budget_spent_orchestrator(
   try {
     const affected_period_ids: string[] = [];
     let periods_updated = 0;
-    // One read per distinct period window for the whole job (budgets share windows).
-    const load_txns = create_window_txn_loader(ctx, input.user_id);
 
-    for (const budget_id of input.budget_ids) {
+    // GATHER (reads only, budgets in parallel): each budget's cadence + the periods to recompute.
+    const gather = async (budget_id: string) => {
       // Read the budget once: its `period` selects which split-lens field spend is
       // matched on (monthly→monthlyBudgetId, weekly→weeklyBudgetId, …), applied to
       // ALL its periods (prime + non-prime). Reused for the rollover gate below.
@@ -78,7 +88,7 @@ export async function recompute_budget_spent_orchestrator(
       // the user's own transactions, so it would store a partial number. Group views derive
       // their budgets on read — leave the group budget's stored mirror alone.
       if (budget && String(budget.user_id ?? "").startsWith("group:")) {
-        continue;
+        return null;
       }
       const cadence = budget
         ? budget_cadence_to_instance(budget.period)
@@ -103,10 +113,27 @@ export async function recompute_budget_spent_orchestrator(
           : input.transaction_date_ms === undefined
             ? periods
             : periods.filter(contains(input.transaction_date_ms));
-      if (affected.length === 0) {
-        continue;
-      }
+      return affected.length === 0 ? null : { budget_id, budget, cadence, affected };
+    };
+    const gathered: Array<NonNullable<Awaited<ReturnType<typeof gather>>>> = [];
+    for (let i = 0; i < input.budget_ids.length; i += BUDGET_CONCURRENCY) {
+      const chunk = await Promise.all(input.budget_ids.slice(i, i + BUDGET_CONCURRENCY).map(gather));
+      for (const g of chunk) if (g) gathered.push(g);
+    }
 
+    // One read per distinct period window for the whole job (budgets share windows) — or, in
+    // preload mode, ONE read covering every affected period (± the transfer-pairing slack).
+    let preloaded: Parameters<typeof create_window_txn_loader>[2];
+    if (input.preload_window && gathered.length > 0) {
+      const all = gathered.flatMap((g) => g.affected);
+      const lo_ms = Math.min(...all.map((p) => p.start_date.toMillis())) - TRANSFER_PAIRING_BUFFER_MS;
+      const hi_ms = Math.max(...all.map((p) => p.end_date.toMillis())) + TRANSFER_PAIRING_BUFFER_MS;
+      preloaded = { lo_ms, hi_ms, txns: await transaction_repo.get_active_in_date_range(ctx, input.user_id, lo_ms, hi_ms) };
+    }
+    const load_txns = create_window_txn_loader(ctx, input.user_id, preloaded);
+
+    // COMPUTE + WRITE (budgets in parallel; windows are memoized, so shared reads happen once).
+    const apply = async ({ budget_id, budget, cadence, affected }: (typeof gathered)[number]) => {
       const updates: Array<{
         id: string;
         spent: number;
@@ -171,6 +198,9 @@ export async function recompute_budget_spent_orchestrator(
           rollover_error
         );
       }
+    };
+    for (let i = 0; i < gathered.length; i += BUDGET_CONCURRENCY) {
+      await Promise.all(gathered.slice(i, i + BUDGET_CONCURRENCY).map(apply));
     }
 
     // (user_summaries build retired)

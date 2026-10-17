@@ -35,6 +35,9 @@ export type ReviewAnswer =
   | "it_ended"
   | "keep_separate"
   | "same_bill"
+  /** The user made the vendor a bill / income by hand ("Make this a bill"): fulfils and creates
+   *  NOTHING — a Plaid stream of the vendor on another account must not make a second bill. */
+  | "converted"
   | "matured"
   | "auto_active"
   | "account_removed"
@@ -290,6 +293,8 @@ export interface ReviewStateChange {
   add_suppressed?: string[];
   remove_suppressed?: string[];
   add_dismissed_vendor_keys?: string[];
+  /** Forget a "Not a bill" memory (the user converted the vendor after all). */
+  remove_dismissed_vendor_keys?: string[];
   detector_last_run_day?: string;
   /** Track answers waiting for their bill (defect 4); an item id already pending is replaced. */
   add_pending_tracks?: PendingTrack[];
@@ -315,7 +320,8 @@ export function apply_review_state_change(
   const have = new Set(base.suppressed_txn_ids.filter((id) => !remove.has(id)));
   for (const id of change.add_suppressed ?? []) have.add(id);
   const suppressed = cap_suppressed_ids([...have]);
-  const dismissed = [...base.dismissed_vendor_keys];
+  const forget = new Set(change.remove_dismissed_vendor_keys ?? []);
+  const dismissed = base.dismissed_vendor_keys.filter((k) => !forget.has(k));
   const have_d = new Set(dismissed);
   for (const k of change.add_dismissed_vendor_keys ?? []) {
     if (!have_d.has(k)) {

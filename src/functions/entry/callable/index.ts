@@ -44,6 +44,9 @@ export { list_suppressed_recurring } from "./list_suppressed_recurring.entry";
 export { set_occurrence_settled } from "./set_occurrence_settled.entry";
 export { answer_recurring_review_item } from "./answer_recurring_review_item.entry";
 export { assign_split_to_inflow } from "./assign_split_to_inflow.entry";
+export { convert_transaction_to_recurring } from "./convert_transaction_to_recurring.entry";
+export { preview_convert_transaction } from "./preview_convert_transaction.entry";
+export { get_recurring_capabilities } from "./get_recurring_capabilities.entry";
 
 // Derive-On-Read Period Architecture (Phase 3): bill/income view derivation
 export { derive_recurring_view } from "./derive_recurring_view.entry";

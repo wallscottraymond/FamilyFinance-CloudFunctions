@@ -31,6 +31,7 @@ const DEPLOY_SET = [
   // Phase 2 (convert backend): the callables. The assignment engine is bundled into ~15 functions —
   // an OLD instance would clobber a manual income pin (merge_assignment), so the whole set deploys
   // from one commit.
+  "convert_transaction_to_recurring", "preview_convert_transaction", "get_recurring_capabilities",
   "assign_split_to_inflow",
 ];
 const DERIVE_FUNCTIONS = DEPLOY_SET.filter((f) => f.startsWith("derive_")).concat("widget_snapshot");

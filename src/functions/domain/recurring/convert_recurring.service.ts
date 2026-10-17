@@ -23,6 +23,7 @@ import { CAPTURE_RULES_VERSION } from "./capture_rules";
 import { LATE_PAYMENT_MAX_MS } from "./late_payment.service";
 import { normalize_frequency } from "./frequency";
 import type { RemovalInterval } from "./recurring_suppression.service";
+import { apply_inflow_pin_to_split } from "./inflow_pin.service";
 
 export type ConvertDirection = "outflow" | "inflow";
 
@@ -375,6 +376,25 @@ export function guess_schedule(dates_ms: number[], now_ms: number): ScheduleGues
     next = step_cadence(last, frequency, n);
   }
   return { frequency, median_gap_days: g, next_due_ms: next };
+}
+
+/**
+ * Pin the source split to the new record (pure). A bill is pinned like the manual bill pin; an
+ * income like the manual income pin (`apply_inflow_pin_to_split`). A "remove from bill" detach on
+ * the split is replaced: converting is the user's explicit choice.
+ */
+export function apply_source_pin(split: Record<string, unknown>, direction: ConvertDirection, id: string): Record<string, unknown> {
+  if (direction === "inflow") return apply_inflow_pin_to_split(split, id);
+  /* eslint-disable @typescript-eslint/naming-convention */
+  return {
+    ...split,
+    outflowId: id,
+    outflowAssignmentSource: "manual",
+    outflowPinnedPeriodId: null,
+    inflowId: null,
+    suspendedOutflowPinId: null,
+  };
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 // ── The record both convert and Add Bill / Add Income build ────────────────
