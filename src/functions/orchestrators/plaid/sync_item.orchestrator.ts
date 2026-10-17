@@ -159,6 +159,8 @@ async function run_round(
   let follow_ups: SyncFollowUps = empty_follow_ups();
   const streams_written: RecurringWrittenDoc[] = [];
   const newly_suppressed = new Set<string>();
+  const newly_absorbed = new Set<string>();
+  const absorbing = new Map<string, "outflow" | "inflow">();
 
   const sync_recurring = async (): Promise<boolean> => {
     const r = await sync_recurring_orchestrator(
@@ -172,6 +174,8 @@ async function run_round(
     );
     streams_written.push(...r.written);
     for (const id of r.newly_suppressed_plaid_ids ?? []) newly_suppressed.add(id);
+    for (const id of r.newly_absorbed_plaid_ids ?? []) newly_absorbed.add(id);
+    for (const a of r.absorbing_records ?? []) absorbing.set(a.id, a.direction);
     // A "Track" whose stream is gone from this item was handed to the user's other items (round 4
     // defect 2): re-sync them now so one with a live stream of the vendor creates the bill.
     for (const other of r.handoff_item_doc_ids ?? []) {
@@ -240,6 +244,17 @@ async function run_round(
   if (newly_suppressed.size > 0) {
     const relinked = await assign_by_plaid_ids(ctx, input.user_id, run_id, [...newly_suppressed]);
     follow_ups = merge_follow_ups(follow_ups, follow_ups_from_written(relinked));
+  }
+
+  // 4c. Payments a converted record just absorbed (D42): re-assign the stored ones so the engine's
+  //     stream map links them now, and reconcile the absorbing records in the follow-up pass.
+  if (newly_absorbed.size > 0) {
+    const relinked = await assign_by_plaid_ids(ctx, input.user_id, run_id, [...newly_absorbed]);
+    follow_ups = merge_follow_ups(follow_ups, {
+      ...follow_ups_from_written(relinked),
+      outflow_ids: [...absorbing].filter(([, d]) => d === "outflow").map(([id]) => id),
+      inflow_ids: [...absorbing].filter(([, d]) => d === "inflow").map(([id]) => id),
+    });
   }
 
   // 5. ONE follow-up pass for everything this round wrote.

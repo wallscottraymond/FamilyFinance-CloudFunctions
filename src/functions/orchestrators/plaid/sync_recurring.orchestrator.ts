@@ -164,6 +164,9 @@ export async function sync_recurring_orchestrator(
   review_items_written?: number;
   /** Other Plaid items a "Track" was handed to (round 4 defect 2): the item sync re-syncs them. */
   handoff_item_doc_ids?: string[];
+  /** Plaid payments newly claimed by a converted record's absorb — the item sync re-assigns them. */
+  newly_absorbed_plaid_ids?: string[];
+  absorbing_records?: Array<{ id: string; direction: "outflow" | "inflow" }>;
 }> {
   const written: RecurringWrittenDoc[] = [];
   const start_time = Date.now();
@@ -318,10 +321,13 @@ export async function sync_recurring_orchestrator(
     ...stale_candidates.stale_inflow_ids.map((id) => record_by_id.get(id)),
   ].filter((r): r is CaptureRecordInfo => !!r);
   const flag_on = await is_convert_to_recurring_enabled(ctx.user_id);
+  // A converted record (v2 + manual + vendor key) absorbs a matching new stream whatever the flag
+  // says (D16 / D42), so it also needs the planner. +1 review read per sync, only for those users.
   const planner_needed =
     flag_on ||
     [...existing_records.values()].some((r) => r.v2) ||
-    stale_records.some((r) => r.v2);
+    stale_records.some((r) => r.v2) ||
+    deps.active_records.some((r) => r.v2 && r.source === "manual" && !!r.vendor_key);
 
   let plan: CapturePlan = {
     save_outflows: valid_outflows,
@@ -349,7 +355,10 @@ export async function sync_recurring_orchestrator(
     review_context = await resolve_capture_review_context(
       create_child_span(ctx),
       ctx.user_id,
-      review_ids_for_sync(ctx.user_id, streams, [...existing_records.values(), ...stale_records]),
+      review_ids_for_sync(
+        ctx.user_id, streams, [...existing_records.values(), ...stale_records],
+        new Set(deps.active_records.flatMap((r) => (r.absorbed_streams ?? []).filter((a) => a.state === "absorbed").map((a) => a.stream_id)))
+      ),
       deps.plaid_item.doc_id
     );
     const plan_input = {
@@ -433,6 +442,25 @@ export async function sync_recurring_orchestrator(
       console.error(`[${ctx.trace_id}] Error saving outflows:`, error_msg);
       errors.push(`Outflow save error: ${error_msg}`);
       failed_save_directions.add("outflow");
+    }
+  }
+
+  // 7c. ABSORBS (D42): a converted record takes a new stream that is its own bill — one stamped
+  //     write per record, only when something changed; a failure drops what depended on it.
+  const newly_absorbed_plaid_ids = new Set<string>();
+  const absorbing_records: Array<{ id: string; direction: "outflow" | "inflow" }> = [];
+  for (const a of plan.absorbs ?? []) {
+    try {
+      const repo = a.direction === "outflow" ? outflow_repo : inflow_repo;
+      await repo.record_absorbed(create_child_span(ctx), a.record_id, a.streams, a.txn_ids, opts?.run_id ?? ctx.trace_id);
+      perf.writes++;
+      for (const id of a.added_txn_ids) newly_absorbed_plaid_ids.add(id);
+      absorbing_records.push({ id: a.record_id, direction: a.direction });
+    } catch (error) {
+      const error_msg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[${ctx.trace_id}] Error recording absorb on ${a.record_id}:`, error_msg);
+      errors.push(`Absorb error: ${error_msg}`);
+      failed_save_directions.add(a.direction);
     }
   }
 
@@ -595,6 +623,7 @@ export async function sync_recurring_orchestrator(
   return {
     ...response, written, newly_suppressed_plaid_ids: newly_suppressed, review_items_written,
     ...(plan.handoff_item_doc_ids?.length ? { handoff_item_doc_ids: plan.handoff_item_doc_ids } : {}),
+    ...(newly_absorbed_plaid_ids.size ? { newly_absorbed_plaid_ids: [...newly_absorbed_plaid_ids], absorbing_records } : {}),
   };
 }
 

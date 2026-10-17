@@ -34,6 +34,7 @@ import {
   ConvertEntityView,
   carried_convert_fields,
   map_convert_fields_to_entity,
+  absorbed_streams_to_doc,
 } from "./convert_doc_fields";
 import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
 import {
@@ -142,6 +143,8 @@ export interface Outflow {
   absorbed_txn_ids?: string[];
   retro_txn_ids?: string[];
   retro_linked_at_ms?: number | null;
+  /** The schedule the user picked when tracking a suggestion (D8). */
+  user_frequency?: string | null;
   /** Set on a record merged into another (D7 / D22 / D41): what undo needs. */
   merge_log?: ConvertEntityView["merge_log"];
 
@@ -313,6 +316,7 @@ function map_to_entity(doc: LegacyOutflowDoc): Outflow {
     plaid_inactive_ack_at_ms: doc.plaidInactiveAckAt?.toMillis?.() ?? null,
     merged_into_id: doc.mergedIntoId ?? null,
     ...map_convert_fields_to_entity(doc),
+    user_frequency: doc.userFrequency ?? null,
 
     last_synced_at: doc.lastSyncedAt,
   };
@@ -1033,6 +1037,29 @@ export const outflow_repo = {
       ref: doc_ref(entity.id),
       data: { ...doc, syncRunId: run_id, lastWriteSource: "convert" } as unknown as Record<string, unknown>,
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
+
+  /**
+   * Record what an absorb changed on a converted outflow (D42): its absorbed streams and their payment
+   * ids — nothing else, never Plaid's numbers. Stamped with the sync run so the update trigger
+   * neither bumps nor reconciles (the sync does both once).
+   */
+  async record_absorbed(
+    _ctx: TraceContext,
+    id: string,
+    streams: import("../domain/recurring/convert_recurring.service").AbsorbedStream[],
+    txn_ids: string[],
+    run_id: string
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({
+      absorbedStreams: absorbed_streams_to_doc(streams),
+      absorbedTxnIds: txn_ids,
+      syncRunId: run_id,
+      lastWriteSource: "plaid_sync",
+      updatedAt: Timestamp.now(),
+    });
     /* eslint-enable @typescript-eslint/naming-convention */
   },
 

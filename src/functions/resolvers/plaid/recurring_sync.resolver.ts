@@ -145,6 +145,12 @@ export interface CaptureRecordInfo {
   transaction_ids: string[];
   /** The user's own name for it (wins over Plaid's merchant / description in `name`). */
   custom_name?: string | null;
+  // Convert-To-Recurring Phase 2 (absent on every record that predates it).
+  vendor_key?: string | null;
+  expected_amount_override?: number | null;
+  user_frequency?: string | null;
+  absorbed_streams?: import("../../domain/recurring/convert_recurring.service").AbsorbedStream[];
+  absorbed_txn_ids?: string[];
 }
 
 // ============================================================================
@@ -177,6 +183,11 @@ export function to_capture_record_info(
     last_date: unknown;
     removal_intervals: Array<{ from_ms: number; to_ms: number | null; mode: string }>;
     transaction_ids: string[];
+    vendor_key?: string | null;
+    expected_amount_override?: number | null;
+    user_frequency?: string | null;
+    absorbed_streams?: import("../../domain/recurring/convert_recurring.service").AbsorbedStream[];
+    absorbed_txn_ids?: string[];
   },
   direction: "outflow" | "inflow",
   merchant_name: string | null
@@ -205,6 +216,11 @@ export function to_capture_record_info(
     removal_intervals: r.removal_intervals ?? [],
     transaction_ids: r.transaction_ids ?? [],
     custom_name: r.user_custom_name ?? null,
+    ...(r.vendor_key ? { vendor_key: r.vendor_key } : {}),
+    ...(r.expected_amount_override != null ? { expected_amount_override: r.expected_amount_override } : {}),
+    ...(r.user_frequency ? { user_frequency: r.user_frequency } : {}),
+    ...(r.absorbed_streams?.length ? { absorbed_streams: r.absorbed_streams } : {}),
+    ...(r.absorbed_txn_ids?.length ? { absorbed_txn_ids: r.absorbed_txn_ids } : {}),
   };
 }
 

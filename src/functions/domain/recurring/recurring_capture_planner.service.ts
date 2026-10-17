@@ -57,6 +57,8 @@ import {
 } from "./review_item.service";
 import { is_currently_suppressed, RemovalInterval } from "./recurring_suppression.service";
 import { find_replaced_record } from "./same_bill.service";
+import type { AbsorbedStream } from "./convert_recurring.service";
+import { AbsorbWrite, find_absorber, plan_absorb } from "./absorb.service";
 
 /** A stored record as the planner sees it (see `CaptureRecordInfo` in the sync resolver). */
 export interface PlannerRecord {
@@ -84,6 +86,12 @@ export interface PlannerRecord {
   transaction_ids: string[];
   /** The user's own name for it (wins over Plaid's merchant / description in `name`). */
   custom_name?: string | null;
+  // Convert-To-Recurring Phase 2 (absent on every record that predates it).
+  vendor_key?: string | null;
+  expected_amount_override?: number | null;
+  user_frequency?: string | null;
+  absorbed_streams?: AbsorbedStream[];
+  absorbed_txn_ids?: string[];
 }
 
 /** One Plaid stream of the response (identified; on an active account). */
@@ -162,6 +170,8 @@ export interface CapturePlan {
   wants_other_items?: boolean;
   /** Other Plaid items a track was just handed to: the caller re-syncs them now. */
   handoff_item_doc_ids?: string[];
+  /** Converted records that absorb a stream this sync (D42): one stamped write each. */
+  absorbs?: AbsorbWrite[];
 }
 
 /** The state / item changes that follow from saving one stream's record. */
@@ -227,12 +237,16 @@ export function drop_failed_saves(plan: CapturePlan, failed: Set<ReviewDirection
 export function review_ids_for_sync(
   user_id: string,
   streams: PlannerStream[],
-  records: PlannerRecord[]
+  records: PlannerRecord[],
+  /** Streams a converted record already absorbed: they never get a tile or a question, so their
+   *  two item ids are not looked up on every sync (a missing doc is still billed). */
+  absorbed_stream_ids: ReadonlySet<string> = new Set()
 ): string[] {
   const ids = new Set<string>();
   const has_record = new Set(records.map((r) => r.id));
   for (const s of streams) {
     if (has_record.has(s.stream_id)) continue; // suggested / same-bill only apply to NEW streams
+    if (absorbed_stream_ids.has(s.stream_id)) continue;
     ids.add(build_review_item_id(user_id, "suggested", suggested_subject(s.direction, stream_vendor(s))));
     ids.add(build_review_item_id(user_id, "same_bill", s.stream_id));
   }
@@ -455,6 +469,8 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   const item_at = (kind: ReviewItem["kind"], subject: string) =>
     input.review_items.get(build_review_item_id(input.user_id, kind, subject));
   const suggest_candidates: SuggestCandidate[] = [];
+  const in_response_stream_ids = new Set(input.streams.map((x) => x.stream_id));
+  const absorb_writes = new Map<string, AbsorbWrite>();
   const matured = new Map<string, { item: ReviewItem; s: PlannerStream }>();
   const base_change: BaseChange = { add_suppressed: [], remove_suppressed: [], remove_pending_track_ids: [] };
   const effects = new Map<string, SaveEffect>();
@@ -533,6 +549,23 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
 
     // ── New stream.
     if (!s.entity) continue; // rejected and no record: nothing to do (as today)
+    // Absorb, never save (D3 / D42): the same bill as a converted record → recorded on it, not saved.
+    // Independent of the flag (D16: the record decides).
+    const absorber = find_absorber(s, stream_vendor(s), same_bill_pool);
+    if (absorber) {
+      const taken = plan_absorb(absorber, s, input.now_ms, in_response_stream_ids, absorb_writes.get(absorber.id));
+      if (taken !== "declined" && taken !== "full") {
+        if (taken) absorb_writes.set(absorber.id, taken);
+        // The stream counts as handled: its held-out payments are released and a pending track of
+        // the vendor is fulfilled — as if its bill had been saved.
+        saved_ids.add(s.stream_id);
+        const subject = suggested_subject(s.direction, stream_vendor(s));
+        if (!saved_by_subject.has(subject)) saved_by_subject.set(subject, s);
+        effect(s).release.push(...s.transaction_ids);
+        continue;
+      }
+      // declined (the user undid the absorb) or no room: the stream is handled as any new stream
+    }
     if (!input.flag_on) {
       save(s, s.entity); // today's handling (no stamp)
       continue;
@@ -800,6 +833,7 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   }
 
   // Ids both suppressed and saved this round end saved (stream membership wins).
+  if (absorb_writes.size > 0) plan.absorbs = [...absorb_writes.values()].sort((a, b) => (a.record_id < b.record_id ? -1 : 1));
   plan.base_change = base_change;
   plan.save_effects = [...effects.values()];
   plan.state_change = compose_state_change(base_change, plan.save_effects);
