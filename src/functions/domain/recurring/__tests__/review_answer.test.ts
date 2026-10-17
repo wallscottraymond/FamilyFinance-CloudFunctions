@@ -48,8 +48,10 @@ describe("plan_review_answer", () => {
   });
 
   it("Phase 2 answers and wrong answers are refused", () => {
-    expect(plan_review_answer(item({ source: "detector" }), "track", NOW).ok).toBe(false);
-    expect(plan_review_answer(item({ kind: "same_bill", subject_key: "x" }), "same_bill", NOW).ok).toBe(false);
+    // Phase 2: tracking a detector suggestion converts it; "same bill" merges (both need their ids)
+    const detector_track = plan_review_answer(item({ source: "detector" }), "track", NOW, { frequency: "monthly" });
+    expect(detector_track.ok && detector_track.plan.convert).toBe(true);
+    expect(plan_review_answer(item({ kind: "same_bill", subject_key: "x" }), "same_bill", NOW).ok).toBe(false); // no bill to merge
     expect(plan_review_answer(item(), "it_ended", NOW).ok).toBe(false);
     expect(plan_review_answer(item({ source: "detector" }), "not_bill", NOW).ok).toBe(true);
   });
@@ -58,7 +60,7 @@ describe("plan_review_answer", () => {
     const r = plan_review_answer(item(), "not_bill", NOW);
     const answered = r.ok ? r.plan.item! : item();
     expect(plan_review_answer(answered, "not_bill", NOW + 1)).toEqual({
-      ok: true, plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null, merge: null },
+      ok: true, plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null, merge: null, convert: false },
     });
     expect(plan_review_answer(answered, "track", NOW + 1).ok).toBe(false);
   });

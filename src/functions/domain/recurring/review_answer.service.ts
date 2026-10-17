@@ -39,6 +39,8 @@ export interface ReviewAnswerPlan {
   resync_item_doc_id: string | null;
   /** "Same bill": the old bill ends and is merged into the new stream's bill (D7 / D22). */
   merge: { old_record_id: string; into_stream_id: string } | null;
+  /** A detector suggestion tracked: made a bill by the convert path (the item closes `converted`). */
+  convert: boolean;
 }
 
 export type ReviewAnswerResult = { ok: true; plan: ReviewAnswerPlan } | { ok: false; error: string };
@@ -47,7 +49,7 @@ const ALLOWED: Record<string, UserAnswer[]> = {
   "suggested:plaid": ["track", "not_bill"],
   "still_a_bill:plaid": ["still_a_bill", "it_ended"],
   "same_bill:plaid": ["keep_separate", "same_bill"],
-  "suggested:detector": ["not_bill"],
+  "suggested:detector": ["track", "not_bill"],
 };
 
 /** Plan an answer. PURE. */
@@ -70,10 +72,10 @@ export function plan_review_answer(
     };
   }
   if (item.status !== "open") {
-    if (item.answer === answer) {
+    if (item.answer === answer || (answer === "track" && item.answer === "converted")) {
       return {
         ok: true,
-        plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null, merge: null },
+        plan: { no_op: true, item: null, state_change: {}, record_action: null, resync_item_doc_id: null, merge: null, convert: false },
       };
     }
     return { ok: false, error: "this question was already answered" };
@@ -96,7 +98,15 @@ export function plan_review_answer(
     record_action: null,
     resync_item_doc_id: null,
     merge: null,
+    convert: false,
   };
+  if (answer === "track" && item.source === "detector") {
+    // A detector suggestion has no Plaid stream: tracking it converts its latest payment (the
+    // convert orchestrator closes the item `converted`).
+    plan.convert = true;
+    plan.item = null;
+    return { ok: true, plan };
+  }
   switch (answer) {
     case "same_bill":
       if (!item.record_id || !item.stream_id) return { ok: false, error: "this question has no bill to merge" };

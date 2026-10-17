@@ -29,7 +29,10 @@ import {
 const schema = z.object({
   item_id: z.string().min(1, "item_id is required").max(300),
   answer: z.enum(["track", "not_bill", "still_a_bill", "it_ended", "keep_separate", "same_bill"]),
-  frequency: z.enum(["weekly", "biweekly", "semimonthly", "monthly", "yearly"]).nullable().optional(),
+  frequency: z.enum(["weekly", "biweekly", "semimonthly", "monthly", "quarterly", "yearly"]).nullable().optional(),
+  name: z.string().trim().min(1).max(120).optional(),
+  amount: z.number().positive().max(10_000_000).optional(),
+  next_due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -53,11 +56,11 @@ export const answer_recurring_review_item = onCall(
           { trace_id: ctx.trace_id }
         );
       }
-      const { item_id, answer, frequency } = validation.data;
+      const { item_id, answer, frequency, name, amount, next_due_date } = validation.data;
       const result = await answer_recurring_review_item_orchestrator(
         ctx,
         user_id,
-        { item_id, answer, frequency: frequency ?? null },
+        { item_id, answer, frequency: frequency ?? null, name, amount, next_due_date },
         Date.now()
       );
       log_operation_success(span, user_id);

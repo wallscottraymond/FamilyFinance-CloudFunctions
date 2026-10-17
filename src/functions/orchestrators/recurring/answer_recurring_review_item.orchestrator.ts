@@ -30,15 +30,21 @@ import { plan_review_answer, UserAnswer } from "../../domain/recurring/review_an
 import { apply_review_state_change } from "../../domain/recurring/review_item.service";
 import { manage_recurring_removal_orchestrator } from "./manage_recurring_removal.orchestrator";
 import { enqueue_item_sync } from "../plaid/sync_item.orchestrator";
+import { transaction_repo } from "../../repositories/transaction.repo";
 import { plan_merge_old_into_new } from "../../domain/recurring/merge.service";
 import { enqueue_reassign_user } from "../transactions/reassign_user.orchestrator";
-
+import { convert_transaction_to_recurring_orchestrator } from "./convert_transaction_to_recurring.orchestrator";
+import { ConvertFrequency, CONVERT_FREQUENCIES } from "../../domain/recurring/convert_recurring.service";
 
 export interface AnswerReviewItemInput {
   item_id: string;
   answer: UserAnswer;
   /** The schedule picked when tracking a Plaid suggestion with an UNKNOWN frequency (D8). */
   frequency?: string | null;
+  /** Detector "Track": the confirm sheet's values (defaults come from the suggestion). */
+  name?: string;
+  amount?: number;
+  next_due_date?: string;
 }
 
 export interface AnswerReviewItemResult {
@@ -75,6 +81,31 @@ export async function answer_recurring_review_item_orchestrator(
     if (plan.no_op) {
       log_operation_success(span, user_id);
       return { item_id: input.item_id, status: context.item.status, answer: input.answer, no_op: true };
+    }
+
+    // 2b. A detector suggestion tracked = converted from its latest payment (D4): the convert
+    //     orchestrator makes the bill, links the past payments and closes the item `converted`.
+    if (plan.convert) {
+      const item = context.item;
+      const docs = await transaction_repo.get_raw_by_ids(ctx, item.transaction_ids);
+      const latest = docs
+        .filter((d) => d.data.isActive !== false && d.data.isPending !== true && (!item.account_id || d.data.accountId === item.account_id))
+        .sort((a, b) => ((b.data.transactionDate as { toMillis(): number }).toMillis()) - ((a.data.transactionDate as { toMillis(): number }).toMillis()))[0];
+      if (!latest) throw new ValidationError(["the payments behind this suggestion are gone"]);
+      const freq = (input.frequency ?? item.user_frequency ?? item.frequency) as ConvertFrequency | null;
+      if (!freq || !CONVERT_FREQUENCIES.includes(freq)) throw new ValidationError(["pick a schedule for this bill"]);
+      const due_ms = item.next_due_ms ?? now_ms;
+      await convert_transaction_to_recurring_orchestrator(ctx, user_id, {
+        transaction_id: latest.id,
+        name: input.name ?? item.name,
+        amount: input.amount ?? item.amount,
+        frequency: freq,
+        next_due_date: input.next_due_date ?? new Date(due_ms).toISOString().slice(0, 10),
+        link_past: true,
+        review_item_id: item.id,
+      }, now_ms);
+      log_operation_success(span, user_id);
+      return { item_id: input.item_id, status: "resolved", answer: "converted", no_op: false };
     }
 
     // 2c. "Same bill" (D7 / D22): the old bill ends after its last payment and is merged into the
