@@ -176,7 +176,16 @@ export async function answer_recurring_review_item_orchestrator(
           trace_id: ctx.trace_id,
         });
       } catch (error) {
-        // The new bill can't be made: a "same bill" merge written above must not strand the old one.
+        // The new bill can't be made: the answer is undone — the item back to open and its pending
+        // track removed (a later sync must not create a bill from it) — and a "same bill" merge
+        // written above must not strand the old one.
+        try {
+          await recurring_review_repo.upsert_items(ctx, [context.item]);
+          const undone = await recurring_review_repo.apply_state_change(ctx, user_id, { remove_pending_track_ids: [input.item_id] });
+          if (undone.suppressed_changed) await bump_derive_version(user_id).catch(() => {});
+        } catch (rollback_error) {
+          console.error(`[${ctx.trace_id}] review answer rollback failed:`, rollback_error);
+        }
         if (plan.merge) {
           const repo = context.item.direction === "outflow" ? outflow_repo : inflow_repo;
           const old = await repo.get_by_id(ctx, plan.merge.old_record_id, { include_deleted: true });

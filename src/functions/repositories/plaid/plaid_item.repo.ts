@@ -204,7 +204,11 @@ export const plaid_item_repo = {
    *  already reads its item, so it learns the planner must run without any extra read. */
   async set_review_memory(_ctx: TraceContext, doc_ids: string[]): Promise<void> {
     const db = get_db();
-    await Promise.all(doc_ids.map((id) => db.collection(COLLECTION).doc(id).update({ reviewMemory: true })));
+    // A vanished item (deleted mid-flight) is skipped, never fatal.
+    await Promise.all(doc_ids.map((id) => db.collection(COLLECTION).doc(id).update({ reviewMemory: true }).catch((e: { code?: number | string }) => {
+      if (e?.code === 5 || e?.code === "not-found" || e?.code === "NOT_FOUND") return;
+      throw e;
+    })));
   },
 
   async get_by_user_id(

@@ -64,6 +64,9 @@ export interface ConvertResult {
   direction: ConvertDirection;
   /** An earlier tap already created it (a double tap / a resumed convert). */
   already: boolean;
+  /** …and it is still being finished (its lease hasn't run out): nothing was done by this tap; ask
+   *  again in a moment. A convert that died is resumed by the first tap after the lease expires. */
+  in_progress?: boolean;
   /** Past payments linked in addition to the source (D46: one per occurrence). */
   linked_past_count: number;
   first_date_ms: number | null;
@@ -112,7 +115,7 @@ export async function convert_transaction_to_recurring_orchestrator(
         const repo = direction === "outflow" ? outflow_repo : inflow_repo;
         if (!(await repo.claim_resume(ctx, r.existing_conversion.id, now_ms))) {
           follow_up_done = true;
-          return { id: r.existing_conversion.id, direction, already: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
+          return { id: r.existing_conversion.id, direction, already: true, in_progress: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
         }
         const resumed = await complete_convert(ctx, user_id, direction, r.existing_conversion.id, now_ms, null);
         follow_up_done = true;
@@ -242,7 +245,10 @@ async function complete_convert(
   // 6. ONE follow-up pass: reconcile the record, recompute only the touched budget periods, one
   //    derive bump. No transfer re-check (a loan vendor must not force a 180-day classifier scan).
   const f = follow_ups_from_written(written);
-  await run_sync_follow_ups(ctx, user_id, {
+  // A resume that finds nothing left to do (periods exist, the engine wrote nothing) skips the
+  // reconcile, the recompute and the bump.
+  const nothing_to_do = !fresh && has_periods && written.length === 0;
+  if (!nothing_to_do) await run_sync_follow_ups(ctx, user_id, {
     ...f,
     outflow_ids: direction === "outflow" ? [...new Set([...f.outflow_ids, id])] : f.outflow_ids,
     inflow_ids: direction === "inflow" ? [...new Set([...f.inflow_ids, id])] : f.inflow_ids,
@@ -285,19 +291,23 @@ async function finish_convert(
       const repo = direction === "outflow" ? outflow_repo : inflow_repo;
       const month_start = Date.UTC(new Date(now_ms).getUTCFullYear(), new Date(now_ms).getUTCMonth(), 1);
       let from_ms = month_start;
+      let merged_any = false;
       for (const old of old_bills) {
         const mp = plan_merge_old_into_new(
           { ...old, last_payment_ms: await resolve_last_payment_ms(ctx, user_id, direction, old.id, old.last_payment_ms) },
           id, now_ms, month_start);
         if (!mp) continue;
+        merged_any = true;
         await repo.apply_merge(ctx, old.id, { intervals: mp.intervals, merged_into_id: id, merge_log: mp.merge_log }, run_id);
         await repo.apply_period_suppression(ctx, old.id, mp.intervals, user_id);
         from_ms = Math.min(from_ms, mp.intervals[mp.intervals.length - 1].from_ms);
       }
-      await enqueue_reassign_user({
-        user_id, reason: "recurring_removal", scope: { account_ids: [account_id], from_ms },
-      }, ctx.trace_id).catch((e) => console.error(`[${ctx.trace_id}] convert merge re-assign enqueue failed:`, e));
-      await bump_derive_version(user_id).catch(() => {});
+      if (merged_any) {
+        await enqueue_reassign_user({
+          user_id, reason: "recurring_removal", scope: { account_ids: [account_id], from_ms },
+        }, ctx.trace_id).catch((e) => console.error(`[${ctx.trace_id}] convert merge re-assign enqueue failed:`, e));
+        await bump_derive_version(user_id).catch(() => {});
+      }
     }
 
     // 7. The vendor's question: closed `converted`; its held-out payments released; a "Not a bill"

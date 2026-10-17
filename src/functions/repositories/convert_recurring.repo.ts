@@ -13,11 +13,14 @@
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { TraceContext, NotFoundError, PermissionDeniedError } from "../types";
 import type { InflowForPersistence, OutflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
-import { is_currently_suppressed } from "../domain/recurring/recurring_suppression.service";
+import { is_removed_now } from "../domain/recurring/recurring_suppression.service";
 import { apply_source_pin, ConvertDirection } from "../domain/recurring/convert_recurring.service";
 import { record_audit_entry_async } from "../audit";
 import { outflow_repo } from "./outflow.repo";
 import { inflow_repo } from "./inflow.repo";
+
+/** At least the callable timeout (300 s) with margin: a resume never overlaps a slow original. */
+export const RESUME_LEASE_MS = 330_000;
 
 export type CreateConvertedResult =
   | {
@@ -33,8 +36,8 @@ export type CreateConvertedResult =
 
 const live = (d: Record<string, unknown> | undefined): boolean =>
   !!d && d.isActive !== false && d.isHidden !== true && !d.mergedIntoId &&
-  // a bill the user removed / paused / ended right now isn't claiming anything
-  !is_currently_suppressed(
+  // a bill the user removed / ended right now isn't claiming anything (a paused one still is)
+  !is_removed_now(
     ((d.removalIntervals as Array<{ fromMs: number; toMs: number | null; mode: string }> | undefined) ?? [])
       .map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode as "all" | "going_forward" | "paused" })),
     Date.now()
@@ -101,7 +104,8 @@ export const convert_recurring_repo = {
         updatedBy: args.user_id,
       };
       /* eslint-enable @typescript-eslint/naming-convention */
-      tx.create(built.ref, built.data);
+      // The convert is in progress: a tap during it (or until the lease runs out) resumes nothing.
+      tx.create(built.ref, { ...built.data, resumeLeaseMs: Date.now() + RESUME_LEASE_MS });
       tx.update(txn_ref, update);
       return {
         status: "created",

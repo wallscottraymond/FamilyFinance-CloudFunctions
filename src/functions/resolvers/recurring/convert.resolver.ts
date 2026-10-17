@@ -21,7 +21,7 @@ import { account_repo } from "../../repositories/account.repo";
 import { vendor_key as vendor_key_of } from "../../domain/transactions/vendor_key.service";
 import { ConvertFacts, ConvertTxnFacts, direction_of, retro_floor_ms } from "../../domain/recurring/convert_plan.service";
 import { splits_paying_recurring } from "../../domain/recurring/stream_membership";
-import { is_currently_suppressed } from "../../domain/recurring/recurring_suppression.service";
+import { is_removed_now } from "../../domain/recurring/recurring_suppression.service";
 
 export type ConvertResolution =
   | { ok: false; reason: "not_found" | "permission_denied" }
@@ -150,8 +150,9 @@ export async function resolve_convert_facts(
   const claim_splits = raw_splits.filter((x) => wanted_splits.includes(String(x.splitId ?? "")));
   let claimed_by: { id: string; name: string } | null = null;
   for (const r of records) {
-    // A bill the user removed / paused / ended right now isn't a live bill: its payment converts.
-    if (is_currently_suppressed(r.removal_intervals, now_ms)) continue;
+    // A bill the user removed / ended right now isn't a live bill: its payment converts. A PAUSED bill is
+    // still live ("Part of <bill>"), so converting one of its payments is refused.
+    if (is_removed_now(r.removal_intervals, now_ms)) continue;
     const in_stream = !!base.plaid_id && (r.transaction_ids ?? []).includes(base.plaid_id);
     if (splits_paying_recurring(claim_splits, kind, r.id, in_stream).length > 0) {
       claimed_by = { id: r.id, name: record_name(r) };

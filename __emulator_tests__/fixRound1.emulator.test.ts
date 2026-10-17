@@ -137,6 +137,7 @@ describe('fix round 1 (emulator)', () => {
     const plan = plan_convert(r.facts, req, 'conv_dead2');
     await convert_recurring_repo.create_with_source_pin(ctx(), { direction: 'outflow', entity: { ...plan.entity, retro_txn_ids: plan.retro_plaid_ids }, user_id: h.ids.userId, run_id: 'dead', source_txn_doc_id: doc(h, 'gymnew'), source_split_ids: plan.source_split_ids });
     expect((await db.collection('outflows').doc(GYM).get()).data()!.mergedIntoId).toBeUndefined(); // died before the merge
+    await db.collection('outflows').doc('conv_dead2').update({ resumeLeaseMs: 0 }); // the dead convert's lease ran out
     await convert(ctx(), h.ids.userId, { transaction_id: doc(h, 'gymnew'), ...req }, NOW_MS);
     const old = (await db.collection('outflows').doc(GYM).get()).data()!;
     expect([old.mergedIntoId, old.isActive]).toEqual(['conv_dead2', true]);
@@ -224,6 +225,7 @@ describe('fix round 1 (emulator)', () => {
     await h.sync('off');
     expect((await h.txn('after')).splits[0].outflowId).toBe(bill);
     const repo = outflow_repo;
+    await db.collection('outflows').doc(bill).update({ resumeLeaseMs: 0 }); // the create's own lease has run out
     expect(await repo.claim_resume(ctx(), bill, NOW_MS)).toBe(true);
     expect(await repo.claim_resume(ctx(), bill, NOW_MS)).toBe(false); // the lease is held
   }, 240000);

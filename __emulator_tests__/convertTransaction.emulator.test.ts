@@ -260,6 +260,7 @@ describe('convert_transaction_to_recurring (emulator)', () => {
       direction: 'outflow', entity, user_id: uid, run_id: 'dead_run', source_txn_doc_id: doc_of(h, 'r_oct'), source_split_ids: plan.source_split_ids,
     });
     expect((await db.collection('outflow_periods').where('outflowId', '==', 'conv_dead').get()).size).toBe(0);
+    await db.collection('outflows').doc('conv_dead').update({ resumeLeaseMs: 0 }); // the dead convert's lease ran out
     const resumed = await convert(ctx(), uid, { transaction_id: doc_of(h, 'r_oct'), ...RENT }, NOW_MS);
     expect(resumed).toMatchObject({ id: 'conv_dead', already: true });
     expect((await db.collection('outflow_periods').where('outflowId', '==', 'conv_dead').get()).size).toBeGreaterThan(0);

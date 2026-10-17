@@ -84,6 +84,22 @@ describe("plan_absorb", () => {
     expect(g.streams[0].txn_ids).toHaveLength(120);
   });
 
+  it("reruns are no write: the same >120 ids again, and any reordering of a set within the cap", () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `t${String(i).padStart(3, "0")}`);
+    const w = plan_absorb(rec(), stream({ transaction_ids: ids }), 5, inr, undefined);
+    if (!w || w === "declined" || w === "full") throw new Error("expected a write");
+    expect(plan_absorb(rec({ absorbed_streams: w.streams }), stream({ transaction_ids: ids }), 6, inr, undefined)).toBeNull();
+    // within the cap the order never matters
+    const small = ids.slice(0, 40);
+    const w2 = plan_absorb(rec(), stream({ transaction_ids: small }), 5, inr, undefined);
+    if (!w2 || w2 === "declined" || w2 === "full") throw new Error("expected a write");
+    expect(plan_absorb(rec({ absorbed_streams: w2.streams }), stream({ transaction_ids: [...small].reverse() }), 6, inr, undefined)).toBeNull();
+    // a >120 set reordered is indistinguishable from new arrivals pushing others out: documented, bounded
+    // by the 120 cap (it re-keeps 120 ids, never grows past it).
+    const flip = plan_absorb(rec({ absorbed_streams: w.streams }), stream({ transaction_ids: [...ids].reverse() }), 6, inr, undefined);
+    if (flip && flip !== "declined" && flip !== "full") expect(flip.streams[0].txn_ids.length).toBeLessThanOrEqual(120);
+  });
+
   it("decline drops the stream's payments from the claimed set", () => {
     const have: AbsorbedStream[] = [
       { stream_id: "s1", state: "absorbed", at_ms: 1, txn_ids: ["a", "b"] },

@@ -1127,7 +1127,7 @@ export const outflow_repo = {
   },
 
   /**
-   * Claim the right to RESUME a died convert: one resume at a time (a lease of 2 minutes), so a
+   * Claim the right to RESUME a died convert: one resume at a time (a lease of 330 s: longer than the callable's 300 s timeout; it expires, so a died resume can be retried), so a
    * concurrent double tap returns the bill instead of repeating the work. Stamped.
    */
   async claim_resume(_ctx: TraceContext, id: string, now_ms: number): Promise<boolean> {
@@ -1136,7 +1136,7 @@ export const outflow_repo = {
       const lease = (snap.data() as { resumeLeaseMs?: number } | undefined)?.resumeLeaseMs ?? 0;
       if (!snap.exists || lease > now_ms) return false;
       /* eslint-disable @typescript-eslint/naming-convention */
-      tx.update(doc_ref(id), { resumeLeaseMs: now_ms + 120_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });
+      tx.update(doc_ref(id), { resumeLeaseMs: now_ms + 330_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });
       /* eslint-enable @typescript-eslint/naming-convention */
       return true;
     });

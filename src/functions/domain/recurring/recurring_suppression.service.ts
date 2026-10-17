@@ -175,6 +175,14 @@ export function apply_end_at(
   return [...kept, { from_ms, to_ms: null, mode: "going_forward" }];
 }
 
+/**
+ * Is the item REMOVED / ended right now (a paused one is still a live bill: converting one of its
+ * payments would make a second bill)? PURE.
+ */
+export function is_removed_now(intervals: RemovalInterval[] | undefined, now_ms: number): boolean {
+  return (intervals ?? []).some((i) => i.mode !== "paused" && i.from_ms <= now_ms && (i.to_ms === null || now_ms < i.to_ms));
+}
+
 /** The open (indefinite) interval that starts after `now_ms`, if any — an end not yet in effect. */
 export function pending_end(intervals: RemovalInterval[], now_ms: number): RemovalInterval | null {
   return intervals.find((i) => i.from_ms > now_ms && i.to_ms === null) ?? null;

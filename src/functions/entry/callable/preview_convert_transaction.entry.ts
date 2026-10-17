@@ -27,6 +27,7 @@ import {
 
 const schema = z.object({
   transaction_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/, "transaction_id is invalid"),
+  split_id: z.string().min(1).max(128).regex(/^[^/]+$/, "split_id is invalid").optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -51,7 +52,7 @@ export const preview_convert_transaction = onCall(
         );
       }
       const result = await preview_convert_transaction_orchestrator(
-        ctx, user_id, { transaction_id: validation.data.transaction_id }, Date.now()
+        ctx, user_id, { transaction_id: validation.data.transaction_id, split_id: validation.data.split_id }, Date.now()
       );
       log_operation_success(span, user_id);
       return success_response(result, ctx.trace_id);

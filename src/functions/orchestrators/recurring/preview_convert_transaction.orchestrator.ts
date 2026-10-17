@@ -1,7 +1,9 @@
 /**
  * Preview Convert Orchestrator (Convert-To-Recurring Phase 2): what the "Make this a bill" sheet
- * should show for a transaction — READ-ONLY (≈ 150 reads: the transaction, the user's bills /
- * income, the accounts, the vendor's payments). A refusal is DATA here (`refusal`), not an error:
+ * should show for a transaction — READ-ONLY. Reads: the transaction, the user's bills / income, the
+ * accounts, the inactive records of the vendor, and the vendor's payments (one doc per payment
+ * returned, paged at 600 rows up to 3000; a source without a stored vendorKey adds up to 1500 for
+ * the account-window fallback). Typically ~100–200, bounded by the vendor's payment count. A refusal is DATA here (`refusal`), not an error:
  * the sheet explains it. The owner is checked first; flag off → `{enabled: false}` and nothing is
  * read.
  *
@@ -23,14 +25,14 @@ export type PreviewResult =
 export async function preview_convert_transaction_orchestrator(
   ctx: TraceContext,
   user_id: string,
-  input: { transaction_id: string },
+  input: { transaction_id: string; split_id?: string },
   now_ms: number
 ): Promise<PreviewResult> {
   const span = create_span(ctx, "orchestrator", "preview_convert_transaction");
   log_operation_start(span, user_id);
   try {
     if (!(await is_convert_to_recurring_enabled(user_id))) return { enabled: false };
-    const r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms);
+    const r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms, input.split_id);
     if (!r.ok) {
       if (r.reason === "not_found") throw new NotFoundError("transaction", input.transaction_id);
       throw new PermissionDeniedError("preview_convert_transaction", input.transaction_id);
