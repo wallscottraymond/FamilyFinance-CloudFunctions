@@ -20,6 +20,8 @@ import {
   ManualSettledOccurrences,
   manual_settlement_amount,
 } from "./manual_settlement.service";
+import { reconcile_occurrences } from "./reconcile_occurrences.service";
+import { RemovalInterval, carried_early_payment_ms } from "./recurring_suppression.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -177,37 +179,44 @@ export interface CarriedPayment {
   carried_due_ms: number;
 }
 
+/** A payment below this is no payment (the derive drops it before matching — period page rule). */
+const CARRY_PAYMENT_EPSILON = 0.005;
+
 /**
  * D28 (stored periods, the derive's rule): a payment made in a month that isn't suppressed, a few
  * days BEFORE an occurrence due in a removed / paused / ended month (due Oct 1, paid Sep 29,
  * removed from Oct 1), pays that occurrence — counted as paid where the payment was made: the
  * period of this type containing its date, which then expects that occurrence AT the payment date.
- * It carries only when that occurrence is the payment's nearest (a closer occurrence in a kept
- * month keeps it, as the derive's nearest match does). PURE.
+ *
+ * Round 5 defects 3 + 4: WHICH payment pays which occurrence is decided by the derive's own
+ * matcher (`reconcile_occurrences`, run over this type's due dates and the payments) — exactly
+ * what it assigns to a suppressed occurrence is carried. Two early payments for one occurrence
+ * carry only the one the matcher gives it (the other stays an ordinary payment, as on the page);
+ * a tie, or an occurrence already paid, breaks the way the derive breaks it. PURE.
  */
 export function carried_payments(
   periods: CarryPeriod[],
-  payments: Array<{ date_ms: number }>,
-  carry: (due_ms: number, payment_ms: number) => number | null,
-  is_suppressed_due: (due_ms: number) => boolean
+  payments: Array<{ date_ms: number; amount: number }>,
+  intervals: RemovalInterval[]
 ): CarriedPayment[] {
   const dues = [...new Set(periods.flatMap((p) =>
     p.occurrence_due_dates_ms.filter((d) => d >= p.start_ms && d <= p.end_ms)))].sort((a, b) => a - b);
+  const matched = reconcile_occurrences(
+    dues.map((d) => ({ occurrence_id: String(d), recurring_id: "", due_date_ms: d, amount_due: 0 })),
+    payments
+      .map((p, i) => ({ transaction_id: String(i), split_id: null, date_ms: p.date_ms, amount: p.amount }))
+      .filter((p) => p.amount > CARRY_PAYMENT_EPSILON)
+  );
   const out: CarriedPayment[] = [];
-  payments.forEach((pay, index) => {
-    let carried: number | null = null;
-    for (const d of dues) {
-      if (carry(d, pay.date_ms) === null) continue;
-      if (carried === null || d - pay.date_ms < carried - pay.date_ms) carried = d;
-    }
-    if (carried === null) return;
-    const kept_nearer = dues.some((d) => !is_suppressed_due(d) && Math.abs(d - pay.date_ms) < carried! - pay.date_ms);
-    if (kept_nearer) return;
-    const home = periods.find((p) => pay.date_ms >= p.start_ms && pay.date_ms <= p.end_ms);
-    if (!home) return;
-    out.push({ index, period_id: home.period_id, carried_due_ms: carried });
-  });
-  return out;
+  for (const o of matched) {
+    if (!o.is_paid || o.matched_transaction_id === null) continue;
+    const index = Number(o.matched_transaction_id);
+    const pay_ms = payments[index].date_ms;
+    if (carried_early_payment_ms(intervals, o.due_date_ms, pay_ms) === null) continue;
+    const home = periods.find((p) => pay_ms >= p.start_ms && pay_ms <= p.end_ms);
+    if (home) out.push({ index, period_id: home.period_id, carried_due_ms: o.due_date_ms });
+  }
+  return out.sort((a, b) => a.index - b.index);
 }
 
 // ============================================================================

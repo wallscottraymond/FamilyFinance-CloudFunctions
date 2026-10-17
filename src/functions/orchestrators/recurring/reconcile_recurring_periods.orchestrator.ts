@@ -37,8 +37,6 @@ import {
 import { outflow_period_repo } from "../../repositories/outflow_period.repo";
 import { inflow_period_repo } from "../../repositories/inflow_period.repo";
 import {
-  carried_early_payment_ms,
-  is_payment_suppressed,
   is_stored_period_active,
 } from "../../domain/recurring/recurring_suppression.service";
 
@@ -101,12 +99,7 @@ export async function reconcile_recurring_periods_orchestrator(
     for (const type of new Set([...periods_by_type.keys(), ...inactive_by_type.keys()])) {
       const type_periods = periods_by_type.get(type) ?? [];
       const carried = intervals?.length
-        ? carried_payments(
-          [...type_periods, ...(inactive_by_type.get(type) ?? [])],
-          resolved.splits,
-          (due, pay) => carried_early_payment_ms(intervals, due, pay),
-          (due) => is_payment_suppressed(intervals, due)
-        )
+        ? carried_payments([...type_periods, ...(inactive_by_type.get(type) ?? [])], resolved.splits, intervals)
         : [];
       const carried_idx = new Set(carried.map((c) => c.index));
       for (const c of carried) {
