@@ -78,13 +78,16 @@ let flag_cache_generation = 0;
  */
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
+/** Re-reads after an invalidation that raced a load (round 5 defect 6) — a bound, never reached in practice. */
+const MAX_INVALIDATION_RETRIES = 3;
+
 /**
  * Loads all feature flags from Firestore.
  * Results are cached in memory.
  *
  * @param force_reload - Force reload even if cache is valid
  */
-export async function load_feature_flags(force_reload = false): Promise<void> {
+export async function load_feature_flags(force_reload = false, _retries = 0): Promise<void> {
   // Check if cache is still valid
   if (!force_reload && flag_cache) {
     const elapsed = Date.now() - flag_cache.loaded_at;
@@ -97,7 +100,13 @@ export async function load_feature_flags(force_reload = false): Promise<void> {
   // derive resolving the flag for every member at once) share ONE in-flight read instead of each
   // reading the whole collection. A forced reload always starts its own read.
   if (!force_reload && flag_load_in_flight) {
-    return flag_load_in_flight;
+    const joined_generation = flag_cache_generation;
+    await flag_load_in_flight;
+    // Round 5 defect 6: invalidated while we waited → that read filled nothing; read the fresh value.
+    if (joined_generation !== flag_cache_generation && _retries < MAX_INVALIDATION_RETRIES) {
+      await load_feature_flags(false, _retries + 1);
+    }
+    return;
   }
 
   const generation = flag_cache_generation;
@@ -124,14 +133,20 @@ export async function load_feature_flags(force_reload = false): Promise<void> {
 
   if (force_reload) {
     await load;
-    return;
+  } else {
+    flag_load_in_flight = load;
+    try {
+      await load;
+    } finally {
+      if (flag_load_in_flight === load) flag_load_in_flight = null;
+    }
   }
-
-  flag_load_in_flight = load;
-  try {
-    await load;
-  } finally {
-    if (flag_load_in_flight === load) flag_load_in_flight = null;
+  // Round 5 defect 6: an invalidation landed while this read was in flight, so the read didn't
+  // fill the cache — every caller waiting on it would see no flags (= OFF). Read again (or join a
+  // newer in-flight read) so the caller gets the FRESH value. Bounded: only a further invalidation
+  // during that read repeats it.
+  if (generation !== flag_cache_generation && _retries < MAX_INVALIDATION_RETRIES) {
+    await load_feature_flags(force_reload, _retries + 1);
   }
 }
 

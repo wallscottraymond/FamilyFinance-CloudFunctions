@@ -118,4 +118,19 @@ describe("feature flags — hardened (X18)", () => {
     await p;
     expect(await is_convert_to_recurring_enabled("u1")).toBe(false); // re-read, not the stale snapshot
   });
+
+  it("round 5 test 6: callers waiting on a read that an invalidation overtook see the FRESH value, never off", async () => {
+    flag({ enabled: true, enabled_user_ids: ["u1", "u2"] });
+    gets = 0;
+    release = () => undefined; // gate the first read
+    const starter = is_convert_to_recurring_enabled("u1"); // starts the read
+    const joiner = is_convert_to_recurring_enabled("u2"); // joins it
+    await new Promise((r) => setImmediate(r));
+    docs = [{ id: "convert_to_recurring_v1", data: () => ({ enabled: true, enabled_user_ids: ["u1", "u2"], rollout_percentage: 0 }) }];
+    invalidate_flag_cache(); // e.g. the flag doc was rewritten while the read was in flight
+    (release as unknown as () => void)();
+    release = null; // the re-read is not gated
+    expect(await Promise.all([starter, joiner])).toEqual([true, true]);
+    expect(gets).toBe(2); // the overtaken read + exactly one fresh read, shared
+  });
 });
