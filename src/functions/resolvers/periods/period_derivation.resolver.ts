@@ -14,7 +14,7 @@
  * @module resolvers/periods/period_derivation
  */
 
-import { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
+import { RemovalInterval, is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
 import { LATE_PAYMENT_MAX_MS, is_payment_released } from "../../domain/recurring/late_payment.service";
 import {
   compute_countable_split_net,
@@ -913,7 +913,11 @@ export function shape_period_derivation_deps(
       const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
       if (txn_date_ms <= span_end_ms || txn_date_ms > late_end || counted_ids.has(id) || crossing.ids.has(id)) continue;
       const released = released_at(txn_date_ms);
-      const kept = [...bill_schedule_by_id.keys()].filter((rid) => !released.has(rid));
+      // D37: only a payment made in a SUPPRESSED month of that bill (a late payment the release
+      // rule keeps) — a payment in a kept month past the span is no different from a never-removed
+      // bill's (the next view counts it), so a live bill with a past pause doesn't reach for it.
+      const kept = [...bill_schedule_by_id.keys()].filter((rid) =>
+        !released.has(rid) && is_payment_suppressed(removal_by_id.get(rid), txn_date_ms));
       if (kept.length === 0) continue;
       const plaid_txn_id = (data.transactionId as string | null) ?? null;
       const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];

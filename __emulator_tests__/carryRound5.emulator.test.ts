@@ -250,4 +250,30 @@ describe('round 5 — stored periods carry what the page\'s matcher assigns (emu
       }, 240000);
     }
   }
+
+  // ── Test 10 (D37 defect 1): the late rule reaches past the span ONLY for a payment in a
+  // SUPPRESSED month. A LIVE bill with a past pause (Mar 2042) is no different from a never-paused
+  // twin: the single-month Sep view doesn't take the Oct 2 payment (Sep 29 unpaid there).
+  it('test 10 (D37): a live bill with a past pause — the single-month views equal a never-paused twin\'s; stored == derive', async () => {
+    const spec = { paid: [U12(7, 29), U12(8, 29), U12(10, 2)], frequency: 'MONTHLY', next_ms: U12(10, 29) };
+    const twin = await billUser('qzr5p10t', false, spec);
+    const paused = await billUser('qzr5p10p', false, spec);
+    await outflow_repo.set_removal_intervals(ctx(), paused.bill, [{ from_ms: Date.UTC(2042, 2, 1), to_ms: Date.UTC(2042, 3, 1), mode: 'paused' }], false, paused.uid);
+    const shape = async (u: { uid: string; bill: string; doc: (i: number) => string }) => {
+      const out: unknown[] = [];
+      for (const [cad, w] of [['monthly', SEP], ['monthly', OCT_2042], ['monthly', { start: SEP.start, end: OCT_2042.end }]] as const) {
+        const r = await view(u.uid, cad, w);
+        out.push((r.bills.find((b: any) => b.recurring_id === u.bill)?.groups ?? []).map((g: any) => [g.period_id,
+          g.occurrences.map((o: any) => [new Date(o.due_ms).toISOString().slice(0, 10), o.paid, o.transaction_id === u.doc(2) ? 'P2' : o.transaction_id ?? null])]));
+      }
+      return out;
+    };
+    const t = await shape(twin);
+    expect(t[0]).toEqual([['2042M09', [['2042-09-29', false, null]]]]);
+    expect(await shape(paused)).toEqual(t);
+    // Stored Sep == the Sep view (expected 1, paid 0).
+    await runReconcile(paused.uid, paused.bill);
+    expect(stored_counts(await period(paused.bill, '2042M09'))).toEqual(derived_counts(await view(paused.uid, 'monthly', SEP), paused.bill, '2042M09'));
+    expect(stored_counts(await period(paused.bill, '2042M09'))).toEqual([1, 0]);
+  }, 240000);
 });
