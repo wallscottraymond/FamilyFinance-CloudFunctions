@@ -140,6 +140,8 @@ export interface Outflow {
   /** Plaid streams absorbed into this record (D42) and the Plaid payment ids it claims. */
   absorbed_streams?: ConvertEntityView["absorbed_streams"];
   absorbed_txn_ids?: string[];
+  retro_txn_ids?: string[];
+  retro_linked_at_ms?: number | null;
   /** Set on a record merged into another (D7 / D22 / D41): what undo needs. */
   merge_log?: ConvertEntityView["merge_log"];
 

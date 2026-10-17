@@ -14,6 +14,7 @@
  * @module resolvers/periods/period_derivation
  */
 
+import { is_converted_candidate } from "../../domain/recurring/convert_recurring.service";
 import { RemovalInterval, is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
 import {
   BillPaymentForRelease,
@@ -431,13 +432,18 @@ function without_recurring_links(
  * yet). A manual bill pin or a "remove from bill" detach is kept — the user's choice wins.
  */
 function without_guessed_links(
-  splits: Array<Record<string, unknown>>
+  splits: Array<Record<string, unknown>>,
+  converted_ids?: ReadonlySet<string>
 ): Array<Record<string, unknown>> {
+  // Phase 2 (D1): an auto link to a CONVERTED bill / income is the engine's own deterministic
+  // key match (it runs before the hold-out), not a merchant guess — kept, like a pin.
+  const keep = (id: unknown): string | null =>
+    typeof id === "string" && converted_ids && converted_ids.has(id) ? id : null;
   /* eslint-disable @typescript-eslint/naming-convention */
   return splits.map((s) => ({
     ...s,
-    outflowId: s.outflowAssignmentSource === "manual" ? s.outflowId ?? null : null,
-    inflowId: null,
+    outflowId: s.outflowAssignmentSource === "manual" ? s.outflowId ?? null : keep(s.outflowId),
+    inflowId: keep(s.inflowId),
   }));
   /* eslint-enable @typescript-eslint/naming-convention */
 }
@@ -476,6 +482,10 @@ export function shape_period_derivation_deps(
   const owner_of = (user_id: string) => (raw.scope.kind === "group" ? { owner_user_id: user_id } : {});
   const out_of_view_recurring_ids = raw.out_of_view_recurring.ids;
   const raw_excluded = raw.fuzzy_excluded_plaid_ids;
+  // Converted bills / income (v2 + manual + vendor key + account): D1-linked by the engine.
+  const converted_ids = new Set(
+    [...outflows, ...inflows].filter((r) => is_converted_candidate(r)).map((r) => r.id)
+  );
   const overlapping = overlapping_for_window(raw.overlapping, window_start_ms, window_end_ms);
 
   // Active, income-drawing goals contribute their planned per-period set-aside to
@@ -729,7 +739,7 @@ export function shape_period_derivation_deps(
       seen_txn.add(id);
       const plaid_txn_id = (data.transactionId as string | null) ?? null;
       const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
-      const splits = (plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits) : stored_splits)
+      const splits = (plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits, converted_ids) : stored_splits)
         .filter((sp) => !sp.outflowPinnedPeriodId);
       const stream_bill = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
       for (const rid of bill_schedule_by_id.keys()) {
@@ -815,7 +825,7 @@ export function shape_period_derivation_deps(
       ? without_recurring_links(stored_splits)
       : without_out_of_view_links(
         plaid_txn_id && raw_excluded?.has(plaid_txn_id)
-          ? without_guessed_links(stored_splits)
+          ? without_guessed_links(stored_splits, converted_ids)
           : stored_splits,
         released.size
           ? new Set([...out_of_view_recurring_ids, ...released])
@@ -988,7 +998,7 @@ export function shape_period_derivation_deps(
       const plaid_txn_id = (data.transactionId as string | null) ?? null;
       const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
       const splits = without_out_of_view_links(
-        plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits) : stored_splits,
+        plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits, converted_ids) : stored_splits,
         released.size ? new Set([...out_of_view_recurring_ids, ...released]) : out_of_view_recurring_ids
       ).filter((sp) => !sp.outflowPinnedPeriodId);
       const stream_bill = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;

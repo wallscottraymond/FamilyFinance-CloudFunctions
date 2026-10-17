@@ -21,6 +21,8 @@ export interface AbsorbedStreamDoc {
   streamId: string;
   state: "absorbed" | "declined";
   atMs: number;
+  /** The Plaid payments of that stream the record claims (their union is `absorbedTxnIds`). */
+  txnIds?: string[];
 }
 
 export interface MergeLogDoc {
@@ -43,6 +45,10 @@ export interface ConvertDocFields {
   absorbedStreams?: AbsorbedStreamDoc[];
   /** Plaid transaction ids this record claims durably besides its own stream (D42 / D2), bounded. */
   absorbedTxnIds?: string[];
+  /** Past payments (Plaid transaction ids) a convert linked (D2 / D46) — D1 keeps them linked. */
+  retroTxnIds?: string[];
+  /** When the convert's retro-link finished (ms). Absent = a convert that died: the next tap resumes it. */
+  retroLinkedAtMs?: number;
   /** Set on a record that was merged into another (D7 / D22 / D41), so the merge can be undone. */
   mergeLog?: MergeLogDoc;
 }
@@ -52,6 +58,7 @@ export interface ConvertEntityFields {
   vendor_key?: string;
   converted_from_txn_id?: string;
   converted_at_ms?: number;
+  retro_txn_ids?: string[];
 }
 
 /**
@@ -71,6 +78,8 @@ export function carried_convert_fields(
     ...(a !== undefined ? { convertedAtMs: a } : {}),
     ...(existing?.absorbedStreams !== undefined ? { absorbedStreams: existing.absorbedStreams } : {}),
     ...(existing?.absorbedTxnIds !== undefined ? { absorbedTxnIds: existing.absorbedTxnIds } : {}),
+    ...(existing?.retroTxnIds !== undefined ? { retroTxnIds: existing.retroTxnIds } : (!existing && entity.retro_txn_ids?.length ? { retroTxnIds: entity.retro_txn_ids } : {})),
+    ...(existing?.retroLinkedAtMs !== undefined ? { retroLinkedAtMs: existing.retroLinkedAtMs } : {}),
     ...(existing?.mergeLog !== undefined ? { mergeLog: existing.mergeLog } : {}),
   };
 }
@@ -83,6 +92,8 @@ export interface ConvertEntityView {
   converted_at_ms: number | null;
   absorbed_streams: AbsorbedStream[];
   absorbed_txn_ids: string[];
+  retro_txn_ids: string[];
+  retro_linked_at_ms: number | null;
   merge_log: MergeLog | null;
 }
 
@@ -95,8 +106,11 @@ export function map_convert_fields_to_entity(doc: ConvertDocFields): ConvertEnti
       stream_id: s.streamId,
       state: s.state,
       at_ms: s.atMs,
+      txn_ids: s.txnIds ?? [],
     })),
     absorbed_txn_ids: doc.absorbedTxnIds ?? [],
+    retro_txn_ids: doc.retroTxnIds ?? [],
+    retro_linked_at_ms: doc.retroLinkedAtMs ?? null,
     merge_log: doc.mergeLog
       ? {
         into: doc.mergeLog.into,
@@ -113,7 +127,7 @@ export function map_convert_fields_to_entity(doc: ConvertDocFields): ConvertEnti
 
 /* eslint-disable @typescript-eslint/naming-convention */
 export const absorbed_streams_to_doc = (xs: AbsorbedStream[]): AbsorbedStreamDoc[] =>
-  xs.map((s) => ({ streamId: s.stream_id, state: s.state, atMs: s.at_ms }));
+  xs.map((s) => ({ streamId: s.stream_id, state: s.state, atMs: s.at_ms, txnIds: s.txn_ids }));
 
 export const merge_log_to_doc = (m: MergeLog): MergeLogDoc => ({
   into: m.into,

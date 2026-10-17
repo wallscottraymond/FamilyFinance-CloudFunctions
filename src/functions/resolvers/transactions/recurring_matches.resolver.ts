@@ -24,13 +24,26 @@ import {
   match_recurring,
   RecurringCandidate,
 } from "../../domain/transactions/match_recurring.service";
+import {
+  ConvertedIndex,
+  d1_allows,
+  pick_converted_bill,
+} from "../../domain/recurring/converted_match.service";
+import { converted_key } from "../../domain/recurring/convert_recurring.service";
 
 const WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // ±90 days candidate window
 
 /** Per-split recurring links keyed by split id (the engine's `recurring_by_split`). */
 export type RecurringBySplit = Record<
   string,
-  { outflow_id: string | null; inflow_id: string | null }
+  {
+    outflow_id: string | null;
+    inflow_id: string | null;
+    /** A stream-member payment that ALSO has an eligible converted bill of its D1 key: used by the
+     *  caller only when the stream's bill is dropped as another view's (D1 fallthrough). */
+    d1_alt_id?: string | null;
+    d1_alt_kind?: "outflow" | "inflow";
+  }
 >;
 
 function ms(value: unknown): number | null {
@@ -216,6 +229,10 @@ export async function resolve_recurring_matches(
     v2_account_by_recurring_id?: Map<string, string>;
     /** The transaction's (Plaid) account id. */
     txn_account_id?: string | null;
+    /** Converted bills / income by D1 key (Convert-To-Recurring Phase 2). */
+    converted_index?: ConvertedIndex;
+    /** The transaction's vendor key (stored, else computed the same way). */
+    txn_vendor_key?: string | null;
   } = {}
 ): Promise<RecurringBySplit> {
   const out: RecurringBySplit = {};
@@ -227,6 +244,32 @@ export async function resolve_recurring_matches(
   const is_expense = txn_type === "expense";
   if (!is_income && !is_expense) {
     return out; // transfers match nothing
+  }
+
+  // D1 (Convert-To-Recurring Phase 2): the payment's direction + account + vendor key names the
+  // user's converted bill(s). A single-split payment dated on/after the bill's D1 floor (or one
+  // its convert linked) links to it, ANY amount. Two or more bills of one key: the fuzzy scorer
+  // restricted to exactly those, else the closest amount, else the smallest id — deterministic.
+  const converted = opts.converted_index;
+  const dir: "outflow" | "inflow" = is_expense ? "outflow" : "inflow";
+  let d1_pick: string | null = null;
+  if (converted && converted.ids.size > 0 && opts.txn_account_id && opts.txn_vendor_key && splits.length === 1) {
+    const key_bills = converted.by_key.get(converted_key(dir, opts.txn_account_id, opts.txn_vendor_key));
+    const eligible = (key_bills ?? []).filter((b) =>
+      d1_allows(b, { date_ms: txn_date_ms, plaid_id: opts.txn_plaid_id ?? null }));
+    if (eligible.length > 0) {
+      let scorer_pick: string | null = null;
+      if (eligible.length > 1) {
+        const ids = new Set(eligible.map((b) => b.id));
+        const restricted = (await candidates_for_txn(ctx, user_id, is_expense, txn_date_ms, opts.preloaded_candidates))
+          .filter((c) => ids.has(c.recurring_id));
+        scorer_pick = match_recurring(
+          { merchant_name: txn_merchant_name, amount: Math.abs(splits[0].amount), date_ms: txn_date_ms },
+          restricted
+        ).recurring_id;
+      }
+      d1_pick = pick_converted_bill(eligible, splits[0].amount, scorer_pick);
+    }
   }
 
   // 0. AUTHORITATIVE deterministic link: if this transaction is a member of a recurring
@@ -245,9 +288,21 @@ export async function resolve_recurring_matches(
         out[s.split_id] = is_expense
           ? { outflow_id: recurring_id, inflow_id: null }
           : { outflow_id: null, inflow_id: recurring_id };
+        if (d1_pick && d1_pick !== recurring_id) {
+          out[s.split_id].d1_alt_id = d1_pick;
+          out[s.split_id].d1_alt_kind = dir;
+        }
       }
       return out;
     }
+  }
+
+  // D1: a converted bill of this payment's key (after stream membership, before the hold-out).
+  if (d1_pick) {
+    out[splits[0].split_id] = is_expense
+      ? { outflow_id: d1_pick, inflow_id: null }
+      : { outflow_id: null, inflow_id: d1_pick };
+    return out;
   }
 
   // Held out of fuzzy matching (Convert-To-Recurring X3): a payment of a stream Plaid is unsure of
@@ -257,13 +312,16 @@ export async function resolve_recurring_matches(
     return out;
   }
 
-  const all_candidates = await candidates_for_txn(
+  // Converted bills are matched by D1 only: the fuzzy scorer never links to them (an unlinked
+  // payment of theirs — a multi-split one, one before their floor — stays a normal transaction).
+  const converted_ids = converted?.ids;
+  const all_candidates = (await candidates_for_txn(
     ctx,
     user_id,
     is_expense,
     txn_date_ms,
     opts.preloaded_candidates
-  );
+  )).filter((c) => !converted_ids || converted_ids.size === 0 || !converted_ids.has(c.recurring_id));
   // F13: a v2 bill / income is fuzzy-matched only by payments from its own account (a payment from
   // another account — the bill moved — is not auto-linked in Phase 1). Old records: unchanged.
   const v2_accounts = opts.v2_account_by_recurring_id;

@@ -126,6 +126,8 @@ export interface InflowForPersistence {
   converted_from_txn_id?: string;
   /** UTC day the record was created by the new path (D1 links payments from this day on). */
   converted_at_ms?: number;
+  /** Plaid ids of the past payments a convert linked (D2 / D46): D1 keeps them linked. */
+  retro_txn_ids?: string[];
   /** The expected amount, written at creation (a Plaid average never drifts it). */
   expected_amount_override?: number | null;
 }
@@ -207,6 +209,8 @@ export interface OutflowForPersistence {
   converted_from_txn_id?: string;
   /** UTC day the record was created by the new path (D1 links payments from this day on). */
   converted_at_ms?: number;
+  /** Plaid ids of the past payments a convert linked (D2 / D46): D1 keeps them linked. */
+  retro_txn_ids?: string[];
   /** The expected amount, written at creation (a Plaid average never drifts it). */
   expected_amount_override?: number | null;
 }

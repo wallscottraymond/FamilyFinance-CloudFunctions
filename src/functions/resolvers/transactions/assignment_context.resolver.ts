@@ -14,6 +14,12 @@
 
 import { is_v2_record } from "../../domain/recurring/capture_rules";
 import {
+  ConvertedIndex,
+  ConvertedRecordInput,
+  build_converted_index,
+} from "../../domain/recurring/converted_match.service";
+import { vendor_key as vendor_key_of } from "../../domain/transactions/vendor_key.service";
+import {
   budget_to_match_input,
   build_match_budgets,
 } from "../../domain/budgets/match_budgets.service";
@@ -138,6 +144,13 @@ export interface SharedAssignmentContext {
    * pins are unaffected). Old records keep today's fuzzy matching (D13). No extra reads.
    */
   v2_account_by_recurring_id?: Map<string, string>;
+  /**
+   * Converted bills / income (v2 + manual + a vendor key on a Plaid account), keyed by direction |
+   * account | vendor (Convert-To-Recurring Phase 2, D1): a payment of that vendor on that account
+   * links to them by KEY, any amount; fuzzy matching excludes exactly these ids. No extra reads —
+   * built from the bills / income this context already loads. Empty for anyone without such records.
+   */
+  converted_index?: ConvertedIndex;
 }
 
 /** One view's budgets, as the engine matches against them. */
@@ -174,10 +187,10 @@ export async function resolve_shared_assignment_context(
   // a txn is linked to a bill/income exactly as the derive-on-read read path does. A txn
   // claimed by two streams is excluded (no guessing — see build_stream_membership_map).
   const outflow_tx_to_id = build_stream_membership_map(
-    outflows.filter((o) => o.is_active && !o.is_hidden)
+    outflows.filter((o) => o.is_active && !o.is_hidden).map(with_absorbed_ids)
   );
   const inflow_tx_to_id = build_stream_membership_map(
-    inflows.filter((i) => i.is_active && !i.is_hidden)
+    inflows.filter((i) => i.is_active && !i.is_hidden).map(with_absorbed_ids)
   );
 
   // The `categories` collection as the one category function needs it (canon M7).
@@ -216,6 +229,11 @@ export async function resolve_shared_assignment_context(
     if (is_v2_record(r) && r.account_id) v2_account_by_recurring_id.set(r.id, r.account_id);
   }
 
+  const converted_index = build_converted_index([
+    ...outflows.map((o) => as_converted_input(o, "outflow")),
+    ...inflows.map((i) => as_converted_input(i, "inflow")),
+  ]);
+
   return {
     real_budgets,
     budget_names,
@@ -231,7 +249,59 @@ export async function resolve_shared_assignment_context(
     load_bill_payments_for_release,
     fuzzy_excluded_plaid_ids: new Set(review_state?.suppressed_txn_ids ?? []),
     v2_account_by_recurring_id,
+    converted_index,
   };
+}
+
+/**
+ * A record's stream membership for the engine: its Plaid stream's ids PLUS the Plaid payments it
+ * absorbed (D42: a Plaid stream that turned out to be this converted bill). Records without
+ * absorbed ids pass through as the same object — unchanged for everything that exists today.
+ */
+function with_absorbed_ids<T extends { id: string; transaction_ids?: string[] | null; absorbed_txn_ids?: string[] }>(
+  r: T
+): { id: string; transaction_ids?: string[] | null } {
+  return r.absorbed_txn_ids?.length
+    ? { id: r.id, transaction_ids: [...(r.transaction_ids ?? []), ...r.absorbed_txn_ids] }
+    : r;
+}
+
+function as_converted_input(
+  r: {
+    id: string; is_active: boolean; is_hidden: boolean; merged_into_id?: string | null;
+    capture_rules_version?: number | null; source?: string | null; vendor_key?: string | null;
+    account_id?: string | null; average_amount: number; expected_amount_override?: number | null;
+    first_date?: Timestamp; converted_at_ms?: number | null; retro_txn_ids?: string[];
+  },
+  direction: "outflow" | "inflow"
+): ConvertedRecordInput {
+  return {
+    id: r.id,
+    direction,
+    is_active: r.is_active,
+    is_hidden: r.is_hidden,
+    merged_into_id: r.merged_into_id,
+    capture_rules_version: r.capture_rules_version,
+    source: r.source,
+    vendor_key: r.vendor_key,
+    account_id: r.account_id,
+    average_amount: r.average_amount,
+    expected_amount_override: r.expected_amount_override,
+    first_date_ms: (r.first_date as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0,
+    converted_at_ms: r.converted_at_ms,
+    retro_txn_ids: r.retro_txn_ids,
+  };
+}
+
+/** The transaction's vendor key: the stored one, else computed exactly as the stored one is. */
+function txn_vendor_key(data: Record<string, unknown>): string | null {
+  const stored = data.vendorKey;
+  if (typeof stored === "string" && stored.length > 0) return stored;
+  return vendor_key_of({
+    merchant_name: data.merchantName as string | null | undefined,
+    name: data.name as string | null | undefined,
+    description: data.description as string | null | undefined,
+  });
 }
 
 /**
@@ -389,6 +459,8 @@ export async function resolve_assignment_context(
       fuzzy_excluded_plaid_ids: resolved_shared.fuzzy_excluded_plaid_ids,
       v2_account_by_recurring_id: resolved_shared.v2_account_by_recurring_id,
       txn_account_id: (data.accountId as string | null) ?? null,
+      converted_index: resolved_shared.converted_index,
+      txn_vendor_key: txn_vendor_key(data),
     }
   );
 
@@ -438,14 +510,22 @@ export async function resolve_assignment_context(
 
   // A link to a bill / income of ANOTHER view isn't this view's bill payment — the period page
   // drops it and counts the money here as ordinary spending; the engine does the same.
+  // …except that a stream-member payment whose bill is another view's still pays an in-view
+  // converted bill of its key (D1's `d1_alt`): the stream target is dropped, the D1 one is kept.
   const recurring_by_split = Object.fromEntries(
-    Object.entries(await recurring_by_split_promise).map(([split_id, m]) => [
-      split_id,
-      {
-        outflow_id: in_view(m.outflow_id) ? m.outflow_id : null,
-        inflow_id: in_view(m.inflow_id) ? m.inflow_id : null,
-      },
-    ])
+    Object.entries(await recurring_by_split_promise).map(([split_id, m]) => {
+      const alt = m.d1_alt_id ?? null;
+      const outflow_ok = in_view(m.outflow_id);
+      const inflow_ok = in_view(m.inflow_id);
+      const alt_ok = !!alt && in_view(alt);
+      return [
+        split_id,
+        {
+          outflow_id: outflow_ok ? m.outflow_id : (m.outflow_id && alt_ok && m.d1_alt_kind === "outflow" ? alt : null),
+          inflow_id: inflow_ok ? m.inflow_id : (m.inflow_id && alt_ok && m.d1_alt_kind === "inflow" ? alt : null),
+        },
+      ];
+    })
   );
   // Manual bill pins are honoured only for live bills in this view (a stale / other-view pin
   // falls back to auto — canon A5).

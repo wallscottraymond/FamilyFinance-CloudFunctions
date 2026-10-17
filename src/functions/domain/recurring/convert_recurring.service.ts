@@ -61,6 +61,8 @@ export interface AbsorbedStream {
   stream_id: string;
   state: "absorbed" | "declined";
   at_ms: number;
+  /** The Plaid payments of that stream the record claims (their union is `absorbed_txn_ids`). */
+  txn_ids: string[];
 }
 
 /** How a bill was merged into another (D7 / D22 / D41), kept so the merge can be undone (D18). */
@@ -252,13 +254,15 @@ export function select_retro_payments(input: {
   const lo = sorted[0].date_ms - MATCH_TOLERANCE_MS - 1;
   const hi = Math.max(sorted[sorted.length - 1].date_ms, next_due_ms) + MATCH_TOLERANCE_MS + 1;
   const dues = occurrences_between(frequency, next_due_ms, lo, hi);
-  // Only occurrences inside the window (on or after the floor) can be linked to: a payment just
-  // after the floor that pays an occurrence before it belongs to history we don't reach (D40 / D45).
+  // Only occurrences inside the window (on or after the floor, already due) can be linked to: a
+  // payment just after the floor that pays an occurrence before it belongs to history we don't
+  // reach (D40 / D45), and a past payment never claims an occurrence that isn't due yet (only the
+  // source — the payment the user tapped — may be early).
   const nearest = (date_ms: number, in_window_only: boolean): number | null => {
     let best: number | null = null;
     let best_diff = Infinity;
     for (const d of dues) {
-      if (in_window_only && d < floor_ms) continue;
+      if (in_window_only && (d < floor_ms || d > input.now_ms)) continue;
       const diff = Math.abs(date_ms - d);
       if (diff <= MATCH_TOLERANCE_MS && diff < best_diff) {
         best = d;
