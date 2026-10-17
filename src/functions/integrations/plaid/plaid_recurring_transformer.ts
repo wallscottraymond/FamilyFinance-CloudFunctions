@@ -130,6 +130,9 @@ export interface InflowForPersistence {
   retro_txn_ids?: string[];
   /** The expected amount, written at creation (a Plaid average never drifts it). */
   expected_amount_override?: number | null;
+  /** Add Income (D43): the settings the form collected (hourly / commission / bonus / variable
+   *  config, variability, isPrivate …) — written on a NEW doc only, never by a Plaid sync. */
+  income_extras?: Record<string, unknown>;
 }
 
 /**

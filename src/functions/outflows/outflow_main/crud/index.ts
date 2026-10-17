@@ -1,7 +1,8 @@
 /**
  * Outflow Main CRUD Operations
  *
- * Exports all Create, Read, Update, Delete operations for main outflow entities
+ * `createManualOutflow` (camelCase) was retired with Convert-To-Recurring D43 — Add Bill is the
+ * `create_manual_outflow` callable (entry/callable). Nothing is exported from here.
  */
 
-export * from './createManualOutflow';
+export {};

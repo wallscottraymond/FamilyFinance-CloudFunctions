@@ -26,6 +26,7 @@ import {
   success_response,
   error_response,
   FunctionResponse,
+  ConvertRefusedError,
 } from "../../types";
 
 /**
@@ -42,6 +43,9 @@ const schema = z.object({
   expense_type: z.string().min(1).max(40).default("other"),
   is_essential: z.boolean().default(false),
   due_day: z.number().int().min(1).max(31).optional(),
+  // D43 (honoured only with the feature on): where the bill is paid from / which transaction it came from.
+  account_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
+  source_transaction_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -88,6 +92,8 @@ export const create_manual_outflow = onCall(
           expense_type: data.expense_type,
           is_essential: data.is_essential,
           due_day: data.due_day ?? null,
+          account_id: data.account_id ?? null,
+          source_transaction_id: data.source_transaction_id ?? null,
         },
         user_id,
         idempotency_key: `create_manual_outflow:${trace.trace_id}`,
@@ -104,6 +110,9 @@ export const create_manual_outflow = onCall(
       log_operation_success(span, user_id);
       return success_response({ outflow_id: result.outflow_id }, trace.trace_id);
     } catch (error) {
+      if (error instanceof ConvertRefusedError) {
+        return error_response<{ outflow_id: string }>(error.code, error.message, trace.trace_id);
+      }
       log_operation_error(
         span,
         error instanceof Error ? error : new Error(String(error)),

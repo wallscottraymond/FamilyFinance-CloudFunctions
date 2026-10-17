@@ -430,6 +430,10 @@ export interface BuildConvertedInput {
   is_variable?: boolean;
   /** Hidden from creation (never for convert). */
   is_hidden?: boolean;
+  /** Add Income keeps its own description / user-modified flag / settings (D43). */
+  description?: string;
+  is_user_modified?: boolean;
+  income_extras?: Record<string, unknown>;
 }
 
 export interface BuildConvertedResult {
@@ -470,7 +474,7 @@ export function build_converted_recurring(input: BuildConvertedInput): BuildConv
     last_amount: input.amount,
     average_amount: input.amount,
     currency: "USD",
-    description: name,
+    description: input.description ?? name,
     user_custom_name: name,
     frequency: stored_frequency(input.frequency),
     first_date: first,
@@ -486,7 +490,7 @@ export function build_converted_recurring(input: BuildConvertedInput): BuildConv
     plaid_confidence_level: null,
     is_active: true,
     is_hidden: input.is_hidden === true,
-    is_user_modified: true,
+    is_user_modified: input.is_user_modified ?? true,
     transaction_ids: [] as string[],
     tags: [] as string[],
     rules: [] as unknown[],
@@ -516,6 +520,7 @@ export function build_converted_recurring(input: BuildConvertedInput): BuildConv
       income_type: input.income_type ?? "other",
       is_regular_salary: input.is_regular_salary ?? false,
       is_variable: input.is_variable ?? false,
+      ...(input.income_extras ? { income_extras: input.income_extras } : {}),
     } as InflowForPersistence,
   };
 }

@@ -25,6 +25,13 @@ import {
   ManualBillFrequency,
 } from "../../domain/recurring/manual_outflow.service";
 import { outflow_repo } from "../../repositories/outflow.repo";
+import { is_convert_to_recurring_enabled } from "../../infrastructure/feature_flags";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
+import { resolve_manual_source } from "../../resolvers/recurring/manual_source.resolver";
+import { CAPTURE_RULES_VERSION } from "../../domain/recurring/capture_rules";
+import { utc_day_start } from "../../domain/recurring/convert_recurring.service";
+import { generate_periods_inline } from "./generate_periods_inline";
+import { ConvertRefusedError } from "../../types";
 
 /**
  * Input for creating a bill.
@@ -37,6 +44,10 @@ export interface CreateManualOutflowInput {
   expense_type: string;
   is_essential: boolean;
   due_day: number | null;
+  /** D43 (flag on only): a Plaid account the bill is paid from, and/or a real transaction it came
+   *  from — the only source of a D1 vendor key. Ignored with the flag off. */
+  account_id?: string | null;
+  source_transaction_id?: string | null;
 }
 
 /**
@@ -83,9 +94,31 @@ export async function create_manual_outflow_orchestrator(
       return { success: false, errors: result.validation_errors ?? ["Invalid bill"] };
     }
 
-    // 3. REPOSITORY — on_outflow_created generates periods; on_recurring_updated
-    // invalidates the derive cache.
-    await outflow_repo.save_batch(ctx, [result.entity]);
+    // 3. REPOSITORY.
+    if (await is_convert_to_recurring_enabled(ctx.user_id)) {
+      // D43 (flag on): the same record, stamped v2 + manual; a D1 key ONLY from a real transaction;
+      // never a retro-link. Created stamped, periods generated inline, one derive bump — no trigger
+      // fan-out and no queued reconcile.
+      const src = await resolve_manual_source(ctx, ctx.user_id, ctx.input);
+      if (!src.ok) {
+        throw new ConvertRefusedError(src.reason === "account_not_yours" ? "ACCOUNT_NOT_YOURS" : "SOURCE_NOT_YOURS",
+          "That account or transaction isn't yours");
+      }
+      const run_id = `manual_${randomUUID()}`;
+      const entity = {
+        ...result.entity,
+        account_id: src.account_id,
+        capture_rules_version: CAPTURE_RULES_VERSION,
+        plaid_is_active: true,
+        ...(src.vendor_key && src.account_id ? { vendor_key: src.vendor_key, converted_at_ms: utc_day_start(Date.now()) } : {}),
+      };
+      const saved = await outflow_repo.save_batch(ctx, [entity], run_id);
+      await generate_periods_inline(ctx, ctx.user_id, saved.written.filter((w) => w.created));
+      await bump_derive_version(ctx.user_id).catch(() => {});
+    } else {
+      // on_outflow_created generates periods; on_recurring_updated invalidates the derive cache.
+      await outflow_repo.save_batch(ctx, [result.entity]);
+    }
 
     log_operation_success(span, ctx.user_id);
     return { success: true, outflow_id };

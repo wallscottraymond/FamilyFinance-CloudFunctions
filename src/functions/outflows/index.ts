@@ -10,7 +10,8 @@
  */
 
 // Public API functions from module-specific locations
-export * from './outflow_main/crud/createManualOutflow';
+// createManualOutflow (camelCase) was retired with D43: Add Bill is `create_manual_outflow`.
+// The deploy must delete the orphan: `firebase functions:delete createManualOutflow` (never --force).
 export * from './outflow_periods/api';
 
 // =============================================================================

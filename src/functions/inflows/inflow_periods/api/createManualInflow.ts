@@ -12,6 +12,10 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import { is_convert_to_recurring_enabled } from '../../../infrastructure/feature_flags';
+import { to_convert_frequency } from '../../../domain/recurring/manual_inflow.service';
+import { create_manual_inflow_orchestrator } from '../../../orchestrators/recurring/create_manual_inflow.orchestrator';
+import { ConvertRefusedError } from '../../../types';
 import {
   IncomeType,
   IncomeVariability,
@@ -32,6 +36,7 @@ interface CreateManualInflowRequest {
   // Optional fields
   description?: string;
   accountId?: string;        // Associated account (optional)
+  sourceTransactionId?: string; // D43 (flag on): the real transaction a D1 vendor key may come from
 
   // Income type configuration
   incomeType: IncomeType;
@@ -116,6 +121,42 @@ export const createManualInflow = onCall(
       }
     } catch {
       throw new HttpsError('invalid-argument', 'Invalid first expected date format');
+    }
+
+    // D43 (flag on): Add Income through the shared builder — stamped v2, the caller's own account
+    // verified (a forged accountId is refused), periods generated inline. Flag off (or a schedule the
+    // new path doesn't know): the legacy write below, unchanged.
+    if (await is_convert_to_recurring_enabled(userId)) {
+      const frequency = to_convert_frequency(String(data.frequency));
+      if (frequency) {
+        try {
+          const { inflow_id } = await create_manual_inflow_orchestrator(
+            { trace_id: `createManualInflow_${userId}_${Date.now()}`, span_id: 'createManualInflow' },
+            userId,
+            {
+              name: data.name.trim(),
+              amount: data.amount,
+              frequency,
+              first_expected_ms: firstDate.getTime(),
+              description: data.description || null,
+              income_type: String(data.incomeType),
+              is_regular_salary: data.incomeType === IncomeType.SALARY,
+              income_variability: String(data.incomeVariability || getDefaultVariability(data.incomeType)),
+              hourly_config: data.hourlyConfig,
+              commission_config: data.commissionConfig,
+              bonus_config: data.bonusConfig,
+              variable_config: data.variableConfig,
+              account_id: data.accountId || null,
+              source_transaction_id: data.sourceTransactionId || null,
+            }
+          );
+          return { success: true, inflowId: inflow_id, message: 'Manual income created successfully. Periods were generated.' };
+        } catch (error: any) {
+          if (error instanceof ConvertRefusedError) throw new HttpsError('permission-denied', error.message);
+          if (error instanceof HttpsError) throw error;
+          throw new HttpsError('invalid-argument', error?.message || 'Failed to create manual inflow');
+        }
+      }
     }
 
     // Generate unique ID

@@ -426,6 +426,8 @@ function map_persistence_to_doc(
         : {}),
     // Convert-To-Recurring Phase 2: carried through this full-document set (conditional keys only).
     ...carried_convert_fields(existing, entity),
+    // Add Income (D43) settings: a NEW doc only (conditional).
+    ...(!existing && entity.income_extras ? entity.income_extras : {}),
 
     lastSyncedAt: now,
   };
