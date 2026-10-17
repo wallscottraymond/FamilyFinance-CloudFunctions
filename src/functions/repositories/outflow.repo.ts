@@ -523,6 +523,10 @@ export const outflow_repo = {
       } else {
         next_active = is_stored_period_active(intervals, end_ms, stored_occurrence_due_ms(p));
         if ((p.isActive !== false) === next_active) continue; // already in the right state
+        // Round 5 test 8: a period turned on by a carried early payment (D28, `carryActive`) is
+        // the reconcile's to keep or turn off — turning it off here only for the reconcile to turn
+        // it back on was 2 writes on every call.
+        if (p.carryActive === true && p.isActive !== false) continue;
       }
       flipped++;
       if (opts.dry_run) continue;

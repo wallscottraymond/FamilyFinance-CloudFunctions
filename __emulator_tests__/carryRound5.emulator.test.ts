@@ -10,6 +10,7 @@ import * as admin from 'firebase-admin';
 import { FAKE_CLOCK, makeHarness, plaidTxn, scenarioRecurring } from './helpers/captureHarness';
 import { plaidStream } from './helpers/captureScenario';
 import { halves, months, seedPeriods, weeks } from './helpers/sourcePeriods';
+import { startCounting } from './helpers/firestoreCounter';
 
 const mockSync = jest.fn();
 const mockRecurring = jest.fn();
@@ -153,4 +154,24 @@ describe('round 5 — stored periods carry what the page\'s matcher assigns (emu
       expect([wk?.isActive, wk?.carryActive]).toEqual([true, true]);
     }, 240000);
   });
+
+  it('test 8: apply_period_suppression on a carryActive week, then reconcile → at most 2 writes, then none', async () => {
+    const { uid, bill } = await billUser('qzr5t8', false, { paid: [U12(8, 1), U12(9, 1), U12(9, 29)], frequency: 'MONTHLY', next_ms: U12(11, 1) });
+    await removeFromOct(uid, bill);
+    await runReconcile(uid, bill);
+    const wk_id = WEEKS.find((x) => x.start === Date.UTC(2042, 8, 28))!.id;
+    expect([(await period(bill, wk_id))?.isActive, (await period(bill, wk_id))?.carryActive]).toEqual([true, true]);
+    const intervals = (await outflow_repo.get_by_id(ctx(), bill)).removal_intervals;
+    const round = async () => {
+      const c = startCounting();
+      await outflow_repo.apply_period_suppression(ctx(), bill, intervals, uid);
+      await runReconcile(uid, bill);
+      const k = c.stop();
+      return k.writes_by.outflow_periods ?? 0;
+    };
+    const first = await round();
+    expect(first).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 3; i++) expect(await round()).toBe(0);
+    expect([(await period(bill, wk_id))?.isActive, (await period(bill, wk_id))?.carryActive]).toEqual([true, true]);
+  }, 240000);
 });
