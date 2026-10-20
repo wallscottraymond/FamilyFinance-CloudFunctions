@@ -491,9 +491,7 @@ export async function resolve_assignment_context(
   const view_group_id = in_group ? placed!.group_id : null;
   // …and a bill / income removed or paused for this payment's month isn't paid by it either: the
   // money counts as ordinary spending / money in (the period page applies the same rule).
-  // A bill / income that no longer exists (deleted; a period of it left behind) is in no view.
   const of_view = (recurring_id: string): boolean =>
-    resolved_shared.recurring_view_by_id.has(recurring_id) &&
     (resolved_shared.recurring_view_by_id.get(recurring_id) ?? null) === view_group_id;
   // D31 / D37: a bill's late payment of its last occurrence before the cut-off is not released
   // while that occurrence is still unpaid — judged by the bill's stored payments, loaded only for

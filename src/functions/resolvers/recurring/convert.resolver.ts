@@ -193,15 +193,24 @@ export async function resolve_convert_facts(
       const window = await transaction_repo.get_account_window(ctx, user_id, own.account_id, retro_floor_ms(facts));
       rows = [...rows, ...window.filter((w) => !have.has(w.id) && !w.data.vendorKey && txn_facts(w.id, w.data, false).vendor_key === own.vendor_key)];
     }
-    // A link to a record that's gone (deleted, e.g. the D47 recovery, before its re-assign has run)
-    // isn't a link: the engine drops it too, so the payment is the vendor's like any other.
-    const live_ids = new Set([...outflows, ...inflows].map((r) => r.id));
-    facts.vendor_txns = rows.map((r) => {
-      const f = txn_facts(r.id, r.data, false);
+    // A link to a record that no longer EXISTS (hard-deleted — the D47 recovery — before its
+    // re-assign has run) isn't a link: the payment is the vendor's like any other. An inactive record
+    // (Plaid-stale, a D41 old bill) still exists and keeps its history. Only ids outside the active
+    // set are looked up (one batched read, usually none).
+    const active_ids = new Set([...outflows, ...inflows].map((r) => r.id));
+    const all = rows.map((r) => txn_facts(r.id, r.data, false));
+    const unknown = (k: "outflow_id" | "inflow_id") =>
+      [...new Set(all.flatMap((f) => f.splits.map((x) => x[k]).filter((v): v is string => !!v && !active_ids.has(v))))];
+    const [out_found, in_found] = await Promise.all([
+      unknown("outflow_id").length ? outflow_repo.get_raw_by_ids(ctx, unknown("outflow_id")) : new Map(),
+      unknown("inflow_id").length ? inflow_repo.get_raw_by_ids(ctx, unknown("inflow_id")) : new Map(),
+    ]);
+    const exists = (id: string, found: Map<string, unknown>) => active_ids.has(id) || found.has(id);
+    facts.vendor_txns = all.map((f) => {
       f.splits = f.splits.map((x) => ({
         ...x,
-        outflow_id: x.outflow_id && live_ids.has(x.outflow_id) ? x.outflow_id : null,
-        inflow_id: x.inflow_id && live_ids.has(x.inflow_id) ? x.inflow_id : null,
+        outflow_id: x.outflow_id && exists(x.outflow_id, out_found) ? x.outflow_id : null,
+        inflow_id: x.inflow_id && exists(x.inflow_id, in_found) ? x.inflow_id : null,
       }));
       return { ...f, in_shown_stream: !!f.plaid_id && stream_ids.has(f.plaid_id) };
     });
