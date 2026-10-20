@@ -99,6 +99,7 @@ describe('fix round 2 (emulator)', () => {
     const pb = await preview(ctx(), h.ids.userId, { transaction_id: ref.id, split_id: b.splitId }, NOW_MS);
     expect(pb.already_converted ?? false).toBe(false);
     expect(pa.already_converted?.id).toBeTruthy();
+    expect(pa.already_converted?.unfinished).toBe(false); // finished: nothing to resume
   }, 300000);
 
   it('2: a double tap during the original convert does nothing (in progress); after the lease expires the next tap resumes', async () => {
@@ -108,11 +109,14 @@ describe('fix round 2 (emulator)', () => {
     expect(tap).toMatchObject({ id: 'conv_lease', already: true, in_progress: true });
     expect((await db.collection('outflow_periods').where('outflowId', '==', 'conv_lease').get()).size).toBe(0);
     expect((await db.collection('outflows').doc('conv_lease').get()).data()!.retroLinkedAtMs).toBeUndefined();
+    // the preview tells the app it's unfinished, so a tap goes to convert (which resumes it)
+    expect((await preview(ctx(), h.ids.userId, { transaction_id: doc(h, 'oct') }, NOW_MS)).already_converted).toMatchObject({ id: 'conv_lease', unfinished: true });
     await db.collection('outflows').doc('conv_lease').update({ resumeLeaseMs: 0 });
     const done = await convert(ctx(), h.ids.userId, { transaction_id: doc(h, 'oct'), ...RENT }, NOW_MS);
     expect(done.in_progress).toBeUndefined();
     expect((await db.collection('outflows').doc('conv_lease').get()).data()!.retroLinkedAtMs).toBeGreaterThan(0);
     expect((await db.collection('outflow_periods').where('outflowId', '==', 'conv_lease').get()).size).toBeGreaterThan(0);
+    expect((await preview(ctx(), h.ids.userId, { transaction_id: doc(h, 'oct') }, NOW_MS)).already_converted?.unfinished).toBe(false);
   }, 300000);
 
   it('3 (P-a): a PAUSED bill is live — its payment cannot be converted into a second bill', async () => {

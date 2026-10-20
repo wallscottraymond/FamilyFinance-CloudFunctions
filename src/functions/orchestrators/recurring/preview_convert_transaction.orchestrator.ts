@@ -19,7 +19,9 @@ import { build_preview, ConvertPreview, direction_of } from "../../domain/recurr
 export type PreviewResult =
   | { enabled: false }
   | { enabled: true; refusal: { code: string; message: string; details?: Record<string, unknown> } }
-  | { enabled: true; already_converted: { id: string; name: string } }
+  /** `unfinished`: made but never finished (a convert that timed out) — the app taps convert again
+   *  to resume it, since only convert finishes it. */
+  | { enabled: true; already_converted: { id: string; name: string; unfinished: boolean } }
   | ({ enabled: true } & Omit<ConvertPreview, "ok">);
 
 export async function preview_convert_transaction_orchestrator(
@@ -38,7 +40,7 @@ export async function preview_convert_transaction_orchestrator(
       throw new PermissionDeniedError("preview_convert_transaction", input.transaction_id);
     }
     if (r.existing_conversion?.live) {
-      return { enabled: true, already_converted: { id: r.existing_conversion.id, name: r.existing_conversion.name } };
+      return { enabled: true, already_converted: { id: r.existing_conversion.id, name: r.existing_conversion.name, unfinished: !r.existing_conversion.retro_done } };
     }
     // A conversion that was removed: convert refuses it, so the preview says so too.
     if (r.existing_conversion) {
