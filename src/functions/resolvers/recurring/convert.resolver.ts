@@ -184,7 +184,10 @@ export async function resolve_convert_facts(
     user_id, txn: own, vendor_txns: [], claimed_by, placement, now_ms,
   };
   // The vendor's other payments (only worth reading for a transaction that can convert).
-  if (own.vendor_key && own.account_id && !existing_conversion) {
+  // …also when the existing conversion is a removed, unfinished one: a convert discards it first, so
+  // its payments are the vendor's like any other (preview and convert then agree).
+  const discardable = !!existing_conversion && !existing_conversion.live && !existing_conversion.retro_done;
+  if (own.vendor_key && own.account_id && (!existing_conversion || discardable)) {
     let rows = await transaction_repo.get_by_vendor_key(ctx, user_id, own.vendor_key, retro_floor_ms(facts));
     // Transactions written before `vendorKey` was stored aren't found by the key: when the source
     // itself has none, scan the account's window and compute the key exactly as the engine does.
@@ -195,6 +198,14 @@ export async function resolve_convert_facts(
     }
     facts.vendor_txns = rows.map((r) => {
       const f = txn_facts(r.id, r.data, false);
+      // Links to the record about to be discarded are cleared by the discard.
+      if (discardable) {
+        f.splits = f.splits.map((x) => ({
+          ...x,
+          outflow_id: x.outflow_id === existing_conversion!.id ? null : x.outflow_id,
+          inflow_id: x.inflow_id === existing_conversion!.id ? null : x.inflow_id,
+        }));
+      }
       return { ...f, in_shown_stream: !!f.plaid_id && stream_ids.has(f.plaid_id) };
     });
   }

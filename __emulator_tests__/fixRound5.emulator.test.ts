@@ -30,7 +30,7 @@ jest.mock('../src/utils/encryption', () => {
 
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any */
 let db: FirebaseFirestore.Firestore;
-let convert: any; let manage: any; let outflow_repo: any;
+let convert: any; let manage: any; let outflow_repo: any; let inflow_repo: any; let preview: any;
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
   jest.useFakeTimers(FAKE_CLOCK);
@@ -40,6 +40,8 @@ beforeAll(async () => {
   ({ convert_transaction_to_recurring_orchestrator: convert } = require('../src/functions/orchestrators/recurring/convert_transaction_to_recurring.orchestrator'));
   ({ manage_recurring_removal_orchestrator: manage } = require('../src/functions/orchestrators/recurring/manage_recurring_removal.orchestrator'));
   ({ outflow_repo } = require('../src/functions/repositories/outflow.repo'));
+  ({ inflow_repo } = require('../src/functions/repositories/inflow.repo'));
+  ({ preview_convert_transaction_orchestrator: preview } = require('../src/functions/orchestrators/recurring/preview_convert_transaction.orchestrator'));
   db = admin.firestore();
   await seedMonths(db);
 }, 60000);
@@ -195,4 +197,45 @@ describe('fix round 6 (emulator)', () => {
     expect(old.mergedIntoId === undefined || old.mergedIntoId === ok.id).toBe(true); // un-merged (then merged again into the NEW bill by its D41)
     expect(old.mergedIntoId).not.toBe(first.id);
   }, 400000);
+});
+
+describe('fix round 7 (emulator): the discard is complete for every removal mode and for income', () => {
+  const run = async (tag: string, kind: 'outflow' | 'inflow', mode: 'going_forward' | 'end' | 'all') => {
+    const h = await makeHarness(db, tag, mocks, { flag: true });
+    await h.sync('link');
+    const dep = (key: string, days_ago: number) => kind === 'inflow'
+      ? plaidTxn(h.ids, { key, account: 'chk', amount: -450, days_ago, name: 'SIDE GIG CO', merchant: 'Side Gig Co', primary: 'INCOME', detailed: 'INCOME_OTHER_INCOME' })
+      : ll(h.ids, key, days_ago);
+    h.postTxns([dep('oct', ago(2037, 10, 3)), dep('sep', ago(2037, 9, 3)), dep('aug', ago(2037, 8, 3))]);
+    await h.sync('pay');
+    const req = kind === 'inflow'
+      ? { transaction_id: doc(h, 'oct'), name: 'Side gig', amount: 450, frequency: 'monthly', next_due_date: '2037-11-03', link_past: true }
+      : { transaction_id: doc(h, 'oct'), ...RENT };
+    const coll = kind === 'inflow' ? 'inflows' : 'outflows';
+    const gname = kind === 'inflow' ? 'generate_inflow_periods_orchestrator' : 'generate_outflow_periods_orchestrator';
+    const gmod = require(`../src/functions/orchestrators/${kind}s/generate_${kind}_periods.orchestrator`);
+    const spy = jest.spyOn(gmod, gname).mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
+    expect((await convert(ctx(), h.ids.userId, req, NOW_MS)).in_progress).toBe(true);
+    spy.mockRestore();
+    const stuck = (await db.collection(coll).where('ownerId', '==', h.ids.userId).where('convertedFromTxnId', '==', doc(h, 'oct')).get()).docs[0];
+    if (kind === 'inflow') { // a MANUAL income pin to the stuck income (the source's pin)
+      expect((await h.txn('oct')).splits[0].inflowAssignmentSource).toBe('manual');
+    }
+    await manage(ctx(), h.ids.userId, [], { id: stuck.id, action: mode === 'end' ? 'end' : 'remove', ...(mode === 'end' ? {} : { mode }) }, NOW_MS, kind === 'inflow' ? inflow_repo : outflow_repo, kind === 'inflow' ? 'recurring_inflow' : 'recurring_outflow');
+    await stuck.ref.update({ resumeLeaseMs: 0 });
+    const pv = await preview(ctx(), h.ids.userId, { transaction_id: doc(h, 'oct') }, NOW_MS);
+    const ok = await convert(ctx(), h.ids.userId, req, NOW_MS);
+    const field = kind === 'inflow' ? 'splitInflowIds' : 'splitOutflowIds';
+    expect((await db.collection('transactions').where(field, 'array-contains', stuck.id).get()).size).toBe(0);
+    expect(ok.id).not.toBe(stuck.id);
+    expect(ok.linked_past_count).toBeGreaterThan(0);
+    expect(ok.linked_past_count).toBe(pv.linkable_count);
+    const link = kind === 'inflow' ? 'inflowId' : 'outflowId';
+    for (const k of ['oct', 'sep', 'aug']) expect((await h.txn(k)).splits[0][link]).toBe(ok.id);
+    expect((await stuck.ref.get()).exists).toBe(false);
+  };
+  it('outflow, going_forward removal', async () => { await run('qzl1', 'outflow', 'going_forward'); }, 500000);
+  it('outflow, end', async () => { await run('qzl2', 'outflow', 'end'); }, 500000);
+  it('income with a manual pin, going_forward removal', async () => { await run('qzl3', 'inflow', 'going_forward'); }, 500000);
+  it('income with a manual pin, end', async () => { await run('qzl4', 'inflow', 'end'); }, 500000);
 });

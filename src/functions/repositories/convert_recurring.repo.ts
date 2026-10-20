@@ -71,7 +71,9 @@ export const convert_recurring_repo = {
       if (d.retroLinkedAtMs !== undefined || d.followUpsDoneAtMs !== undefined) return "finished";
       if (((d.resumeLeaseMs as number | undefined) ?? 0) > now_ms) return "in_progress";
       /* eslint-disable @typescript-eslint/naming-convention */
-      tx.update(ref, { resumeLeaseMs: now_ms + RESUME_LEASE_MS, syncRunId: `discard_lease_${now_ms}`, lastWriteSource: "convert" });
+      // Hidden at once: every engine set, map and matcher skips the record, so re-assigning the
+      // payments below can't re-link them to it and a manual pin falls back to auto.
+      tx.update(ref, { isHidden: true, resumeLeaseMs: now_ms + RESUME_LEASE_MS, syncRunId: `discard_lease_${now_ms}`, lastWriteSource: "convert" });
       /* eslint-enable @typescript-eslint/naming-convention */
       return "claimed";
     });
