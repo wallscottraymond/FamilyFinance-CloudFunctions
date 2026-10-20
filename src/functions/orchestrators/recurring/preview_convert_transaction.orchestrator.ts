@@ -14,7 +14,7 @@ import { TraceContext, NotFoundError, PermissionDeniedError } from "../../types"
 import { create_span, log_operation_start, log_operation_success, log_operation_error } from "../../observability";
 import { is_convert_to_recurring_enabled } from "../../infrastructure/feature_flags";
 import { resolve_convert_facts } from "../../resolvers/recurring/convert.resolver";
-import { build_preview, ConvertPreview } from "../../domain/recurring/convert_plan.service";
+import { build_preview, ConvertPreview, direction_of } from "../../domain/recurring/convert_plan.service";
 
 export type PreviewResult =
   | { enabled: false }
@@ -42,7 +42,8 @@ export async function preview_convert_transaction_orchestrator(
     }
     // A conversion that was removed: convert refuses it, so the preview says so too.
     if (r.existing_conversion) {
-      return { enabled: true, refusal: { code: "ALREADY_TRACKED", message: "This was already made into a bill", details: { id: r.existing_conversion.id, name: r.existing_conversion.name } } };
+      const message = direction_of(r.facts.txn.type) === "inflow" ? "This was already made into income" : "This was already made into a bill";
+      return { enabled: true, refusal: { code: "ALREADY_TRACKED", message, details: { id: r.existing_conversion.id, name: r.existing_conversion.name } } };
     }
     const preview = build_preview(r.facts);
     log_operation_success(span, user_id);

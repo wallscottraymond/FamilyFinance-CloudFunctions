@@ -219,4 +219,62 @@ describe('fix round 8 (emulator): CONVERT_FAILED is recovered by Delete, then a 
     expect(state.dismissedVendorKeys).toContain('outflow:ll properties'); // D11: absorbed vendor stays dismissed
     expect(state.dismissedVendorKeys ?? []).not.toContain('outflow:landlord llc'); // own vendor cleared by step 7
   }, 600000);
+
+  // Round 9: a stuck record that already HAS periods (an attempt that got past period generation).
+  const with_periods = async (c: any, kind: Kind) => {
+    const { generate_periods_inline } = require('../src/functions/orchestrators/recurring/generate_periods_inline');
+    const rec = (await c.stuck.ref.get()).data()!;
+    await generate_periods_inline(ctx(), c.h.ids.userId, [{ id: c.stuck.id, kind, created: true, before: null, after: rec }], true);
+    const pcoll = kind === 'inflow' ? 'inflow_periods' : 'outflow_periods';
+    const pfield = kind === 'inflow' ? 'inflowId' : 'outflowId';
+    const periods = () => db.collection(pcoll).where(pfield, '==', c.stuck.id).get();
+    expect((await periods()).size).toBeGreaterThan(0); // so the checks below bite
+    return periods;
+  };
+
+  for (const kind of ['outflow', 'inflow'] as const) {
+    it(`round 9 (${kind}): Delete removes the stuck record's periods, so its payments can't be pulled back to it`, async () => {
+      const c = await setup(`qzn1${kind.slice(0, 2)}`, kind);
+      const periods = await with_periods(c, kind);
+      await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'delete' }, NOW_MS, c.repo, c.etype);
+      expect((await periods()).size).toBe(0);
+      await finish(c, kind);
+      await run_reassign(c.h.ids.userId); // a later re-assign keeps them on the new record
+      const link = kind === 'inflow' ? 'inflowId' : 'outflowId';
+      const [rec] = (await db.collection(c.coll).where('ownerId', '==', c.h.ids.userId).where('convertedFromTxnId', '==', doc(c.h, 'oct')).get()).docs;
+      for (const k of ['oct', 'sep', 'aug']) expect((await c.h.txn(k)).splits[0][link]).toBe(rec.id);
+      expect(await nothing_references(c.h.ids.userId, c.stuck.id)).toEqual([]);
+    }, 600000);
+
+    it(`round 9 (${kind}): converting again right after Delete (re-assign not yet run) still links the past payments`, async () => {
+      const c = await setup(`qzn2${kind.slice(0, 2)}`, kind);
+      await with_periods(c, kind);
+      const link = kind === 'inflow' ? 'inflowId' : 'outflowId';
+      // the stuck record had linked the earlier payments
+      await run_reassign(c.h.ids.userId);
+      expect((await c.h.txn('sep')).splits[0][link]).toBe(c.stuck.id);
+      await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'delete' }, NOW_MS, c.repo, c.etype);
+      const pv = await preview(ctx(), c.h.ids.userId, { transaction_id: doc(c.h, 'oct') }, NOW_MS);
+      const ok = await convert(ctx(), c.h.ids.userId, c.req, NOW_MS); // no re-assign in between
+      expect(ok.in_progress).toBeUndefined();
+      expect(ok.id).not.toBe(c.stuck.id);
+      expect(ok.linked_past_count).toBeGreaterThan(0);
+      expect(ok.linked_past_count).toBe(pv.linkable_count);
+      for (const k of ['oct', 'sep', 'aug']) expect((await c.h.txn(k)).splits[0][link]).toBe(ok.id);
+      await run_reassign(c.h.ids.userId); // the delete's own re-assign, arriving late
+      for (const k of ['oct', 'sep', 'aug']) expect((await c.h.txn(k)).splits[0][link]).toBe(ok.id);
+      expect(await nothing_references(c.h.ids.userId, c.stuck.id)).toEqual([]);
+    }, 600000);
+  }
+
+  it('round 9: a removed, unfinished INCOME conversion is refused with income wording', async () => {
+    const c = await setup('qzn3', 'inflow');
+    await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'remove', mode: 'all' }, NOW_MS, c.repo, c.etype);
+    await c.stuck.ref.update({ resumeLeaseMs: 0 });
+    const pv = await preview(ctx(), c.h.ids.userId, { transaction_id: doc(c.h, 'oct') }, NOW_MS);
+    const cv = await convert(ctx(), c.h.ids.userId, c.req, NOW_MS).catch((e: any) => e);
+    expect(cv.code).toBe('ALREADY_TRACKED');
+    expect(cv.message).toBe('This was already made into income');
+    expect(pv.refusal.message).toBe(cv.message);
+  }, 600000);
 });

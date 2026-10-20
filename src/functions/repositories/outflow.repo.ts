@@ -614,6 +614,22 @@ export const outflow_repo = {
   },
 
   /**
+   * Delete every stored period of an outflow (its own aggregate) — the "Delete permanently" path,
+   * before the doc itself: a period left behind stays a match candidate and shows in the summaries.
+   */
+  async delete_periods(ctx: TraceContext, id: string, user_id: string): Promise<number> {
+    const db = getFirestore();
+    const snap = await db.collection("outflow_periods").where("outflowId", "==", id).select().get();
+    for (let i = 0; i < snap.docs.length; i += 450) {
+      const batch = db.batch();
+      for (const d of snap.docs.slice(i, i + 450)) batch.delete(d.ref);
+      await batch.commit();
+    }
+    console.log(`[${ctx.trace_id}] outflow_repo.delete_periods ${id}: deleted ${snap.size} periods (user ${user_id})`);
+    return snap.size;
+  },
+
+  /**
    * Permanently delete an outflow doc — irreversible ("Delete permanently").
    */
   async hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult> {

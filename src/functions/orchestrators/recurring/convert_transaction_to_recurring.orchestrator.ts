@@ -108,7 +108,8 @@ export async function convert_transaction_to_recurring_orchestrator(
     const existing = r.existing_conversion;
     if (existing) {
       if (!existing.live) {
-        throw new ConvertRefusedError("ALREADY_TRACKED", "This was already made into a bill", {
+        const income = direction_of(r.facts.txn.type) === "inflow";
+        throw new ConvertRefusedError("ALREADY_TRACKED", income ? "This was already made into income" : "This was already made into a bill", {
           id: existing.id, name: existing.name,
         });
       }
