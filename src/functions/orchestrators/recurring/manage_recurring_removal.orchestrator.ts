@@ -153,6 +153,9 @@ export async function manage_recurring_removal_orchestrator(
       // the deleted id) and still shows in the summaries. A failure leaves the record to delete again.
       await repo.delete_periods(ctx, input.id, user_id);
       await repo.hard_delete(ctx, input.id, user_id);
+      // …and again after: a convert retry already past its read may have generated periods in
+      // between (no lease guards Delete). With the doc gone, nothing generates them again.
+      await repo.delete_periods(ctx, input.id, user_id);
       await reassign_released_payments(ctx, context, undefined); // its links go everywhere
       log_operation_success(span, user_id);
       return { id: input.id, action: "delete", deleted: true, state: null };
