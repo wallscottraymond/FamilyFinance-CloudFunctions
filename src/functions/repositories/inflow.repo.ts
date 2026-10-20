@@ -504,7 +504,10 @@ export const inflow_repo = {
       updatedAt: now,
     };
     /* eslint-enable @typescript-eslint/naming-convention */
-    await doc_ref(id).set(after);
+    // the convert-lifecycle markers are never touched by a full-doc write built from a stale read
+    const { data: to_write, merge: as_merge } = without_lifecycle_markers(before, after as unknown as Record<string, unknown>);
+    if (as_merge) await doc_ref(id).set(to_write, { merge: true });
+    else await doc_ref(id).set(after);
 
     record_audit_entry_async({
       user_id,
@@ -1151,7 +1154,7 @@ export const inflow_repo = {
       if (!snap.exists || lease > now_ms) return false;
       const attempts = (snap.data() as { convertAttempts?: number }).convertAttempts ?? 1;
       if (attempts >= MAX_CONVERT_ATTEMPTS) {
-        throw new ConvertRefusedError("CONVERT_FAILED", "This couldn't be finished. Please remove it and try again, or contact support.");
+        throw new ConvertRefusedError("CONVERT_FAILED", "This couldn't be finished. Remove it from your bills, then tap \"Make this a bill\" again.");
       }
       /* eslint-disable @typescript-eslint/naming-convention */
       tx.update(doc_ref(id), { convertAttempts: attempts + 1, resumeLeaseMs: now_ms + 330_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });
@@ -1220,7 +1223,13 @@ export const inflow_repo = {
     };
     /* eslint-enable @typescript-eslint/naming-convention */
 
-    await doc_ref(id).set(after);
+    // the convert-lifecycle markers are never touched by a full-doc write built from a stale read
+
+    const { data: to_write, merge: as_merge } = without_lifecycle_markers(before, after as unknown as Record<string, unknown>);
+
+    if (as_merge) await doc_ref(id).set(to_write, { merge: true });
+
+    else await doc_ref(id).set(after);
 
     record_audit_entry_async({
       user_id,
@@ -1271,7 +1280,13 @@ export const inflow_repo = {
         };
         /* eslint-enable @typescript-eslint/naming-convention */
 
-        batch.set(doc_ref(id), after);
+        // the convert-lifecycle markers are never touched by a full-doc write built from a stale read
+
+        const { data: to_write, merge: as_merge } = without_lifecycle_markers(before, after as unknown as Record<string, unknown>);
+
+        if (as_merge) batch.set(doc_ref(id), to_write, { merge: true });
+
+        else batch.set(doc_ref(id), after);
 
         results.push(create_write_result("inflow", id, "replace", before, after));
 
@@ -1318,7 +1333,10 @@ export const inflow_repo = {
         if (before.isHidden === hidden) continue; // idempotent
         // eslint-disable-next-line @typescript-eslint/naming-convention
         const after: LegacyInflowDoc = { ...before, isHidden: hidden, updatedAt: now };
-        batch.set(doc_ref(id), after);
+        // the convert-lifecycle markers are never touched by a full-doc write built from a stale read
+        const { data: to_write, merge: as_merge } = without_lifecycle_markers(before, after as unknown as Record<string, unknown>);
+        if (as_merge) batch.set(doc_ref(id), to_write, { merge: true });
+        else batch.set(doc_ref(id), after);
         results.push(create_write_result("inflow", id, "replace", before, after));
         record_audit_entry_async({
           user_id,

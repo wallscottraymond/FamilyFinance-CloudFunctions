@@ -46,6 +46,33 @@ const live = (d: Record<string, unknown> | undefined): boolean =>
   );
 
 export const convert_recurring_repo = {
+  /** Is this converted record one that never finished (no retro marker, no follow-ups marker)? */
+  async is_unfinished(_ctx: TraceContext, direction: ConvertDirection, id: string): Promise<boolean> {
+    const snap = await getFirestore().collection(direction === "outflow" ? "outflows" : "inflows").doc(id).get();
+    const d = snap.data();
+    return !!d && d.retroLinkedAtMs === undefined && d.followUpsDoneAtMs === undefined;
+  },
+
+  /**
+   * A conversion that never finished and that the user REMOVED (the way out of CONVERT_FAILED) is
+   * superseded by a fresh convert of the same transaction: its stored periods and the record are
+   * deleted (the source split's pin is simply overwritten by the new one; payments it linked are
+   * re-linked by the new convert's retro pass). Returns whether it was discarded.
+   */
+  async discard_unfinished(ctx: TraceContext, direction: ConvertDirection, id: string, user_id: string): Promise<boolean> {
+    if (!(await convert_recurring_repo.is_unfinished(ctx, direction, id))) return false;
+    const db = getFirestore();
+    const periods = await db.collection(direction === "outflow" ? "outflow_periods" : "inflow_periods")
+      .where(direction === "outflow" ? "outflowId" : "inflowId", "==", id).select().get();
+    for (let i = 0; i < periods.docs.length; i += 400) {
+      const batch = db.batch();
+      for (const p of periods.docs.slice(i, i + 400)) batch.delete(p.ref);
+      await batch.commit();
+    }
+    await (direction === "outflow" ? outflow_repo : inflow_repo).hard_delete(ctx, id, user_id);
+    return true;
+  },
+
   async create_with_source_pin(
     ctx: TraceContext,
     args: {

@@ -103,38 +103,45 @@ export async function convert_transaction_to_recurring_orchestrator(
     }
 
     // A record already made from this transaction: resume it (never a second bill).
-    if (r.existing_conversion) {
-      if (!r.existing_conversion.live) {
+    // A conversion the user REMOVED before it ever finished (the way out of CONVERT_FAILED) is
+    // superseded: it is discarded and this tap converts afresh.
+    let existing = r.existing_conversion;
+    if (existing && !existing.live) {
+      const dir = direction_of(r.facts.txn.type) as ConvertDirection;
+      if (await convert_recurring_repo.discard_unfinished(ctx, dir, existing.id, user_id)) existing = null;
+    }
+    if (existing) {
+      if (!existing.live) {
         throw new ConvertRefusedError("ALREADY_TRACKED", "This was already made into a bill", {
-          id: r.existing_conversion.id, name: r.existing_conversion.name,
+          id: existing.id, name: existing.name,
         });
       }
       const direction = direction_of(r.facts.txn.type) as ConvertDirection;
-      created = { id: r.existing_conversion.id, direction };
-      if (!r.existing_conversion.retro_done) {
+      created = { id: existing.id, direction };
+      if (!existing.retro_done) {
         // Only one resume at a time: a concurrent double tap returns the existing bill.
         const repo = direction === "outflow" ? outflow_repo : inflow_repo;
-        const claimed = await repo.claim_resume(ctx, r.existing_conversion.id, now_ms).catch((e: unknown) => {
+        const claimed = await repo.claim_resume(ctx, existing.id, now_ms).catch((e: unknown) => {
           follow_up_done = true; // a convert that gave up: nothing more runs, no bump
           throw e;
         });
         if (!claimed) {
           follow_up_done = true;
-          return { id: r.existing_conversion.id, direction, already: true, in_progress: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
+          return { id: existing.id, direction, already: true, in_progress: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
         }
-        const resumed = await complete_convert(ctx, user_id, direction, r.existing_conversion.id, now_ms, null);
+        const resumed = await complete_convert(ctx, user_id, direction, existing.id, now_ms, null);
         follow_up_done = true;
         if (resumed.in_progress) {
           // Periods could not all be generated: no marker, the lease goes back for an immediate retry.
-          await repo.release_resume_lease(ctx, r.existing_conversion.id, `convert_release_${randomUUID()}`).catch(() => {});
+          await repo.release_resume_lease(ctx, existing.id, `convert_release_${randomUUID()}`).catch(() => {});
           return { ...resumed, already: true };
         }
-        const rec = (await repo.get_raw_by_ids(ctx, [r.existing_conversion.id])).get(r.existing_conversion.id);
-        await finish_convert(ctx, user_id, direction, r.existing_conversion.id, (rec?.vendorKey as string | undefined) ?? r.facts.txn.vendor_key ?? "",
+        const rec = (await repo.get_raw_by_ids(ctx, [existing.id])).get(existing.id);
+        await finish_convert(ctx, user_id, direction, existing.id, (rec?.vendorKey as string | undefined) ?? r.facts.txn.vendor_key ?? "",
           (rec?.accountId as string | undefined) ?? r.facts.txn.account_id, r.old_bills, input.review_item_id, now_ms, `convert_resume_${randomUUID()}`);
         return { ...resumed, already: true };
       }
-      return { id: r.existing_conversion.id, direction, already: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
+      return { id: existing.id, direction, already: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
     }
 
     // 2. Plan (pure).
@@ -252,6 +259,12 @@ async function complete_convert(
   if (!done_before) {
     const failed = await generate_periods_inline(ctx, user_id, [{ id, kind: direction, created: true, before: null, after: record }], true);
     periods_ok = failed.length === 0;
+    // Periods a resume just created are not yet suppressed: re-apply the record's removal / pause
+    // intervals (only periods whose flag changes are written).
+    const intervals = (record.removalIntervals as Array<{ fromMs: number; toMs: number | null; mode: "all" | "going_forward" | "paused" }> | undefined) ?? [];
+    if (!fresh && intervals.length > 0) {
+      await repo.apply_period_suppression(ctx, id, intervals.map((i) => ({ from_ms: i.fromMs, to_ms: i.toMs, mode: i.mode })), user_id);
+    }
   }
 
   // 5. The chosen past payments: assigned IN MEMORY by the engine (D1 links them), written once,
