@@ -109,8 +109,9 @@ describe('Phase 1 robustness (emulator)', () => {
     await enqueue_item_sync({ item_doc_id: h.ids.itemDocId, user_id: uid, recurring: false, delay_seconds: 600, reason: 'webhook' });
     const avant = (await itemsOf(uid)).find((i) => i.vendorKey === 'avant')!;
     const c1 = startCounting();
-    await answer(ctx(), uid, { item_id: avant.id, answer: 'track', frequency: 'monthly' }, NOW_MS); // recurring request #1
+    const tracked = await answer(ctx(), uid, { item_id: avant.id, answer: 'track', frequency: 'monthly' }, NOW_MS); // recurring request #1
     const k1 = c1.stop();
+    expect(tracked).toMatchObject({ record_id: h.ids.streams.AVANT, direction: 'outflow' }); // D48: the bill the re-sync makes
     const c2 = startCounting();
     await enqueue_item_sync({ item_doc_id: h.ids.itemDocId, user_id: uid, recurring: true, reason: 'webhook_recurring' }); // #2
     const k2 = c2.stop();

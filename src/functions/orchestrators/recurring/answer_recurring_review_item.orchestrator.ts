@@ -210,7 +210,11 @@ export async function answer_recurring_review_item_orchestrator(
     }
 
     log_operation_success(span, user_id);
-    return { item_id: input.item_id, status: plan.item!.status, answer: input.answer, no_op: false };
+    // A tracked Plaid suggestion's bill / income takes the stream's id (D48: the app tags it NEW).
+    const tracked = input.answer === "track" && context.item.stream_id
+      ? { record_id: context.item.stream_id, direction: context.item.direction }
+      : {};
+    return { item_id: input.item_id, status: plan.item!.status, answer: input.answer, no_op: false, ...tracked };
   } catch (error) {
     log_operation_error(span, error instanceof Error ? error : new Error(String(error)), { user_id });
     throw error;
