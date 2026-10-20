@@ -41,6 +41,7 @@ import { plan_convert, ConvertRequest, direction_of } from "../../domain/recurri
 import { ConvertDirection, ConvertFrequency } from "../../domain/recurring/convert_recurring.service";
 import { is_own_review_item_id, plan_convert_review, suggested_item_id } from "../../domain/recurring/convert_review.service";
 import { apply_review_state_change } from "../../domain/recurring/review_item.service";
+import { discard_unfinished_convert } from "./discard_unfinished_convert";
 import { generate_periods_inline } from "./generate_periods_inline";
 import { assign_transactions_batch_orchestrator } from "../transactions/assign_transactions_batch.orchestrator";
 import { empty_follow_ups, follow_ups_from_written, merge_follow_ups, run_sync_follow_ups } from "../plaid/sync_follow_ups";
@@ -96,7 +97,7 @@ export async function convert_transaction_to_recurring_orchestrator(
     }
 
     // 1. Resolve — owner first; nothing else is read for someone else's transaction.
-    const r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms, input.split_id);
+    let r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms, input.split_id);
     if (!r.ok) {
       if (r.reason === "not_found") throw new NotFoundError("transaction", input.transaction_id);
       throw new PermissionDeniedError("convert_transaction_to_recurring", input.transaction_id);
@@ -104,11 +105,21 @@ export async function convert_transaction_to_recurring_orchestrator(
 
     // A record already made from this transaction: resume it (never a second bill).
     // A conversion the user REMOVED before it ever finished (the way out of CONVERT_FAILED) is
-    // superseded: it is discarded and this tap converts afresh.
+    // superseded: discarded like a normal delete, then this tap converts afresh.
     let existing = r.existing_conversion;
     if (existing && !existing.live) {
       const dir = direction_of(r.facts.txn.type) as ConvertDirection;
-      if (await convert_recurring_repo.discard_unfinished(ctx, dir, existing.id, user_id)) existing = null;
+      const outcome = await discard_unfinished_convert(ctx, user_id, dir, existing.id, input.transaction_id, now_ms);
+      if (outcome === "in_progress") {
+        follow_up_done = true;
+        return { id: existing.id, direction: dir, already: true, in_progress: true, linked_past_count: 0, first_date_ms: null, next_due_ms: null, next_due_clamped: false };
+      }
+      if (outcome === "discarded") {
+        // Re-resolve so the vendor's payments load (they are only read when nothing was converted).
+        r = await resolve_convert_facts(ctx, user_id, input.transaction_id, now_ms, input.split_id);
+        if (!r.ok) throw new NotFoundError("transaction", input.transaction_id);
+        existing = r.existing_conversion;
+      }
     }
     if (existing) {
       if (!existing.live) {

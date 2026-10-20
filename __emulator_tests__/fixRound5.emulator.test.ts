@@ -107,6 +107,10 @@ describe('fix round 5 (emulator)', () => {
     await manage(ctx(), h.ids.userId, [], { id: stuck.id, action: 'remove', mode: 'all' }, NOW_MS, outflow_repo, 'recurring_outflow');
     const ok = await convert(ctx(), h.ids.userId, req, NOW_MS);
     expect(ok.in_progress).toBeUndefined();
+    expect(ok.linked_past_count).toBeGreaterThan(0);
+    // nothing points at the stuck id any more; the earlier payments follow the NEW bill
+    expect((await db.collection('transactions').where('splitOutflowIds', 'array-contains', stuck.id).get()).size).toBe(0);
+    for (const k of ['oct', 'sep', 'aug']) expect((await h.txn(k)).splits[0].outflowId).toBe(ok.id);
     expect(ok.id).not.toBe(stuck.id);
     expect((await db.collection('outflows').doc(stuck.id).get()).exists).toBe(false);
     const bills = await bill_of(h.ids.userId);
@@ -129,4 +133,66 @@ describe('fix round 5 (emulator)', () => {
     expect(inside.filter((p) => p.isActive !== false)).toHaveLength(0);
     expect(periods.some((p) => p.isActive !== false)).toBe(true); // outside the pause stays active
   }, 300000);
+});
+
+describe('fix round 6 (emulator)', () => {
+  const stuck_bill = async (tag: string) => {
+    const h = await fresh_rent(tag);
+    const spy = jest.spyOn(gen(), 'generate_outflow_periods_orchestrator').mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
+    const req = { transaction_id: doc(h, 'oct'), ...RENT };
+    expect((await convert(ctx(), h.ids.userId, req, NOW_MS)).in_progress).toBe(true);
+    spy.mockRestore();
+    const [stuck] = await bill_of(h.ids.userId);
+    await manage(ctx(), h.ids.userId, [], { id: stuck.id, action: 'remove', mode: 'all' }, NOW_MS, outflow_repo, 'recurring_outflow');
+    return { h, req, stuck };
+  };
+
+  it('a discard during a live lease returns in_progress and touches nothing', async () => {
+    const { h, req, stuck } = await stuck_bill('qzk1');
+    await stuck.ref.update({ resumeLeaseMs: NOW_MS + 200_000 });
+    const r = await convert(ctx(), h.ids.userId, req, NOW_MS);
+    expect(r).toMatchObject({ id: stuck.id, already: true, in_progress: true });
+    expect((await stuck.ref.get()).exists).toBe(true);
+    expect((await h.txn('oct')).splits[0].outflowId).toBe(stuck.id);
+  }, 300000);
+
+  it('two simultaneous taps on a stuck removed bill: one converts, the other never errors, one bill results', async () => {
+    const { h, req, stuck } = await stuck_bill('qzk2');
+    await stuck.ref.update({ resumeLeaseMs: 0 });
+    const call = () => convert(ctx(), h.ids.userId, req, NOW_MS).then((r: any) => r, (e: any) => e);
+    const [a, b] = await Promise.all([call(), call()]);
+    for (const x of [a, b]) expect(x instanceof Error).toBe(false);
+    const bills = await bill_of(h.ids.userId);
+    expect(bills.filter((d) => d.id !== stuck.id)).toHaveLength(1);
+    expect((await stuck.ref.get()).exists).toBe(false);
+    expect((await db.collection('transactions').where('splitOutflowIds', 'array-contains', stuck.id).get()).size).toBe(0);
+  }, 400000);
+
+  it('a bill merged into the stuck record is un-merged by the discard', async () => {
+    const h = await makeHarness(db, 'qzk3', mocks, { flag: true });
+    await h.sync('link');
+    const GYM = h.ids.streams.GYM;
+    h.postTxns([plaidTxn(h.ids, { key: 'gymnew', account: 'chk', amount: 35, days_ago: 0, name: 'OLD GYM', merchant: 'Old Gym', primary: 'PERSONAL_CARE', detailed: 'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS' })]);
+    await h.sync('gym');
+    const req = { transaction_id: doc(h, 'gymnew'), name: 'Gym', amount: 35, frequency: 'monthly', next_due_date: '2037-11-15', link_past: true };
+    const spy = jest.spyOn(gen(), 'generate_outflow_periods_orchestrator').mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
+    const first = await convert(ctx(), h.ids.userId, req, NOW_MS);
+    spy.mockRestore();
+    expect(first.in_progress).toBe(true);
+    // the old bill merged into the stuck record (as a finished D41 step would have)
+    const before = (await db.collection('outflows').doc(GYM).get()).data()!;
+    await outflow_repo.apply_merge(ctx(), GYM, {
+      intervals: [{ from_ms: Date.UTC(2037, 9, 1), to_ms: null, mode: 'going_forward' }], merged_into_id: first.id,
+      merge_log: { into: first.id, at_ms: 1, prior_intervals: [], inherited_name: null, inherited_override: null, prior_is_active: before.isActive !== false },
+    }, 'r');
+    expect((await db.collection('outflows').doc(GYM).get()).data()!.mergedIntoId).toBe(first.id);
+    await manage(ctx(), h.ids.userId, [], { id: first.id, action: 'remove', mode: 'all' }, NOW_MS, outflow_repo, 'recurring_outflow');
+    await db.collection('outflows').doc(first.id).update({ resumeLeaseMs: 0 });
+    const ok = await convert(ctx(), h.ids.userId, req, NOW_MS);
+    expect(ok.id).not.toBe(first.id);
+    expect((await db.collection('outflows').doc(first.id).get()).exists).toBe(false);
+    const old = (await db.collection('outflows').doc(GYM).get()).data()!;
+    expect(old.mergedIntoId === undefined || old.mergedIntoId === ok.id).toBe(true); // un-merged (then merged again into the NEW bill by its D41)
+    expect(old.mergedIntoId).not.toBe(first.id);
+  }, 400000);
 });
