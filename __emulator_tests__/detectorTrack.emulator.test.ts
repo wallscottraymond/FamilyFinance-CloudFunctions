@@ -63,6 +63,7 @@ describe('detector suggestion → Track (F5, emulator)', () => {
     const bills = (await db.collection('outflows').where('ownerId', '==', h.ids.userId).where('vendorKey', '==', 'city water').get()).docs;
     expect(bills).toHaveLength(1);
     const bill = bills[0];
+    expect(r).toMatchObject({ record_id: bill.id, direction: 'outflow' }); // D48: the app tags it NEW
     expect(bill.data()).toMatchObject({ accountId: h.ids.chk, source: 'manual', captureRulesVersion: 2, convertedFromTxnId: `plaid_${h.ids.txn('water0')}` });
     for (const k of ['water0', 'water1', 'water2']) expect(((await h.txn(k)).splits[0] as any).outflowId).toBe(bill.id);
     const closed = (await items_of(h.ids.userId)).find((i) => i.name === 'City Water')!;

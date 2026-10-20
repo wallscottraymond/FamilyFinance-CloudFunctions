@@ -56,6 +56,9 @@ export interface AnswerReviewItemResult {
   no_op: boolean;
   /** "converted" only: the bill exists but is still being finished — the item stays open; ask again. */
   in_progress?: boolean;
+  /** "converted" only: the bill / income it made (the app tags it NEW — D48). */
+  record_id?: string;
+  direction?: "outflow" | "inflow";
 }
 
 export async function answer_recurring_review_item_orchestrator(
@@ -111,8 +114,9 @@ export async function answer_recurring_review_item_orchestrator(
         review_item_id: item.id,
       }, now_ms);
       log_operation_success(span, user_id);
-      if (converted.in_progress) return { item_id: input.item_id, status: "open", answer: "converted", no_op: false, in_progress: true };
-      return { item_id: input.item_id, status: "resolved", answer: "converted", no_op: false };
+      const made = { record_id: converted.id, direction: converted.direction };
+      if (converted.in_progress) return { item_id: input.item_id, status: "open", answer: "converted", no_op: false, in_progress: true, ...made };
+      return { item_id: input.item_id, status: "resolved", answer: "converted", no_op: false, ...made };
     }
 
     // 2c. "Same bill" (D7 / D22): the old bill ends after its last payment and is merged into the
