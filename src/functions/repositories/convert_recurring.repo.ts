@@ -46,61 +46,6 @@ const live = (d: Record<string, unknown> | undefined): boolean =>
   );
 
 export const convert_recurring_repo = {
-  /** Is this converted record one that never finished (no retro marker, no follow-ups marker)? */
-  async is_unfinished(_ctx: TraceContext, direction: ConvertDirection, id: string): Promise<boolean> {
-    const snap = await getFirestore().collection(direction === "outflow" ? "outflows" : "inflows").doc(id).get();
-    const d = snap.data();
-    return !!d && d.retroLinkedAtMs === undefined && d.followUpsDoneAtMs === undefined;
-  },
-
-  /**
-   * Take the right to discard an unfinished conversion (one transaction, so two simultaneous taps
-   * can't both): `claimed` (the lease now blocks a second tap), `in_progress` (a lease is live —
-   * the convert may still be running), `finished` (it completed: not discardable) or `gone`
-   * (somebody else already discarded it).
-   */
-  async claim_discard(
-    _ctx: TraceContext, direction: ConvertDirection, id: string, now_ms: number
-  ): Promise<"claimed" | "in_progress" | "finished" | "gone"> {
-    const db = getFirestore();
-    const ref = db.collection(direction === "outflow" ? "outflows" : "inflows").doc(id);
-    return db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists) return "gone";
-      const d = snap.data() as Record<string, unknown>;
-      if (d.retroLinkedAtMs !== undefined || d.followUpsDoneAtMs !== undefined) return "finished";
-      if (((d.resumeLeaseMs as number | undefined) ?? 0) > now_ms) return "in_progress";
-      /* eslint-disable @typescript-eslint/naming-convention */
-      // Hidden at once: every engine set, map and matcher skips the record, so re-assigning the
-      // payments below can't re-link them to it and a manual pin falls back to auto.
-      tx.update(ref, { isHidden: true, resumeLeaseMs: now_ms + RESUME_LEASE_MS, syncRunId: `discard_lease_${now_ms}`, lastWriteSource: "convert" });
-      /* eslint-enable @typescript-eslint/naming-convention */
-      return "claimed";
-    });
-  },
-
-  /** Transactions whose splits still point at this record (denormalized link arrays). */
-  async linked_txn_ids(_ctx: TraceContext, direction: ConvertDirection, id: string): Promise<string[]> {
-    const snap = await getFirestore().collection("transactions")
-      .where(direction === "outflow" ? "splitOutflowIds" : "splitInflowIds", "array-contains", id).select().get();
-    return snap.docs.map((d) => d.id);
-  },
-
-  /** Delete a record's stored periods, then the record. */
-  async delete_record_and_periods(ctx: TraceContext, direction: ConvertDirection, id: string, user_id: string): Promise<void> {
-    const db = getFirestore();
-    const periods = await db.collection(direction === "outflow" ? "outflow_periods" : "inflow_periods")
-      .where(direction === "outflow" ? "outflowId" : "inflowId", "==", id).select().get();
-    for (let i = 0; i < periods.docs.length; i += 400) {
-      const batch = db.batch();
-      for (const p of periods.docs.slice(i, i + 400)) batch.delete(p.ref);
-      await batch.commit();
-    }
-    await (direction === "outflow" ? outflow_repo : inflow_repo).hard_delete(ctx, id, user_id).catch((e: Error) => {
-      if (!/not found/i.test(e.message)) throw e; // a simultaneous discard got there first
-    });
-  },
-
   async create_with_source_pin(
     ctx: TraceContext,
     args: {

@@ -1154,7 +1154,7 @@ export const inflow_repo = {
       if (!snap.exists || lease > now_ms) return false;
       const attempts = (snap.data() as { convertAttempts?: number }).convertAttempts ?? 1;
       if (attempts >= MAX_CONVERT_ATTEMPTS) {
-        throw new ConvertRefusedError("CONVERT_FAILED", "This couldn't be finished. Remove it from your income, then tap \"Make this income\" again.");
+        throw new ConvertRefusedError("CONVERT_FAILED", "This couldn't be finished. Delete it from your income, then tap \"Make this income\" again.");
       }
       /* eslint-disable @typescript-eslint/naming-convention */
       tx.update(doc_ref(id), { convertAttempts: attempts + 1, resumeLeaseMs: now_ms + 330_000, syncRunId: `resume_lease_${now_ms}`, lastWriteSource: "convert" });

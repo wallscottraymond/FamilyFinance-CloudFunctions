@@ -1,7 +1,7 @@
 /**
  * Emulator — fix round 5: whole-doc writers built from a stale read (removal intervals, hide,
  * soft delete, stale-marking) can't wipe the convert-lifecycle markers; a user can recover from
- * CONVERT_FAILED by removing the bill and converting again; periods a resume creates are
+ * CONVERT_FAILED by deleting the bill (D47) and converting again; periods a resume creates are
  * suppressed by the record's pause.
  *
  * Run: firebase emulators:exec --only firestore --project demo-convert \
@@ -30,7 +30,7 @@ jest.mock('../src/utils/encryption', () => {
 
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any */
 let db: FirebaseFirestore.Firestore;
-let convert: any; let manage: any; let outflow_repo: any; let inflow_repo: any; let preview: any;
+let convert: any; let manage: any; let outflow_repo: any; let inflow_repo: any; let preview: any; let reassign: any;
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
   jest.useFakeTimers(FAKE_CLOCK);
@@ -42,6 +42,7 @@ beforeAll(async () => {
   ({ outflow_repo } = require('../src/functions/repositories/outflow.repo'));
   ({ inflow_repo } = require('../src/functions/repositories/inflow.repo'));
   ({ preview_convert_transaction_orchestrator: preview } = require('../src/functions/orchestrators/recurring/preview_convert_transaction.orchestrator'));
+  ({ reassign_user_orchestrator: reassign } = require('../src/functions/orchestrators/transactions/reassign_user.orchestrator'));
   db = admin.firestore();
   await seedMonths(db);
 }, 60000);
@@ -98,28 +99,6 @@ describe('fix round 5 (emulator)', () => {
     expect(without_lifecycle_markers({ a: 1 }, { a: 1, b: 2 })).toEqual({ data: { a: 1, b: 2 }, merge: false });
   }, 300000);
 
-  it('2: after CONVERT_FAILED, removing the stuck bill lets the next convert of the same transaction succeed', async () => {
-    const h = await fresh_rent('qzj2');
-    const spy = jest.spyOn(gen(), 'generate_outflow_periods_orchestrator').mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
-    const req = { transaction_id: doc(h, 'oct'), ...RENT };
-    for (let i = 0; i < 3; i++) expect((await convert(ctx(), h.ids.userId, req, NOW_MS)).in_progress).toBe(true);
-    expect((await convert(ctx(), h.ids.userId, req, NOW_MS).catch((e: any) => e)).code).toBe('CONVERT_FAILED');
-    spy.mockRestore();
-    const [stuck] = await bill_of(h.ids.userId);
-    await manage(ctx(), h.ids.userId, [], { id: stuck.id, action: 'remove', mode: 'all' }, NOW_MS, outflow_repo, 'recurring_outflow');
-    const ok = await convert(ctx(), h.ids.userId, req, NOW_MS);
-    expect(ok.in_progress).toBeUndefined();
-    expect(ok.linked_past_count).toBeGreaterThan(0);
-    // nothing points at the stuck id any more; the earlier payments follow the NEW bill
-    expect((await db.collection('transactions').where('splitOutflowIds', 'array-contains', stuck.id).get()).size).toBe(0);
-    for (const k of ['oct', 'sep', 'aug']) expect((await h.txn(k)).splits[0].outflowId).toBe(ok.id);
-    expect(ok.id).not.toBe(stuck.id);
-    expect((await db.collection('outflows').doc(stuck.id).get()).exists).toBe(false);
-    const bills = await bill_of(h.ids.userId);
-    expect(bills).toHaveLength(1);
-    expect(bills[0].data().retroLinkedAtMs).toBeGreaterThan(0);
-  }, 400000);
-
   it('3: periods a resume creates inside a pause that landed meanwhile are suppressed', async () => {
     const h = await fresh_rent('qzj3');
     const spy = jest.spyOn(gen(), 'generate_outflow_periods_orchestrator').mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
@@ -137,70 +116,9 @@ describe('fix round 5 (emulator)', () => {
   }, 300000);
 });
 
-describe('fix round 6 (emulator)', () => {
-  const stuck_bill = async (tag: string) => {
-    const h = await fresh_rent(tag);
-    const spy = jest.spyOn(gen(), 'generate_outflow_periods_orchestrator').mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
-    const req = { transaction_id: doc(h, 'oct'), ...RENT };
-    expect((await convert(ctx(), h.ids.userId, req, NOW_MS)).in_progress).toBe(true);
-    spy.mockRestore();
-    const [stuck] = await bill_of(h.ids.userId);
-    await manage(ctx(), h.ids.userId, [], { id: stuck.id, action: 'remove', mode: 'all' }, NOW_MS, outflow_repo, 'recurring_outflow');
-    return { h, req, stuck };
-  };
-
-  it('a discard during a live lease returns in_progress and touches nothing', async () => {
-    const { h, req, stuck } = await stuck_bill('qzk1');
-    await stuck.ref.update({ resumeLeaseMs: NOW_MS + 200_000 });
-    const r = await convert(ctx(), h.ids.userId, req, NOW_MS);
-    expect(r).toMatchObject({ id: stuck.id, already: true, in_progress: true });
-    expect((await stuck.ref.get()).exists).toBe(true);
-    expect((await h.txn('oct')).splits[0].outflowId).toBe(stuck.id);
-  }, 300000);
-
-  it('two simultaneous taps on a stuck removed bill: one converts, the other never errors, one bill results', async () => {
-    const { h, req, stuck } = await stuck_bill('qzk2');
-    await stuck.ref.update({ resumeLeaseMs: 0 });
-    const call = () => convert(ctx(), h.ids.userId, req, NOW_MS).then((r: any) => r, (e: any) => e);
-    const [a, b] = await Promise.all([call(), call()]);
-    for (const x of [a, b]) expect(x instanceof Error).toBe(false);
-    const bills = await bill_of(h.ids.userId);
-    expect(bills.filter((d) => d.id !== stuck.id)).toHaveLength(1);
-    expect((await stuck.ref.get()).exists).toBe(false);
-    expect((await db.collection('transactions').where('splitOutflowIds', 'array-contains', stuck.id).get()).size).toBe(0);
-  }, 400000);
-
-  it('a bill merged into the stuck record is un-merged by the discard', async () => {
-    const h = await makeHarness(db, 'qzk3', mocks, { flag: true });
-    await h.sync('link');
-    const GYM = h.ids.streams.GYM;
-    h.postTxns([plaidTxn(h.ids, { key: 'gymnew', account: 'chk', amount: 35, days_ago: 0, name: 'OLD GYM', merchant: 'Old Gym', primary: 'PERSONAL_CARE', detailed: 'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS' })]);
-    await h.sync('gym');
-    const req = { transaction_id: doc(h, 'gymnew'), name: 'Gym', amount: 35, frequency: 'monthly', next_due_date: '2037-11-15', link_past: true };
-    const spy = jest.spyOn(gen(), 'generate_outflow_periods_orchestrator').mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
-    const first = await convert(ctx(), h.ids.userId, req, NOW_MS);
-    spy.mockRestore();
-    expect(first.in_progress).toBe(true);
-    // the old bill merged into the stuck record (as a finished D41 step would have)
-    const before = (await db.collection('outflows').doc(GYM).get()).data()!;
-    await outflow_repo.apply_merge(ctx(), GYM, {
-      intervals: [{ from_ms: Date.UTC(2037, 9, 1), to_ms: null, mode: 'going_forward' }], merged_into_id: first.id,
-      merge_log: { into: first.id, at_ms: 1, prior_intervals: [], inherited_name: null, inherited_override: null, prior_is_active: before.isActive !== false },
-    }, 'r');
-    expect((await db.collection('outflows').doc(GYM).get()).data()!.mergedIntoId).toBe(first.id);
-    await manage(ctx(), h.ids.userId, [], { id: first.id, action: 'remove', mode: 'all' }, NOW_MS, outflow_repo, 'recurring_outflow');
-    await db.collection('outflows').doc(first.id).update({ resumeLeaseMs: 0 });
-    const ok = await convert(ctx(), h.ids.userId, req, NOW_MS);
-    expect(ok.id).not.toBe(first.id);
-    expect((await db.collection('outflows').doc(first.id).get()).exists).toBe(false);
-    const old = (await db.collection('outflows').doc(GYM).get()).data()!;
-    expect(old.mergedIntoId === undefined || old.mergedIntoId === ok.id).toBe(true); // un-merged (then merged again into the NEW bill by its D41)
-    expect(old.mergedIntoId).not.toBe(first.id);
-  }, 400000);
-});
-
-describe('fix round 7 (emulator): the discard is complete for every removal mode and for income', () => {
-  const run = async (tag: string, kind: 'outflow' | 'inflow', mode: 'going_forward' | 'end' | 'all') => {
+describe('fix round 8 (emulator): CONVERT_FAILED is recovered by Delete, then a fresh convert (D47)', () => {
+  type Kind = 'outflow' | 'inflow';
+  const setup = async (tag: string, kind: Kind) => {
     const h = await makeHarness(db, tag, mocks, { flag: true });
     await h.sync('link');
     const dep = (key: string, days_ago: number) => kind === 'inflow'
@@ -212,30 +130,93 @@ describe('fix round 7 (emulator): the discard is complete for every removal mode
       ? { transaction_id: doc(h, 'oct'), name: 'Side gig', amount: 450, frequency: 'monthly', next_due_date: '2037-11-03', link_past: true }
       : { transaction_id: doc(h, 'oct'), ...RENT };
     const coll = kind === 'inflow' ? 'inflows' : 'outflows';
-    const gname = kind === 'inflow' ? 'generate_inflow_periods_orchestrator' : 'generate_outflow_periods_orchestrator';
     const gmod = require(`../src/functions/orchestrators/${kind}s/generate_${kind}_periods.orchestrator`);
-    const spy = jest.spyOn(gmod, gname).mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
-    expect((await convert(ctx(), h.ids.userId, req, NOW_MS)).in_progress).toBe(true);
+    const spy = jest.spyOn(gmod, `generate_${kind}_periods_orchestrator`).mockResolvedValue({ success: false, periods_created: 0, errors: ['boom'], trace_id: 't' });
+    for (let i = 0; i < 3; i++) expect((await convert(ctx(), h.ids.userId, req, NOW_MS)).in_progress).toBe(true);
+    const failed = await convert(ctx(), h.ids.userId, req, NOW_MS).catch((e: any) => e);
     spy.mockRestore();
+    expect(failed.code).toBe('CONVERT_FAILED');
+    expect(failed.message).toContain(kind === 'inflow' ? `Delete it from your income, then tap "Make this income" again.` : `Delete it from your bills, then tap "Make this a bill" again.`);
     const stuck = (await db.collection(coll).where('ownerId', '==', h.ids.userId).where('convertedFromTxnId', '==', doc(h, 'oct')).get()).docs[0];
-    if (kind === 'inflow') { // a MANUAL income pin to the stuck income (the source's pin)
-      expect((await h.txn('oct')).splits[0].inflowAssignmentSource).toBe('manual');
-    }
-    await manage(ctx(), h.ids.userId, [], { id: stuck.id, action: mode === 'end' ? 'end' : 'remove', ...(mode === 'end' ? {} : { mode }) }, NOW_MS, kind === 'inflow' ? inflow_repo : outflow_repo, kind === 'inflow' ? 'recurring_inflow' : 'recurring_outflow');
-    await stuck.ref.update({ resumeLeaseMs: 0 });
-    const pv = await preview(ctx(), h.ids.userId, { transaction_id: doc(h, 'oct') }, NOW_MS);
-    const ok = await convert(ctx(), h.ids.userId, req, NOW_MS);
-    const field = kind === 'inflow' ? 'splitInflowIds' : 'splitOutflowIds';
-    expect((await db.collection('transactions').where(field, 'array-contains', stuck.id).get()).size).toBe(0);
-    expect(ok.id).not.toBe(stuck.id);
-    expect(ok.linked_past_count).toBeGreaterThan(0);
-    expect(ok.linked_past_count).toBe(pv.linkable_count);
-    const link = kind === 'inflow' ? 'inflowId' : 'outflowId';
-    for (const k of ['oct', 'sep', 'aug']) expect((await h.txn(k)).splits[0][link]).toBe(ok.id);
-    expect((await stuck.ref.get()).exists).toBe(false);
+    return { h, req, stuck, coll, repo: kind === 'inflow' ? inflow_repo : outflow_repo, etype: kind === 'inflow' ? 'recurring_inflow' : 'recurring_outflow' };
   };
-  it('outflow, going_forward removal', async () => { await run('qzl1', 'outflow', 'going_forward'); }, 500000);
-  it('outflow, end', async () => { await run('qzl2', 'outflow', 'end'); }, 500000);
-  it('income with a manual pin, going_forward removal', async () => { await run('qzl3', 'inflow', 'going_forward'); }, 500000);
-  it('income with a manual pin, end', async () => { await run('qzl4', 'inflow', 'end'); }, 500000);
+  const nothing_references = async (uid: string, id: string) => {
+    const s = await db.collection('transactions').where('userId', '==', uid).get();
+    return s.docs.filter((d) => JSON.stringify(d.data()).includes(id)).map((d) => d.id);
+  };
+  const run_reassign = async (uid: string) => reassign(ctx(), { user_id: uid, reason: 'recurring_removal' });
+  const finish = async (c: any, kind: Kind) => {
+    await run_reassign(c.h.ids.userId);
+    expect(await nothing_references(c.h.ids.userId, c.stuck.id)).toEqual([]); // links AND parked pins cleared
+    const ok = await convert(ctx(), c.h.ids.userId, c.req, NOW_MS);
+    expect(ok.in_progress).toBeUndefined();
+    expect(ok.id).not.toBe(c.stuck.id);
+    expect(ok.linked_past_count).toBeGreaterThan(0);
+    const link = kind === 'inflow' ? 'inflowId' : 'outflowId';
+    for (const k of ['oct', 'sep', 'aug']) expect((await c.h.txn(k)).splits[0][link]).toBe(ok.id);
+    expect(await nothing_references(c.h.ids.userId, c.stuck.id)).toEqual([]);
+    expect((await c.stuck.ref.get()).exists).toBe(false);
+    const rec = (await db.collection(c.coll).doc(ok.id).get()).data()!;
+    expect(rec.retroLinkedAtMs).toBeGreaterThan(0);
+    // the bill's OWN vendor is no longer "Not a bill"
+    const state = (await db.collection('_recurring_review_state').doc(c.h.ids.userId).get()).data() ?? {};
+    return { ok, state };
+  };
+
+  it('outflow: CONVERT_FAILED -> delete -> reassign -> convert succeeds, nothing references the old id', async () => {
+    const c = await setup('qzm1', 'outflow');
+    await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'delete' }, NOW_MS, c.repo, c.etype);
+    await finish(c, 'outflow');
+  }, 600000);
+
+  it('income: CONVERT_FAILED -> delete -> reassign -> convert succeeds, nothing references the old id', async () => {
+    const c = await setup('qzm2', 'inflow');
+    expect((await c.h.txn('oct')).splits[0].inflowAssignmentSource).toBe('manual'); // the source's pin
+    await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'delete' }, NOW_MS, c.repo, c.etype);
+    await finish(c, 'inflow');
+  }, 600000);
+
+  for (const mode of ['going_forward', 'all'] as const) {
+    it(`outflow removed (${mode}) first, then deleted: recovery is the same, no parked pin survives`, async () => {
+      const c = await setup(`qzm3${mode.slice(0, 2)}`, 'outflow');
+      const extra = plaidTxn(c.h.ids, { key: 'gym', account: 'chk', amount: 60, days_ago: ago(2037, 10, 5), name: 'GYM CO', merchant: 'Gym Co', primary: 'GENERAL_SERVICES', detailed: 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES' });
+      c.h.postTxns([extra]);
+      await c.h.sync('gym');
+      const { transaction_repo } = require('../src/functions/repositories/transaction.repo');
+      const g = await c.h.txn('gym');
+      await transaction_repo.pin_split_to_outflow(ctx(), doc(c.h, 'gym'), g.splits[0].splitId, c.stuck.id, c.h.ids.userId); // a manual pin to the stuck bill
+      await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'remove', mode }, NOW_MS, c.repo, c.etype);
+      await run_reassign(c.h.ids.userId); // the removal's own re-assign parks the pin
+      expect(await nothing_references(c.h.ids.userId, c.stuck.id)).toContain(doc(c.h, 'gym')); // parked, so the check below bites
+      await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'delete' }, NOW_MS, c.repo, c.etype);
+      await finish(c, 'outflow');
+    }, 600000);
+  }
+
+  it('a removed, unfinished conversion: preview and convert give the SAME refusal', async () => {
+    const c = await setup('qzm4', 'outflow');
+    await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'remove', mode: 'all' }, NOW_MS, c.repo, c.etype);
+    await c.stuck.ref.update({ resumeLeaseMs: 0 });
+    const pv = await preview(ctx(), c.h.ids.userId, { transaction_id: doc(c.h, 'oct') }, NOW_MS);
+    const cv = await convert(ctx(), c.h.ids.userId, c.req, NOW_MS).catch((e: any) => e);
+    expect(pv.refusal.code).toBe('ALREADY_TRACKED');
+    expect(cv.code).toBe('ALREADY_TRACKED');
+    expect(pv.refusal.message).toBe(cv.message);
+    expect(pv.refusal.details).toEqual(cv.details);
+    expect((await c.stuck.ref.get()).exists).toBe(true); // nothing was discarded
+  }, 600000);
+
+  it('an absorbed vendor\'s earlier "Not a bill" survives the recovery; the bill\'s own vendor is cleared', async () => {
+    const c = await setup('qzm5', 'outflow');
+    await c.stuck.ref.update({
+      absorbedStreams: [{ streamId: 'sx', state: 'absorbed', atMs: 1, txnIds: ['p1'], vendorKey: 'll properties' }], absorbedTxnIds: ['p1'],
+    });
+    await manage(ctx(), c.h.ids.userId, [], { id: c.stuck.id, action: 'delete' }, NOW_MS, c.repo, c.etype);
+    let state = (await db.collection('_recurring_review_state').doc(c.h.ids.userId).get()).data()!;
+    expect([...state.dismissedVendorKeys].sort()).toEqual(['outflow:landlord llc', 'outflow:ll properties']);
+    const r = await finish(c, 'outflow');
+    state = r.state as any;
+    expect(state.dismissedVendorKeys).toContain('outflow:ll properties'); // D11: absorbed vendor stays dismissed
+    expect(state.dismissedVendorKeys ?? []).not.toContain('outflow:landlord llc'); // own vendor cleared by step 7
+  }, 600000);
 });
