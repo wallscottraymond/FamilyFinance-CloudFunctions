@@ -8,8 +8,9 @@
  */
 
 import { Timestamp } from "firebase-admin/firestore";
+import { get_generation_source_periods } from "../periods/generation_source_periods.resolver";
 import { TraceContext, DependencyResult, no_dependencies } from "../../types";
-import { inflow_repo, Inflow, source_period_repo } from "../../repositories";
+import { inflow_repo, Inflow } from "../../repositories";
 import {
   InflowForPeriodGeneration,
   SourcePeriodForGeneration,
@@ -114,11 +115,10 @@ export async function resolve_inflow_period_dependencies(
   );
 
   // 3. Query source periods within the date range
-  const periods = await source_period_repo.get_by_start_date_range(
-    ctx,
-    Timestamp.fromDate(start_date),
-    Timestamp.fromDate(end_date)
-  );
+  const periods = await get_generation_source_periods(ctx, start_date, end_date, {
+    source: inflow.source ?? "plaid",
+    explicit_start: !!input.start_date,
+  });
   const source_periods: SourcePeriodForGeneration[] = periods.map((p) => ({
     id: p.id,
     period_id: p.period_id,
@@ -216,11 +216,10 @@ export async function resolve_inflow_period_dependencies_from_doc(
   );
 
   // Query source periods
-  const periods = await source_period_repo.get_by_start_date_range(
-    ctx,
-    Timestamp.fromDate(start_date),
-    Timestamp.fromDate(end_date)
-  );
+  const periods = await get_generation_source_periods(ctx, start_date, end_date, {
+    source: inflow.source,
+    explicit_start: !!options?.start_date,
+  });
   const source_periods: SourcePeriodForGeneration[] = periods.map((p) => ({
     id: p.id,
     period_id: p.period_id,
