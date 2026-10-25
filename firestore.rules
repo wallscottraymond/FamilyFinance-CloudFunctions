@@ -297,6 +297,21 @@ service cloud.firestore {
                            .hasOnly(['homeLayout', 'updatedAt'])
                        )
                        ||
+                       // Fast-path: owner changing ONLY their Display Settings — appearance
+                       // (`preferences.theme`) and color theme (`preferences.colorThemeId`) — same
+                       // reason as above: the stored legacy `preferences` can fail the full check.
+                       (
+                         isOwner(userId) &&
+                         request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['preferences', 'updatedAt']) &&
+                         request.resource.data.preferences.diff(resource.data.preferences).affectedKeys()
+                           .hasOnly(['theme', 'colorThemeId']) &&
+                         request.resource.data.preferences.theme in ['light', 'dark', 'auto'] &&
+                         (!('colorThemeId' in request.resource.data.preferences) ||
+                           (request.resource.data.preferences.colorThemeId is string &&
+                            request.resource.data.preferences.colorThemeId.size() <= 40))
+                       )
+                       ||
                        (
                          isValidUserData() &&
                          // groupIds is a server-written mirror of group membership
