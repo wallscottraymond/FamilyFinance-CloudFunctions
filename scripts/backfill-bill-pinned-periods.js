@@ -68,6 +68,7 @@ const { FieldPath, FieldValue } = admin.firestore;
 
   const ids = [...want.keys()];
   let to_write = 0;
+  const written_owners = new Set();
   for (let i = 0; i < ids.length; i += 300) {
     const chunk = ids.slice(i, i + 300);
     const bills = await db.getAll(...chunk.map((id) => db.collection('outflows').doc(id)),
@@ -102,10 +103,18 @@ const { FieldPath, FieldValue } = admin.firestore;
           updatedAt: admin.firestore.Timestamp.now(),
         }, { merge: true });
         /* eslint-enable @typescript-eslint/naming-convention */
+        written_owners.add(owner);
       }
     }
   }
   console.log(`${to_write} bill(s) ${COMMIT ? 'written' : 'would be written'}`);
+  // A derive input changed (no trigger on this collection): bump each owner's derive version AFTER
+  // the writes, as bump_derive_version does, so a cached period view (24h) recomputes.
+  for (const owner of written_owners) {
+    await db.collection('user_data_versions').doc(owner)
+      .set({ version: FieldValue.increment(1), updated_at: admin.firestore.Timestamp.now() }, { merge: true });
+    console.log(`  derive version bumped for ${owner}`);
+  }
   process.exit(0);
 })().catch((e) => {
   console.error(e);
