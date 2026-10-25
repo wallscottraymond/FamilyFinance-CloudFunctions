@@ -290,6 +290,8 @@ export async function purge_user_data_orchestrator(
       "derived_recurring_view_cache",
       // Bills-to-review items (Convert-To-Recurring, X19): ids are `${user_id}__…` too.
       "recurring_review_items",
+      // A bill's hand-pinned periods (outflow_pinned_period.repo): `${user_id}__${outflow_id}`.
+      "outflow_pinned_periods",
     ]) {
       await record(
         collection,

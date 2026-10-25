@@ -23,6 +23,7 @@ import { RemovalInterval } from "../../domain/recurring/recurring_suppression.se
 import { bill_release_schedule, is_payment_released } from "../../domain/recurring/late_payment.service";
 import {
   is_edge_money,
+  is_manual_period_pin,
   splits_paying_recurring,
 } from "../../domain/recurring/stream_membership";
 import { fingerprint_stored } from "../../domain/recurring/reconciliation_fingerprint";
@@ -265,7 +266,7 @@ export async function resolve_recurring_reconciliation(
     if (is_outflow) {
       const pinned = (txn.splits ?? []).find((s) => {
         const sp = s as { outflowId?: string | null; outflowPinnedPeriodId?: string };
-        return sp.outflowId === input.recurring_id && !!sp.outflowPinnedPeriodId;
+        return sp.outflowId === input.recurring_id && is_manual_period_pin(sp);
       }) as { outflowPinnedPeriodId?: string } | undefined;
       const pinned_source = pinned?.outflowPinnedPeriodId;
       if (pinned_source && midpoint_by_source_period.has(pinned_source)) {

@@ -65,6 +65,8 @@ import {
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
 import {
   build_stream_membership_map,
+  is_edge_money,
+  is_manual_period_pin,
   is_other_income_split,
   is_split_on_stream,
   splits_paying_recurring,
@@ -87,6 +89,7 @@ import {
 } from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
 import { feature_flag_repo } from "../../repositories/feature_flag.repo";
+import { outflow_pinned_period_repo } from "../../repositories/outflow_pinned_period.repo";
 import { load_review_state_if_relevant } from "../recurring/review_holdout.resolver";
 import {
   CategoryCatalog,
@@ -145,6 +148,13 @@ export interface PeriodDerivationRaw {
    * only to judge whether that bill's last occurrence was already paid (the release rule).
    */
   release_lookback_txns?: Array<{ id: string; data: Record<string, unknown> }>;
+  /**
+   * The view's active payments of every bill that has a hand-pinned period
+   * (`outflow_pinned_period.repo`) among the loaded periods — whatever their date. A payment pinned to a period here but dated
+   * outside the loaded range (a late payment of an overdue month, or paid ahead) is found only
+   * through this. Read only when such a bill exists (usually none).
+   */
+  pinned_bill_txns?: Array<{ id: string; data: Record<string, unknown> }>;
   /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
   inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
   /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
@@ -289,12 +299,14 @@ export async function load_period_derivation_raw(
       // record — their review state (the fuzzy hold-out). X11: no extra read otherwise.
       per_member(scope, async (m) => {
         const flag_on = feature_flag_repo.is_convert_to_recurring_enabled(m);
-        const [outs, ins] = await Promise.all([
+        const [outs, ins, pins] = await Promise.all([
           outflow_repo.get_by_user_id(ctx, m),
           inflow_repo.get_by_user_id(ctx, m),
+          // Bills with a hand-pinned period (one read; usually no docs).
+          outflow_pinned_period_repo.get_by_owner(ctx, m),
         ]);
         const st = await load_review_state_if_relevant(ctx, m, [...outs, ...ins], flag_on);
-        return [{ outs, ins, st }];
+        return [{ member_id: m, outs, ins, st, pins }];
       }),
       per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
       load_category_catalog(ctx),
@@ -350,12 +362,38 @@ export async function load_period_derivation_raw(
       lookback_start_ms = Math.min(lookback_start_ms, cut_ms - LATE_PAYMENT_MAX_MS - LATE_PAYMENT_LOOKBACK_MS);
     }
   }
-  const [member_txns_read, pairing_extra] = await Promise.all([
+  // Bills with a payment hand-pinned into one of the loaded periods: their linked payments are read
+  // whole (the pinned one may be dated anywhere). The same query stored reconcile uses.
+  const loaded_period_ids = new Set(overlapping.map((p) => p.id));
+  const pinned_by_member = new Map(member_recurring.map((r) => [r.member_id, r.pins]));
+  const pinned_bills = outflows.filter(
+    (o) => o.is_active && !o.is_hidden &&
+      (pinned_by_member.get(o.user_id)?.get(o.id) ?? []).some((id) => loaded_period_ids.has(id))
+  );
+  const [member_txns_read, pairing_extra, pinned_bill_docs] = await Promise.all([
     per_member(scope, (m) =>
       transaction_repo.get_active_in_date_range(ctx, m, lookback_start_ms, txn_end_ms)
     ),
     load_pairing_extra_txns(ctx, scope, txn_start_ms, txn_end_ms),
+    Promise.all(
+      pinned_bills.map((o) => transaction_repo.get_by_split_recurring_link(ctx, o.user_id, "outflow", o.id))
+    ),
   ]);
+  const pinned_seen = new Set<string>();
+  const pinned_bill_txns = pinned_bill_docs
+    .flat()
+    .filter((d) => {
+      if (pinned_seen.has(d.id)) return false;
+      pinned_seen.add(d.id);
+      // Any date (an old record may lack a Timestamp): never let one bad doc break the page.
+      if (typeof (d.transactionDate as { toMillis?: unknown } | undefined)?.toMillis !== "function") return false;
+      return transaction_in_scope(
+        scope,
+        d.accountId as string | undefined,
+        (d.transactionDate as Timestamp).toMillis()
+      );
+    })
+    .map((d) => ({ id: d.id, data: d as unknown as Record<string, unknown> }));
   const before_range = (t: { data: Record<string, unknown> }) =>
     ts_cmp(t.data.transactionDate as Timestamp, txn_start_ms) < 0;
   const member_txns = lookback_start_ms < txn_start_ms
@@ -405,6 +443,7 @@ export async function load_period_derivation_raw(
     txns,
     all_member_txns,
     ...(release_lookback_txns.length ? { release_lookback_txns } : {}),
+    ...(pinned_bill_txns.length ? { pinned_bill_txns } : {}),
     inflow_history_docs,
     scope,
     out_of_view_recurring,
@@ -741,7 +780,7 @@ export function shape_period_derivation_deps(
       const plaid_txn_id = (data.transactionId as string | null) ?? null;
       const stored_splits = (data.splits as Array<Record<string, unknown>>) ?? [];
       const splits = (plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits, converted_ids) : stored_splits)
-        .filter((sp) => !sp.outflowPinnedPeriodId);
+        .filter((sp) => !is_manual_period_pin(sp));
       const stream_bill = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
       for (const rid of bill_schedule_by_id.keys()) {
         const linked = splits.filter((sp) => sp.outflowId === rid);
@@ -786,7 +825,7 @@ export function shape_period_derivation_deps(
     linked: Array<Record<string, unknown>>,
     link: string
   ): { start_ms: number; end_ms: number } | null | undefined => {
-    const pin = linked.find((sp) => sp.outflowId === link && sp.outflowPinnedPeriodId);
+    const pin = linked.find((sp) => sp.outflowId === link && is_manual_period_pin(sp));
     if (!pin) return undefined;
     return period_range.get(pin.outflowPinnedPeriodId as string) ?? null;
   };
@@ -952,27 +991,35 @@ export function shape_period_derivation_deps(
       other_income_credits.push({ date_ms: txn_date_ms, amount: other_income_amount });
     }
   }
-  // Payments dated just OUTSIDE the span (the pairing pool, ± a few days) but PINNED to a period
-  // in it pay that period here (reconcile counts them there too).
+  // Payments dated OUTSIDE the span but PINNED to a period in it pay that period here (reconcile
+  // counts them there too): the pairing pool (± a few days), plus the payments of bills with a period
+  // pinned among the loaded ones, dated anywhere (a late payment of an overdue month).
   const counted_ids = new Set(txns.map((t) => t.id));
-  for (const { id, data } of view_pool) {
+  const pool_ids = new Set(view_pool.map((t) => t.id));
+  const pinned_elsewhere = (raw.pinned_bill_txns ?? []).filter(
+    // Not already in the span / pool; edge money pays nothing (as stored reconcile drops it).
+    (t) => !counted_ids.has(t.id) && !pool_ids.has(t.id) && !is_edge_money(t.data.transferRole)
+  );
+  for (const { id, data } of [...view_pool, ...pinned_elsewhere]) {
     if (counted_ids.has(id) || crossing.ids.has(id)) continue;
     // Released bills (removed / paused for this payment's month) are dropped here too.
     const pool_released = released_at((data.transactionDate as Timestamp).toMillis(), id);
-    const pinned_splits = without_out_of_view_links(
+    // Every split linked to a bill, so a pinned payment's amount is the net of ALL its splits on that
+    // bill — as the in-span pass and stored reconcile count it (one payment, placed by the pin).
+    const linked_splits = without_out_of_view_links(
       (data.splits as Array<Record<string, unknown>>) ?? [],
       pool_released.size
         ? new Set([...out_of_view_recurring_ids, ...pool_released])
         : out_of_view_recurring_ids
-    ).filter((sp) => sp.outflowId && sp.outflowPinnedPeriodId);
+    ).filter((sp) => sp.outflowId);
     const by_link = new Map<string, Array<Record<string, unknown>>>();
-    for (const sp of pinned_splits) {
+    for (const sp of linked_splits) {
       const link = sp.outflowId as string;
       if (payments_by_id.has(link)) by_link.set(link, [...(by_link.get(link) ?? []), sp]);
     }
     for (const [link, linked] of by_link) {
       const pinned = pinned_period(linked, link);
-      if (!pinned) continue;
+      if (!pinned) continue; // not pinned (counted by date in its own view), or pinned outside this load
       const n = compute_countable_split_net(linked as CountableSplitInput[], id);
       push_payment(link, {
         pinned_window: pinned, // the period view keeps it only in the span of its due occurrence
@@ -1004,13 +1051,18 @@ export function shape_period_derivation_deps(
       const splits = without_out_of_view_links(
         plaid_txn_id && raw_excluded?.has(plaid_txn_id) ? without_guessed_links(stored_splits, converted_ids) : stored_splits,
         released.size ? new Set([...out_of_view_recurring_ids, ...released]) : out_of_view_recurring_ids
-      ).filter((sp) => !sp.outflowPinnedPeriodId);
+      );
+      // A bill this payment pays through a PIN is placed by the pin (above / in another view) —
+      // never also here by date, not even its unpinned splits.
+      const pinned_to = new Set(splits.filter(is_manual_period_pin).map((sp) => sp.outflowId as string));
+      const unpinned = splits.filter((sp) => !is_manual_period_pin(sp));
       const stream_bill = plaid_txn_id ? outflow_tx_to_id.get(plaid_txn_id) : undefined;
       for (const rid of kept) {
-        const linked = splits.filter((sp) => sp.outflowId === rid);
+        if (pinned_to.has(rid)) continue;
+        const linked = unpinned.filter((sp) => sp.outflowId === rid);
         const paying = linked.length
           ? linked
-          : stream_bill === rid ? splits_paying_recurring(splits, "outflow", rid, true) : [];
+          : stream_bill === rid ? splits_paying_recurring(unpinned, "outflow", rid, true) : [];
         if (paying.length === 0) continue;
         const n = compute_countable_split_net(paying as CountableSplitInput[], id);
         push_payment(rid, { transaction_id: id, split_id: linked.length ? n.split_id : null, date_ms: txn_date_ms, amount: n.amount });

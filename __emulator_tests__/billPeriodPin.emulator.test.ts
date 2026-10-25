@@ -55,7 +55,8 @@ async function seedBill(pinnedPeriodId: string | null) {
     transactionId: rid('tx'), userId, ownerId: userId, isActive: true, isPending: false,
     transactionDate: Timestamp.fromMillis(Date.UTC(2026, 7, 20)), amount,
     splitOutflowIds: [outflowId],
-    splits: [{ splitId: 'sp1', outflowId, amount, outflowPinnedPeriodId: pinnedPeriodId, isDefault: true }],
+    // A pin is always a MANUAL link (assign_split_to_outflow); a period left on an auto link is stale.
+    splits: [{ splitId: 'sp1', outflowId, amount, outflowAssignmentSource: 'manual', outflowPinnedPeriodId: pinnedPeriodId, isDefault: true }],
   });
   return { userId, outflowId };
 }
@@ -103,7 +104,7 @@ describe('a pinned payment in WEEKLY periods (emulator)', () => {
     await db.collection('transactions').doc(`plaid_${rid('tx')}`).set({
       transactionId: rid('tx'), userId, ownerId: userId, isActive: true, isPending: false,
       transactionDate: T(2026, 7, 20, 12), amount: 100, splitOutflowIds: [outflowId],
-      splits: [{ splitId: 'sp1', outflowId, amount: 100, outflowPinnedPeriodId: '2026M07', isDefault: true }],
+      splits: [{ splitId: 'sp1', outflowId, amount: 100, outflowAssignmentSource: 'manual', outflowPinnedPeriodId: '2026M07', isDefault: true }],
     });
     await reconcile({ trace_id: rid('t'), span_id: rid('s') }, { recurring_id: outflowId, recurring_type: 'outflow' });
     expect(await paidOf(outflowId, '2026M07')).toBeGreaterThan(0);

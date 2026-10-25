@@ -443,10 +443,12 @@ describe('capture rules — flag off equals today (emulator)', () => {
     // Measured on the BASE commit 2ae62e6 with this exact flow (throwaway worktree, harness copied in).
     // Round 5: re-measured there after the scenario gained the D31 bill (LTE: +2 outflows, +5 periods, +1 txn).
     // Round 6: re-measured there after the D37 bills (PPA + XTR: +4 outflows, +10 periods, +3 txns).
+    // Late-pinned-payment fix (not convert, flag-independent): +1 — the derive's per-member read of
+    // the bills' hand-pinned periods (outflow_pinned_periods; no docs here, billed as one read).
     const BASE = { budgets: 6, inflows: 4, outflows: 26, users: 3, transactions: 29, inflow_periods: 10, source_periods: 3,
-      outflow_periods: 65, user_data_versions: 1, budget_periods: 1, goals: 1 };
+      outflow_periods: 65, user_data_versions: 1, budget_periods: 1, goals: 1, outflow_pinned_periods: 1 };
     expect(by).toEqual(BASE);
-    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(149);
+    expect(k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0)).toBe(150);
   }, 120000);
 });
 

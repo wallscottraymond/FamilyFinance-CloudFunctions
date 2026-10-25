@@ -39,7 +39,11 @@ const schema = z.object({
   outflow_id: z.string().min(1).nullable(),
   /** Optional: force the payment into a SPECIFIC period (sourcePeriodId, e.g. "2026M07"),
    *  overriding date-based placement. Omit/null → the reconcile places it by txn date. */
-  outflow_period_id: z.string().min(1).nullable().optional(),
+  outflow_period_id: z
+    .string()
+    .regex(/^\d{4}(M(0[1-9]|1[0-2])|W\d{2}|BM(0[1-9]|1[0-2])[AB])$/, "outflow_period_id must be a period id")
+    .nullable()
+    .optional(),
   /** Clear the split's budget assignment when pinning to a bill (default: keep). */
   clear_budget: z.boolean().optional(),
   /** With `outflow_id: null`: DETACH ("remove from bill") — a durable manual "no bill" that

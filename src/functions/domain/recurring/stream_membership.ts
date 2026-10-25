@@ -124,6 +124,18 @@ export function is_edge_money(transfer_role: unknown): boolean {
   return transfer_role === "edge_out" || transfer_role === "edge_in";
 }
 
+/**
+ * A split's PERIOD pin (`outflowPinnedPeriodId`, the two-stage bill picker) counts only on a MANUAL
+ * bill link — the pin's own. A pin left behind on a link the engine re-made automatically (the pinned
+ * bill went inactive / hidden / out of the view) is stale: that payment is placed by its date. The
+ * period page and stored reconcile both decide with this. PURE.
+ */
+export function is_manual_period_pin(split: unknown): boolean {
+  const s = split as { outflowPinnedPeriodId?: unknown; outflowAssignmentSource?: unknown } | null;
+  return !!s && typeof s.outflowPinnedPeriodId === "string" && s.outflowPinnedPeriodId !== "" &&
+    s.outflowAssignmentSource === "manual";
+}
+
 /** Is this split ON its transaction's Plaid stream (member, not taken off)? PURE. */
 export function is_split_on_stream(
   split: unknown,

@@ -208,6 +208,10 @@ jest.mock("../../../repositories/user.repo", () => ({
 jest.mock("../../../repositories/recurring_review.repo", () => ({
   recurring_review_repo: { get_state: jest.fn(async () => null) },
 }));
+// Hand-pinned bill periods (late / early payments pinned with the bill picker): none here.
+jest.mock("../../../repositories/outflow_pinned_period.repo", () => ({
+  outflow_pinned_period_repo: { get_by_owner: jest.fn(async () => new Map()) },
+}));
 jest.mock("../../../repositories/derive_version.repo", () => ({
   get_derive_version: async () => 7,
 }));

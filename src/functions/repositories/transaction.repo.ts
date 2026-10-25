@@ -12,7 +12,11 @@
 
 import { split_spend_status } from "../domain/budgets/budget_spend.service";
 import type { TransactionSplitForMigration } from "../types/plaid";
-import { getFirestore, Timestamp, FieldPath } from "firebase-admin/firestore";
+import {
+  OUTFLOW_PINNED_PERIODS_COLLECTION,
+  outflow_pinned_period_doc_id,
+} from "./outflow_pinned_period.repo";
+import { getFirestore, Timestamp, FieldPath, FieldValue } from "firebase-admin/firestore";
 import {
   WriteResult,
   TraceContext,
@@ -861,6 +865,25 @@ export const transaction_repo = {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       const update_data = { splits, splitOutflowIds, splitInflowIds, updatedAt: now, updatedBy: user_id };
       tx.update(ref, update_data);
+      // Record the pinned period for the bill in the SAME transaction (outflow_pinned_period.repo):
+      // the period page loads only the payments dated in the period it shows, so a payment pinned
+      // there from another period (a late payment of an overdue month) is found through it.
+      if (outflow_id && outflow_period_id) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        tx.set(
+          getFirestore()
+            .collection(OUTFLOW_PINNED_PERIODS_COLLECTION)
+            .doc(outflow_pinned_period_doc_id(user_id, outflow_id)),
+          {
+            ownerId: user_id,
+            outflowId: outflow_id,
+            periodIds: FieldValue.arrayUnion(outflow_period_id),
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        /* eslint-enable @typescript-eslint/naming-convention */
+      }
       return { before, update_data };
     });
 
