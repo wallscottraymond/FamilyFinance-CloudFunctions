@@ -93,6 +93,8 @@ const CACHES = [
 const STATE_DOCS = [
   "user_data_versions", "_transfer_classification_state", "_assignment_watermarks", "_recurring_reconcile_watermarks",
   "_recurring_review_state", "_recurring_detector_state",
+  // Feedback-And-Questions: the sender's own note list + daily counter.
+  "feedback_senders",
 ] as const;
 async function seedUserMade(userId: string): Promise<void> {
   const batch = db.batch();
@@ -167,6 +169,27 @@ describe("purge_user_data_orchestrator — full erase", () => {
     expect(await countWhere("accounts", "userId", bystander.userId)).toBe(1);
     expect(await userMadeLeft(victim.userId)).toBe(0);
     expect(await userMadeLeft(bystander.userId)).toBe(USER_MADE.length + CACHES.length + STATE_DOCS.length);
+  });
+
+  it("Feedback: drops the sender's list but keeps their (anonymous) notes in the inbox", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const note_id = `purge_note_${seed.userId}`.replace(/[^A-Za-z0-9_-]/g, "_");
+    await db.collection("feedback").doc(note_id).set({
+      type: "idea", message: "keep me", appVersion: "1.0", build: "52", screen: null, device: null,
+      osVersion: null, createdAt: Timestamp.now(), status: "open", readByOwner: false, reply: null,
+    });
+    await db.collection("feedback_senders").doc(seed.userId).set({
+      noteIds: [note_id], dailyCount: 1, dailyDate: "2026-10-25",
+    });
+
+    await purge_user_data_orchestrator(ctx(), {
+      user_id: seed.userId, initiated_by: seed.userId, trace_id: "t_feedback",
+    });
+
+    expect((await db.collection("feedback_senders").doc(seed.userId).get()).exists).toBe(false);
+    const kept = await db.collection("feedback").doc(note_id).get();
+    expect(kept.exists).toBe(true);
+    expect(kept.data()?.message).toBe("keep me");
   });
 
   it("BLOCKS when the user owns a group with other members (no data deleted)", async () => {

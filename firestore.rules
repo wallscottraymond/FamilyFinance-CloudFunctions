@@ -395,6 +395,14 @@ service cloud.firestore {
     match /reports/{id} {
       allow read, write: if false;
     }
+    // Feedback-And-Questions: notes + each sender's list. Functions-only — a note never says who
+    // sent it, and nobody reads another person's list or the inbox from the client.
+    match /feedback/{noteId} {
+      allow read, write: if false;
+    }
+    match /feedback_senders/{userId} {
+      allow read, write: if false;
+    }
 
     // =======================
     // FAMILIES COLLECTION RULES (LEGACY)

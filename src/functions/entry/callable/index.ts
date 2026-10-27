@@ -106,3 +106,9 @@ export { share_account } from "./share_account.entry";
 export { unshare_account } from "./unshare_account.entry";
 export { move_budget } from "./move_budget.entry";
 export { copy_budgets_to_group } from "./copy_budgets_to_group.entry";
+
+// Feedback-And-Questions: send a note, the Sent tab, and the owner-only inbox
+export { submit_feedback } from "./submit_feedback.entry";
+export { list_my_feedback } from "./list_my_feedback.entry";
+export { get_feedback_status } from "./get_feedback_status.entry";
+export { manage_feedback_inbox } from "./manage_feedback_inbox.entry";

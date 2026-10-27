@@ -369,6 +369,9 @@ export async function purge_user_data_orchestrator(
       // Convert-To-Recurring per-user state (suppressed ids, "Not a bill" vendors, detector throttle).
       "_recurring_review_state",
       "_recurring_detector_state",
+      // Feedback-And-Questions: the sender's own note list + daily counter. The notes themselves
+      // carry no sender (D2), so they stay — anonymous — in the owner's inbox.
+      "feedback_senders",
     ]) {
       await hard_delete_doc(collection, user_id).catch(() => {});
     }
