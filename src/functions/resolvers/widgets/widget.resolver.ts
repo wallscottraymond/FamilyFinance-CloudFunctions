@@ -57,15 +57,22 @@ export async function resolve_source_periods_from_now(
 const RECENT_READ_LIMIT = 100;
 
 /**
- * The view's newest transactions (Me or a group), newest first: each member's latest
- * RECENT_READ_LIMIT, kept only when they belong to the view (`transaction_in_scope`). Raw docs;
- * which rows show is the domain's call (`select_recent_transactions`). READ-ONLY.
+ * The view's newest transactions, newest first. Raw docs; which rows show is the domain's call
+ * (`select_recent_transactions`). READ-ONLY.
+ * - Me: every transaction on your own accounts, shared into a group or not: the app's Home
+ *   "Recent transactions" card (ownerId only). NOT the period page's Me view, which leaves shared
+ *   accounts to the group: with most accounts shared, that left Me nearly empty.
+ * - A group: each member's latest RECENT_READ_LIMIT, kept when on the group's shared accounts
+ *   (`transaction_in_scope`).
  */
 export async function resolve_recent_view_transactions(
   ctx: TraceContext,
   user_id: string,
   scope_request: DeriveScopeRequest | undefined
 ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  if (!scope_request || scope_request.kind === "me") {
+    return transaction_repo.get_latest_by_owner(ctx, user_id, RECENT_READ_LIMIT);
+  }
   const scope = await resolve_derive_scope(ctx, user_id, scope_request);
   const per_member = await Promise.all(
     scope.member_ids.map((m) => transaction_repo.get_latest_by_owner(ctx, m, RECENT_READ_LIMIT))
