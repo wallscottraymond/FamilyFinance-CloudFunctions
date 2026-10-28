@@ -781,6 +781,24 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Ideas (Planning-Module v1). userId = the list's owner key: a uid (Me) or
+    // "group:<groupId>" (any member of that group reads it). Writes: callables only.
+    match /ideas/{ideaId} {
+      allow read: if isOwner(resource.data.userId) || isGroupViewMember(resource.data.userId);
+      allow create, update, delete: if false;
+    }
+
+    match /idea_comments/{commentId} {
+      allow read: if isOwner(resource.data.userId) || isGroupViewMember(resource.data.userId);
+      allow create, update, delete: if false;
+    }
+
+    // Doc id = the list's owner key, so a list with no topics yet (no doc) still reads.
+    match /idea_topics/{ownerKey} {
+      allow read: if isOwner(ownerKey) || isGroupViewMember(ownerKey);
+      allow create, update, delete: if false;
+    }
+
     match /tags/{tagId} {
       // Owner-only read (Tag catalog). The FE subscribes to raw tag docs (TagsContext).
       allow read: if isOwner(resource.data.userId);

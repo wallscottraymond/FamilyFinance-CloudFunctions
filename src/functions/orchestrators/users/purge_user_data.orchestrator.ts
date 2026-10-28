@@ -271,13 +271,16 @@ export async function purge_user_data_orchestrator(
       await hard_delete_by_fields_union("user_summaries", ["ownerId", "userId"], user_id, writer, on_batch)
     );
     // Everything else the user made or the app keeps for them: goals, tags, rules, balance
-    // history, and the derive caches (doc ids `${user_id}__…`).
+    // history, Me ideas, and the derive caches (doc ids `${user_id}__…`).
     await step("Deleting goals, tags, rules and history…");
     for (const [collection, fields] of [
       ["goals", ["ownerId", "userId"]],
       ["tags", ["userId"]],
       ["rules", ["userId"]],
       ["account_balance_snapshots", ["userId"]],
+      // Ideas: the person's own (Me) list and its comments. Group ideas stay with the group.
+      ["ideas", ["userId"]],
+      ["idea_comments", ["userId"]],
     ] as const) {
       await record(
         collection,
@@ -372,6 +375,8 @@ export async function purge_user_data_orchestrator(
       // Feedback-And-Questions: the sender's own note list + daily counter. The notes themselves
       // carry no sender (D2), so they stay — anonymous — in the owner's inbox.
       "feedback_senders",
+      // Ideas: the Me list's topic names (doc id = the uid, its owner key).
+      "idea_topics",
     ]) {
       await hard_delete_doc(collection, user_id).catch(() => {});
     }

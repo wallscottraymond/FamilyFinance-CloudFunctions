@@ -55,6 +55,8 @@ import { ensure_group_everything_else } from "./group_everything_else";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
 import { bump_owner_versions } from "./versions";
 import { reassign_accounts, refresh_group_transfer_roles } from "./view_reassign";
+import { idea_repo } from "../../repositories/idea.repo";
+import { group_view_key } from "../../domain/sharing/budget_view.service";
 
 export interface SharingWriteResult {
   success: boolean;
@@ -294,6 +296,8 @@ export async function manage_group_orchestrator(
       ctx, cancel_requests(requests_released(pending, leaving), now_ms)
     );
     await return_moved_in_budgets(ctx, input.group_id, leaving, caller);
+    // A closed group's ideas have nobody left to read them (Planning-Module v1).
+    if (deleted) await idea_repo.delete_list(ctx, group_view_key(input.group_id));
   }
 
   log_operation_success(span, ctx.user_id);

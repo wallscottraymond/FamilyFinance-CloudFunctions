@@ -32,6 +32,8 @@ import { account_repo } from "../../repositories/account.repo";
 import { return_moved_in_budgets } from "./budget_view.orchestrator";
 import { bump_owner_versions } from "./versions";
 import { reassign_accounts, refresh_group_transfer_roles } from "./view_reassign";
+import { idea_repo } from "../../repositories/idea.repo";
+import { group_view_key } from "../../domain/sharing/budget_view.service";
 
 export interface DepartureResult {
   groups_left: number;
@@ -79,6 +81,8 @@ export async function release_user_from_sharing(
     await refresh_group_transfer_roles(ctx, g.id, [user_id]);
     await request_repo.save_many(ctx, cancel_requests(requests_released(pending, leaving), now_ms));
     await return_moved_in_budgets(ctx, g.id, leaving, user_id);
+    // A closed group's ideas have nobody left to read them (Planning-Module v1).
+    if (closed) await idea_repo.delete_list(ctx, group_view_key(g.id));
     if (closed) result.groups_closed++;
     else result.groups_left++;
   }

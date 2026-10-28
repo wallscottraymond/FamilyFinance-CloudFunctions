@@ -84,7 +84,11 @@ async function seedExtras(userId: string, itemDocId: string): Promise<void> {
 }
 
 /** What the user made / the app keeps for them beyond the account graph (Transaction-Integrity X17). */
-const USER_MADE = ["goals", "tags", "rules", "account_balance_snapshots"] as const;
+const USER_MADE = [
+  "goals", "tags", "rules", "account_balance_snapshots",
+  // Ideas (Planning-Module v1): the Me list and its comments.
+  "ideas", "idea_comments",
+] as const;
 const CACHES = [
   "derived_period_cache", "derived_budget_txn_cache", "derived_recurring_view_cache",
   // Bills-to-review items share the `${uid}__…` id prefix (Convert-To-Recurring X19).
@@ -95,6 +99,8 @@ const STATE_DOCS = [
   "_recurring_review_state", "_recurring_detector_state",
   // Feedback-And-Questions: the sender's own note list + daily counter.
   "feedback_senders",
+  // Ideas: the Me list's topic names (doc id = the uid).
+  "idea_topics",
 ] as const;
 async function seedUserMade(userId: string): Promise<void> {
   const batch = db.batch();
@@ -190,6 +196,24 @@ describe("purge_user_data_orchestrator — full erase", () => {
     const kept = await db.collection("feedback").doc(note_id).get();
     expect(kept.exists).toBe(true);
     expect(kept.data()?.message).toBe("keep me");
+  });
+
+  it("Ideas: deletes the Me list, keeps the group's ideas and comments", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const gkey = `group:g_${seed.userId}`;
+    const group_idea = `purge_gidea_${seed.userId}`.replace(/[^A-Za-z0-9_-]/g, "_");
+    await db.collection("ideas").doc(group_idea).set({ userId: gkey, createdBy: seed.userId, title: "Trip", status: "open" });
+    await db.collection("idea_comments").doc(`${group_idea}_c`).set({ userId: gkey, ideaId: group_idea, authorId: seed.userId, text: "hi" });
+    await db.collection("idea_topics").doc(gkey).set({ userId: gkey, topics: ["Trip"] });
+
+    await purge_user_data_orchestrator(ctx(), {
+      user_id: seed.userId, initiated_by: seed.userId, trace_id: "t_ideas",
+    });
+
+    expect(await userMadeLeft(seed.userId)).toBe(0);
+    expect((await db.collection("ideas").doc(group_idea).get()).exists).toBe(true);
+    expect((await db.collection("idea_comments").doc(`${group_idea}_c`).get()).exists).toBe(true);
+    expect((await db.collection("idea_topics").doc(gkey).get()).exists).toBe(true);
   });
 
   it("BLOCKS when the user owns a group with other members (no data deleted)", async () => {

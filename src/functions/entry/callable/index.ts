@@ -112,3 +112,10 @@ export { submit_feedback } from "./submit_feedback.entry";
 export { list_my_feedback } from "./list_my_feedback.entry";
 export { get_feedback_status } from "./get_feedback_status.entry";
 export { manage_feedback_inbox } from "./manage_feedback_inbox.entry";
+
+// Ideas (Planning-Module v1): the list, likes + comments, and the capability check
+export { create_idea } from "./create_idea.entry";
+export { update_idea } from "./update_idea.entry";
+export { delete_idea } from "./delete_idea.entry";
+export { react_to_idea } from "./react_to_idea.entry";
+export { get_ideas_capabilities } from "./get_ideas_capabilities.entry";
