@@ -2,7 +2,7 @@
  * Widget Snapshot Entry Point ([[iOS-Home-Screen-Widgets]] Phases 2–3)
  *
  * HTTPS GET called by the iOS widget extension on its own (no app, no Firebase SDK):
- *   GET /widget_snapshot?kind=left|summary|bills|budget_txns&cadence=monthly&lookahead=7
+ *   GET /widget_snapshot?kind=left|summary|bills|budget_txns|recent&cadence=monthly&lookahead=7
  *       &budget=<id, budget_txns only>&group=<group id, optional>&have=<version>
  *   Authorization: Bearer <widget token>
  * → 200 { unchanged: true, version }      (widget already current; ~2 reads)
@@ -24,7 +24,7 @@ import {
 } from "../../orchestrators/widgets/widget_snapshot.orchestrator";
 
 const query_schema = z.object({
-  kind: z.enum(["left", "summary", "bills", "budget_txns"]).default("left"),
+  kind: z.enum(["left", "summary", "bills", "budget_txns", "recent"]).default("left"),
   budget: z.string().min(1).max(128).optional(),
   group: z.string().trim().min(1).max(128).optional(),
   cadence: z.enum(["monthly", "weekly", "bi_monthly"]).default("monthly"),

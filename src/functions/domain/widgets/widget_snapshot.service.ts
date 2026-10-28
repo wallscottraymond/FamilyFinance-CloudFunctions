@@ -126,6 +126,31 @@ export interface WidgetBudgetTxn {
   refund: boolean;
 }
 
+/** A raw transaction doc, as read for the Recent transactions widget. */
+export interface WidgetRawTxn {
+  id: string;
+  data: Record<string, unknown>;
+}
+
+/** One row of the Recent transactions widget (camelCase wire format, like the other kinds). */
+export interface WidgetRecentTxn {
+  id: string;
+  /** With `id` → the app's transaction detail link. */
+  accountId: string;
+  name: string;
+  dateMs: number;
+  /** Magnitude; `income` says which way it went (the app shows "+" for money in). */
+  amount: number;
+  income: boolean;
+  pending: boolean;
+  /** Set when a split pays a recurring bill: that bill's name. */
+  bill: string | null;
+  /** The primary split's budget ("Everything else", or "Income" for money in with no budget). */
+  budget: string | null;
+  /** How many OTHER budgets the splits go to ("Groceries +1"). */
+  moreBudgets: number;
+}
+
 export interface WidgetBillItem {
   id: string;
   /** Source period the occurrence was placed in (→ the app's `{id}_{periodId}` bill detail). */
@@ -175,6 +200,12 @@ type WidgetPayload =
       lookaheadDays: number;
       items: WidgetBillItem[];
       moreCount: number;
+    }
+  | {
+      v: number;
+      kind: "recent";
+      asOfMs: number;
+      recent: WidgetRecentTxn[];
     };
 
 // ---- Shared helpers (mirror mobile) ----------------------------------------------------------
@@ -279,6 +310,130 @@ export function compute_budget_lines(
 }
 
 /** Most recent transactions that count toward a budget (newest first). PURE. */
+// ---- Recent transactions (mirrors the app's Home card with "Hide transfers" on) --------------
+
+/** Most rows any size shows (large). */
+export const MAX_RECENT_TXNS = 9;
+
+type RawSplit = Record<string, unknown>;
+
+function splits_of(data: Record<string, unknown>): RawSplit[] {
+  return Array.isArray(data.splits) ? (data.splits as RawSplit[]) : [];
+}
+
+function millis_of(v: unknown): number {
+  const t = v as { toMillis?: () => number } | undefined;
+  return typeof t?.toMillis === "function" ? t.toMillis() : 0;
+}
+
+/** The app's `transactionDate || dateTransacted || date`. */
+function txn_date_ms(data: Record<string, unknown>): number {
+  return millis_of(data.transactionDate) || millis_of(data.dateTransacted) || millis_of(data.date);
+}
+
+/** The app's `isTransferTransaction`: the stored matched-pair role decides ("internal" between your
+ *  own accounts, "external" unpaired); without one, every split must be a transfer category. */
+export function is_recent_transfer(data: Record<string, unknown>): boolean {
+  const role = data.transferRole;
+  if (typeof role === "string" && role.length > 0) {
+    return role === "internal" || role === "external";
+  }
+  const splits = splits_of(data);
+  if (splits.length === 0) return false;
+  return splits.every((s) =>
+    /^TRANSFER_(IN|OUT)/.test(String(s.plaidDetailedCategory ?? s.plaidPrimaryCategory ?? ""))
+  );
+}
+
+/**
+ * The rows the widget shows, newest first: what the app's Home card lists (not soft-deleted, has an
+ * owner and at least one split) minus transfers, de-duplicated by id. PURE.
+ */
+export function select_recent_transactions(
+  rows: WidgetRawTxn[],
+  limit = MAX_RECENT_TXNS
+): WidgetRawTxn[] {
+  const seen = new Set<string>();
+  return rows
+    .filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      const d = r.data;
+      if (d.isActive === false || d.isDeleted === true) return false;
+      if (!d.userId || splits_of(d).length === 0) return false;
+      return !is_recent_transfer(d);
+    })
+    .sort((a, b) => txn_date_ms(b.data) - txn_date_ms(a.data))
+    .slice(0, limit);
+}
+
+/** The bill ids the selected rows paid (a split not ignored, linked to an outflow). PURE. */
+export function recent_bill_ids(rows: WidgetRawTxn[]): string[] {
+  const ids = new Set<string>();
+  for (const r of rows) {
+    for (const s of splits_of(r.data)) {
+      const outflow_id = s.outflowId;
+      if (s.isIgnored !== true && typeof outflow_id === "string" && outflow_id) ids.add(outflow_id);
+    }
+  }
+  return [...ids];
+}
+
+/** A bill's display name, as the app's bill rows name it. PURE. */
+function bill_name(doc: Record<string, unknown> | undefined, fallback: unknown): string {
+  const pick = [doc?.userCustomName, doc?.merchantName, doc?.description, fallback].find(
+    (v) => typeof v === "string" && v.trim().length > 0
+  );
+  return (pick as string | undefined) ?? "Bill";
+}
+
+/** The selected rows as the widget wire format. `bills` = outflow docs by id. PURE. */
+export function compute_recent_transactions(
+  rows: WidgetRawTxn[],
+  bills: Map<string, Record<string, unknown>>
+): WidgetRecentTxn[] {
+  return rows.map(({ id, data }) => {
+    const splits = splits_of(data);
+    const split_total = splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+    const total = splits.length > 0 ? split_total : Number(data.amount) || 0;
+    const income = typeof data.type === "string" && data.type ? data.type === "income" : total < 0;
+    const metadata = (data.metadata ?? {}) as Record<string, unknown>;
+    const name =
+      [data.merchantName, metadata.plaidMerchantName, data.name, data.description].find(
+        (v) => typeof v === "string" && v.trim().length > 0
+      ) as string | undefined;
+    const bill_split = splits.find(
+      (s) => s.isIgnored !== true && typeof s.outflowId === "string" && s.outflowId
+    );
+    const primary = splits.find((s) => s.isDefault === true) ?? splits[0];
+    const budget_names = [
+      ...new Set(
+        splits
+          .map((s) => s.budgetName)
+          .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+      ),
+    ];
+    const primary_name = primary?.budgetName;
+    const primary_budget =
+      typeof primary_name === "string" && primary_name.trim() ? primary_name : null;
+    return {
+      id,
+      accountId: typeof data.accountId === "string" ? data.accountId : "",
+      name: name ?? "Transaction",
+      dateMs: txn_date_ms(data),
+      amount: Math.abs(total),
+      income,
+      pending:
+        data.isPending === true || data.pending === true || data.transactionStatus === "pending",
+      bill: bill_split
+        ? bill_name(bills.get(bill_split.outflowId as string), bill_split.outflowDescription)
+        : null,
+      budget: primary_budget ?? budget_names[0] ?? (income ? "Income" : null),
+      moreBudgets: Math.max(0, budget_names.length - 1),
+    };
+  });
+}
+
 export function compute_recent_budget_transactions(
   rows: WidgetBudgetTxnInput[],
   limit = 5

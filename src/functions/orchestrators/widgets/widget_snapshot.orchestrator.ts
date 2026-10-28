@@ -25,6 +25,8 @@ import {
 import {
   resolve_widget_request,
   resolve_source_periods_from_now,
+  resolve_recent_view_transactions,
+  resolve_bill_names,
 } from "../../resolvers/widgets/widget.resolver";
 import {
   WIDGET_DATA_VERSION,
@@ -34,6 +36,9 @@ import {
   compute_bills_due_soon,
   compute_budget_lines,
   compute_recent_budget_transactions,
+  compute_recent_transactions,
+  recent_bill_ids,
+  select_recent_transactions,
   short_period_label,
 } from "../../domain/widgets/widget_snapshot.service";
 import { hash_widget_token } from "../../domain/widgets/widget_token.service";
@@ -56,7 +61,7 @@ export type WidgetCadence = "monthly" | "weekly" | "bi_monthly";
 export interface WidgetSnapshotInput {
   /** Raw bearer token from the widget (hashed here; never stored or logged). */
   token: string;
-  kind: "left" | "summary" | "bills" | "budget_txns";
+  kind: "left" | "summary" | "bills" | "budget_txns" | "recent";
   /** kind=budget_txns: the budget whose recent transactions to return. */
   budget_id: string | null;
   cadence: WidgetCadence;
@@ -124,6 +129,25 @@ export async function widget_snapshot_orchestrator(
     if (input.have_version !== null && input.have_version === version) {
       log_operation_success(span, user_id);
       return { status: "unchanged", version };
+    }
+
+    // Recent transactions: period-independent. Newest rows of the view → which show (domain) →
+    // the names of the bills they paid (one batched read) → wire rows (domain).
+    if (input.kind === "recent") {
+      const raw = await resolve_recent_view_transactions(ctx, user_id, scope);
+      const shown = select_recent_transactions(raw);
+      const bills = await resolve_bill_names(ctx, recent_bill_ids(shown));
+      /* eslint-disable @typescript-eslint/naming-convention */
+      let recent_data: WidgetData = {
+        v: WIDGET_DATA_VERSION,
+        kind: "recent",
+        asOfMs: input.now_ms,
+        recent: compute_recent_transactions(shown, bills),
+      };
+      if (group_name !== undefined) recent_data = { ...recent_data, groupName: group_name };
+      /* eslint-enable @typescript-eslint/naming-convention */
+      log_operation_success(span, user_id);
+      return { status: "data", version, data: recent_data };
     }
 
     // Bills are date-based (cadence-independent): current + next MONTH covers any look-ahead.

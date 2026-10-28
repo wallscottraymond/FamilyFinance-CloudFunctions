@@ -779,6 +779,31 @@ export const transaction_repo = {
   },
 
   /**
+   * An owner's newest transactions, newest first, capped (existing index
+   * `(ownerId, transactionDate DESC)`, the same query the app's Home "Recent transactions" card
+   * pages). Raw docs, any state: the caller drops soft-deleted / out-of-view rows in memory (there
+   * is no isActive + date index). Only the fields a recent-transactions row needs (`select`).
+   */
+  async get_latest_by_owner(
+    _ctx: TraceContext,
+    owner_id: string,
+    limit: number
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const snap = await getFirestore()
+      .collection(COLLECTION)
+      .where("ownerId", "==", owner_id)
+      .orderBy("transactionDate", "desc")
+      .limit(limit)
+      .select(
+        "userId", "accountId", "transactionDate", "isActive", "isDeleted", "isPending", "pending",
+        "transactionStatus", "merchantName", "metadata", "name", "description", "amount", "type",
+        "transferRole", "splits"
+      )
+      .get();
+    return snap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
+  },
+
+  /**
    * Manually PIN a split to a recurring bill (outflow) or CLEAR the pin (outflow_id
    * = null), or DETACH it from bills (`outflow_id = null` + `detach`: a manual pin to
    * "none" — "remove from bill" — that beats auto/stream re-linking; see
