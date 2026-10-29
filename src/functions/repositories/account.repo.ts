@@ -747,32 +747,21 @@ export const account_repo = {
   },
 
   /**
-   * Gets an account by Plaid account ID.
-   *
-   * @param _ctx - Trace context
-   * @param plaid_account_id - Plaid account ID
-   * @param user_id - User ID for scoping query
-   * @returns Account entity or null if not found
+   * Gets an account by Plaid account ID whatever its status (active or removed). When both
+   * exist (an active copy created before P2-H1 was fixed), the active one wins.
    */
-  async get_by_plaid_account_id(
+  async get_by_plaid_account_id_any_status(
     _ctx: TraceContext,
     plaid_account_id: string,
     user_id: string
   ): Promise<Account | null> {
-    const db = getFirestore();
-    const snapshot = await db
+    const snapshot = await getFirestore()
       .collection(COLLECTION)
       .where("accountId", "==", plaid_account_id)
       .where("userId", "==", user_id)
-      .where("isActive", "==", true)
-      .limit(1)
       .get();
-
-    if (snapshot.empty) {
-      return null;
-    }
-
-    return map_to_entity(snapshot.docs[0].data() as LegacyAccountDoc);
+    const accounts = snapshot.docs.map((d) => map_to_entity(d.data() as LegacyAccountDoc));
+    return accounts.find((a) => a.is_active) ?? accounts[0] ?? null;
   },
 
   /**
@@ -850,11 +839,20 @@ export const account_repo = {
 
       for (const plaid_account of chunk) {
         // Check if account exists
-        const existing = await this.get_by_plaid_account_id(
+        // Any status: a removed account (soft-deleted while its bank connection stays linked)
+        // still comes back from Plaid on every balance sync. It stays removed, untouched,
+        // instead of being re-created as a new active copy (P2-H1).
+        const existing = await this.get_by_plaid_account_id_any_status(
           ctx,
           plaid_account.account_id,
           user_id
         );
+        if (existing && !existing.is_active) {
+          console.log(
+            `[${ctx.trace_id}] upsert_from_plaid: skipping removed account ${existing.id}`
+          );
+          continue;
+        }
 
         const new_balance = plaid_account.balances.current ?? 0;
         const liability_detail = liabilities?.[plaid_account.account_id];

@@ -43,7 +43,7 @@ export async function build_transaction_data(
   group_id: string | undefined,
   currency: string,
   item_id: string
-): Promise<FamilyTransaction | null> {
+): Promise<FamilyTransaction> {
   try {
     // Determine transaction type and amount
     const transaction_type = plaid_transaction.amount > 0 ? TransactionType.EXPENSE : TransactionType.INCOME;
@@ -162,7 +162,8 @@ export async function build_transaction_data(
       userId: user_id,
       groupId: group_id
     });
-    return null;
+    // Rethrow: a transaction that can't be built must fail the sync, not vanish (P2-H2).
+    throw error;
   }
 }
 

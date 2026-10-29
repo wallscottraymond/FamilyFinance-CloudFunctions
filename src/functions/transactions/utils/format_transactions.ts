@@ -19,6 +19,9 @@ import { Transaction as PlaidTransaction } from "plaid";
 import { build_transaction_data } from "./build_transaction_data";
 import { Transaction as FamilyTransaction } from "../../../types";
 
+/** Firestore `in` takes at most 30 values. */
+const ACCOUNT_IN_LIMIT = 30;
+
 /**
  * Format transactions from Plaid sync data (pure mapping, no DB writes)
  *
@@ -46,64 +49,40 @@ export async function format_transactions(
 ): Promise<FamilyTransaction[]> {
   console.log(`➕ Mapping ${added_transactions.length} Plaid transactions to FamilyTransaction structure`);
 
-  const formatted_transactions: FamilyTransaction[] = [];
-
-  try {
-    // Get account information for transactions
-    const account_ids = [...new Set(added_transactions.map(t => t.account_id))];
-    console.log(`Looking for ${account_ids.length} unique accounts`);
-
+  // Failures THROW (P2-H2): the sync saves the Plaid cursor only when nothing failed, so a
+  // shorter list here would drop those transactions for good. A throw keeps the cursor where it
+  // was and the next sync re-delivers them.
+  const account_ids = [...new Set(added_transactions.map((t) => t.account_id))];
+  const account_map = new Map<string, PlaidAccount>();
+  for (let i = 0; i < account_ids.length; i += ACCOUNT_IN_LIMIT) {
     const account_query = await queryDocuments("accounts", {
       where: [
-        { field: "accountId", operator: "in", value: account_ids },
-        { field: "userId", operator: "==", value: user_id }
-      ]
+        { field: "accountId", operator: "in", value: account_ids.slice(i, i + ACCOUNT_IN_LIMIT) },
+        { field: "userId", operator: "==", value: user_id },
+      ],
     });
-
-    const account_map = new Map<string, PlaidAccount>();
     account_query.forEach((account) => {
       const acct = account as unknown as PlaidAccount & { accountId: string };
       account_map.set(acct.accountId, acct);
     });
-
-    console.log(`Found ${account_map.size} accounts`);
-
-    // Process each transaction individually
-    for (const plaid_transaction of added_transactions) {
-      try {
-        const account = account_map.get(plaid_transaction.account_id);
-        if (!account) {
-          console.warn(`Account not found for transaction: ${plaid_transaction.transaction_id}`);
-          continue;
-        }
-
-        // Build the transaction data using extracted utility (no DB calls)
-        const formatted_transaction = await build_transaction_data(
-          plaid_transaction,
-          account,
-          user_id,
-          group_id,
-          currency,
-          item_id
-        );
-
-        // Add to array (no DB write yet)
-        if (formatted_transaction) {
-          formatted_transactions.push(formatted_transaction);
-        }
-      } catch (error) {
-        console.error(`Error mapping transaction ${plaid_transaction.transaction_id}:`, error);
-      }
-    }
-
-    console.log(`✅ Mapped ${formatted_transactions.length} of ${added_transactions.length} Plaid transactions to FamilyTransaction structure`);
-
-    return formatted_transactions;
-
-  } catch (error) {
-    console.error("Error formatting transactions:", error);
-    return formatted_transactions; // Return partial results
   }
+
+  const formatted_transactions: FamilyTransaction[] = [];
+  for (const plaid_transaction of added_transactions) {
+    const account = account_map.get(plaid_transaction.account_id);
+    if (!account) {
+      throw new Error(
+        `Account ${plaid_transaction.account_id} not found for transaction ${plaid_transaction.transaction_id}`
+      );
+    }
+    // Build the transaction data using extracted utility (no DB calls)
+    formatted_transactions.push(
+      await build_transaction_data(plaid_transaction, account, user_id, group_id, currency, item_id)
+    );
+  }
+
+  console.log(`✅ Mapped ${formatted_transactions.length} of ${added_transactions.length} Plaid transactions to FamilyTransaction structure`);
+  return formatted_transactions;
 }
 
 // Re-export utilities for backward compatibility
