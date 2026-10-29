@@ -8,11 +8,11 @@
  * Memory: 256MiB, Timeout: 30s
  */
 
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
-import { OutflowPeriod, Outflow } from '../../../../types';
-import { autoMatchSinglePeriod } from '../utils/autoMatchSinglePeriod';
-import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactionsToOccurrences';
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import * as admin from "firebase-admin";
+import { OutflowPeriod, Outflow } from "../../../../types";
+import { autoMatchSinglePeriod } from "../utils/autoMatchSinglePeriod";
+import { matchAllTransactionsToOccurrences } from "../utils/matchAllTransactionsToOccurrences";
 // NOTE: createOutflowPeriodSummary removed - summary updates are handled by
 // the generate_outflow_periods_orchestrator AFTER all periods are created.
 // This prevents race conditions when many periods are created at once.
@@ -22,9 +22,9 @@ import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactions
  * Auto-matches transactions to this specific period
  */
 export const onOutflowPeriodCreate = onDocumentCreated({
-  document: 'outflow_periods/{outflowPeriodId}',
-  region: 'us-central1',
-  memory: '256MiB',
+  document: "outflow_periods/{outflowPeriodId}",
+  region: "us-central1",
+  memory: "256MiB",
   timeoutSeconds: 30,
 }, async (event) => {
   try {
@@ -32,27 +32,27 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     const outflowPeriodData = event.data?.data() as OutflowPeriod;
 
     if (!outflowPeriodData) {
-      console.error('[onOutflowPeriodCreate] No outflow period data found');
+      console.error("[onOutflowPeriodCreate] No outflow period data found");
       return;
     }
 
-    console.log('');
-    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
-    console.log('[onOutflowPeriodCreate] NEW OUTFLOW PERIOD CREATED');
-    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
+    console.log("");
+    console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
+    console.log("[onOutflowPeriodCreate] NEW OUTFLOW PERIOD CREATED");
+    console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
     console.log(`[onOutflowPeriodCreate] Period ID: ${outflowPeriodId}`);
     console.log(`[onOutflowPeriodCreate] Description: ${outflowPeriodData.description}`);
     console.log(`[onOutflowPeriodCreate] Period Type: ${outflowPeriodData.periodType}`);
     console.log(`[onOutflowPeriodCreate] Source Period: ${outflowPeriodData.sourcePeriodId}`);
-    console.log(`[onOutflowPeriodCreate] Period Range: ${outflowPeriodData.periodStartDate?.toDate().toISOString().split('T')[0]} to ${outflowPeriodData.periodEndDate?.toDate().toISOString().split('T')[0]}`);
+    console.log(`[onOutflowPeriodCreate] Period Range: ${outflowPeriodData.periodStartDate?.toDate().toISOString().split("T")[0]} to ${outflowPeriodData.periodEndDate?.toDate().toISOString().split("T")[0]}`);
     console.log(`[onOutflowPeriodCreate] Expected Amount: $${outflowPeriodData.expectedAmount || outflowPeriodData.amountWithheld}`);
-    console.log('');
+    console.log("");
 
     const db = admin.firestore();
 
     // Step 1: Get parent outflow
-    console.log('[onOutflowPeriodCreate] Step 1: Fetching parent outflow...');
-    const outflowRef = db.collection('outflows').doc(outflowPeriodData.outflowId);
+    console.log("[onOutflowPeriodCreate] Step 1: Fetching parent outflow...");
+    const outflowRef = db.collection("outflows").doc(outflowPeriodData.outflowId);
     const outflowSnap = await outflowRef.get();
 
     if (!outflowSnap.exists) {
@@ -63,18 +63,18 @@ export const onOutflowPeriodCreate = onDocumentCreated({
     const outflow = { id: outflowSnap.id, ...outflowSnap.data() } as Outflow;
     console.log(`[onOutflowPeriodCreate] ✓ Found parent outflow: ${outflow.description}`);
     console.log(`[onOutflowPeriodCreate] ✓ Transaction IDs in outflow: ${outflow.transactionIds?.length || 0}`);
-    console.log('');
+    console.log("");
 
     // Step 2: Auto-match transactions for this specific period
     const transactionIds = outflow.transactionIds || [];
     if (transactionIds.length === 0) {
-      console.log('[onOutflowPeriodCreate] No historical transactions to match (transactionIds empty)');
-      console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
-      console.log('');
+      console.log("[onOutflowPeriodCreate] No historical transactions to match (transactionIds empty)");
+      console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
+      console.log("");
       return;
     }
 
-    console.log('[onOutflowPeriodCreate] Step 2: Auto-matching transactions to this period...');
+    console.log("[onOutflowPeriodCreate] Step 2: Auto-matching transactions to this period...");
     const result = await autoMatchSinglePeriod(
       db,
       outflowPeriodId,
@@ -82,28 +82,28 @@ export const onOutflowPeriodCreate = onDocumentCreated({
       outflow
     );
 
-    console.log('');
-    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
-    console.log('[onOutflowPeriodCreate] AUTO-MATCH COMPLETE');
-    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
+    console.log("");
+    console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
+    console.log("[onOutflowPeriodCreate] AUTO-MATCH COMPLETE");
+    console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
     console.log(`[onOutflowPeriodCreate] ✓ Transactions matched: ${result.transactionsMatched}`);
     console.log(`[onOutflowPeriodCreate] ✓ Splits assigned: ${result.splitsAssigned}`);
-    console.log(`[onOutflowPeriodCreate] ✓ Period updated: ${result.periodUpdated ? 'Yes' : 'No'}`);
-    console.log(`[onOutflowPeriodCreate] ✓ Final status: ${result.finalStatus || 'N/A'}`);
+    console.log(`[onOutflowPeriodCreate] ✓ Period updated: ${result.periodUpdated ? "Yes" : "No"}`);
+    console.log(`[onOutflowPeriodCreate] ✓ Final status: ${result.finalStatus || "N/A"}`);
 
     if (result.errors.length > 0) {
       console.log(`[onOutflowPeriodCreate] ⚠️  Errors: ${result.errors.length}`);
       result.errors.forEach(err => console.log(`[onOutflowPeriodCreate]    - ${err}`));
     }
 
-    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
-    console.log('');
+    console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
+    console.log("");
 
     // Step 2.5: Match transactions to occurrence indices (if multi-occurrence period)
-    console.log('[onOutflowPeriodCreate] Step 2.5: Matching transactions to occurrence indices...');
+    console.log("[onOutflowPeriodCreate] Step 2.5: Matching transactions to occurrence indices...");
     try {
       // Re-fetch the period to get updated transactionSplits from auto-matching
-      const updatedPeriodSnap = await db.collection('outflow_periods').doc(outflowPeriodId).get();
+      const updatedPeriodSnap = await db.collection("outflow_periods").doc(outflowPeriodId).get();
       if (updatedPeriodSnap.exists) {
         const updatedPeriodData = { id: updatedPeriodSnap.id, ...updatedPeriodSnap.data() } as OutflowPeriod;
 
@@ -111,29 +111,29 @@ export const onOutflowPeriodCreate = onDocumentCreated({
         if (updatedPeriodData.occurrenceDueDates && updatedPeriodData.occurrenceDueDates.length > 0) {
           console.log(`[onOutflowPeriodCreate] Period has ${updatedPeriodData.occurrenceDueDates.length} occurrences, running occurrence matching...`);
           await matchAllTransactionsToOccurrences(db, outflowPeriodId, updatedPeriodData);
-          console.log('[onOutflowPeriodCreate] ✓ Occurrence matching complete');
+          console.log("[onOutflowPeriodCreate] ✓ Occurrence matching complete");
         } else {
-          console.log('[onOutflowPeriodCreate] Period has no occurrences to track, skipping occurrence matching');
+          console.log("[onOutflowPeriodCreate] Period has no occurrences to track, skipping occurrence matching");
         }
       }
     } catch (occurrenceError) {
-      console.error('[onOutflowPeriodCreate] ⚠️  Occurrence matching failed:', occurrenceError);
+      console.error("[onOutflowPeriodCreate] ⚠️  Occurrence matching failed:", occurrenceError);
       // Don't throw - occurrence matching failures shouldn't break period creation
     }
-    console.log('');
+    console.log("");
 
     // NOTE: Summary updates are handled by the generate_outflow_periods_orchestrator
     // AFTER all periods are created. This prevents race conditions when many periods
     // are created at once. The centralized trigger (on_outflow_period_updated_summary)
     // handles subsequent updates via the job queue.
-    console.log('[onOutflowPeriodCreate] ✓ Summary updates handled by orchestrator (not triggered here)');
-    console.log('[onOutflowPeriodCreate] ════════════════════════════════════════════');
-    console.log('');
+    console.log("[onOutflowPeriodCreate] ✓ Summary updates handled by orchestrator (not triggered here)");
+    console.log("[onOutflowPeriodCreate] ════════════════════════════════════════════");
+    console.log("");
 
   } catch (error) {
-    console.error('');
-    console.error('[onOutflowPeriodCreate] ❌ ERROR:', error);
-    console.error('');
+    console.error("");
+    console.error("[onOutflowPeriodCreate] ❌ ERROR:", error);
+    console.error("");
     // Don't throw - we don't want to break period creation if auto-matching fails
   }
 });

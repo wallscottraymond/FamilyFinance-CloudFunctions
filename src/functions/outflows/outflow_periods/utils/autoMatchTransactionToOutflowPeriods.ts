@@ -15,8 +15,8 @@
  * 7. Recalculate outflow period statuses
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp, FieldPath } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp, FieldPath } from "firebase-admin/firestore";
 import {
   RecurringOutflow,
   Transaction,
@@ -24,8 +24,8 @@ import {
   TransactionSplitReference,
   OutflowPeriod,
   PaymentType
-} from '../../../../types';
-import { calculateOutflowPeriodStatus } from './calculateOutflowPeriodStatus';
+} from "../../../../types";
+import { calculateOutflowPeriodStatus } from "./calculateOutflowPeriodStatus";
 
 /**
  * Result of auto-matching operation
@@ -64,14 +64,14 @@ export async function autoMatchTransactionToOutflowPeriods(
 
     // Check if there are any transactions to match
     if (!outflow.transactionIds || outflow.transactionIds.length === 0) {
-      console.log(`[autoMatch] No transaction IDs in outflow, skipping auto-match`);
+      console.log("[autoMatch] No transaction IDs in outflow, skipping auto-match");
       return result;
     }
 
     // Step 1: Get all outflow periods that were just created
     const outflowPeriods = await getOutflowPeriods(db, createdPeriodIds);
     if (outflowPeriods.length === 0) {
-      console.warn(`[autoMatch] No outflow periods found with IDs: ${createdPeriodIds.join(', ')}`);
+      console.warn(`[autoMatch] No outflow periods found with IDs: ${createdPeriodIds.join(", ")}`);
       return result;
     }
 
@@ -79,7 +79,7 @@ export async function autoMatchTransactionToOutflowPeriods(
 
     // Step 2: Get all transactions referenced in transactionIds array
     // Note: transactionIds are Plaid transaction IDs, which are now used as document IDs
-    const transactions = await getTransactionsByPlaidIds(db, outflow.transactionIds, outflow.userId || outflow.ownerId || '');
+    const transactions = await getTransactionsByPlaidIds(db, outflow.transactionIds, outflow.userId || outflow.ownerId || "");
     console.log(`[autoMatch] Found ${transactions.length} transactions to process`);
 
     // Step 3: For each transaction, match splits to appropriate outflow periods
@@ -94,7 +94,7 @@ export async function autoMatchTransactionToOutflowPeriods(
         );
         result.transactionsProcessed++;
       } catch (error) {
-        const errorMsg = `Failed to match transaction ${transaction.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to match transaction ${transaction.id}: ${error instanceof Error ? error.message : "Unknown error"}`;
         result.errors.push(errorMsg);
         console.error(`[autoMatch] ${errorMsg}`);
       }
@@ -104,7 +104,7 @@ export async function autoMatchTransactionToOutflowPeriods(
 
     return result;
   } catch (error) {
-    const errorMsg = `Auto-match failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    const errorMsg = `Auto-match failed: ${error instanceof Error ? error.message : "Unknown error"}`;
     result.errors.push(errorMsg);
     console.error(`[autoMatch] ${errorMsg}`);
     return result;
@@ -126,8 +126,8 @@ async function getOutflowPeriods(
   const BATCH_SIZE = 10;
   for (let i = 0; i < periodIds.length; i += BATCH_SIZE) {
     const batchIds = periodIds.slice(i, i + BATCH_SIZE);
-    const snapshot = await db.collection('outflow_periods')
-      .where(admin.firestore.FieldPath.documentId(), 'in', batchIds)
+    const snapshot = await db.collection("outflow_periods")
+      .where(admin.firestore.FieldPath.documentId(), "in", batchIds)
       .get();
 
     snapshot.docs.forEach(doc => {
@@ -162,7 +162,7 @@ async function getTransactionsByPlaidIds(
 
     // FIRST: Try to fetch transactions directly by document ID (NEW format)
     // Use getAll() for efficient batch reading instead of Promise.all with individual gets
-    const docRefs = batchIds.map(id => db.collection('transactions').doc(id));
+    const docRefs = batchIds.map(id => db.collection("transactions").doc(id));
     const docs = await db.getAll(...docRefs);
 
     docs.forEach(doc => {
@@ -179,9 +179,9 @@ async function getTransactionsByPlaidIds(
     // SECOND: For any IDs not found, query by metadata.plaidTransactionId (OLD format)
     const notFoundIds = batchIds.filter(id => !foundIds.has(id));
     if (notFoundIds.length > 0) {
-      const querySnapshot = await db.collection('transactions')
-        .where('userId', '==', userId)
-        .where('metadata.plaidTransactionId', 'in', notFoundIds)
+      const querySnapshot = await db.collection("transactions")
+        .where("userId", "==", userId)
+        .where("metadata.plaidTransactionId", "in", notFoundIds)
         .get();
 
       querySnapshot.docs.forEach(doc => {
@@ -225,7 +225,7 @@ async function matchTransactionToOutflowPeriods(
   // Process each split in the transaction
   for (const split of transaction.splits) {
     // Skip if already assigned to budget or another outflow
-    if ((split.budgetId && split.budgetId !== '' && split.budgetId !== 'unassigned') || split.outflowPeriodId) {
+    if ((split.budgetId && split.budgetId !== "" && split.budgetId !== "unassigned") || split.outflowPeriodId) {
       console.log(`[autoMatch] Split ${split.id} already assigned, skipping`);
       continue;
     }
@@ -256,7 +256,7 @@ async function matchTransactionToOutflowPeriods(
       paymentType,
       isAutoMatched: true,
       matchedAt: Timestamp.now(),
-      matchedBy: 'system'
+      matchedBy: "system"
     };
 
     // Update transaction split with ALL THREE period assignments
@@ -329,13 +329,13 @@ function findAllMatchingOutflowPeriods(
     // Check if transaction date falls within this period
     if (txnMs >= startMs && txnMs <= endMs) {
       // Separate by period type (using lowercase enum values)
-      if (period.periodType === 'monthly') {
+      if (period.periodType === "monthly") {
         result.monthlyPeriod = period;
         result.foundCount++;
-      } else if (period.periodType === 'weekly') {
+      } else if (period.periodType === "weekly") {
         result.weeklyPeriod = period;
         result.foundCount++;
-      } else if (period.periodType === 'bi_monthly') {
+      } else if (period.periodType === "bi_monthly") {
         result.biWeeklyPeriod = period;
         result.foundCount++;
       }
@@ -402,7 +402,7 @@ async function updateTransactionSplitWithAllOutflowPeriods(
   paymentType: PaymentType,
   paymentDate: Timestamp
 ): Promise<void> {
-  const transactionRef = db.collection('transactions').doc(transactionId);
+  const transactionRef = db.collection("transactions").doc(transactionId);
 
   // Update the specific split in the splits array
   const transactionDoc = await transactionRef.get();
@@ -425,7 +425,7 @@ async function updateTransactionSplitWithAllOutflowPeriods(
                          matchingPeriods.biWeeklyPeriod?.id;
 
   // Extract description based on structure (flat or nested)
-  const outflowDescription = outflow.description || (outflow as any).metadata?.outflowDescription || '';
+  const outflowDescription = outflow.description || (outflow as any).metadata?.outflowDescription || "";
 
   splits[splitIndex] = {
     ...splits[splitIndex],
@@ -459,7 +459,7 @@ async function addSplitReferenceToOutflowPeriod(
   outflowPeriodId: string,
   splitRef: TransactionSplitReference
 ): Promise<void> {
-  const periodRef = db.collection('outflow_periods').doc(outflowPeriodId);
+  const periodRef = db.collection("outflow_periods").doc(outflowPeriodId);
 
   // Use arrayUnion to add the split reference
   await periodRef.update({
@@ -481,7 +481,7 @@ export async function recalculateOutflowPeriodStatuses(
 
   for (const periodId of periodIds) {
     try {
-      const periodRef = db.collection('outflow_periods').doc(periodId);
+      const periodRef = db.collection("outflow_periods").doc(periodId);
       const periodDoc = await periodRef.get();
 
       if (!periodDoc.exists) {
@@ -548,7 +548,7 @@ export async function orchestrateAutoMatchingWorkflow(
 
   // Check if there are transactions to match
   if (!outflow.transactionIds || outflow.transactionIds.length === 0) {
-    console.log(`[orchestrateAutoMatching] No transactions to match`);
+    console.log("[orchestrateAutoMatching] No transactions to match");
     return {
       success: true,
       transactionsProcessed: 0,
@@ -570,7 +570,7 @@ export async function orchestrateAutoMatchingWorkflow(
       periodIds
     );
 
-    console.log(`[orchestrateAutoMatching] Auto-match complete:`, {
+    console.log("[orchestrateAutoMatching] Auto-match complete:", {
       transactionsProcessed: matchResult.transactionsProcessed,
       splitsAssigned: matchResult.splitsAssigned,
       periodsUpdated: matchResult.periodsUpdated,
@@ -600,7 +600,7 @@ export async function orchestrateAutoMatchingWorkflow(
     };
 
   } catch (error) {
-    const errorMsg = `Auto-matching workflow failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    const errorMsg = `Auto-matching workflow failed: ${error instanceof Error ? error.message : "Unknown error"}`;
     console.error(`[orchestrateAutoMatching] ${errorMsg}`);
 
     return {

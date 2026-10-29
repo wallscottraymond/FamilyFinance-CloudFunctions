@@ -11,23 +11,23 @@
  * - Edge cases and validation
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { findMatchingOccurrenceIndex } from '../utils/matchAllTransactionsToOccurrences';
+import { Timestamp } from "firebase-admin/firestore";
+import { findMatchingOccurrenceIndex } from "../utils/matchAllTransactionsToOccurrences";
 
-describe('findMatchingOccurrenceIndex', () => {
+describe("findMatchingOccurrenceIndex", () => {
   // Helper to create timestamps from date strings
   const ts = (dateString: string): Timestamp => {
     return Timestamp.fromDate(new Date(dateString));
   };
 
-  describe('Exact matches', () => {
-    it('should match transaction to exact occurrence date', () => {
-      const transactionDate = ts('2025-01-15');
+  describe("Exact matches", () => {
+    it("should match transaction to exact occurrence date", () => {
+      const transactionDate = ts("2025-01-15");
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -35,11 +35,11 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(2); // Index of Jan 15
     });
 
-    it('should match to first occurrence when exact match', () => {
-      const transactionDate = ts('2025-01-01');
+    it("should match to first occurrence when exact match", () => {
+      const transactionDate = ts("2025-01-01");
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08')
+        ts("2025-01-01"),
+        ts("2025-01-08")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -47,13 +47,13 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(0);
     });
 
-    it('should match to last occurrence when exact match', () => {
-      const transactionDate = ts('2025-01-22');
+    it("should match to last occurrence when exact match", () => {
+      const transactionDate = ts("2025-01-22");
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -62,14 +62,14 @@ describe('findMatchingOccurrenceIndex', () => {
     });
   });
 
-  describe('Close matches within tolerance', () => {
-    it('should match transaction 1 day before occurrence', () => {
-      const transactionDate = ts('2025-01-14'); // 1 day before Jan 15
+  describe("Close matches within tolerance", () => {
+    it("should match transaction 1 day before occurrence", () => {
+      const transactionDate = ts("2025-01-14"); // 1 day before Jan 15
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -77,13 +77,13 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(2); // Should match to Jan 15 (closest)
     });
 
-    it('should match transaction 1 day after occurrence', () => {
-      const transactionDate = ts('2025-01-16'); // 1 day after Jan 15
+    it("should match transaction 1 day after occurrence", () => {
+      const transactionDate = ts("2025-01-16"); // 1 day after Jan 15
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -91,13 +91,13 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(2); // Should match to Jan 15 (closest)
     });
 
-    it('should match transaction 3 days away (at tolerance edge)', () => {
-      const transactionDate = ts('2025-01-18'); // 3 days after Jan 15
+    it("should match transaction 3 days away (at tolerance edge)", () => {
+      const transactionDate = ts("2025-01-18"); // 3 days after Jan 15
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -106,14 +106,14 @@ describe('findMatchingOccurrenceIndex', () => {
     });
   });
 
-  describe('Closest match selection', () => {
-    it('should select closest occurrence when multiple are within tolerance', () => {
-      const transactionDate = ts('2025-01-10'); // Between Jan 8 and Jan 15
+  describe("Closest match selection", () => {
+    it("should select closest occurrence when multiple are within tolerance", () => {
+      const transactionDate = ts("2025-01-10"); // Between Jan 8 and Jan 15
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'), // 2 days away
-        ts('2025-01-15'), // 5 days away
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"), // 2 days away
+        ts("2025-01-15"), // 5 days away
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -121,11 +121,11 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(1); // Should match to Jan 8 (closer)
     });
 
-    it('should handle midpoint between two occurrences', () => {
-      const transactionDate = ts('2025-01-11'); // Exactly between Jan 8 and Jan 15
+    it("should handle midpoint between two occurrences", () => {
+      const transactionDate = ts("2025-01-11"); // Exactly between Jan 8 and Jan 15
       const occurrenceDates = [
-        ts('2025-01-08'),
-        ts('2025-01-15')
+        ts("2025-01-08"),
+        ts("2025-01-15")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -136,13 +136,13 @@ describe('findMatchingOccurrenceIndex', () => {
     });
   });
 
-  describe('Out of tolerance', () => {
-    it('should return null when transaction is >3 days from any occurrence', () => {
-      const transactionDate = ts('2025-01-20'); // 5 days from Jan 15, 2 days from Jan 22
+  describe("Out of tolerance", () => {
+    it("should return null when transaction is >3 days from any occurrence", () => {
+      const transactionDate = ts("2025-01-20"); // 5 days from Jan 15, 2 days from Jan 22
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15")
         // No Jan 22, so transaction is too far from Jan 15
       ];
 
@@ -155,12 +155,12 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(null);
     });
 
-    it('should return null when transaction is before all occurrences by >3 days', () => {
-      const transactionDate = ts('2024-12-25'); // >3 days before Jan 1
+    it("should return null when transaction is before all occurrences by >3 days", () => {
+      const transactionDate = ts("2024-12-25"); // >3 days before Jan 1
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -168,13 +168,13 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(null);
     });
 
-    it('should return null when transaction is after all occurrences by >3 days', () => {
-      const transactionDate = ts('2025-02-01'); // >3 days after Jan 22
+    it("should return null when transaction is after all occurrences by >3 days", () => {
+      const transactionDate = ts("2025-02-01"); // >3 days after Jan 22
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -183,13 +183,13 @@ describe('findMatchingOccurrenceIndex', () => {
     });
   });
 
-  describe('Custom tolerance', () => {
-    it('should respect custom tolerance of 7 days', () => {
-      const transactionDate = ts('2025-01-20'); // 5 days from Jan 15
+  describe("Custom tolerance", () => {
+    it("should respect custom tolerance of 7 days", () => {
+      const transactionDate = ts("2025-01-20"); // 5 days from Jan 15
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates, 7);
@@ -197,12 +197,12 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(2); // Should match to Jan 15 with 7-day tolerance
     });
 
-    it('should respect custom tolerance of 1 day', () => {
-      const transactionDate = ts('2025-01-17'); // 2 days from Jan 15
+    it("should respect custom tolerance of 1 day", () => {
+      const transactionDate = ts("2025-01-17"); // 2 days from Jan 15
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15")
       ];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates, 1);
@@ -211,9 +211,9 @@ describe('findMatchingOccurrenceIndex', () => {
     });
   });
 
-  describe('Edge cases', () => {
-    it('should return null for empty occurrence array', () => {
-      const transactionDate = ts('2025-01-15');
+  describe("Edge cases", () => {
+    it("should return null for empty occurrence array", () => {
+      const transactionDate = ts("2025-01-15");
       const occurrenceDates: Timestamp[] = [];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
@@ -221,18 +221,18 @@ describe('findMatchingOccurrenceIndex', () => {
       expect(result).toBe(null);
     });
 
-    it('should handle single occurrence', () => {
-      const transactionDate = ts('2025-01-15');
-      const occurrenceDates = [ts('2025-01-15')];
+    it("should handle single occurrence", () => {
+      const transactionDate = ts("2025-01-15");
+      const occurrenceDates = [ts("2025-01-15")];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
 
       expect(result).toBe(0);
     });
 
-    it('should return null for single occurrence outside tolerance', () => {
-      const transactionDate = ts('2025-01-20');
-      const occurrenceDates = [ts('2025-01-15')];
+    it("should return null for single occurrence outside tolerance", () => {
+      const transactionDate = ts("2025-01-20");
+      const occurrenceDates = [ts("2025-01-15")];
 
       const result = findMatchingOccurrenceIndex(transactionDate, occurrenceDates);
 
@@ -240,15 +240,15 @@ describe('findMatchingOccurrenceIndex', () => {
     });
   });
 
-  describe('Same-day transactions', () => {
-    it('should match multiple transactions on same day to same occurrence', () => {
-      const transactionDate1 = ts('2025-01-15T10:00:00Z');
-      const transactionDate2 = ts('2025-01-15T14:30:00Z');
+  describe("Same-day transactions", () => {
+    it("should match multiple transactions on same day to same occurrence", () => {
+      const transactionDate1 = ts("2025-01-15T10:00:00Z");
+      const transactionDate2 = ts("2025-01-15T14:30:00Z");
       const occurrenceDates = [
-        ts('2025-01-01'),
-        ts('2025-01-08'),
-        ts('2025-01-15'),
-        ts('2025-01-22')
+        ts("2025-01-01"),
+        ts("2025-01-08"),
+        ts("2025-01-15"),
+        ts("2025-01-22")
       ];
 
       const result1 = findMatchingOccurrenceIndex(transactionDate1, occurrenceDates);

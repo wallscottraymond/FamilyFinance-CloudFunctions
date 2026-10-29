@@ -57,8 +57,8 @@
  * This is a UTILITY function (reusable business logic) in the outflows module.
  */
 
-import * as admin from 'firebase-admin';
-import { PeriodType } from '../../../../types';
+import * as admin from "firebase-admin";
+import { PeriodType } from "../../../../types";
 
 /**
  * Result object returned when searching for matching outflow periods
@@ -175,10 +175,10 @@ export async function findMatchingOutflowPeriods(
   console.log(`[findMatchingOutflowPeriods] Finding periods for outflow ${outflowId} on ${transactionDate.toDate().toISOString()}`);
 
   // Query for all periods of this outflow that contain the transaction date
-  const periodsQuery = db.collection('outflow_periods')
-    .where('outflowId', '==', outflowId)
-    .where('periodStartDate', '<=', transactionDate)
-    .where('periodEndDate', '>=', transactionDate);
+  const periodsQuery = db.collection("outflow_periods")
+    .where("outflowId", "==", outflowId)
+    .where("periodStartDate", "<=", transactionDate)
+    .where("periodEndDate", ">=", transactionDate);
 
   const periodsSnapshot = await periodsQuery.get();
 
@@ -227,7 +227,7 @@ export async function findMatchingOutflowPeriods(
  */
 export function validatePeriodsFound(result: MatchingOutflowPeriodsResult): void {
   if (result.foundCount === 0) {
-    throw new Error('No matching outflow periods found for this transaction date. Periods may not have been generated yet.');
+    throw new Error("No matching outflow periods found for this transaction date. Periods may not have been generated yet.");
   }
 }
 
@@ -361,7 +361,7 @@ export async function findMatchingOutflowPeriodsBySourcePeriod(
   console.log(`[findMatchingOutflowPeriodsBySourcePeriod] Finding periods for outflow ${outflowId} matching source period ${targetPeriodId}`);
 
   // First, get the source period to find its date range
-  const sourcePeriodRef = db.collection('source_periods').doc(targetPeriodId);
+  const sourcePeriodRef = db.collection("source_periods").doc(targetPeriodId);
   const sourcePeriodDoc = await sourcePeriodRef.get();
 
   if (!sourcePeriodDoc.exists) {
@@ -380,10 +380,10 @@ export async function findMatchingOutflowPeriodsBySourcePeriod(
 
   // Query for all outflow periods of this outflow that overlap with the source period date range
   // An overlap exists if: periodStart <= sourcePeriodEnd AND periodEnd >= sourcePeriodStart
-  const periodsQuery = db.collection('outflow_periods')
-    .where('outflowId', '==', outflowId)
-    .where('periodStartDate', '<=', periodEndDate)
-    .where('periodEndDate', '>=', periodStartDate);
+  const periodsQuery = db.collection("outflow_periods")
+    .where("outflowId", "==", outflowId)
+    .where("periodStartDate", "<=", periodEndDate)
+    .where("periodEndDate", ">=", periodStartDate);
 
   const periodsSnapshot = await periodsQuery.get();
 

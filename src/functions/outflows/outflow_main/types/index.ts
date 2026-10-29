@@ -47,7 +47,7 @@ export enum OutflowFrequency {
 /**
  * Expense Type Classification
  */
-export type ExpenseType = 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other';
+export type ExpenseType = "subscription" | "utility" | "loan" | "rent" | "insurance" | "tax" | "other";
 
 // =======================
 // OUTFLOW DOCUMENT
@@ -133,7 +133,7 @@ export interface CreateRecurringOutflowRequest {
   description: string;
   merchantName?: string;
   amount: number;                      // Will be stored as FLAT averageAmount
-  frequency: 'weekly' | 'bi_weekly' | 'monthly' | 'quarterly' | 'yearly';
+  frequency: "weekly" | "bi_weekly" | "monthly" | "quarterly" | "yearly";
   expenseType?: ExpenseType;
   isEssential?: boolean;
   dueDay?: number;

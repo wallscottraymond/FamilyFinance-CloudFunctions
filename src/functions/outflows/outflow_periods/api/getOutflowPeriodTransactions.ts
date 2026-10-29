@@ -7,10 +7,10 @@
  * Memory: 256MiB, Timeout: 30s
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { authenticateRequest, UserRole } from '../../../../utils/auth';
-import { Transaction, OutflowPeriod, TransactionSplitReference, PaymentType } from '../../../../types';
-import * as admin from 'firebase-admin';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { authenticateRequest, UserRole } from "../../../../utils/auth";
+import { Transaction, OutflowPeriod, TransactionSplitReference, PaymentType } from "../../../../types";
+import * as admin from "firebase-admin";
 
 /**
  * Request to get transactions for an outflow period
@@ -73,7 +73,7 @@ export interface GetOutflowPeriodTransactionsResponse {
  */
 export const getOutflowPeriodTransactions = onCall(
   {
-    memory: '256MiB',
+    memory: "256MiB",
     timeoutSeconds: 30,
   },
   async (request) => {
@@ -86,7 +86,7 @@ export const getOutflowPeriodTransactions = onCall(
 
       // Validate required fields
       if (!outflowPeriodId) {
-        throw new HttpsError('invalid-argument', 'outflowPeriodId is required');
+        throw new HttpsError("invalid-argument", "outflowPeriodId is required");
       }
 
       console.log(`[getOutflowPeriodTransactions] User ${userId} requesting transactions for period ${outflowPeriodId}`);
@@ -94,11 +94,11 @@ export const getOutflowPeriodTransactions = onCall(
       const db = admin.firestore();
 
       // Step 1: Get and validate outflow period
-      const periodRef = db.collection('outflow_periods').doc(outflowPeriodId);
+      const periodRef = db.collection("outflow_periods").doc(outflowPeriodId);
       const periodDoc = await periodRef.get();
 
       if (!periodDoc.exists) {
-        throw new HttpsError('not-found', `Outflow period ${outflowPeriodId} not found`);
+        throw new HttpsError("not-found", `Outflow period ${outflowPeriodId} not found`);
       }
 
       const outflowPeriod = { id: periodDoc.id, ...periodDoc.data() } as OutflowPeriod;
@@ -106,7 +106,7 @@ export const getOutflowPeriodTransactions = onCall(
       // Verify user owns the outflow period (or is in the same family)
       if (outflowPeriod.ownerId !== userId) {
         // TODO: Check family membership when family feature is implemented
-        throw new HttpsError('permission-denied', 'You can only view your own outflow periods');
+        throw new HttpsError("permission-denied", "You can only view your own outflow periods");
       }
 
       // Step 2: Get transaction IDs from period
@@ -120,7 +120,7 @@ export const getOutflowPeriodTransactions = onCall(
             id: outflowPeriod.id!,
             outflowDescription: outflowPeriod.description,
             amountDue: outflowPeriod.totalAmountUnpaid,
-            status: 'pending', // Status should be calculated on read
+            status: "pending", // Status should be calculated on read
             isDuePeriod: outflowPeriod.isDuePeriod,
             dueDate: outflowPeriod.firstDueDateInPeriod || undefined
           },
@@ -134,7 +134,7 @@ export const getOutflowPeriodTransactions = onCall(
             transactionCount: 0,
             splitCount: 0
           },
-          message: 'No transactions assigned to this period'
+          message: "No transactions assigned to this period"
         };
       }
 
@@ -143,7 +143,7 @@ export const getOutflowPeriodTransactions = onCall(
 
       for (const transactionId of transactionIds) {
         try {
-          const transactionDoc = await db.collection('transactions').doc(transactionId).get();
+          const transactionDoc = await db.collection("transactions").doc(transactionId).get();
 
           if (!transactionDoc.exists) {
             console.warn(`[getOutflowPeriodTransactions] Transaction ${transactionId} not found, skipping`);
@@ -207,18 +207,18 @@ export const getOutflowPeriodTransactions = onCall(
         summary.totalPaid += splitReference.amount;
 
         switch (splitReference.paymentType) {
-          case PaymentType.REGULAR:
-            summary.totalRegular += splitReference.amount;
-            break;
-          case PaymentType.CATCH_UP:
-            summary.totalCatchUp += splitReference.amount;
-            break;
-          case PaymentType.ADVANCE:
-            summary.totalAdvance += splitReference.amount;
-            break;
-          case PaymentType.EXTRA_PRINCIPAL:
-            summary.totalExtraPrincipal += splitReference.amount;
-            break;
+        case PaymentType.REGULAR:
+          summary.totalRegular += splitReference.amount;
+          break;
+        case PaymentType.CATCH_UP:
+          summary.totalCatchUp += splitReference.amount;
+          break;
+        case PaymentType.ADVANCE:
+          summary.totalAdvance += splitReference.amount;
+          break;
+        case PaymentType.EXTRA_PRINCIPAL:
+          summary.totalExtraPrincipal += splitReference.amount;
+          break;
         }
       });
 
@@ -235,7 +235,7 @@ export const getOutflowPeriodTransactions = onCall(
           id: outflowPeriod.id!,
           outflowDescription: outflowPeriod.description,
           amountDue: outflowPeriod.totalAmountUnpaid,
-          status: 'pending', // Status should be calculated on read
+          status: "pending", // Status should be calculated on read
           isDuePeriod: outflowPeriod.isDuePeriod,
           dueDate: outflowPeriod.firstDueDateInPeriod || undefined
         },
@@ -246,13 +246,13 @@ export const getOutflowPeriodTransactions = onCall(
 
       return response;
     } catch (error: any) {
-      console.error('[getOutflowPeriodTransactions] Error:', error);
+      console.error("[getOutflowPeriodTransactions] Error:", error);
 
       if (error instanceof HttpsError) {
         throw error;
       }
 
-      throw new HttpsError('internal', error.message || 'Failed to get outflow period transactions');
+      throw new HttpsError("internal", error.message || "Failed to get outflow period transactions");
     }
   }
 );

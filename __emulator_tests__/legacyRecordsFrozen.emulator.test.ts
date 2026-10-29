@@ -15,27 +15,27 @@
  * Run: firebase emulators:exec --only firestore --project demo-convert \
  *        "npx jest --selectProjects emulator --testPathPattern legacyRecordsFrozen"
  */
-import * as admin from 'firebase-admin';
+import * as admin from "firebase-admin";
 import {
   NOW_MS, dumpScenario, normalizeDoc, plaidTxn, scenarioIds, scenarioMocks, scenarioRecurring,
   seedMonthlySourcePeriods, seedScenario,
-} from './helpers/captureScenario';
+} from "./helpers/captureScenario";
 
 const mockSync = jest.fn();
 const mockRecurring = jest.fn();
-jest.mock('../src/functions/integrations/plaid', () => {
-  const actual = jest.requireActual('../src/functions/integrations/plaid');
+jest.mock("../src/functions/integrations/plaid", () => {
+  const actual = jest.requireActual("../src/functions/integrations/plaid");
   return {
     ...actual,
     sync_transactions: (...a: unknown[]) => mockSync(...a),
     fetch_recurring_transactions: (...a: unknown[]) => mockRecurring(...a),
-    fetch_plaid_accounts: async () => ({ accounts: [], item_id: 'x', request_id: 'r' }),
+    fetch_plaid_accounts: async () => ({ accounts: [], item_id: "x", request_id: "r" }),
     safe_fetch_liabilities: async () => null,
   };
 });
-jest.mock('../src/utils/encryption', () => {
-  const actual = jest.requireActual('../src/utils/encryption');
-  return { ...actual, decryptAccessToken: () => 'decrypted-token' };
+jest.mock("../src/utils/encryption", () => {
+  const actual = jest.requireActual("../src/utils/encryption");
+  return { ...actual, decryptAccessToken: () => "decrypted-token" };
 });
 
 let db: FirebaseFirestore.Firestore;
@@ -47,18 +47,18 @@ let classify: (ctx: unknown, uid: string, now: number, opts?: unknown) => Promis
 let invalidate_flag_cache: () => void;
 
 beforeAll(async () => {
-  if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
+  if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("emulator only (dev==prod)");
   jest.useFakeTimers({
     now: NOW_MS, advanceTimers: true,
-    doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    doNotFake: ["nextTick", "setImmediate", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask", "hrtime", "performance"],
   });
-  if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  if (!admin.apps.length) admin.initializeApp({ projectId: "family-budget-app-cb59b" });
   db = admin.firestore();
   /* eslint-disable @typescript-eslint/no-var-requires */
-  ({ sync_item_orchestrator } = require('../src/functions/orchestrators/plaid/sync_item.orchestrator'));
-  ({ derive_period_orchestrator } = require('../src/functions/orchestrators/periods/derive_period.orchestrator'));
-  ({ classify_internal_transfers_orchestrator: classify } = require('../src/functions/orchestrators/plaid/classify_internal_transfers.orchestrator'));
-  ({ invalidate_flag_cache } = require('../src/functions/infrastructure/feature_flags'));
+  ({ sync_item_orchestrator } = require("../src/functions/orchestrators/plaid/sync_item.orchestrator"));
+  ({ derive_period_orchestrator } = require("../src/functions/orchestrators/periods/derive_period.orchestrator"));
+  ({ classify_internal_transfers_orchestrator: classify } = require("../src/functions/orchestrators/plaid/classify_internal_transfers.orchestrator"));
+  ({ invalidate_flag_cache } = require("../src/functions/infrastructure/feature_flags"));
   /* eslint-enable @typescript-eslint/no-var-requires */
   await seedMonthlySourcePeriods(db, [[2037, 4], [2037, 5], [2037, 6], [2037, 7], [2037, 8], [2037, 9], [2037, 10], [2037, 11], [2037, 12], [2038, 1]]);
 }, 60000);
@@ -74,15 +74,15 @@ async function twin(tag: string, flag_on_after_link: boolean) {
   mockSync.mockImplementation(mocks.sync);
   mockRecurring.mockReset();
   mockRecurring.mockResolvedValue(scenarioRecurring(ids));
-  const sync = (n: string) => sync_item_orchestrator({ trace_id: `${tag}_${n}`, span_id: 's' }, {
-    item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test',
+  const sync = (n: string) => sync_item_orchestrator({ trace_id: `${tag}_${n}`, span_id: "s" }, {
+    item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test",
   });
-  await sync('link'); // flag off for everyone at link time → old records
+  await sync("link"); // flag off for everyone at link time → old records
 
-  const flags = (await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').get()).data();
+  const flags = (await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").get()).data();
   const allow = new Set<string>((flags?.enabled_user_ids as string[]) ?? []);
   if (flag_on_after_link) allow.add(ids.userId);
-  await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
+  await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").set({
     enabled: true, enabled_user_ids: [...allow], enabled_group_ids: [], rollout_percentage: 0,
   });
   invalidate_flag_cache();
@@ -90,34 +90,34 @@ async function twin(tag: string, flag_on_after_link: boolean) {
   // Every capture-rule path, on old records only (no new stream ids).
   const recurring = scenarioRecurring(ids, {
     SPOT: { is_active: false },
-    TOMB: { status: 'UNKNOWN', frequency: 'UNKNOWN' },
-    SUNBIT: { status: 'EARLY_DETECTION' },
+    TOMB: { status: "UNKNOWN", frequency: "UNKNOWN" },
+    SUNBIT: { status: "EARLY_DETECTION" },
   });
   recurring.outflow_streams = recurring.outflow_streams
     .filter((s) => s.stream_id !== ids.streams.GYM) // Plaid stops returning it → stale (today)
-    .map((s) => (s.stream_id === ids.streams.AVANT ? { ...s, first_date: '2038-01-01' } : s)); // rejected
+    .map((s) => (s.stream_id === ids.streams.AVANT ? { ...s, first_date: "2038-01-01" } : s)); // rejected
   mockRecurring.mockResolvedValue(recurring);
-  const new_spot = plaidTxn(ids, { key: 'spotnew', account: 'chk', amount: 15.49, days_ago: 1, name: 'SPOTIFY USA',
-    merchant: 'Spotify', primary: 'ENTERTAINMENT', detailed: 'ENTERTAINMENT_MUSIC_AND_AUDIO' });
+  const new_spot = plaidTxn(ids, { key: "spotnew", account: "chk", amount: 15.49, days_ago: 1, name: "SPOTIFY USA",
+    merchant: "Spotify", primary: "ENTERTAINMENT", detailed: "ENTERTAINMENT_MUSIC_AND_AUDIO" });
   mockSync.mockImplementation(async (_t: string, cursor: string | null) => ({
-    added: cursor === 'c1' ? [new_spot] : [], modified: [], removed: [],
-    next_cursor: cursor === 'c1' ? 'c2' : cursor, has_more: false,
-    transactions_update_status: 'HISTORICAL_UPDATE_COMPLETE', accounts: [], request_id: 'r',
+    added: cursor === "c1" ? [new_spot] : [], modified: [], removed: [],
+    next_cursor: cursor === "c1" ? "c2" : cursor, has_more: false,
+    transactions_update_status: "HISTORICAL_UPDATE_COMPLETE", accounts: [], request_id: "r",
   }));
-  await sync('changes');
-  await classify({ trace_id: `${tag}_cls`, span_id: 's' }, ids.userId, NOW_MS, { force: true });
+  await sync("changes");
+  await classify({ trace_id: `${tag}_cls`, span_id: "s" }, ids.userId, NOW_MS, { force: true });
 
   const dump = await dumpScenario(db, ids);
-  const derive = normalizeDoc(await derive_period_orchestrator({ trace_id: `${tag}_d`, span_id: 's' }, ids.userId, {
-    view_cadence: 'monthly', window_start_ms: OCT.start, window_end_ms: OCT.end, force: true,
+  const derive = normalizeDoc(await derive_period_orchestrator({ trace_id: `${tag}_d`, span_id: "s" }, ids.userId, {
+    view_cadence: "monthly", window_start_ms: OCT.start, window_end_ms: OCT.end, force: true,
   }), tag);
   return { ids, dump, derive };
 }
 
-describe('legacy records are frozen with the flag on (emulator)', () => {
-  it('flag-on twin equals flag-off twin on every path; no review items about old records', async () => {
-    const a = await twin('qzfrza', true);
-    const b = await twin('qzfrzb', false);
+describe("legacy records are frozen with the flag on (emulator)", () => {
+  it("flag-on twin equals flag-off twin on every path; no review items about old records", async () => {
+    const a = await twin("qzfrza", true);
+    const b = await twin("qzfrzb", false);
     // The flag-on twin's ONLY extra is new-feature bookkeeping, not a record change: the
     // detector's throttle (the state doc; no detector job exists — X12). Every record, period and
     // transaction — and the derived page — is identical.
@@ -133,7 +133,7 @@ describe('legacy records are frozen with the flag on (emulator)', () => {
     const outflows = a.dump.outflows as Record<string, Record<string, unknown>>;
     expect(outflows.TAG_S_GYM.isActive).toBe(false);
     expect(outflows.TAG_S_SPOT.isActive).toBe(false);
-    expect(outflows.TAG_S_AVANT.plaidStatus).toBe('STALE');
+    expect(outflows.TAG_S_AVANT.plaidStatus).toBe("STALE");
     for (const o of Object.values(outflows)) {
       expect(o.captureRulesVersion).toBeUndefined();
       expect(o.plaidIsActive).toBeUndefined();

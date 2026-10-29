@@ -318,7 +318,7 @@ export async function remove_account_orchestrator(
         } else {
           console.warn(
             `[${ctx.trace_id}] No access token found for item ${dependencies.item_id}, ` +
-            `skipping Plaid API call`
+            "skipping Plaid API call"
           );
         }
       } catch (plaid_error) {

@@ -96,21 +96,21 @@ interface CycleInfo {
  */
 function get_cycle_days(frequency: string): number {
   switch (normalize_frequency(frequency)) {
-    case "WEEKLY":
-      return 7;
-    case "BIWEEKLY":
-      return 14;
-    case "SEMIMONTHLY":
-      return 15;
-    case "MONTHLY":
-      return 30;
-    case "QUARTERLY":
-      return 91;
-    case "ANNUALLY":
-      return 365;
-    default:
-      // UNKNOWN — treat as annual so it never fans out as monthly (see frequency.ts).
-      return 365;
+  case "WEEKLY":
+    return 7;
+  case "BIWEEKLY":
+    return 14;
+  case "SEMIMONTHLY":
+    return 15;
+  case "MONTHLY":
+    return 30;
+  case "QUARTERLY":
+    return 91;
+  case "ANNUALLY":
+    return 365;
+  default:
+    // UNKNOWN — treat as annual so it never fans out as monthly (see frequency.ts).
+    return 365;
   }
 }
 
@@ -130,29 +130,29 @@ function add_frequency_interval(date: Date, frequency: string): Date {
   const result = new Date(date);
 
   switch (normalize_frequency(frequency)) {
-    case "WEEKLY":
-      result.setUTCDate(result.getUTCDate() + 7);
-      break;
-    case "BIWEEKLY":
-      result.setUTCDate(result.getUTCDate() + 14);
-      break;
-    case "SEMIMONTHLY":
-      // Real semi-monthly generation is day-of-month based (see semimonthly_due_dates);
-      // this +15 is only a defensive fallback if the generic loop is ever used for it.
-      result.setUTCDate(result.getUTCDate() + 15);
-      break;
-    case "MONTHLY":
-      result.setUTCMonth(result.getUTCMonth() + 1);
-      break;
-    case "QUARTERLY":
-      result.setUTCMonth(result.getUTCMonth() + 3);
-      break;
-    case "ANNUALLY":
-      result.setUTCFullYear(result.getUTCFullYear() + 1);
-      break;
-    default:
-      // UNKNOWN — step by a year so an unrecognized cadence never fans out monthly.
-      result.setUTCFullYear(result.getUTCFullYear() + 1);
+  case "WEEKLY":
+    result.setUTCDate(result.getUTCDate() + 7);
+    break;
+  case "BIWEEKLY":
+    result.setUTCDate(result.getUTCDate() + 14);
+    break;
+  case "SEMIMONTHLY":
+    // Real semi-monthly generation is day-of-month based (see semimonthly_due_dates);
+    // this +15 is only a defensive fallback if the generic loop is ever used for it.
+    result.setUTCDate(result.getUTCDate() + 15);
+    break;
+  case "MONTHLY":
+    result.setUTCMonth(result.getUTCMonth() + 1);
+    break;
+  case "QUARTERLY":
+    result.setUTCMonth(result.getUTCMonth() + 3);
+    break;
+  case "ANNUALLY":
+    result.setUTCFullYear(result.getUTCFullYear() + 1);
+    break;
+  default:
+    // UNKNOWN — step by a year so an unrecognized cadence never fans out monthly.
+    result.setUTCFullYear(result.getUTCFullYear() + 1);
   }
 
   return result;
@@ -165,27 +165,27 @@ function subtract_frequency_interval(date: Date, frequency: string): Date {
   const result = new Date(date); // UTC date-math (see add_frequency_interval).
 
   switch (normalize_frequency(frequency)) {
-    case "WEEKLY":
-      result.setUTCDate(result.getUTCDate() - 7);
-      break;
-    case "BIWEEKLY":
-      result.setUTCDate(result.getUTCDate() - 14);
-      break;
-    case "SEMIMONTHLY":
-      result.setUTCDate(result.getUTCDate() - 15);
-      break;
-    case "MONTHLY":
-      result.setUTCMonth(result.getUTCMonth() - 1);
-      break;
-    case "QUARTERLY":
-      result.setUTCMonth(result.getUTCMonth() - 3);
-      break;
-    case "ANNUALLY":
-      result.setUTCFullYear(result.getUTCFullYear() - 1);
-      break;
-    default:
-      // UNKNOWN — mirror the forward step (a year), never monthly.
-      result.setUTCFullYear(result.getUTCFullYear() - 1);
+  case "WEEKLY":
+    result.setUTCDate(result.getUTCDate() - 7);
+    break;
+  case "BIWEEKLY":
+    result.setUTCDate(result.getUTCDate() - 14);
+    break;
+  case "SEMIMONTHLY":
+    result.setUTCDate(result.getUTCDate() - 15);
+    break;
+  case "MONTHLY":
+    result.setUTCMonth(result.getUTCMonth() - 1);
+    break;
+  case "QUARTERLY":
+    result.setUTCMonth(result.getUTCMonth() - 3);
+    break;
+  case "ANNUALLY":
+    result.setUTCFullYear(result.getUTCFullYear() - 1);
+    break;
+  default:
+    // UNKNOWN — mirror the forward step (a year), never monthly.
+    result.setUTCFullYear(result.getUTCFullYear() - 1);
   }
 
   return result;
@@ -238,14 +238,14 @@ function semimonthly_due_dates(reference: Date, start: Date, end: Date): Date[] 
  */
 function month_step(frequency: string): number | null {
   switch (normalize_frequency(frequency)) {
-    case "MONTHLY":
-      return 1;
-    case "QUARTERLY":
-      return 3;
-    case "ANNUALLY":
-      return 12;
-    default:
-      return null;
+  case "MONTHLY":
+    return 1;
+  case "QUARTERLY":
+    return 3;
+  case "ANNUALLY":
+    return 12;
+  default:
+    return null;
   }
 }
 

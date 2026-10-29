@@ -5,8 +5,8 @@
  * This is the final step in the recurring transaction pipeline.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../../index';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../../index";
 
 /**
  * Batch create or update inflow streams - FLAT STRUCTURE
@@ -31,7 +31,7 @@ export async function batchCreateInflowStreams(
   };
 
   if (inflows.length === 0) {
-    console.log(`⏭️ [batchCreateInflowStreams] No inflows to process`);
+    console.log("⏭️ [batchCreateInflowStreams] No inflows to process");
     return result;
   }
 
@@ -41,12 +41,12 @@ export async function batchCreateInflowStreams(
         // Use stream_id (now in inflow.id) as the Firestore document ID
         const streamId = inflow.id;
         if (!streamId) {
-          result.errors.push(`Inflow missing required 'id' field (stream_id)`);
-          console.error(`❌ Inflow missing required 'id' field`);
+          result.errors.push("Inflow missing required 'id' field (stream_id)");
+          console.error("❌ Inflow missing required 'id' field");
           continue;
         }
 
-        const docRef = db.collection('inflows').doc(streamId);
+        const docRef = db.collection("inflows").doc(streamId);
         const docSnapshot = await docRef.get();
 
         if (docSnapshot.exists) {
@@ -112,7 +112,7 @@ export async function batchCreateInflowStreams(
           console.log(`✅ Created FLAT inflow stream: ${streamId}`);
         }
       } catch (error) {
-        const errorMsg = `Failed to process inflow stream ${inflow.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to process inflow stream ${inflow.id}: ${error instanceof Error ? error.message : "Unknown error"}`;
         result.errors.push(errorMsg);
         console.error(errorMsg);
       }
@@ -122,7 +122,7 @@ export async function batchCreateInflowStreams(
     return result;
 
   } catch (error) {
-    console.error('[batchCreateInflowStreams] Error in batch creation:', error);
+    console.error("[batchCreateInflowStreams] Error in batch creation:", error);
     throw error;
   }
 }
@@ -150,7 +150,7 @@ export async function batchCreateOutflowStreams(
   };
 
   if (outflows.length === 0) {
-    console.log(`⏭️ [batchCreateOutflowStreams] No outflows to process`);
+    console.log("⏭️ [batchCreateOutflowStreams] No outflows to process");
     return result;
   }
 
@@ -160,12 +160,12 @@ export async function batchCreateOutflowStreams(
         // Use stream_id (now in outflow.id) as the Firestore document ID
         const streamId = outflow.id;
         if (!streamId) {
-          result.errors.push(`Outflow missing required 'id' field (stream_id)`);
-          console.error(`❌ Outflow missing required 'id' field`);
+          result.errors.push("Outflow missing required 'id' field (stream_id)");
+          console.error("❌ Outflow missing required 'id' field");
           continue;
         }
 
-        const docRef = db.collection('outflows').doc(streamId);
+        const docRef = db.collection("outflows").doc(streamId);
         const docSnapshot = await docRef.get();
 
         if (docSnapshot.exists) {
@@ -227,7 +227,7 @@ export async function batchCreateOutflowStreams(
           console.log(`✅ Created FLAT outflow stream: ${streamId}`);
         }
       } catch (error) {
-        const errorMsg = `Failed to process outflow stream ${outflow.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to process outflow stream ${outflow.id}: ${error instanceof Error ? error.message : "Unknown error"}`;
         result.errors.push(errorMsg);
         console.error(errorMsg);
       }
@@ -237,7 +237,7 @@ export async function batchCreateOutflowStreams(
     return result;
 
   } catch (error) {
-    console.error('[batchCreateOutflowStreams] Error in batch creation:', error);
+    console.error("[batchCreateOutflowStreams] Error in batch creation:", error);
     throw error;
   }
 }

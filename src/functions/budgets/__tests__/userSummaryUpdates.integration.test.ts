@@ -12,11 +12,11 @@
  * Run with: npm test -- --testPathPattern=userSummaryUpdates.integration
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { PeriodType } from '../../../types';
-import { createTimestamp, roundToCents } from './helpers/budgetTestHelpers';
+import { Timestamp } from "firebase-admin/firestore";
+import { PeriodType } from "../../../types";
+import { createTimestamp, roundToCents } from "./helpers/budgetTestHelpers";
 
-describe('User Summary Updates', () => {
+describe("User Summary Updates", () => {
   // ============================================================================
   // MOCK SETUP
   // ============================================================================
@@ -29,12 +29,12 @@ describe('User Summary Updates', () => {
   // SUMMARY UPDATE ON BUDGET CREATION
   // ============================================================================
 
-  describe('Summary Update on Budget Creation', () => {
-    it('should trigger summary update when budget periods are created', async () => {
+  describe("Summary Update on Budget Creation", () => {
+    it("should trigger summary update when budget periods are created", async () => {
       // Arrange
-      const userId = 'test_user_001';
-      const budgetId = 'budget_groceries_001';
-      const periodId = '2025-M01';
+      const userId = "test_user_001";
+      const budgetId = "budget_groceries_001";
+      const periodId = "2025-M01";
 
       const mockBudgetPeriod = {
         id: `${budgetId}_${periodId}`,
@@ -58,7 +58,7 @@ describe('User Summary Updates', () => {
       expect(mockBudgetPeriod.allocatedAmount).toBe(500);
     });
 
-    it('should calculate correct summary totals for multiple periods', () => {
+    it("should calculate correct summary totals for multiple periods", () => {
       // Arrange
       const periods = [
         { allocatedAmount: 500, spent: 100, remaining: 400 },
@@ -77,7 +77,7 @@ describe('User Summary Updates', () => {
       expect(totalRemaining).toBe(1050);
     });
 
-    it('should group summary by period type', () => {
+    it("should group summary by period type", () => {
       // Arrange
       const periods = [
         { periodType: PeriodType.MONTHLY, allocatedAmount: 500 },
@@ -114,8 +114,8 @@ describe('User Summary Updates', () => {
   // SUMMARY UPDATE ON SPENDING CHANGE
   // ============================================================================
 
-  describe('Summary Update on Spending Change', () => {
-    it('should update summary when spending increases', () => {
+  describe("Summary Update on Spending Change", () => {
+    it("should update summary when spending increases", () => {
       // Arrange
       const originalSummary = {
         totalAllocated: 1500,
@@ -136,7 +136,7 @@ describe('User Summary Updates', () => {
       expect(newSummary.totalRemaining).toBe(975);
     });
 
-    it('should update summary when spending decreases (refund)', () => {
+    it("should update summary when spending decreases (refund)", () => {
       // Arrange
       const originalSummary = {
         totalAllocated: 1500,
@@ -157,12 +157,12 @@ describe('User Summary Updates', () => {
       expect(newSummary.totalRemaining).toBe(1075);
     });
 
-    it('should handle multiple concurrent spending updates', () => {
+    it("should handle multiple concurrent spending updates", () => {
       // Arrange - multiple transactions being processed
       const transactions = [
-        { amount: 50, budgetId: 'budget_001' },
-        { amount: 30, budgetId: 'budget_001' },
-        { amount: 20, budgetId: 'budget_001' },
+        { amount: 50, budgetId: "budget_001" },
+        { amount: 30, budgetId: "budget_001" },
+        { amount: 20, budgetId: "budget_001" },
       ];
 
       // Act
@@ -172,11 +172,11 @@ describe('User Summary Updates', () => {
       expect(totalSpendingChange).toBe(100);
     });
 
-    it('should update correct budget summary when transaction has budgetId', () => {
+    it("should update correct budget summary when transaction has budgetId", () => {
       // Arrange
       const transactionSplit = {
-        splitId: 'split_001',
-        budgetId: 'budget_groceries_001',
+        splitId: "split_001",
+        budgetId: "budget_groceries_001",
         amount: 45.99,
       };
 
@@ -191,8 +191,8 @@ describe('User Summary Updates', () => {
       }
 
       // Assert
-      expect(budgetSummaries['budget_groceries_001'].totalSpent).toBe(245.99);
-      expect(budgetSummaries['budget_entertainment_001'].totalSpent).toBe(100);
+      expect(budgetSummaries["budget_groceries_001"].totalSpent).toBe(245.99);
+      expect(budgetSummaries["budget_entertainment_001"].totalSpent).toBe(100);
     });
   });
 
@@ -200,8 +200,8 @@ describe('User Summary Updates', () => {
   // SUMMARY UPDATE ON BUDGET DELETION
   // ============================================================================
 
-  describe('Summary Update on Budget Deletion', () => {
-    it('should remove budget from summary when deleted', () => {
+  describe("Summary Update on Budget Deletion", () => {
+    it("should remove budget from summary when deleted", () => {
       // Arrange
       const budgetSummaries: Record<string, { totalAllocated: number; totalSpent: number }> = {
         budget_001: { totalAllocated: 500, totalSpent: 200 },
@@ -209,7 +209,7 @@ describe('User Summary Updates', () => {
         budget_003: { totalAllocated: 200, totalSpent: 100 },
       };
 
-      const budgetToDelete = 'budget_002';
+      const budgetToDelete = "budget_002";
 
       // Act
       delete budgetSummaries[budgetToDelete];
@@ -219,18 +219,18 @@ describe('User Summary Updates', () => {
       expect(budgetSummaries[budgetToDelete]).toBeUndefined();
     });
 
-    it('should recalculate total summary after budget deletion', () => {
+    it("should recalculate total summary after budget deletion", () => {
       // Arrange
       const beforeDeletion = {
         budgets: [
-          { id: 'budget_001', allocated: 500, spent: 200 },
-          { id: 'budget_002', allocated: 300, spent: 150 },
-          { id: 'budget_003', allocated: 200, spent: 100 },
+          { id: "budget_001", allocated: 500, spent: 200 },
+          { id: "budget_002", allocated: 300, spent: 150 },
+          { id: "budget_003", allocated: 200, spent: 100 },
         ],
       };
 
       // Act - delete budget_002
-      const afterDeletion = beforeDeletion.budgets.filter((b) => b.id !== 'budget_002');
+      const afterDeletion = beforeDeletion.budgets.filter((b) => b.id !== "budget_002");
       const newTotalAllocated = afterDeletion.reduce((sum, b) => sum + b.allocated, 0);
       const newTotalSpent = afterDeletion.reduce((sum, b) => sum + b.spent, 0);
 
@@ -244,8 +244,8 @@ describe('User Summary Updates', () => {
   // DEBOUNCE LOGIC
   // ============================================================================
 
-  describe('Debounce Logic', () => {
-    it('should skip update if recently updated within debounce window', () => {
+  describe("Debounce Logic", () => {
+    it("should skip update if recently updated within debounce window", () => {
       // Arrange
       const DEBOUNCE_MS = 5000; // 5 seconds
       const lastRecalculated = Date.now() - 2000; // 2 seconds ago
@@ -258,7 +258,7 @@ describe('User Summary Updates', () => {
       expect(shouldSkip).toBe(true);
     });
 
-    it('should allow update if outside debounce window', () => {
+    it("should allow update if outside debounce window", () => {
       // Arrange
       const DEBOUNCE_MS = 5000; // 5 seconds
       const lastRecalculated = Date.now() - 6000; // 6 seconds ago
@@ -271,7 +271,7 @@ describe('User Summary Updates', () => {
       expect(shouldSkip).toBe(false);
     });
 
-    it('should always update if lastRecalculated is not set', () => {
+    it("should always update if lastRecalculated is not set", () => {
       // Arrange
       const lastRecalculated = null;
       const DEBOUNCE_MS = 5000;
@@ -288,44 +288,44 @@ describe('User Summary Updates', () => {
   // SUMMARY ID FORMAT
   // ============================================================================
 
-  describe('Summary ID Format', () => {
-    it('should generate correct monthly summary ID', () => {
+  describe("Summary ID Format", () => {
+    it("should generate correct monthly summary ID", () => {
       // Arrange
-      const userId = 'user_123';
+      const userId = "user_123";
       const periodType = PeriodType.MONTHLY;
-      const sourcePeriodId = '2025-M01';
+      const sourcePeriodId = "2025-M01";
 
       // Act
       const summaryId = `${userId}_${periodType.toLowerCase()}_${sourcePeriodId}`;
 
       // Assert
-      expect(summaryId).toBe('user_123_monthly_2025-M01');
+      expect(summaryId).toBe("user_123_monthly_2025-M01");
     });
 
-    it('should generate correct bi-monthly summary ID', () => {
+    it("should generate correct bi-monthly summary ID", () => {
       // Arrange
-      const userId = 'user_456';
+      const userId = "user_456";
       const periodType = PeriodType.BI_MONTHLY;
-      const sourcePeriodId = '2025-BM03-2';
+      const sourcePeriodId = "2025-BM03-2";
 
       // Act
       const summaryId = `${userId}_${periodType.toLowerCase()}_${sourcePeriodId}`;
 
       // Assert
-      expect(summaryId).toBe('user_456_bi_monthly_2025-BM03-2');
+      expect(summaryId).toBe("user_456_bi_monthly_2025-BM03-2");
     });
 
-    it('should generate correct weekly summary ID', () => {
+    it("should generate correct weekly summary ID", () => {
       // Arrange
-      const userId = 'user_789';
+      const userId = "user_789";
       const periodType = PeriodType.WEEKLY;
-      const sourcePeriodId = '2025-W05';
+      const sourcePeriodId = "2025-W05";
 
       // Act
       const summaryId = `${userId}_${periodType.toLowerCase()}_${sourcePeriodId}`;
 
       // Assert
-      expect(summaryId).toBe('user_789_weekly_2025-W05');
+      expect(summaryId).toBe("user_789_weekly_2025-W05");
     });
   });
 
@@ -333,8 +333,8 @@ describe('User Summary Updates', () => {
   // EDGE CASES
   // ============================================================================
 
-  describe('Edge Cases', () => {
-    it('should handle empty budget periods list', () => {
+  describe("Edge Cases", () => {
+    it("should handle empty budget periods list", () => {
       // Arrange
       const periods: Array<{ allocatedAmount: number; spent: number }> = [];
 
@@ -347,7 +347,7 @@ describe('User Summary Updates', () => {
       expect(totalSpent).toBe(0);
     });
 
-    it('should handle negative remaining (over budget)', () => {
+    it("should handle negative remaining (over budget)", () => {
       // Arrange
       const period = {
         allocatedAmount: 500,
@@ -364,7 +364,7 @@ describe('User Summary Updates', () => {
       expect(overAmount).toBe(100);
     });
 
-    it('should handle very small amounts (rounding)', () => {
+    it("should handle very small amounts (rounding)", () => {
       // Arrange
       const periods = [
         { allocatedAmount: 33.33 },
@@ -379,7 +379,7 @@ describe('User Summary Updates', () => {
       expect(roundToCents(total)).toBe(100);
     });
 
-    it('should handle zero allocated amount', () => {
+    it("should handle zero allocated amount", () => {
       // Arrange - "Everything Else" budget has 0 allocated
       const period = {
         allocatedAmount: 0,

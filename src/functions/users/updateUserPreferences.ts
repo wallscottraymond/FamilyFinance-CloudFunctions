@@ -121,7 +121,7 @@ export const updateUserPreferences = onCall(
         preferences: mergedPreferences,
       };
     } catch (error: any) {
-      console.error(`[updateUserPreferences] Error updating preferences:`, error);
+      console.error("[updateUserPreferences] Error updating preferences:", error);
 
       if (error instanceof HttpsError) {
         throw error;

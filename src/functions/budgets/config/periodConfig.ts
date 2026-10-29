@@ -32,5 +32,5 @@ export const BATCH_LIMITS = {
  */
 export const EXTENSION_SETTINGS = {
   RECURRING_PERIOD_MONTHS: 12,  // Generate 1 year of periods for recurring budgets
-  SCHEDULED_EXTENSION_CRON: '0 2 1 * *',  // Run monthly on the 1st at 2:00 AM UTC
+  SCHEDULED_EXTENSION_CRON: "0 2 1 * *",  // Run monthly on the 1st at 2:00 AM UTC
 } as const;

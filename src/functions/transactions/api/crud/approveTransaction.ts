@@ -80,11 +80,11 @@ export const approveTransaction = onRequest({
       const newStatus = action === "approve" ? TransactionStatus.APPROVED : TransactionStatus.REJECTED;
 
       // Get the transaction first to update metadata
-      const transactionRef = db.collection('transactions').doc(transactionId);
+      const transactionRef = db.collection("transactions").doc(transactionId);
       await transactionRef.update({
         status: newStatus,
-        'metadata.approvedBy': user.id,
-        'metadata.approvedAt': admin.firestore.Timestamp.now(),
+        "metadata.approvedBy": user.id,
+        "metadata.approvedAt": admin.firestore.Timestamp.now(),
         updatedAt: admin.firestore.Timestamp.now()
       });
 

@@ -173,13 +173,13 @@ function map_transaction_type(
   if (!type) return "expense";
 
   switch (type) {
-    case TransactionType.INCOME:
-      return "income";
-    case TransactionType.EXPENSE:
-      return "expense";
-    case TransactionType.TRANSFER:
-      return "transfer";
-    default:
-      return "expense";
+  case TransactionType.INCOME:
+    return "income";
+  case TransactionType.EXPENSE:
+    return "expense";
+  case TransactionType.TRANSFER:
+    return "transfer";
+  default:
+    return "expense";
   }
 }

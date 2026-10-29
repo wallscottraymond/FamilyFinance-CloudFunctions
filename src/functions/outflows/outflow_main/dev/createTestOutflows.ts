@@ -13,13 +13,13 @@
  * Memory: 512MiB, Timeout: 120s
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { Timestamp } from 'firebase-admin/firestore';
-import { TransactionStream } from 'plaid';
-import { formatRecurringInflows } from '../../../inflows/utils/formatRecurringInflows';
-import { enhanceRecurringInflows } from '../../../inflows/utils/enhanceRecurringInflows';
-import { formatRecurringOutflows, enhanceRecurringOutflows, batchCreateInflowStreams, batchCreateOutflowStreams } from '../utils';
-import { db } from '../../../../index';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Timestamp } from "firebase-admin/firestore";
+import { TransactionStream } from "plaid";
+import { formatRecurringInflows } from "../../../inflows/utils/formatRecurringInflows";
+import { enhanceRecurringInflows } from "../../../inflows/utils/enhanceRecurringInflows";
+import { formatRecurringOutflows, enhanceRecurringOutflows, batchCreateInflowStreams, batchCreateOutflowStreams } from "../utils";
+import { db } from "../../../../index";
 
 /**
  * Simulated Plaid recurring transactions response
@@ -142,32 +142,32 @@ const SIMULATED_PLAID_RESPONSE = {
 };
 
 export const createTestOutflows = onCall({
-  region: 'us-central1',
-  memory: '512MiB',
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 120,
 }, async (request) => {
   // Verify user is authenticated
   if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated to create test outflows');
+    throw new HttpsError("unauthenticated", "User must be authenticated to create test outflows");
   }
 
   try {
-    console.log('');
-    console.log('🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪');
-    console.log('🧪 SIMULATING PLAID RECURRING TRANSACTION SYNC');
-    console.log('🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪');
-    console.log('');
+    console.log("");
+    console.log("🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪");
+    console.log("🧪 SIMULATING PLAID RECURRING TRANSACTION SYNC");
+    console.log("🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪");
+    console.log("");
 
     // Use authenticated user's ID
     const targetUserId = request.auth.uid;
-    const testPlaidItemId = 'test_plaid_item_' + Date.now();
-    const testFamilyId = 'test-family-1';
+    const testPlaidItemId = "test_plaid_item_" + Date.now();
+    const testFamilyId = "test-family-1";
 
-    console.log('📋 Test Configuration:');
+    console.log("📋 Test Configuration:");
     console.log(`  - User ID: ${targetUserId} (authenticated)`);
     console.log(`  - Plaid Item ID: ${testPlaidItemId}`);
     console.log(`  - Family ID: ${testFamilyId}`);
-    console.log('');
+    console.log("");
 
     const result = {
       inflowsCreated: 0,
@@ -179,13 +179,13 @@ export const createTestOutflows = onCall({
     };
 
     // Step 0: Clean up existing test data
-    console.log('🧹 STEP 0: Cleaning up existing test data...');
+    console.log("🧹 STEP 0: Cleaning up existing test data...");
 
     // Delete existing test outflows with these stream IDs
-    const testStreamIds = ['stream_coned_001', 'stream_costco_001', 'stream_payroll_001'];
+    const testStreamIds = ["stream_coned_001", "stream_costco_001", "stream_payroll_001"];
     for (const streamId of testStreamIds) {
       try {
-        const outflowDoc = await db.collection('outflows').doc(streamId).get();
+        const outflowDoc = await db.collection("outflows").doc(streamId).get();
         if (outflowDoc.exists) {
           console.log(`  🗑️  Deleting existing outflow: ${streamId}`);
           await outflowDoc.ref.delete();
@@ -196,15 +196,15 @@ export const createTestOutflows = onCall({
     }
 
     // Delete existing test inflows
-    const inflowDoc = await db.collection('inflows').doc('stream_payroll_001').get();
+    const inflowDoc = await db.collection("inflows").doc("stream_payroll_001").get();
     if (inflowDoc.exists) {
-      console.log(`  🗑️  Deleting existing inflow: stream_payroll_001`);
+      console.log("  🗑️  Deleting existing inflow: stream_payroll_001");
       await inflowDoc.ref.delete();
     }
 
     // Delete existing outflow_periods for this user
-    const periodsSnapshot = await db.collection('outflow_periods')
-      .where('userId', '==', targetUserId)
+    const periodsSnapshot = await db.collection("outflow_periods")
+      .where("userId", "==", targetUserId)
       .limit(100)
       .get();
 
@@ -215,49 +215,49 @@ export const createTestOutflows = onCall({
       await batch.commit();
     }
 
-    console.log('  ✅ Cleanup complete');
-    console.log('');
+    console.log("  ✅ Cleanup complete");
+    console.log("");
 
     // Step 1: Create a test plaid_item (optional - for completeness)
-    console.log('📝 STEP 1: Creating test plaid_item...');
-    const plaidItemRef = db.collection('plaid_items').doc();
+    console.log("📝 STEP 1: Creating test plaid_item...");
+    const plaidItemRef = db.collection("plaid_items").doc();
     await plaidItemRef.set({
       id: plaidItemRef.id,
       plaidItemId: testPlaidItemId,
       userId: targetUserId,
       familyId: testFamilyId,
-      institutionId: 'ins_test',
-      institutionName: 'Test Bank',
-      accessToken: 'encrypted_test_token',
-      products: ['transactions'],
-      status: 'good',
+      institutionId: "ins_test",
+      institutionName: "Test Bank",
+      accessToken: "encrypted_test_token",
+      products: ["transactions"],
+      status: "good",
       isActive: true,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     });
     console.log(`  ✓ Created test plaid_item: ${plaidItemRef.id}`);
-    console.log('');
+    console.log("");
 
     // Step 2: Simulate Plaid API response
-    console.log('📡 STEP 2: Simulating Plaid /transactions/recurring/get response');
+    console.log("📡 STEP 2: Simulating Plaid /transactions/recurring/get response");
     const rawInflowStreams = SIMULATED_PLAID_RESPONSE.inflow_streams;
     const rawOutflowStreams = SIMULATED_PLAID_RESPONSE.outflow_streams;
 
-    console.log(`  📥 Simulated Response:`);
+    console.log("  📥 Simulated Response:");
     console.log(`    - Inflow Streams: ${rawInflowStreams.length}`);
     console.log(`    - Outflow Streams: ${rawOutflowStreams.length}`);
-    console.log('');
+    console.log("");
 
     // === INFLOW PIPELINE ===
     if (rawInflowStreams.length > 0) {
-      console.log('💰 ═══════════════════════════════════════════════════════════');
-      console.log('💰 STARTING INFLOW PIPELINE (INCOME)');
-      console.log('💰 ═══════════════════════════════════════════════════════════');
-      console.log('');
+      console.log("💰 ═══════════════════════════════════════════════════════════");
+      console.log("💰 STARTING INFLOW PIPELINE (INCOME)");
+      console.log("💰 ═══════════════════════════════════════════════════════════");
+      console.log("");
 
       try {
         // Step 1: Format inflow streams (Plaid → Internal structure)
-        console.log('🔄 Step 1/3: Formatting inflow streams...');
+        console.log("🔄 Step 1/3: Formatting inflow streams...");
         const formattedInflows = await formatRecurringInflows(
           rawInflowStreams as TransactionStream[],
           testPlaidItemId,
@@ -265,43 +265,43 @@ export const createTestOutflows = onCall({
           testFamilyId
         );
         console.log(`  ✅ Formatted ${formattedInflows.length} inflow streams`);
-        console.log('');
+        console.log("");
 
         // Step 2: Enhance inflow streams (future transformations placeholder)
-        console.log('🔄 Step 2/3: Enhancing inflow streams...');
+        console.log("🔄 Step 2/3: Enhancing inflow streams...");
         const enhancedInflows = await enhanceRecurringInflows(formattedInflows, targetUserId);
         console.log(`  ✅ Enhanced ${enhancedInflows.length} inflow streams`);
-        console.log('');
+        console.log("");
 
         // Step 3: Batch create/update inflow streams
-        console.log('🔄 Step 3/3: Batch creating inflow streams...');
+        console.log("🔄 Step 3/3: Batch creating inflow streams...");
         const inflowResult = await batchCreateInflowStreams(enhancedInflows, targetUserId);
         console.log(`  ✅ Created ${inflowResult.created} inflows`);
         console.log(`  ✅ Updated ${inflowResult.updated} inflows`);
         if (inflowResult.errors.length > 0) {
           console.log(`  ⚠️  Errors: ${inflowResult.errors.length}`);
         }
-        console.log('');
+        console.log("");
 
         result.inflowsCreated = inflowResult.created;
         result.inflowsUpdated = inflowResult.updated;
         result.errors.push(...inflowResult.errors);
       } catch (error: any) {
-        console.error('❌ Error in inflow pipeline:', error);
+        console.error("❌ Error in inflow pipeline:", error);
         result.errors.push(`Inflow pipeline error: ${error.message}`);
       }
     }
 
     // === OUTFLOW PIPELINE ===
     if (rawOutflowStreams.length > 0) {
-      console.log('💸 ═══════════════════════════════════════════════════════════');
-      console.log('💸 STARTING OUTFLOW PIPELINE (EXPENSES)');
-      console.log('💸 ═══════════════════════════════════════════════════════════');
-      console.log('');
+      console.log("💸 ═══════════════════════════════════════════════════════════");
+      console.log("💸 STARTING OUTFLOW PIPELINE (EXPENSES)");
+      console.log("💸 ═══════════════════════════════════════════════════════════");
+      console.log("");
 
       try {
         // Step 1: Format outflow streams (Plaid → Internal structure)
-        console.log('🔄 Step 1/3: Formatting outflow streams...');
+        console.log("🔄 Step 1/3: Formatting outflow streams...");
         const formattedOutflows = await formatRecurringOutflows(
           rawOutflowStreams as TransactionStream[],
           testPlaidItemId,
@@ -312,10 +312,10 @@ export const createTestOutflows = onCall({
         formattedOutflows.forEach((outflow, i) => {
           console.log(`    ${i + 1}. ${outflow.description} - $${outflow.averageAmount} ${outflow.frequency}`);
         });
-        console.log('');
+        console.log("");
 
         // Step 2: Enhance outflow streams (future transformations placeholder)
-        console.log('🔄 Step 2/3: Enhancing outflow streams...');
+        console.log("🔄 Step 2/3: Enhancing outflow streams...");
         const enhancedOutflows = await enhanceRecurringOutflows(formattedOutflows, targetUserId);
         console.log(`  ✅ Enhanced ${enhancedOutflows.length} outflow streams`);
         enhancedOutflows.forEach((outflow, i) => {
@@ -323,13 +323,13 @@ export const createTestOutflows = onCall({
           console.log(`       - Type: ${outflow.expenseType}`);
           console.log(`       - Essential: ${outflow.isEssential}`);
         });
-        console.log('');
+        console.log("");
 
         // Step 3: Batch create/update outflow streams
-        console.log('🔄 Step 3/3: Batch creating outflow streams...');
-        console.log('   ⚡ This will trigger onOutflowCreated for each outflow');
-        console.log('   ⚡ Which will auto-generate outflow_periods');
-        console.log('');
+        console.log("🔄 Step 3/3: Batch creating outflow streams...");
+        console.log("   ⚡ This will trigger onOutflowCreated for each outflow");
+        console.log("   ⚡ Which will auto-generate outflow_periods");
+        console.log("");
 
         const outflowResult = await batchCreateOutflowStreams(enhancedOutflows, targetUserId);
         console.log(`  ✅ Created ${outflowResult.created} outflows`);
@@ -338,49 +338,49 @@ export const createTestOutflows = onCall({
           console.log(`  ⚠️  Errors: ${outflowResult.errors.length}`);
           outflowResult.errors.forEach(err => console.log(`     - ${err}`));
         }
-        console.log('');
+        console.log("");
 
         result.outflowsCreated = outflowResult.created;
         result.outflowsUpdated = outflowResult.updated;
         result.errors.push(...outflowResult.errors);
       } catch (error: any) {
-        console.error('❌ Error in outflow pipeline:', error);
+        console.error("❌ Error in outflow pipeline:", error);
         result.errors.push(`Outflow pipeline error: ${error.message}`);
       }
     }
 
     // Step 3: Wait for triggers to complete and check results
-    console.log('⏳ STEP 3: Waiting for onOutflowCreated triggers to complete...');
-    console.log('   (Triggers generate outflow_periods for each outflow)');
+    console.log("⏳ STEP 3: Waiting for onOutflowCreated triggers to complete...");
+    console.log("   (Triggers generate outflow_periods for each outflow)");
     await new Promise(resolve => setTimeout(resolve, 5000));
-    console.log('');
+    console.log("");
 
     // Check outflow periods created
-    console.log('📊 STEP 4: Checking results...');
-    const outflowPeriodsSnapshot = await db.collection('outflow_periods')
-      .where('userId', '==', targetUserId)
+    console.log("📊 STEP 4: Checking results...");
+    const outflowPeriodsSnapshot = await db.collection("outflow_periods")
+      .where("userId", "==", targetUserId)
       .get();
 
     result.outflowPeriodsCreated = outflowPeriodsSnapshot.size;
 
-    console.log('');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('🎉 SYNC SIMULATION COMPLETE!');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('');
-    console.log('📈 Final Results:');
+    console.log("");
+    console.log("═══════════════════════════════════════════════════════════");
+    console.log("🎉 SYNC SIMULATION COMPLETE!");
+    console.log("═══════════════════════════════════════════════════════════");
+    console.log("");
+    console.log("📈 Final Results:");
     console.log(`  💰 Inflows Created: ${result.inflowsCreated}`);
     console.log(`  💰 Inflows Updated: ${result.inflowsUpdated}`);
     console.log(`  💸 Outflows Created: ${result.outflowsCreated}`);
     console.log(`  💸 Outflows Updated: ${result.outflowsUpdated}`);
     console.log(`  📅 Outflow Periods Created: ${result.outflowPeriodsCreated}`);
     console.log(`  ⚠️  Errors: ${result.errors.length}`);
-    console.log('');
+    console.log("");
 
     if (result.errors.length > 0) {
-      console.log('❌ Errors encountered:');
+      console.log("❌ Errors encountered:");
       result.errors.forEach(err => console.log(`  - ${err}`));
-      console.log('');
+      console.log("");
     }
 
     // Return detailed response
@@ -405,16 +405,16 @@ export const createTestOutflows = onCall({
     };
 
   } catch (error) {
-    console.error('');
-    console.error('❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌');
-    console.error('❌ FATAL ERROR in createTestOutflows');
-    console.error('❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌');
+    console.error("");
+    console.error("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌");
+    console.error("❌ FATAL ERROR in createTestOutflows");
+    console.error("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌");
     console.error(error);
-    console.error('');
+    console.error("");
 
     throw new HttpsError(
-      'internal',
-      error instanceof Error ? error.message : 'Unknown error occurred while creating test outflows'
+      "internal",
+      error instanceof Error ? error.message : "Unknown error occurred while creating test outflows"
     );
   }
 });

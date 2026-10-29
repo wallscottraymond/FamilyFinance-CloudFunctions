@@ -34,22 +34,22 @@ export function normalize_frequency(frequency: string | null | undefined): Canon
   // Uppercase + strip underscores collapses "SEMI_MONTHLY"→"SEMIMONTHLY", "monthly"→"MONTHLY".
   const raw = (frequency ?? "").toUpperCase().replace(/_/g, "");
   switch (raw) {
-    case "WEEKLY":
-      return "WEEKLY";
-    case "BIWEEKLY":
-    case "FORTNIGHTLY":
-      return "BIWEEKLY";
-    case "SEMIMONTHLY":
-      return "SEMIMONTHLY";
-    case "MONTHLY":
-      return "MONTHLY";
-    case "QUARTERLY":
-      return "QUARTERLY";
-    case "ANNUALLY":
-    case "ANNUAL":
-    case "YEARLY":
-      return "ANNUALLY";
-    default:
-      return "UNKNOWN";
+  case "WEEKLY":
+    return "WEEKLY";
+  case "BIWEEKLY":
+  case "FORTNIGHTLY":
+    return "BIWEEKLY";
+  case "SEMIMONTHLY":
+    return "SEMIMONTHLY";
+  case "MONTHLY":
+    return "MONTHLY";
+  case "QUARTERLY":
+    return "QUARTERLY";
+  case "ANNUALLY":
+  case "ANNUAL":
+  case "YEARLY":
+    return "ANNUALLY";
+  default:
+    return "UNKNOWN";
   }
 }

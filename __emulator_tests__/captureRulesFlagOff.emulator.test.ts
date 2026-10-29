@@ -33,35 +33,35 @@
  * Run: firebase emulators:exec --only firestore --project demo-convert \
  *        "npx jest --selectProjects emulator --testPathPattern captureRulesFlagOff"
  */
-import * as fs from 'fs';
-import * as path from 'path';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as fs from "fs";
+import * as path from "path";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   NOW_MS, dumpScenario, normalizeDoc, scenarioIds, scenarioMocks, scenarioRecurring,
   seedMonthlySourcePeriods, seedScenario,
-} from './helpers/captureScenario';
-import { startCounting } from './helpers/firestoreCounter';
+} from "./helpers/captureScenario";
+import { startCounting } from "./helpers/firestoreCounter";
 
 const mockSync = jest.fn();
 const mockRecurring = jest.fn();
-jest.mock('../src/functions/integrations/plaid', () => {
-  const actual = jest.requireActual('../src/functions/integrations/plaid');
+jest.mock("../src/functions/integrations/plaid", () => {
+  const actual = jest.requireActual("../src/functions/integrations/plaid");
   return {
     ...actual,
     sync_transactions: (...a: unknown[]) => mockSync(...a),
     fetch_recurring_transactions: (...a: unknown[]) => mockRecurring(...a),
-    fetch_plaid_accounts: async () => ({ accounts: [], item_id: 'x', request_id: 'r' }),
+    fetch_plaid_accounts: async () => ({ accounts: [], item_id: "x", request_id: "r" }),
     safe_fetch_liabilities: async () => null,
   };
 });
-jest.mock('../src/utils/encryption', () => {
-  const actual = jest.requireActual('../src/utils/encryption');
-  return { ...actual, decryptAccessToken: () => 'decrypted-token' };
+jest.mock("../src/utils/encryption", () => {
+  const actual = jest.requireActual("../src/utils/encryption");
+  return { ...actual, decryptAccessToken: () => "decrypted-token" };
 });
 
-const GOLDEN = path.join(__dirname, 'golden', 'captureRulesFlagOff.golden.json');
-const WRITE = process.env.CAPTURE_GOLDEN_WRITE === '1';
+const GOLDEN = path.join(__dirname, "golden", "captureRulesFlagOff.golden.json");
+const WRITE = process.env.CAPTURE_GOLDEN_WRITE === "1";
 
 let db: FirebaseFirestore.Firestore;
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -70,16 +70,16 @@ let derive_period_orchestrator: (ctx: unknown, uid: string, input: unknown) => P
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 beforeAll(async () => {
-  if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
+  if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("emulator only (dev==prod)");
   jest.useFakeTimers({
     now: NOW_MS, advanceTimers: true,
-    doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    doNotFake: ["nextTick", "setImmediate", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask", "hrtime", "performance"],
   });
-  if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  if (!admin.apps.length) admin.initializeApp({ projectId: "family-budget-app-cb59b" });
   db = admin.firestore();
   /* eslint-disable @typescript-eslint/no-var-requires */
-  ({ sync_item_orchestrator } = require('../src/functions/orchestrators/plaid/sync_item.orchestrator'));
-  ({ derive_period_orchestrator } = require('../src/functions/orchestrators/periods/derive_period.orchestrator'));
+  ({ sync_item_orchestrator } = require("../src/functions/orchestrators/plaid/sync_item.orchestrator"));
+  ({ derive_period_orchestrator } = require("../src/functions/orchestrators/periods/derive_period.orchestrator"));
   /* eslint-enable @typescript-eslint/no-var-requires */
   await seedMonthlySourcePeriods(db, [[2037, 4], [2037, 5], [2037, 6], [2037, 7], [2037, 8], [2037, 9], [2037, 10], [2037, 11], [2037, 12], [2038, 1]]);
 }, 60000);
@@ -96,10 +96,10 @@ const SYNTHETIC = (() => {
   const out: Array<{ id: string; period_id: string; period_type: string; start_date: Timestamp; end_date: Timestamp; year: number; index: number }> = [];
   const add = (id: string, type: string, start: number, end: number) =>
     out.push({ id, period_id: id, period_type: type, start_date: Timestamp.fromMillis(start), end_date: Timestamp.fromMillis(end), year: 2037, index: 0 });
-  for (let s = Date.UTC(2037, 7, 23), n = 0; s < Date.UTC(2037, 10, 15); s += 7 * DAY, n++) add(`2037SW${String(n).padStart(2, '0')}`, 'weekly', s, s + 7 * DAY - 1);
+  for (let s = Date.UTC(2037, 7, 23), n = 0; s < Date.UTC(2037, 10, 15); s += 7 * DAY, n++) add(`2037SW${String(n).padStart(2, "0")}`, "weekly", s, s + 7 * DAY - 1);
   for (const m of [7, 8, 9, 10]) {
-    add(`2037SBM${m + 1}A`, 'bi_monthly', Date.UTC(2037, m, 1), Date.UTC(2037, m, 16) - 1);
-    add(`2037SBM${m + 1}B`, 'bi_monthly', Date.UTC(2037, m, 16), Date.UTC(2037, m + 1, 1) - 1);
+    add(`2037SBM${m + 1}A`, "bi_monthly", Date.UTC(2037, m, 1), Date.UTC(2037, m, 16) - 1);
+    add(`2037SBM${m + 1}B`, "bi_monthly", Date.UTC(2037, m, 16), Date.UTC(2037, m + 1, 1) - 1);
   }
   return out;
 })();
@@ -109,7 +109,7 @@ const period_id_at = (type: string, start_ms: number) =>
 /** Run `fn` with the synthetic periods visible to THIS process's derive only. */
 async function withSyntheticPeriods<T>(fn: () => Promise<T>): Promise<T> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const repo = require('../src/functions/repositories/source_period.repo').source_period_repo;
+  const repo = require("../src/functions/repositories/source_period.repo").source_period_repo;
   const orig = repo.get_overlapping;
   repo.get_overlapping = async (ctx: unknown, anchor: Timestamp, end: Timestamp) => {
     const real = await orig.call(repo, ctx, anchor, end);
@@ -133,29 +133,29 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   mockSync.mockImplementation(mocks.sync);
   mockRecurring.mockReset();
   mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
-  const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: 's' });
+  const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: "s" });
 
   // The flag is read through a per-instance 5-minute cache (not a per-user cost): prime it so the
   // counted sync measures the user's own reads. (No-op on the base commit, which has no flag.)
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ff = require('../src/functions/infrastructure/feature_flags');
+    const ff = require("../src/functions/infrastructure/feature_flags");
     if (ff.is_convert_to_recurring_enabled) await ff.is_convert_to_recurring_enabled(ids.userId);
   } catch { /* base commit */ }
   const counter1 = opts.counted ? startCounting() : null;
-  const r1 = await sync_item_orchestrator(ctx('run1'), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test' });
+  const r1 = await sync_item_orchestrator(ctx("run1"), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test" });
   await new Promise((r) => setTimeout(r, 400)); // let fire-and-forget audit writes land
   const c1 = counter1?.stop();
   const after_first = await dumpScenario(db, ids);
 
   const counter2 = opts.counted ? startCounting() : null;
-  const r2 = await sync_item_orchestrator(ctx('run2'), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test' });
+  const r2 = await sync_item_orchestrator(ctx("run2"), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test" });
   await new Promise((r) => setTimeout(r, 400));
   const c2 = counter2?.stop();
   const after_second = await dumpScenario(db, ids);
 
-  const derive = async (w: { start: number; end: number }, cadence = 'monthly') =>
-    normalizeDoc(await derive_period_orchestrator(ctx('derive'), ids.userId, {
+  const derive = async (w: { start: number; end: number }, cadence = "monthly") =>
+    normalizeDoc(await derive_period_orchestrator(ctx("derive"), ids.userId, {
       view_cadence: cadence, window_start_ms: w.start, window_end_ms: w.end, force: true,
     }), tag);
   const derive_oct = await derive(OCT);
@@ -163,28 +163,28 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
 
   // The user removes / restores / pauses the three OLD bills (the A2 boundary cases).
   /* eslint-disable @typescript-eslint/no-var-requires */
-  const { manage_recurring_removal_orchestrator: manage } = require('../src/functions/orchestrators/recurring/manage_recurring_removal.orchestrator');
-  const { outflow_repo } = require('../src/functions/repositories/outflow.repo');
+  const { manage_recurring_removal_orchestrator: manage } = require("../src/functions/orchestrators/recurring/manage_recurring_removal.orchestrator");
+  const { outflow_repo } = require("../src/functions/repositories/outflow.repo");
   /* eslint-enable @typescript-eslint/no-var-requires */
   const act = (k: string, input: Record<string, unknown>, now: number) =>
-    manage(ctx(`rm_${k}`), ids.userId, [], { id: ids.streams[k], ...input }, now, outflow_repo, 'recurring_outflow');
-  await act('RMV', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1
-  await act('RST', { action: 'remove', mode: 'going_forward' }, Date.UTC(2037, 8, 10)); // from Sep 1
-  await act('RST', { action: 'restore' }, Date.UTC(2037, 9, 20)); // restored Oct 20
-  await act('PSE', { action: 'pause', resume_ms: Date.UTC(2037, 9, 2) }, Date.UTC(2037, 8, 10)); // Sep 1 → Oct 2
-  await act('ERL', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid early Sep 29 (D28)
-  await act('LTE', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid late Oct 2 (D31)
-  await act('XTR', { action: 'remove', mode: 'going_forward' }, NOW_MS); // from Oct 1; paid Sep 29 + an extra Oct 2 (D37 #2)
+    manage(ctx(`rm_${k}`), ids.userId, [], { id: ids.streams[k], ...input }, now, outflow_repo, "recurring_outflow");
+  await act("RMV", { action: "remove", mode: "going_forward" }, NOW_MS); // from Oct 1
+  await act("RST", { action: "remove", mode: "going_forward" }, Date.UTC(2037, 8, 10)); // from Sep 1
+  await act("RST", { action: "restore" }, Date.UTC(2037, 9, 20)); // restored Oct 20
+  await act("PSE", { action: "pause", resume_ms: Date.UTC(2037, 9, 2) }, Date.UTC(2037, 8, 10)); // Sep 1 → Oct 2
+  await act("ERL", { action: "remove", mode: "going_forward" }, NOW_MS); // from Oct 1; paid early Sep 29 (D28)
+  await act("LTE", { action: "remove", mode: "going_forward" }, NOW_MS); // from Oct 1; paid late Oct 2 (D31)
+  await act("XTR", { action: "remove", mode: "going_forward" }, NOW_MS); // from Oct 1; paid Sep 29 + an extra Oct 2 (D37 #2)
   // D37 #1: a PAST pause (Mar 2037) on a live bill paid Jul 29, Aug 29, Oct 2.
-  await outflow_repo.set_removal_intervals(ctx('rm_PPA'), ids.streams.PPA,
-    [{ from_ms: Date.UTC(2037, 2, 1), to_ms: Date.UTC(2037, 3, 1), mode: 'paused' }], false, ids.userId);
+  await outflow_repo.set_removal_intervals(ctx("rm_PPA"), ids.streams.PPA,
+    [{ from_ms: Date.UTC(2037, 2, 1), to_ms: Date.UTC(2037, 3, 1), mode: "paused" }], false, ids.userId);
   await new Promise((r) => setTimeout(r, 400));
   const after_removals = await dumpScenario(db, ids);
   const derive_removed = await withSyntheticPeriods(async () => ({
     monthly_sep: await derive(SEP),
     monthly_oct: await derive(OCT),
-    weekly: await derive(SEP_OCT, 'weekly'),
-    bi_monthly: await derive(SEP_OCT, 'bi_monthly'),
+    weekly: await derive(SEP_OCT, "weekly"),
+    bi_monthly: await derive(SEP_OCT, "bi_monthly"),
   }));
   return {
     ids,
@@ -243,7 +243,7 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   //  - D31 (round 5): the LTE bill's Oct 2 LATE payment for its Sep 29 occurrence (removed from
   //    Oct 1) now pays it in September — and is no longer October budget spend (Everything Else's
   //    October cell: spent − 88).
-  const M_SEP = (got_removed.monthly_sep.bills as any[]).find((b) => b.recurring_id === 'TAG_S_ERL')?.groups[0]?.period_id;
+  const M_SEP = (got_removed.monthly_sep.bills as any[]).find((b) => b.recurring_id === "TAG_S_ERL")?.groups[0]?.period_id;
   const M_OCT = period_id_at_month(got_removed.monthly_oct);
   const ee_m = (base_removed.monthly_sep.budgets as any[]).find((b) => b.is_everything_else)?.budget_id;
   const strip = (v: any) => ({ ...v, bills: undefined, income: undefined, budgets: undefined });
@@ -257,10 +257,10 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   const { spent: s_base, remaining: r_base, ...oct_base } = ee_cell(base_removed.monthly_oct, M_OCT);
   expect(oct_got).toEqual(oct_base); // only spent / remaining move…
   expect([Math.round((s_base - s_got) * 100) / 100, Math.round((r_got - r_base) * 100) / 100]).toEqual([88, 88]); // …by the late payment
-  const W_SEP27 = period_id_at('weekly', Date.UTC(2037, 8, 27));
-  const W_OCT11 = period_id_at('weekly', Date.UTC(2037, 9, 11));
-  const BM_OCT_A = period_id_at('bi_monthly', Date.UTC(2037, 9, 1));
-  const BM_SEP_B = period_id_at('bi_monthly', Date.UTC(2037, 8, 16));
+  const W_SEP27 = period_id_at("weekly", Date.UTC(2037, 8, 27));
+  const W_OCT11 = period_id_at("weekly", Date.UTC(2037, 9, 11));
+  const BM_OCT_A = period_id_at("bi_monthly", Date.UTC(2037, 9, 1));
+  const BM_SEP_B = period_id_at("bi_monthly", Date.UTC(2037, 8, 16));
   const ee = (base_removed.weekly.budgets as any[]).find((b) => b.is_everything_else)?.budget_id;
   const allowed = (keys: string[], buckets: string[]) =>
     keys.filter((k) => !(k.startsWith(`budget:${ee}@`) && buckets.some((b) => k.endsWith(`@${b}`))));
@@ -277,56 +277,56 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   const group = (view: any, bill: string, pid: string) =>
     (view.bills as any[]).find((b) => b.recurring_id === bill)?.groups.find((g: any) => g.period_id === pid);
   const occ = (g: any) => (g?.occurrences ?? []).map((o: any) => [new Date(o.due_ms).toISOString().slice(0, 10), o.paid]);
-  expect(group(base_removed.weekly, 'TAG_S_RMV', W_SEP27)).toBeUndefined(); // (a) base: hidden, payment nowhere
-  expect(occ(group(got_removed.weekly, 'TAG_S_RMV', W_SEP27))).toEqual([['2037-09-29', true]]);
-  expect(group(base_removed.weekly, 'TAG_S_RST', W_OCT11)).toBeUndefined(); // (b)
-  expect(occ(group(got_removed.weekly, 'TAG_S_RST', W_OCT11))).toEqual([['2037-10-12', true]]);
-  expect(group(base_removed.bi_monthly, 'TAG_S_RST', BM_OCT_A)).toBeUndefined();
-  expect(occ(group(got_removed.bi_monthly, 'TAG_S_RST', BM_OCT_A))).toEqual([['2037-10-12', true]]);
-  expect(occ(group(base_removed.weekly, 'TAG_S_PSE', W_SEP27))).toEqual([['2037-09-29', false]]); // (c) base: expected in a paused month
-  expect(occ(group(got_removed.weekly, 'TAG_S_PSE', W_SEP27))).toEqual([]); // now: listed, no occurrence
+  expect(group(base_removed.weekly, "TAG_S_RMV", W_SEP27)).toBeUndefined(); // (a) base: hidden, payment nowhere
+  expect(occ(group(got_removed.weekly, "TAG_S_RMV", W_SEP27))).toEqual([["2037-09-29", true]]);
+  expect(group(base_removed.weekly, "TAG_S_RST", W_OCT11)).toBeUndefined(); // (b)
+  expect(occ(group(got_removed.weekly, "TAG_S_RST", W_OCT11))).toEqual([["2037-10-12", true]]);
+  expect(group(base_removed.bi_monthly, "TAG_S_RST", BM_OCT_A)).toBeUndefined();
+  expect(occ(group(got_removed.bi_monthly, "TAG_S_RST", BM_OCT_A))).toEqual([["2037-10-12", true]]);
+  expect(occ(group(base_removed.weekly, "TAG_S_PSE", W_SEP27))).toEqual([["2037-09-29", false]]); // (c) base: expected in a paused month
+  expect(occ(group(got_removed.weekly, "TAG_S_PSE", W_SEP27))).toEqual([]); // now: listed, no occurrence
   // D28: base — the Sep 29 early payment counted nowhere; now paid in September in every view.
-  expect(occ(group(base_removed.monthly_sep, 'TAG_S_ERL', M_SEP))).toEqual([['2037-09-01', true]]);
-  expect(occ(group(got_removed.monthly_sep, 'TAG_S_ERL', M_SEP))).toEqual([['2037-09-01', true], ['2037-09-29', true]]);
-  expect(group(base_removed.weekly, 'TAG_S_ERL', W_SEP27)).toBeUndefined();
-  expect(occ(group(got_removed.weekly, 'TAG_S_ERL', W_SEP27))).toEqual([['2037-09-29', true]]);
-  expect(occ(group(got_removed.bi_monthly, 'TAG_S_ERL', BM_SEP_B))).toEqual([['2037-09-29', true]]);
+  expect(occ(group(base_removed.monthly_sep, "TAG_S_ERL", M_SEP))).toEqual([["2037-09-01", true]]);
+  expect(occ(group(got_removed.monthly_sep, "TAG_S_ERL", M_SEP))).toEqual([["2037-09-01", true], ["2037-09-29", true]]);
+  expect(group(base_removed.weekly, "TAG_S_ERL", W_SEP27)).toBeUndefined();
+  expect(occ(group(got_removed.weekly, "TAG_S_ERL", W_SEP27))).toEqual([["2037-09-29", true]]);
+  expect(occ(group(got_removed.bi_monthly, "TAG_S_ERL", BM_SEP_B))).toEqual([["2037-09-29", true]]);
   // D31: base — Sep 29 unpaid in every view (its Oct 2 payment was October spend); now paid by it.
-  expect(occ(group(base_removed.monthly_sep, 'TAG_S_LTE', M_SEP))).toEqual([['2037-09-29', false]]);
-  expect(occ(group(got_removed.monthly_sep, 'TAG_S_LTE', M_SEP))).toEqual([['2037-09-29', true]]);
-  expect(group(base_removed.weekly, 'TAG_S_LTE', W_SEP27)).toBeUndefined(); // base: the whole straddling week dropped
-  expect(occ(group(got_removed.weekly, 'TAG_S_LTE', W_SEP27))).toEqual([['2037-09-29', true]]);
-  expect(occ(group(got_removed.bi_monthly, 'TAG_S_LTE', BM_SEP_B))).toEqual([['2037-09-29', true]]);
+  expect(occ(group(base_removed.monthly_sep, "TAG_S_LTE", M_SEP))).toEqual([["2037-09-29", false]]);
+  expect(occ(group(got_removed.monthly_sep, "TAG_S_LTE", M_SEP))).toEqual([["2037-09-29", true]]);
+  expect(group(base_removed.weekly, "TAG_S_LTE", W_SEP27)).toBeUndefined(); // base: the whole straddling week dropped
+  expect(occ(group(got_removed.weekly, "TAG_S_LTE", W_SEP27))).toEqual([["2037-09-29", true]]);
+  expect(occ(group(got_removed.bi_monthly, "TAG_S_LTE", BM_SEP_B))).toEqual([["2037-09-29", true]]);
   // D37 #2: like RMV — base drops the straddling week; now Sep 29 shows, paid by its Sep 29 payment
   // (the Oct 2 extra charge pays nothing: October spend in both, monthly views identical).
-  expect(group(base_removed.weekly, 'TAG_S_XTR', W_SEP27)).toBeUndefined();
-  expect(occ(group(got_removed.weekly, 'TAG_S_XTR', W_SEP27))).toEqual([['2037-09-29', true]]);
-  console.log('[D28+D31 golden diff] monthly_oct:', JSON.stringify(diff_keys(got_removed.monthly_oct, base_removed.monthly_oct)), 'monthly_sep:', JSON.stringify(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)),
-    'weekly:', JSON.stringify(weekly_diff), 'bi_monthly:', JSON.stringify(bm_diff));
+  expect(group(base_removed.weekly, "TAG_S_XTR", W_SEP27)).toBeUndefined();
+  expect(occ(group(got_removed.weekly, "TAG_S_XTR", W_SEP27))).toEqual([["2037-09-29", true]]);
+  console.log("[D28+D31 golden diff] monthly_oct:", JSON.stringify(diff_keys(got_removed.monthly_oct, base_removed.monthly_oct)), "monthly_sep:", JSON.stringify(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep)),
+    "weekly:", JSON.stringify(weekly_diff), "bi_monthly:", JSON.stringify(bm_diff));
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-describe('capture rules — flag off equals today (emulator)', () => {
+describe("capture rules — flag off equals today (emulator)", () => {
   if (WRITE) {
-    it('writes the golden dump (base commit only)', async () => {
-      const { out, counts } = await runScenario('qzgen', { counted: true });
+    it("writes the golden dump (base commit only)", async () => {
+      const { out, counts } = await runScenario("qzgen", { counted: true });
       fs.mkdirSync(path.dirname(GOLDEN), { recursive: true });
       fs.writeFileSync(GOLDEN, JSON.stringify({ ...out, counts }, null, 1));
     }, 120000);
     return;
   }
 
-  const golden = fs.existsSync(GOLDEN) ? JSON.parse(fs.readFileSync(GOLDEN, 'utf8')) : null;
+  const golden = fs.existsSync(GOLDEN) ? JSON.parse(fs.readFileSync(GOLDEN, "utf8")) : null;
 
-  it('has a golden dump from the base commit', () => {
+  it("has a golden dump from the base commit", () => {
     expect(golden).not.toBeNull();
   });
 
-  it('no flag doc → every doc, period, transaction, the period page and the queue equal the base', async () => {
-    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').delete();
+  it("no flag doc → every doc, period, transaction, the period page and the queue equal the base", async () => {
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").delete();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
-    const { out, counts } = await runScenario('qzoffa', { counted: true });
+    require("../src/functions/infrastructure/feature_flags").invalidate_flag_cache();
+    const { out, counts } = await runScenario("qzoffa", { counted: true });
     const { counts: golden_counts, ...golden_all } = golden;
     expectGoldenWithA2(out, golden_all);
     // R4 / X11: identical writes AND reads to the base — a flag-off user with no v2 records never
@@ -339,34 +339,34 @@ describe('capture rules — flag off equals today (emulator)', () => {
         ({ reads: c.reads, writes: c.writes, audit: c.audit_writes }))
     );
     expect(Object.keys(counts[0]!.reads_by).filter((k) => !(k in golden_counts[0].reads_by))).toEqual([]);
-    console.log('[R4] flag-off sync counts (run1, run2):', JSON.stringify(counts.map((c, i) => c && {
+    console.log("[R4] flag-off sync counts (run1, run2):", JSON.stringify(counts.map((c, i) => c && {
       reads: c.reads, review_state_reads: state_reads[i], writes: c.writes, audit: c.audit_writes,
-    })), 'base:', JSON.stringify(golden_counts.map((c: { reads: number; writes: number }) => ({ reads: c.reads, writes: c.writes }))));
+    })), "base:", JSON.stringify(golden_counts.map((c: { reads: number; writes: number }) => ({ reads: c.reads, writes: c.writes }))));
   }, 120000);
 
-  it('flag doc present but the user not on it → same as the base; 0 review items; no detector job', async () => {
-    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
-      enabled: true, enabled_user_ids: ['someone_else'], enabled_group_ids: [], rollout_percentage: 0,
+  it("flag doc present but the user not on it → same as the base; 0 review items; no detector job", async () => {
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").set({
+      enabled: true, enabled_user_ids: ["someone_else"], enabled_group_ids: [], rollout_percentage: 0,
     });
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
-    const { out } = await runScenario('qzoffb');
+    require("../src/functions/infrastructure/feature_flags").invalidate_flag_cache();
+    const { out } = await runScenario("qzoffb");
     const { counts: _c, ...golden_all } = golden;
     void _c;
     expectGoldenWithA2(out, golden_all);
     expect(out.after_second.review_items).toBe(0);
     expect(out.after_second.review_state_exists).toBe(false);
-    expect(out.after_second.job_types).not.toContain('detect_possible_recurring');
+    expect(out.after_second.job_types).not.toContain("detect_possible_recurring");
   }, 120000);
 
-  it('#9 honest R4: flag doc present + COLD cache → sync = base + 1 _feature_flags read; warm → base + 0; assign + derive the same', async () => {
-    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
-      enabled: true, enabled_user_ids: ['someone_else'], enabled_group_ids: [], rollout_percentage: 0,
+  it("#9 honest R4: flag doc present + COLD cache → sync = base + 1 _feature_flags read; warm → base + 0; assign + derive the same", async () => {
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").set({
+      enabled: true, enabled_user_ids: ["someone_else"], enabled_group_ids: [], rollout_percentage: 0,
     });
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ff = require('../src/functions/infrastructure/feature_flags');
+    const ff = require("../src/functions/infrastructure/feature_flags");
     ff.invalidate_flag_cache();
-    const tag = 'qzoffr4';
+    const tag = "qzoffr4";
     const ids = scenarioIds(tag);
     await seedScenario(db, ids);
     const mocks = scenarioMocks(ids, NOW_MS, { removals: true });
@@ -374,10 +374,10 @@ describe('capture rules — flag off equals today (emulator)', () => {
     mockSync.mockImplementation(mocks.sync);
     mockRecurring.mockReset();
     mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
-    const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: 's' });
-    const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test' });
-    await sync('run1');
-    await sync('run2');
+    const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: "s" });
+    const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test" });
+    await sync("run1");
+    await sync("run2");
     await new Promise((r) => setTimeout(r, 400));
     const measured = async (fn: () => Promise<unknown>) => {
       const c = startCounting();
@@ -385,11 +385,11 @@ describe('capture rules — flag off equals today (emulator)', () => {
       await new Promise((r) => setTimeout(r, 400));
       const k = c.stop();
       return { reads: k.reads - (k.reads_by._audit ?? 0) - (k.reads_by.categories ?? 0), writes: k.writes - (k.writes_by._audit ?? 0),
-        ff: k.reads_by[process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags'] ?? 0, state: k.reads_by._recurring_review_state ?? 0 };
+        ff: k.reads_by[process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags"] ?? 0, state: k.reads_by._recurring_review_state ?? 0 };
     };
     ff.invalidate_flag_cache();
-    const cold = await measured(() => sync('cold'));
-    const warm = await measured(() => sync('warm'));
+    const cold = await measured(() => sync("cold"));
+    const warm = await measured(() => sync("warm"));
     expect([cold.ff, warm.ff, cold.state, warm.state]).toEqual([1, 0, 0, 0]);
     expect(cold.reads).toBe(warm.reads + 1);
     // Warm = exactly the base's identical re-sync (golden run 2, measured on 2ae62e6).
@@ -397,24 +397,24 @@ describe('capture rules — flag off equals today (emulator)', () => {
 
     // Assignment batch + derive: cold = warm + 1 flag read, and no review-state read.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { assign_transactions_batch_orchestrator } = require('../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator');
+    const { assign_transactions_batch_orchestrator } = require("../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator");
     const assign_and_derive = async () => {
-      await assign_transactions_batch_orchestrator(ctx('assign'), { user_id: ids.userId, transaction_ids: [`plaid_${ids.txn('spot0')}`, `plaid_${ids.txn('groc0')}`] });
-      await derive_period_orchestrator(ctx('derive'), ids.userId, { view_cadence: 'monthly', window_start_ms: OCT.start, window_end_ms: OCT.end, force: true });
+      await assign_transactions_batch_orchestrator(ctx("assign"), { user_id: ids.userId, transaction_ids: [`plaid_${ids.txn("spot0")}`, `plaid_${ids.txn("groc0")}`] });
+      await derive_period_orchestrator(ctx("derive"), ids.userId, { view_cadence: "monthly", window_start_ms: OCT.start, window_end_ms: OCT.end, force: true });
     };
     ff.invalidate_flag_cache();
     const a_cold = await measured(assign_and_derive);
     const a_warm = await measured(assign_and_derive);
     expect([a_cold.ff, a_warm.ff, a_cold.state, a_warm.state]).toEqual([1, 0, 0, 0]);
     expect(a_cold.reads).toBe(a_warm.reads + 1);
-    console.log('[R4 honest] sync cold/warm/base:', cold.reads, warm.reads, golden.counts[1].reads, ' assign+derive cold/warm:', a_cold.reads, a_warm.reads);
+    console.log("[R4 honest] sync cold/warm/base:", cold.reads, warm.reads, golden.counts[1].reads, " assign+derive cold/warm:", a_cold.reads, a_warm.reads);
   }, 180000);
 
-  it('round 4 test 10: assign + derive with the flag OFF and a warm cache read exactly what the base reads', async () => {
-    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').delete();
+  it("round 4 test 10: assign + derive with the flag OFF and a warm cache read exactly what the base reads", async () => {
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").delete();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
-    const tag = 'qzoffr10';
+    require("../src/functions/infrastructure/feature_flags").invalidate_flag_cache();
+    const tag = "qzoffr10";
     const ids = scenarioIds(tag);
     await seedScenario(db, ids);
     const mocks = scenarioMocks(ids, NOW_MS, { removals: true });
@@ -422,16 +422,16 @@ describe('capture rules — flag off equals today (emulator)', () => {
     mockSync.mockImplementation(mocks.sync);
     mockRecurring.mockReset();
     mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
-    const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: 's' });
-    const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test' });
-    await sync('run1');
-    await sync('run2');
+    const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: "s" });
+    const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test" });
+    await sync("run1");
+    await sync("run2");
     await new Promise((r) => setTimeout(r, 400));
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { assign_transactions_batch_orchestrator } = require('../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator');
+    const { assign_transactions_batch_orchestrator } = require("../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator");
     const run = async () => {
-      await assign_transactions_batch_orchestrator(ctx('assign'), { user_id: ids.userId, transaction_ids: [`plaid_${ids.txn('spot0')}`, `plaid_${ids.txn('groc0')}`] });
-      await derive_period_orchestrator(ctx('derive'), ids.userId, { view_cadence: 'monthly', window_start_ms: OCT.start, window_end_ms: OCT.end, force: true });
+      await assign_transactions_batch_orchestrator(ctx("assign"), { user_id: ids.userId, transaction_ids: [`plaid_${ids.txn("spot0")}`, `plaid_${ids.txn("groc0")}`] });
+      await derive_period_orchestrator(ctx("derive"), ids.userId, { view_cadence: "monthly", window_start_ms: OCT.start, window_end_ms: OCT.end, force: true });
     };
     await run(); // warms every per-instance cache (the flag included)
     const c = startCounting();

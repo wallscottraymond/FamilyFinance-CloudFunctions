@@ -3,15 +3,15 @@
  * The suite owns the jest.mock() of Plaid (hoisted); it hands its mock fns here.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires */
-import { FieldValue, Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Firestore } from "firebase-admin/firestore";
 import {
   NOW_MS, ScenarioIds, plaidTxn, scenarioIds, scenarioMocks, scenarioRecurring, seedMonthlySourcePeriods, seedScenario,
-} from './captureScenario';
+} from "./captureScenario";
 
 export const FAKE_CLOCK = {
   now: NOW_MS,
   advanceTimers: true,
-  doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'] as any,
+  doNotFake: ["nextTick", "setImmediate", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask", "hrtime", "performance"] as any,
 };
 
 export const MONTHS: Array<[number, number]> = [
@@ -45,18 +45,18 @@ export interface Harness {
 // arrayUnion/arrayRemove, never read-modify-write (a lost update silently turned another suite's
 // user flag-off mid-run).
 export async function setFlag(db: Firestore, user_ids: string[]): Promise<void> {
-  const ref = db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1');
+  const ref = db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1");
   await ref.set({
     enabled: true, enabled_user_ids: FieldValue.arrayUnion(...user_ids), enabled_group_ids: [], rollout_percentage: 0,
-    description: 'test',
+    description: "test",
   }, { merge: true });
-  require('../../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
+  require("../../src/functions/infrastructure/feature_flags").invalidate_flag_cache();
 }
 
 export async function clearFlagFor(db: Firestore, user_id: string): Promise<void> {
-  const ref = db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1');
+  const ref = db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1");
   await ref.set({ enabled: true, enabled_user_ids: FieldValue.arrayRemove(user_id) }, { merge: true });
-  require('../../src/functions/infrastructure/feature_flags').invalidate_flag_cache();
+  require("../../src/functions/infrastructure/feature_flags").invalidate_flag_cache();
 }
 
 export async function seedMonths(db: Firestore): Promise<void> {
@@ -78,8 +78,8 @@ export async function makeHarness(
   let removed: string[] = [];
   let cursor_n = 0;
   let recurring = opts.recurring ?? scenarioRecurring(ids);
-  const { sync_item_orchestrator } = require('../../src/functions/orchestrators/plaid/sync_item.orchestrator');
-  const { derive_period_orchestrator } = require('../../src/functions/orchestrators/periods/derive_period.orchestrator');
+  const { sync_item_orchestrator } = require("../../src/functions/orchestrators/plaid/sync_item.orchestrator");
+  const { derive_period_orchestrator } = require("../../src/functions/orchestrators/periods/derive_period.orchestrator");
   const install = () => {
     mocks.mockSync.mockReset();
     mocks.mockSync.mockImplementation(async () => {
@@ -90,7 +90,7 @@ export async function makeHarness(
       cursor_n++;
       return {
         added, modified: [], removed: gone, next_cursor: `c${cursor_n}`, has_more: false,
-        transactions_update_status: 'HISTORICAL_UPDATE_COMPLETE', accounts: [], request_id: 'r',
+        transactions_update_status: "HISTORICAL_UPDATE_COMPLETE", accounts: [], request_id: "r",
       };
     });
     mocks.mockRecurring.mockReset();
@@ -98,24 +98,24 @@ export async function makeHarness(
   };
   install();
   const derive = (w: { start: number; end: number }) =>
-    derive_period_orchestrator({ trace_id: `${tag}_d_${Math.random()}`, span_id: 's' }, ids.userId, {
-      view_cadence: 'monthly', window_start_ms: w.start, window_end_ms: w.end, force: true,
+    derive_period_orchestrator({ trace_id: `${tag}_d_${Math.random()}`, span_id: "s" }, ids.userId, {
+      view_cadence: "monthly", window_start_ms: w.start, window_end_ms: w.end, force: true,
     });
   return {
     db,
     ids,
     syncRaw: async (label: string) => {
       install();
-      return sync_item_orchestrator({ trace_id: `${tag}_${label}`, span_id: 's' }, {
-        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test',
+      return sync_item_orchestrator({ trace_id: `${tag}_${label}`, span_id: "s" }, {
+        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test",
       });
     },
     sync: async (label: string) => {
       install();
-      const r = await sync_item_orchestrator({ trace_id: `${tag}_${label}`, span_id: 's' }, {
-        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test',
+      const r = await sync_item_orchestrator({ trace_id: `${tag}_${label}`, span_id: "s" }, {
+        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test",
       });
-      if (r?.status !== 'synced') {
+      if (r?.status !== "synced") {
         throw new Error(`harness sync "${label}" for ${ids.itemDocId} did not run: ${JSON.stringify(r)}`);
       }
       return r;
@@ -131,7 +131,7 @@ export async function makeHarness(
       return Math.round(r.budgets.reduce((s: number, b: any) =>
         s + b.periods.reduce((x: number, p: any) => x + (p.spent ?? 0), 0), 0) * 100) / 100;
     },
-    txn: async (key: string) => (await db.collection('transactions').doc(`plaid_${ids.txn(key)}`).get()).data(),
+    txn: async (key: string) => (await db.collection("transactions").doc(`plaid_${ids.txn(key)}`).get()).data(),
   };
 }
 

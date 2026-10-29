@@ -5,13 +5,13 @@
  * to reduce code duplication across Plaid functions.
  */
 
-import { PlaidApi } from 'plaid';
-import { defineSecret } from 'firebase-functions/params';
-import { createPlaidClient } from './plaidClient';
+import { PlaidApi } from "plaid";
+import { defineSecret } from "firebase-functions/params";
+import { createPlaidClient } from "./plaidClient";
 
 // Define secrets for Plaid configuration (shared across functions)
-const plaidClientId = defineSecret('PLAID_CLIENT_ID');
-const plaidSecret = defineSecret('PLAID_SECRET');
+const plaidClientId = defineSecret("PLAID_CLIENT_ID");
+const plaidSecret = defineSecret("PLAID_SECRET");
 
 /**
  * Creates a standardized Plaid client with shared configuration
@@ -50,7 +50,7 @@ export async function validatePlaidConfiguration(): Promise<boolean> {
     const secret = plaidSecret.value();
 
     if (!clientId || !secret) {
-      console.error('Plaid configuration missing: PLAID_CLIENT_ID or PLAID_SECRET not set');
+      console.error("Plaid configuration missing: PLAID_CLIENT_ID or PLAID_SECRET not set");
       return false;
     }
 
@@ -59,14 +59,14 @@ export async function validatePlaidConfiguration(): Promise<boolean> {
 
     // Basic validation - client should have required methods
     const requiredMethods = [
-      'itemPublicTokenExchange',
-      'transactionsSync',
-      'accountsGet',
-      'institutionsGetById'
+      "itemPublicTokenExchange",
+      "transactionsSync",
+      "accountsGet",
+      "institutionsGetById"
     ];
 
     for (const method of requiredMethods) {
-      if (typeof client[method as keyof PlaidApi] !== 'function') {
+      if (typeof client[method as keyof PlaidApi] !== "function") {
         console.error(`Plaid client missing required method: ${method}`);
         return false;
       }
@@ -74,7 +74,7 @@ export async function validatePlaidConfiguration(): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error('Plaid configuration validation failed:', error);
+    console.error("Plaid configuration validation failed:", error);
     return false;
   }
 }
@@ -170,9 +170,9 @@ function isRetryableError(error: any): boolean {
   // Check Plaid-specific retryable errors
   const errorCode = error.response.data?.error_code;
   const retryableErrorCodes = [
-    'PLAID_ERROR', // Generic retryable error
-    'API_ERROR',   // Server error
-    'INTERNAL_SERVER_ERROR'
+    "PLAID_ERROR", // Generic retryable error
+    "API_ERROR",   // Server error
+    "INTERNAL_SERVER_ERROR"
   ];
 
   return retryableErrorCodes.includes(errorCode);

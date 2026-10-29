@@ -7,20 +7,20 @@
  * ARCHITECTURE: This is a pure orchestration function that delegates to utilities.
  */
 
-import * as admin from 'firebase-admin';
-import { is_stored_period_active } from '../../../domain/recurring/recurring_suppression.service';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { is_stored_period_active } from "../../../domain/recurring/recurring_suppression.service";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   OutflowPeriod,
   SourcePeriod
-} from '../../../../types';
+} from "../../../../types";
 import {
   getDaysInPeriod,
   batchCreateOutflowPeriods,
   calculatePaymentCycle,
   calculateWithholdingAmount,
   calculateAllOccurrencesInPeriod
-} from '../utils';
+} from "../utils";
 
 /**
  * Result of creating outflow periods
@@ -31,7 +31,7 @@ export interface CreateOutflowPeriodsResult {
 }
 
 // Re-export utilities for backward compatibility
-export { calculatePeriodGenerationRange } from '../utils';
+export { calculatePeriodGenerationRange } from "../utils";
 
 /**
  * Create outflow periods from source periods for a given outflow - FLAT STRUCTURE
@@ -59,12 +59,12 @@ export async function createOutflowPeriodsFromSource(
 ): Promise<CreateOutflowPeriodsResult> {
   const now = Timestamp.now();
 
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('[createOutflowPeriodsFromSource] STARTING OUTFLOW PERIOD CREATION');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`[createOutflowPeriodsFromSource] Input Parameters:`);
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("[createOutflowPeriodsFromSource] STARTING OUTFLOW PERIOD CREATION");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("[createOutflowPeriodsFromSource] Input Parameters:");
   console.log(`  - Outflow ID: ${outflowId}`);
-  console.log(`  - Description: ${outflow.description || 'N/A'}`);
+  console.log(`  - Description: ${outflow.description || "N/A"}`);
   console.log(`  - Frequency: ${outflow.frequency}`);
   console.log(`  - Date Range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
@@ -80,8 +80,8 @@ export async function createOutflowPeriodsFromSource(
   const startYear = startDate.getFullYear();
   const endYear = endDate.getFullYear();
 
-  console.log('');
-  console.log('[createOutflowPeriodsFromSource] STEP 1: QUERY SOURCE PERIODS');
+  console.log("");
+  console.log("[createOutflowPeriodsFromSource] STEP 1: QUERY SOURCE PERIODS");
   console.log(`  - Start Year: ${startYear}`);
   console.log(`  - End Year: ${endYear}`);
   console.log(`  - Query: source_periods WHERE year >= ${startYear}`);
@@ -91,33 +91,33 @@ export async function createOutflowPeriodsFromSource(
   // single supported range (the old "no upper bound" query read the ENTIRE forward tail of
   // source_periods, which grows unbounded as more years are seeded). The exact date window is still
   // filtered in memory below.
-  const sourcePeriodsQuery = db.collection('source_periods')
-    .where('year', '>=', startYear)
-    .where('year', '<=', endYear);
+  const sourcePeriodsQuery = db.collection("source_periods")
+    .where("year", ">=", startYear)
+    .where("year", "<=", endYear);
 
-  console.log('');
-  console.log('[createOutflowPeriodsFromSource] Executing query...');
+  console.log("");
+  console.log("[createOutflowPeriodsFromSource] Executing query...");
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
   console.log(`  ✓ Query returned ${sourcePeriodsSnapshot.size} documents`);
 
   if (sourcePeriodsSnapshot.empty) {
-    console.error('');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ QUERY FAILED: No source periods found');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("❌ QUERY FAILED: No source periods found");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error(`  - Query: year >= ${startYear}`);
     console.error(`  - Date range requested: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-    console.error(`  - Possible causes:`);
-    console.error(`    1. source_periods collection is empty (check emulator data)`);
+    console.error("  - Possible causes:");
+    console.error("    1. source_periods collection is empty (check emulator data)");
     console.error(`    2. No periods exist for year >= ${startYear}`);
-    console.error(`    3. Data was not persisted (emulator restart without persistence)`);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("    3. Data was not persisted (emulator restart without persistence)");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     return { periodsCreated: 0, periodIds: [] };
   }
 
   // Filter for upper year bound in memory (Firestore limitation workaround)
-  console.log('');
-  console.log('[createOutflowPeriodsFromSource] Filtering year upper bound in memory...');
+  console.log("");
+  console.log("[createOutflowPeriodsFromSource] Filtering year upper bound in memory...");
   const yearFilteredPeriods = sourcePeriodsSnapshot.docs.filter(doc => {
     const data = doc.data();
     const inRange = data.year <= endYear;
@@ -129,22 +129,22 @@ export async function createOutflowPeriodsFromSource(
   console.log(`  ✓ After year filter: ${yearFilteredPeriods.length} documents (excluded ${sourcePeriodsSnapshot.size - yearFilteredPeriods.length})`);
 
   if (yearFilteredPeriods.length === 0) {
-    console.error('');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ FILTER FAILED: No periods in year range');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("❌ FILTER FAILED: No periods in year range");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error(`  - Year range: ${startYear} to ${endYear}`);
     console.error(`  - All ${sourcePeriodsSnapshot.size} periods were outside this range`);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     return { periodsCreated: 0, periodIds: [] };
   }
 
   // Filter in memory for periods that start on or after the outflow's firstDate
   // Only create periods for source_periods that begin after the bill existed
-  console.log('');
-  console.log('[createOutflowPeriodsFromSource] STEP 2: FILTER PERIODS BY START DATE');
+  console.log("");
+  console.log("[createOutflowPeriodsFromSource] STEP 2: FILTER PERIODS BY START DATE");
   console.log(`  - Target range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-  console.log(`  - Filter logic: period.startDate >= ${startDate.toISOString().split('T')[0]} AND period.startDate <= ${endDate.toISOString().split('T')[0]}`);
+  console.log(`  - Filter logic: period.startDate >= ${startDate.toISOString().split("T")[0]} AND period.startDate <= ${endDate.toISOString().split("T")[0]}`);
 
   let overlapCount = 0;
   let excludedCount = 0;
@@ -158,32 +158,32 @@ export async function createOutflowPeriodsFromSource(
     if (overlaps) {
       overlapCount++;
       if (overlapCount <= 5) { // Log first 5 matches
-        console.log(`  ✓ MATCH #${overlapCount}: ${doc.id} (${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]})`);
+        console.log(`  ✓ MATCH #${overlapCount}: ${doc.id} (${periodStart.toISOString().split("T")[0]} to ${periodEnd.toISOString().split("T")[0]})`);
       }
     } else {
       excludedCount++;
       if (excludedCount <= 3) { // Log first 3 exclusions
-        console.log(`  ✗ Excluded: ${doc.id} (${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}) - starts before outflow firstDate`);
+        console.log(`  ✗ Excluded: ${doc.id} (${periodStart.toISOString().split("T")[0]} to ${periodEnd.toISOString().split("T")[0]}) - starts before outflow firstDate`);
       }
     }
     return overlaps;
   });
 
-  console.log('');
-  console.log(`[createOutflowPeriodsFromSource] Date filtering complete:`);
+  console.log("");
+  console.log("[createOutflowPeriodsFromSource] Date filtering complete:");
   console.log(`  ✓ Matching periods: ${overlappingPeriods.length}`);
   console.log(`  ✗ Excluded (started before firstDate): ${excludedCount}`);
   console.log(`  📊 Total processed: ${yearFilteredPeriods.length}`);
 
   if (overlappingPeriods.length === 0) {
-    console.error('');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ DATE FILTER FAILED: No matching periods');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("❌ DATE FILTER FAILED: No matching periods");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error(`  - Requested range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
     console.error(`  - Periods checked: ${yearFilteredPeriods.length}`);
-    console.error(`  - None of these periods start on or after the outflow's firstDate`);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("  - None of these periods start on or after the outflow's firstDate");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     return { periodsCreated: 0, periodIds: [] };
   }
 
@@ -238,7 +238,7 @@ export async function createOutflowPeriodsFromSource(
     if (occurrences.numberOfOccurrences > 0) {
       console.log(
         `[createOutflowPeriodsFromSource] ${description} - ${occurrences.numberOfOccurrences} occurrence(s) in ${sourcePeriod.id}: ` +
-        `$${totalAmountDue.toFixed(2)} total (${occurrences.occurrenceDueDates.map(d => d.toDate().toISOString().split('T')[0]).join(', ')})`
+        `$${totalAmountDue.toFixed(2)} total (${occurrences.occurrenceDueDates.map(d => d.toDate().toISOString().split("T")[0]).join(", ")})`
       );
     }
 
@@ -277,7 +277,7 @@ export async function createOutflowPeriodsFromSource(
       lastCalculated: now,
 
       // === PAYMENT CYCLE INFO ===
-      currency: 'USD', // Default to USD, update from Plaid data if available
+      currency: "USD", // Default to USD, update from Plaid data if available
       cycleDays: cycleInfo.cycleDays,
       cycleStartDate: Timestamp.fromDate(new Date()), // Placeholder
       cycleEndDate: Timestamp.fromDate(new Date()), // Placeholder
@@ -296,8 +296,8 @@ export async function createOutflowPeriodsFromSource(
       // === CATEGORIZATION ===
       internalDetailedCategory: outflow.internalDetailedCategory || null,
       internalPrimaryCategory: outflow.internalPrimaryCategory || null,
-      plaidPrimaryCategory: outflow.plaidPrimaryCategory || 'GENERAL_SERVICES',
-      plaidDetailedCategory: outflow.plaidDetailedCategory || '',
+      plaidPrimaryCategory: outflow.plaidPrimaryCategory || "GENERAL_SERVICES",
+      plaidDetailedCategory: outflow.plaidDetailedCategory || "",
 
       // === STATUS & CONTROL ===
       // D27: the derive's month rule — a period straddling a removal boundary stays active while
@@ -324,12 +324,12 @@ export async function createOutflowPeriodsFromSource(
       // === USER INTERACTION ===
       rules: [],
       tags: outflow.tags || [],
-      type: outflow.type || 'expense',
+      type: outflow.type || "expense",
       note: null,
       userCustomName: null,
 
       // === SOURCE ===
-      source: outflow.source || 'plaid',
+      source: outflow.source || "plaid",
 
       // === TRANSACTION TRACKING ===
       transactionIds: [],
@@ -359,7 +359,7 @@ export async function createOutflowPeriodsFromSource(
   // overwritten. One getAll for the candidate ids.
   let toWrite = outflowPeriods;
   if (options.skip_existing && outflowPeriods.length > 0) {
-    const refs = outflowPeriods.map((p) => db.collection('outflow_periods').doc(p.id!));
+    const refs = outflowPeriods.map((p) => db.collection("outflow_periods").doc(p.id!));
     const snaps = await db.getAll(...refs);
     const existing = new Set(snaps.filter((s) => s.exists).map((s) => s.id));
     toWrite = outflowPeriods.filter((p) => !existing.has(p.id!));

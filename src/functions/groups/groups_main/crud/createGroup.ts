@@ -35,40 +35,40 @@ export const createGroup = onCall<CreateGroupRequest, Promise<CreateGroupRespons
   memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
-  console.log('🚀 [createGroup] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("🚀 [createGroup] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const userId = request.auth.uid;
 
     // Get user document to verify they exist and check system role
-    const userDoc = await getDocument<User>('users', userId);
+    const userDoc = await getDocument<User>("users", userId);
     if (!userDoc) {
-      throw new HttpsError('not-found', 'User profile not found');
+      throw new HttpsError("not-found", "User profile not found");
     }
 
     // Check if user is a demo user (cannot create groups)
-    if (userDoc.systemRole === 'demo_user') {
-      throw new HttpsError('permission-denied', 'Demo users cannot create groups');
+    if (userDoc.systemRole === "demo_user") {
+      throw new HttpsError("permission-denied", "Demo users cannot create groups");
     }
 
     // Validate request data
     const { name, description, settings } = request.data;
 
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      throw new HttpsError('invalid-argument', 'Group name is required');
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "Group name is required");
     }
 
     if (name.length > 100) {
-      throw new HttpsError('invalid-argument', 'Group name must be 100 characters or less');
+      throw new HttpsError("invalid-argument", "Group name must be 100 characters or less");
     }
 
     if (description && description.length > 500) {
-      throw new HttpsError('invalid-argument', 'Description must be 500 characters or less');
+      throw new HttpsError("invalid-argument", "Description must be 500 characters or less");
     }
 
     // Build group settings (merge with defaults)
@@ -79,7 +79,7 @@ export const createGroup = onCall<CreateGroupRequest, Promise<CreateGroupRespons
 
     // Validate settings
     if (groupSettings.maxMembers < 2 || groupSettings.maxMembers > 100) {
-      throw new HttpsError('invalid-argument', 'maxMembers must be between 2 and 100');
+      throw new HttpsError("invalid-argument", "maxMembers must be between 2 and 100");
     }
 
     // Create the owner member entry
@@ -88,7 +88,7 @@ export const createGroup = onCall<CreateGroupRequest, Promise<CreateGroupRespons
       role: GroupRole.OWNER,
       joinedAt: Timestamp.now(),
       invitedBy: userId, // Owner invited themselves
-      status: 'active',
+      status: "active",
     };
 
     // Build the group document
@@ -104,7 +104,7 @@ export const createGroup = onCall<CreateGroupRequest, Promise<CreateGroupRespons
 
     // Create the group document
     const createdGroup = await createDocument<Group>("groups", groupDoc);
-    console.log('✅ [createGroup] Group created:', createdGroup.id);
+    console.log("✅ [createGroup] Group created:", createdGroup.id);
 
     // Add the group to the user's groupIds array and groupMemberships
     const userMembership: GroupMembership = {
@@ -112,29 +112,29 @@ export const createGroup = onCall<CreateGroupRequest, Promise<CreateGroupRespons
       role: GroupRole.OWNER,
       joinedAt: Timestamp.now(),
       invitedBy: userId,
-      status: 'active',
+      status: "active",
     };
 
-    await updateDocument<User>('users', userId, {
+    await updateDocument<User>("users", userId, {
       groupIds: FieldValue.arrayUnion(createdGroup.id!) as unknown as string[],
       groupMemberships: FieldValue.arrayUnion(userMembership) as unknown as GroupMembership[],
     });
 
-    console.log('✅ [createGroup] User groupIds updated');
+    console.log("✅ [createGroup] User groupIds updated");
 
     return {
       success: true,
       groupId: createdGroup.id,
-      message: 'Group created successfully',
+      message: "Group created successfully",
     };
 
   } catch (error: any) {
-    console.error('❌ [createGroup] Error:', error);
+    console.error("❌ [createGroup] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to create group');
+    throw new HttpsError("internal", "Failed to create group");
   }
 });

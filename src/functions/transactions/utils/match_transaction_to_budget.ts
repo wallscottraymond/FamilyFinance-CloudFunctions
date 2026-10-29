@@ -9,8 +9,8 @@
  * @module transactions/utils/match_transaction_to_budget
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { queryDocuments } from '../../../utils/firestore';
+import { Timestamp } from "firebase-admin/firestore";
+import { queryDocuments } from "../../../utils/firestore";
 
 /**
  * Match a transaction to a budget based on its date and category
@@ -31,10 +31,10 @@ export async function match_transaction_to_budget(
   console.log(`🔍 Looking for active budgets for user ${user_id}, transaction date: ${transaction_date.toISOString()}`);
 
   // Query all active budgets for the user
-  const budgets_query = await queryDocuments('budgets', {
+  const budgets_query = await queryDocuments("budgets", {
     where: [
-      { field: 'createdBy', operator: '==', value: user_id },
-      { field: 'isActive', operator: '==', value: true }
+      { field: "createdBy", operator: "==", value: user_id },
+      { field: "isActive", operator: "==", value: true }
     ]
   });
 
@@ -82,7 +82,7 @@ export async function match_transaction_to_budget(
 
         return {
           budget_id: budget.id!,
-          budget_name: budget_data.name || 'General'
+          budget_name: budget_data.name || "General"
         };
       }
     }
@@ -92,7 +92,7 @@ export async function match_transaction_to_budget(
 
   return {
     budget_id: undefined,
-    budget_name: 'General'
+    budget_name: "General"
   };
 }
 

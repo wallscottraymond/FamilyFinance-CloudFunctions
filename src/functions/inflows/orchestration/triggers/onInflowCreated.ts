@@ -21,18 +21,18 @@
  * Memory: 512MiB, Timeout: 60s
  */
 
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   InflowPeriod,
   SourcePeriod,
   PlaidRecurringFrequency
-} from '../../../../types';
-import { create_job } from '../../../infrastructure/job_queue';
-import { generate_id } from '../../../observability';
-import { predictNextPayment } from '../../inflow_periods/utils/predictNextPayment';
-import { calculateAllOccurrencesInPeriod as calculateOccurrencesUtil } from '../../inflow_periods/utils/calculateAllOccurrencesInPeriod';
+} from "../../../../types";
+import { create_job } from "../../../infrastructure/job_queue";
+import { generate_id } from "../../../observability";
+import { predictNextPayment } from "../../inflow_periods/utils/predictNextPayment";
+import { calculateAllOccurrencesInPeriod as calculateOccurrencesUtil } from "../../inflow_periods/utils/calculateAllOccurrencesInPeriod";
 
 /**
  * Triggered when an inflow is created
@@ -40,9 +40,9 @@ import { calculateAllOccurrencesInPeriod as calculateOccurrencesUtil } from '../
  * Supports BOTH flat and nested inflow structures
  */
 export const onInflowCreated = onDocumentCreated({
-  document: 'inflows/{inflowId}',
-  region: 'us-central1',
-  memory: '512MiB',
+  document: "inflows/{inflowId}",
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 60,
 }, async (event) => {
   try {
@@ -50,13 +50,13 @@ export const onInflowCreated = onDocumentCreated({
     const inflowData = event.data?.data() as any; // Accept both flat and nested structures
 
     if (!inflowData) {
-      console.error('No inflow data found');
+      console.error("No inflow data found");
       return;
     }
 
     // Detect if this is flat or nested structure
-    const isFlat = 'ownerId' in inflowData;
-    console.log(`Inflow structure: ${isFlat ? 'FLAT (new)' : 'NESTED (legacy)'}`);
+    const isFlat = "ownerId" in inflowData;
+    console.log(`Inflow structure: ${isFlat ? "FLAT (new)" : "NESTED (legacy)"}`);
 
     // Extract fields based on structure type
     const userId = isFlat ? inflowData.ownerId : inflowData.userId;
@@ -86,14 +86,14 @@ export const onInflowCreated = onDocumentCreated({
     console.log(`Generating inflow periods from ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()} (12 months forward)`);
     
     // Get all source periods that overlap with our time range
-    const sourcePeriodsQuery = db.collection('source_periods')
-      .where('startDate', '>=', Timestamp.fromDate(startDate))
-      .where('startDate', '<=', Timestamp.fromDate(endDate));
+    const sourcePeriodsQuery = db.collection("source_periods")
+      .where("startDate", ">=", Timestamp.fromDate(startDate))
+      .where("startDate", "<=", Timestamp.fromDate(endDate));
     
     const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
     
     if (sourcePeriodsSnapshot.empty) {
-      console.warn('No source periods found in date range - inflow periods cannot be generated');
+      console.warn("No source periods found in date range - inflow periods cannot be generated");
       return;
     }
     
@@ -180,7 +180,7 @@ export const onInflowCreated = onDocumentCreated({
         lastCalculated: now,
 
         // === PAYMENT CYCLE INFO ===
-        currency: inflowData.currency || 'USD',
+        currency: inflowData.currency || "USD",
         cycleDays: cycleInfo.cycleDays,
         cycleStartDate: cycleInfo.cycleStartDate,
         cycleEndDate: cycleInfo.cycleEndDate,
@@ -199,8 +199,8 @@ export const onInflowCreated = onDocumentCreated({
         // === CATEGORIZATION ===
         internalDetailedCategory: isFlat ? inflowData.internalDetailedCategory : (inflowData.categories?.detailed || null),
         internalPrimaryCategory: isFlat ? inflowData.internalPrimaryCategory : (inflowData.categories?.primary || null),
-        plaidPrimaryCategory: isFlat ? inflowData.plaidPrimaryCategory : (inflowData.categories?.primary || 'INCOME'),
-        plaidDetailedCategory: isFlat ? inflowData.plaidDetailedCategory : (inflowData.categories?.detailed || ''),
+        plaidPrimaryCategory: isFlat ? inflowData.plaidPrimaryCategory : (inflowData.categories?.primary || "INCOME"),
+        plaidDetailedCategory: isFlat ? inflowData.plaidDetailedCategory : (inflowData.categories?.detailed || ""),
 
         // === STATUS & CONTROL ===
         isActive: true,
@@ -222,12 +222,12 @@ export const onInflowCreated = onDocumentCreated({
         // === USER INTERACTION ===
         rules: [],
         tags: inflowData.tags || [],
-        type: inflowData.type || 'income',
+        type: inflowData.type || "income",
         note: null,
         userCustomName: null,
 
         // === SOURCE ===
-        source: inflowData.source || 'plaid',
+        source: inflowData.source || "plaid",
 
         // === TRANSACTION TRACKING ===
         transactionIds: [],
@@ -253,7 +253,7 @@ export const onInflowCreated = onDocumentCreated({
       inflowPeriods.push(inflowPeriodDoc);
     }
 
-    console.log('Document created:', {
+    console.log("Document created:", {
       userId,
       groupId
     });
@@ -272,10 +272,10 @@ export const onInflowCreated = onDocumentCreated({
     if (transactionIds.length > 0) {
       try {
         await create_job(
-          'reconcile_recurring_period',
+          "reconcile_recurring_period",
           {
             recurring_id: inflowId,
-            recurring_type: 'inflow',
+            recurring_type: "inflow",
             user_id: inflowData.ownerId || inflowData.userId,
             trace_id: generate_id(),
           },
@@ -283,29 +283,29 @@ export const onInflowCreated = onDocumentCreated({
         );
         console.log(`[onInflowCreated] STEP 4: Enqueued reconcile for inflow ${inflowId}`);
       } catch (reconcileError) {
-        console.error('[onInflowCreated] reconcile enqueue error (non-fatal):', reconcileError);
+        console.error("[onInflowCreated] reconcile enqueue error (non-fatal):", reconcileError);
       }
     } else {
-      console.log('[onInflowCreated] No historical transactions to reconcile');
+      console.log("[onInflowCreated] No historical transactions to reconcile");
     }
 
     // STEP 5: Update prediction information
-    console.log('[onInflowCreated] STEP 5: Calculating payment prediction');
+    console.log("[onInflowCreated] STEP 5: Calculating payment prediction");
     try {
       const prediction = predictNextPayment(inflowData);
       if (prediction) {
-        console.log(`[onInflowCreated] Next payment prediction:`);
-        console.log(`  - Expected date: ${prediction.expectedDate.toDate().toISOString().split('T')[0]}`);
+        console.log("[onInflowCreated] Next payment prediction:");
+        console.log(`  - Expected date: ${prediction.expectedDate.toDate().toISOString().split("T")[0]}`);
         console.log(`  - Expected amount: $${prediction.expectedAmount.toFixed(2)}`);
         console.log(`  - Confidence: ${prediction.confidenceLevel}`);
         console.log(`  - Method: ${prediction.predictionMethod}`);
       }
     } catch (predictionError) {
-      console.error('[onInflowCreated] Prediction calculation error (non-fatal):', predictionError);
+      console.error("[onInflowCreated] Prediction calculation error (non-fatal):", predictionError);
     }
     
   } catch (error) {
-    console.error('Error in onInflowCreated:', error);
+    console.error("Error in onInflowCreated:", error);
     // Don't throw - we don't want to break inflow creation if period generation fails
   }
 });
@@ -317,7 +317,7 @@ export const onInflowCreated = onDocumentCreated({
 function calculatePaymentCycle(inflow: any) {
   // Handle both flat (averageAmount: number) and nested (averageAmount: {amount: number})
   const incomeAmount = Math.abs(
-    typeof inflow.averageAmount === 'number'
+    typeof inflow.averageAmount === "number"
       ? inflow.averageAmount
       : inflow.averageAmount.amount
   ); // Ensure positive
@@ -325,24 +325,24 @@ function calculatePaymentCycle(inflow: any) {
   // Calculate cycle days based on frequency
   let cycleDays: number;
   switch (inflow.frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      cycleDays = 7;
-      break;
-    case PlaidRecurringFrequency.BIWEEKLY:
-      cycleDays = 14;
-      break;
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      cycleDays = 15; // Approximate - twice per month
-      break;
-    case PlaidRecurringFrequency.MONTHLY:
-      cycleDays = 30; // Use 30 as average month length
-      break;
-    case PlaidRecurringFrequency.ANNUALLY:
-      cycleDays = 365;
-      break;
-    default:
-      console.warn(`Unknown frequency: ${inflow.frequency}, defaulting to 30 days`);
-      cycleDays = 30;
+  case PlaidRecurringFrequency.WEEKLY:
+    cycleDays = 7;
+    break;
+  case PlaidRecurringFrequency.BIWEEKLY:
+    cycleDays = 14;
+    break;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+    cycleDays = 15; // Approximate - twice per month
+    break;
+  case PlaidRecurringFrequency.MONTHLY:
+    cycleDays = 30; // Use 30 as average month length
+    break;
+  case PlaidRecurringFrequency.ANNUALLY:
+    cycleDays = 365;
+    break;
+  default:
+    console.warn(`Unknown frequency: ${inflow.frequency}, defaulting to 30 days`);
+    cycleDays = 30;
   }
   
   // Calculate daily earning rate
@@ -409,7 +409,7 @@ async function batchCreateInflowPeriods(
     const batchPeriods = inflowPeriods.slice(i, i + BATCH_SIZE);
 
     batchPeriods.forEach((inflowPeriod) => {
-      const docRef = db.collection('inflow_periods').doc(inflowPeriod.id!);
+      const docRef = db.collection("inflow_periods").doc(inflowPeriod.id!);
       batch.set(docRef, inflowPeriod);
     });
 

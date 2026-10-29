@@ -68,62 +68,62 @@ export const getBudgetSummary = onCall({
       orderDirection: "desc",
     });
 
-      // Calculate spending by member
-      const spendingByMember: Record<string, { amount: number; transactionCount: number }> = {};
-      let totalSpent = 0;
+    // Calculate spending by member
+    const spendingByMember: Record<string, { amount: number; transactionCount: number }> = {};
+    let totalSpent = 0;
 
-      transactions.forEach((transaction: any) => {
-        const userId = transaction.userId;
-        const amount = transaction.amount;
+    transactions.forEach((transaction: any) => {
+      const userId = transaction.userId;
+      const amount = transaction.amount;
 
-        if (!spendingByMember[userId]) {
-          spendingByMember[userId] = { amount: 0, transactionCount: 0 };
-        }
+      if (!spendingByMember[userId]) {
+        spendingByMember[userId] = { amount: 0, transactionCount: 0 };
+      }
 
-        spendingByMember[userId].amount += amount;
-        spendingByMember[userId].transactionCount += 1;
-        totalSpent += amount;
-      });
+      spendingByMember[userId].amount += amount;
+      spendingByMember[userId].transactionCount += 1;
+      totalSpent += amount;
+    });
 
-      // Get member details
-      const memberIds = Object.keys(spendingByMember);
-      const memberPromises = memberIds.map(id => getDocument("users", id));
-      const members = await Promise.all(memberPromises);
+    // Get member details
+    const memberIds = Object.keys(spendingByMember);
+    const memberPromises = memberIds.map(id => getDocument("users", id));
+    const members = await Promise.all(memberPromises);
 
-      const spendingSummary = memberIds.map((memberId, index) => ({
-        user: {
-          id: memberId,
-          displayName: (members[index] as any)?.displayName || "Unknown",
-          email: (members[index] as any)?.email || "Unknown",
-        },
-        spending: spendingByMember[memberId],
-        percentage: totalSpent > 0 ? (spendingByMember[memberId].amount / totalSpent) * 100 : 0,
-      }));
+    const spendingSummary = memberIds.map((memberId, index) => ({
+      user: {
+        id: memberId,
+        displayName: (members[index] as any)?.displayName || "Unknown",
+        email: (members[index] as any)?.email || "Unknown",
+      },
+      spending: spendingByMember[memberId],
+      percentage: totalSpent > 0 ? (spendingByMember[memberId].amount / totalSpent) * 100 : 0,
+    }));
 
-      const summary = {
-        budget: {
-          id: budget.id,
-          name: budget.name,
-          amount: budget.amount,
-          currency: budget.currency,
-          period: budget.period,
-          categoryIds: budget.categoryIds,
-        },
-        spending: {
-          total: totalSpent,
-          remaining: budget.amount - totalSpent,
-          percentage: (totalSpent / budget.amount) * 100,
-          isOverBudget: totalSpent > budget.amount,
-          alertThresholdReached: (totalSpent / budget.amount) * 100 >= budget.alertThreshold,
-        },
-        transactions: {
-          count: transactions.length,
-          recent: transactions.slice(0, 5), // Last 5 transactions
-        },
-        members: spendingSummary,
-      };
+    const summary = {
+      budget: {
+        id: budget.id,
+        name: budget.name,
+        amount: budget.amount,
+        currency: budget.currency,
+        period: budget.period,
+        categoryIds: budget.categoryIds,
+      },
+      spending: {
+        total: totalSpent,
+        remaining: budget.amount - totalSpent,
+        percentage: (totalSpent / budget.amount) * 100,
+        isOverBudget: totalSpent > budget.amount,
+        alertThresholdReached: (totalSpent / budget.amount) * 100 >= budget.alertThreshold,
+      },
+      transactions: {
+        count: transactions.length,
+        recent: transactions.slice(0, 5), // Last 5 transactions
+      },
+      members: spendingSummary,
+    };
 
-      return summary;
+    return summary;
 
   } catch (error: any) {
     // Preserve intentional HttpsErrors (not-found, permission-denied, …)

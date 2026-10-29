@@ -11,9 +11,9 @@
  * - Sets isUserClassified: true to indicate user has configured the income
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   IncomeType,
   IncomeVariability,
@@ -22,7 +22,7 @@ import {
   BonusIncomeConfig,
   VariableIncomeConfig,
   InflowPeriod
-} from '../../../../types';
+} from "../../../../types";
 
 interface UpdateInflowConfigRequest {
   inflowId: string;
@@ -40,7 +40,7 @@ interface UpdateInflowConfigResponse {
   periodsUpdated: number;
   newPrediction: {
     expectedAmount: number;
-    confidence: 'high' | 'medium' | 'low';
+    confidence: "high" | "medium" | "low";
   };
 }
 
@@ -49,46 +49,46 @@ interface UpdateInflowConfigResponse {
  */
 function getDefaultVariability(incomeType: IncomeType): IncomeVariability {
   switch (incomeType) {
-    case IncomeType.SALARY:
-    case IncomeType.PENSION:
-      return IncomeVariability.FIXED;
-    case IncomeType.RENTAL:
-    case IncomeType.GOVERNMENT:
-      return IncomeVariability.LOW;
-    case IncomeType.HOURLY:
-    case IncomeType.BASE_PLUS_COMMISSION:
-    case IncomeType.INVESTMENT:
-      return IncomeVariability.MEDIUM;
-    case IncomeType.COMMISSION_ONLY:
-    case IncomeType.BONUS:
-    case IncomeType.FREELANCE:
-      return IncomeVariability.HIGH;
-    default:
-      return IncomeVariability.MEDIUM;
+  case IncomeType.SALARY:
+  case IncomeType.PENSION:
+    return IncomeVariability.FIXED;
+  case IncomeType.RENTAL:
+  case IncomeType.GOVERNMENT:
+    return IncomeVariability.LOW;
+  case IncomeType.HOURLY:
+  case IncomeType.BASE_PLUS_COMMISSION:
+  case IncomeType.INVESTMENT:
+    return IncomeVariability.MEDIUM;
+  case IncomeType.COMMISSION_ONLY:
+  case IncomeType.BONUS:
+  case IncomeType.FREELANCE:
+    return IncomeVariability.HIGH;
+  default:
+    return IncomeVariability.MEDIUM;
   }
 }
 
 /**
  * Calculate prediction confidence based on income type
  */
-function getPredictionConfidence(incomeType: IncomeType): 'high' | 'medium' | 'low' {
+function getPredictionConfidence(incomeType: IncomeType): "high" | "medium" | "low" {
   switch (incomeType) {
-    case IncomeType.SALARY:
-    case IncomeType.PENSION:
-    case IncomeType.GOVERNMENT:
-    case IncomeType.RENTAL:
-      return 'high';
-    case IncomeType.HOURLY:
-    case IncomeType.BASE_PLUS_COMMISSION:
-    case IncomeType.INVESTMENT:
-      return 'medium';
-    case IncomeType.COMMISSION_ONLY:
-    case IncomeType.BONUS:
-    case IncomeType.FREELANCE:
-    case IncomeType.OTHER:
-      return 'low';
-    default:
-      return 'medium';
+  case IncomeType.SALARY:
+  case IncomeType.PENSION:
+  case IncomeType.GOVERNMENT:
+  case IncomeType.RENTAL:
+    return "high";
+  case IncomeType.HOURLY:
+  case IncomeType.BASE_PLUS_COMMISSION:
+  case IncomeType.INVESTMENT:
+    return "medium";
+  case IncomeType.COMMISSION_ONLY:
+  case IncomeType.BONUS:
+  case IncomeType.FREELANCE:
+  case IncomeType.OTHER:
+    return "low";
+  default:
+    return "medium";
   }
 }
 
@@ -106,71 +106,71 @@ function calculateExpectedAmount(
   }
 ): number {
   switch (incomeType) {
-    case IncomeType.SALARY:
-    case IncomeType.PENSION:
-    case IncomeType.GOVERNMENT:
-    case IncomeType.RENTAL:
-      // Fixed income types use the average amount
-      return averageAmount;
+  case IncomeType.SALARY:
+  case IncomeType.PENSION:
+  case IncomeType.GOVERNMENT:
+  case IncomeType.RENTAL:
+    // Fixed income types use the average amount
+    return averageAmount;
 
-    case IncomeType.HOURLY:
-      if (config.hourlyConfig) {
-        const { hourlyRate, expectedHoursPerPeriod, includeOvertime, overtimeRate, expectedOvertimeHours } = config.hourlyConfig;
-        let total = hourlyRate * expectedHoursPerPeriod;
-        if (includeOvertime && overtimeRate && expectedOvertimeHours) {
-          total += hourlyRate * overtimeRate * expectedOvertimeHours;
-        }
-        return Math.round(total * 100) / 100;
+  case IncomeType.HOURLY:
+    if (config.hourlyConfig) {
+      const { hourlyRate, expectedHoursPerPeriod, includeOvertime, overtimeRate, expectedOvertimeHours } = config.hourlyConfig;
+      let total = hourlyRate * expectedHoursPerPeriod;
+      if (includeOvertime && overtimeRate && expectedOvertimeHours) {
+        total += hourlyRate * overtimeRate * expectedOvertimeHours;
       }
-      return averageAmount;
+      return Math.round(total * 100) / 100;
+    }
+    return averageAmount;
 
-    case IncomeType.BASE_PLUS_COMMISSION:
-      if (config.commissionConfig) {
-        const baseAmount = config.commissionConfig.baseAmount || 0;
-        const targetCommission = config.commissionConfig.targetCommission || 0;
-        return baseAmount + targetCommission;
-      }
-      return averageAmount;
+  case IncomeType.BASE_PLUS_COMMISSION:
+    if (config.commissionConfig) {
+      const baseAmount = config.commissionConfig.baseAmount || 0;
+      const targetCommission = config.commissionConfig.targetCommission || 0;
+      return baseAmount + targetCommission;
+    }
+    return averageAmount;
 
-    case IncomeType.COMMISSION_ONLY:
-      // Use rolling average or user override
-      if (config.variableConfig?.userOverrideAmount != null) {
-        return config.variableConfig.userOverrideAmount;
-      }
-      // Otherwise use the existing average
-      return averageAmount;
+  case IncomeType.COMMISSION_ONLY:
+    // Use rolling average or user override
+    if (config.variableConfig?.userOverrideAmount != null) {
+      return config.variableConfig.userOverrideAmount;
+    }
+    // Otherwise use the existing average
+    return averageAmount;
 
-    case IncomeType.BONUS:
-      // Use last bonus amount if available
-      if (config.bonusConfig?.lastBonusAmount) {
-        return config.bonusConfig.lastBonusAmount;
-      }
-      return averageAmount;
+  case IncomeType.BONUS:
+    // Use last bonus amount if available
+    if (config.bonusConfig?.lastBonusAmount) {
+      return config.bonusConfig.lastBonusAmount;
+    }
+    return averageAmount;
 
-    case IncomeType.FREELANCE:
-    case IncomeType.INVESTMENT:
-    case IncomeType.OTHER:
-      // Use user override or rolling average
-      if (config.variableConfig?.userOverrideAmount != null) {
-        return config.variableConfig.userOverrideAmount;
-      }
-      return averageAmount;
+  case IncomeType.FREELANCE:
+  case IncomeType.INVESTMENT:
+  case IncomeType.OTHER:
+    // Use user override or rolling average
+    if (config.variableConfig?.userOverrideAmount != null) {
+      return config.variableConfig.userOverrideAmount;
+    }
+    return averageAmount;
 
-    default:
-      return averageAmount;
+  default:
+    return averageAmount;
   }
 }
 
 export const updateInflowConfiguration = onCall(
   {
-    region: 'us-central1',
-    memory: '512MiB',
+    region: "us-central1",
+    memory: "512MiB",
     timeoutSeconds: 120,
   },
   async (request): Promise<UpdateInflowConfigResponse> => {
     // Verify authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const userId = request.auth.uid;
@@ -179,15 +179,15 @@ export const updateInflowConfiguration = onCall(
 
     // Validate required fields
     if (!inflowId) {
-      throw new HttpsError('invalid-argument', 'inflowId is required');
+      throw new HttpsError("invalid-argument", "inflowId is required");
     }
     if (!incomeType) {
-      throw new HttpsError('invalid-argument', 'incomeType is required');
+      throw new HttpsError("invalid-argument", "incomeType is required");
     }
 
     // Validate income type is valid enum value
     if (!Object.values(IncomeType).includes(incomeType)) {
-      throw new HttpsError('invalid-argument', `Invalid incomeType: ${incomeType}`);
+      throw new HttpsError("invalid-argument", `Invalid incomeType: ${incomeType}`);
     }
 
     const db = admin.firestore();
@@ -197,18 +197,18 @@ export const updateInflowConfiguration = onCall(
 
     try {
       // Get the inflow document
-      const inflowRef = db.collection('inflows').doc(inflowId);
+      const inflowRef = db.collection("inflows").doc(inflowId);
       const inflowDoc = await inflowRef.get();
 
       if (!inflowDoc.exists) {
-        throw new HttpsError('not-found', `Inflow ${inflowId} not found`);
+        throw new HttpsError("not-found", `Inflow ${inflowId} not found`);
       }
 
       const inflowData = inflowDoc.data()!;
 
       // Verify ownership
       if (inflowData.ownerId !== userId) {
-        throw new HttpsError('permission-denied', 'You can only update your own inflows');
+        throw new HttpsError("permission-denied", "You can only update your own inflows");
       }
 
       // Calculate expected amount based on new configuration
@@ -255,8 +255,8 @@ export const updateInflowConfiguration = onCall(
       console.log(`[updateInflowConfiguration] Updated inflow ${inflowId}`);
 
       // Get all inflow periods for this inflow
-      const periodsQuery = db.collection('inflow_periods')
-        .where('inflowId', '==', inflowId);
+      const periodsQuery = db.collection("inflow_periods")
+        .where("inflowId", "==", inflowId);
 
       const periodsSnapshot = await periodsQuery.get();
       console.log(`[updateInflowConfiguration] Found ${periodsSnapshot.size} periods to update`);
@@ -332,11 +332,11 @@ export const updateInflowConfiguration = onCall(
       };
 
     } catch (error: any) {
-      console.error('[updateInflowConfiguration] Error:', error);
+      console.error("[updateInflowConfiguration] Error:", error);
       if (error instanceof HttpsError) {
         throw error;
       }
-      throw new HttpsError('internal', error.message || 'Failed to update inflow configuration');
+      throw new HttpsError("internal", error.message || "Failed to update inflow configuration");
     }
   }
 );

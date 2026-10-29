@@ -11,7 +11,7 @@
  * import { currentMonthStart, daysAgo } from '../fixtures/dateHelpers';
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 
 // ============================================================================
 // CURRENT PERIOD HELPERS
@@ -94,7 +94,7 @@ export const dayOfMonthsAgo = (months: number, day: number): Timestamp => {
 /** Generates a monthly period ID for current month (e.g., "2025-M01") */
 export const currentMonthPeriodId = (): string => {
   const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, "0");
   return `${now.getFullYear()}-M${month}`;
 };
 
@@ -102,7 +102,7 @@ export const currentMonthPeriodId = (): string => {
 export const monthsAgoPeriodId = (months: number): string => {
   const now = new Date();
   const targetDate = new Date(now.getFullYear(), now.getMonth() - months, 1);
-  const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const month = String(targetDate.getMonth() + 1).padStart(2, "0");
   return `${targetDate.getFullYear()}-M${month}`;
 };
 
@@ -112,14 +112,14 @@ export const currentWeekPeriodId = (): string => {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
   const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
-  return `${now.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
+  return `${now.getFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
 };
 
 /** Generates a bi-monthly period ID for current bi-monthly period */
 export const currentBiMonthlyPeriodId = (): string => {
   const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const half = now.getDate() <= 15 ? '1' : '2';
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const half = now.getDate() <= 15 ? "1" : "2";
   return `${now.getFullYear()}-M${month}-${half}`;
 };
 

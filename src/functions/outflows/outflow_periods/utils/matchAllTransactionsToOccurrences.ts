@@ -21,9 +21,9 @@
  * - Prevents infinite trigger loops
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { OutflowPeriod, OutflowOccurrence } from '../../../../types';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { OutflowPeriod, OutflowOccurrence } from "../../../../types";
 
 /**
  * Match all transaction splits in a period to specific occurrence indices
@@ -64,19 +64,19 @@ export async function matchAllTransactionsToOccurrences(
     const updatedOccurrences: OutflowOccurrence[] = periodData.occurrences
       ? JSON.parse(JSON.stringify(periodData.occurrences)) // Deep clone
       : periodData.occurrenceDueDates.map((dueDate, index) => ({
-          id: `${periodId}_occ_${index}`,
-          dueDate: dueDate,
-          isPaid: false,
-          transactionId: null,
-          transactionSplitId: null,
-          paymentDate: null,
-          amountDue: periodData.amountPerOccurrence || 0,
-          amountPaid: 0,
-          paymentType: null,
-          isAutoMatched: false,
-          matchedAt: null,
-          matchedBy: null,
-        }));
+        id: `${periodId}_occ_${index}`,
+        dueDate: dueDate,
+        isPaid: false,
+        transactionId: null,
+        transactionSplitId: null,
+        paymentDate: null,
+        amountDue: periodData.amountPerOccurrence || 0,
+        amountPaid: 0,
+        paymentType: null,
+        isAutoMatched: false,
+        matchedAt: null,
+        matchedBy: null,
+      }));
 
     // Reset all occurrences to unpaid before matching
     updatedOccurrences.forEach(occ => {
@@ -111,21 +111,21 @@ export async function matchAllTransactionsToOccurrences(
           transactionSplitId: split.splitId,
           paymentDate: split.transactionDate,
           amountPaid: split.amount,
-          paymentType: split.paymentType || 'regular',
+          paymentType: split.paymentType || "regular",
           isAutoMatched: split.isAutoMatched || false,
           matchedAt: split.matchedAt || Timestamp.now(),
-          matchedBy: split.matchedBy || 'system',
+          matchedBy: split.matchedBy || "system",
         };
 
         console.log(
           `[matchAllTransactionsToOccurrences] Matched transaction ${split.transactionId} ` +
           `to occurrence ${occurrenceIndex + 1} (ID: ${updatedOccurrences[occurrenceIndex].id}, ` +
-          `due ${periodData.occurrenceDueDates[occurrenceIndex].toDate().toISOString().split('T')[0]})`
+          `due ${periodData.occurrenceDueDates[occurrenceIndex].toDate().toISOString().split("T")[0]})`
         );
       } else {
         console.warn(
           `[matchAllTransactionsToOccurrences] ⚠️  Could not match transaction ${split.transactionId} ` +
-          `(date: ${split.transactionDate.toDate().toISOString().split('T')[0]}) to any occurrence within tolerance`
+          `(date: ${split.transactionDate.toDate().toISOString().split("T")[0]}) to any occurrence within tolerance`
         );
       }
     }
@@ -141,12 +141,12 @@ export async function matchAllTransactionsToOccurrences(
     const hasChanged = JSON.stringify(currentPaidFlags) !== JSON.stringify(updatedPaidFlags);
 
     if (!hasChanged) {
-      console.log(`[matchAllTransactionsToOccurrences] No changes detected, skipping update`);
+      console.log("[matchAllTransactionsToOccurrences] No changes detected, skipping update");
       return;
     }
 
     // Step 6: Update period document with BOTH patterns
-    await db.collection('outflow_periods').doc(periodId).update({
+    await db.collection("outflow_periods").doc(periodId).update({
       // NEW: Occurrence objects
       occurrences: updatedOccurrences,
 
@@ -197,12 +197,12 @@ export function findMatchingOccurrenceIndex(
 ): number | null {
   // Validation
   if (!occurrenceDueDates || occurrenceDueDates.length === 0) {
-    console.error('[findMatchingOccurrenceIndex] No occurrence dates provided');
+    console.error("[findMatchingOccurrenceIndex] No occurrence dates provided");
     return null;
   }
 
   if (occurrenceDueDates.some(date => !date || !date.toMillis)) {
-    console.error('[findMatchingOccurrenceIndex] Invalid date in occurrence array');
+    console.error("[findMatchingOccurrenceIndex] Invalid date in occurrence array");
     return null;
   }
 
@@ -225,7 +225,7 @@ export function findMatchingOccurrenceIndex(
   if (closestIndex >= 0 && closestDiff > 1) {
     console.warn(
       `[findMatchingOccurrenceIndex] Transaction date is ${closestDiff.toFixed(1)} days ` +
-      `from nearest occurrence. Consider reviewing the match.`
+      "from nearest occurrence. Consider reviewing the match."
     );
   }
 

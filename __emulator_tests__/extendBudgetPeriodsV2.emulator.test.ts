@@ -9,16 +9,16 @@
  *     periods that already exist (save_batch is a set()).
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
-process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
+process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || "localhost:8080";
 if (!admin.apps.length) {
-  admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  admin.initializeApp({ projectId: "family-budget-app-cb59b" });
 }
 const db = admin.firestore();
 
-import { run_recurring_budget_period_extension } from '../src/functions/budgets/orchestration/scheduled/extendRecurringBudgetPeriods';
+import { run_recurring_budget_period_extension } from "../src/functions/budgets/orchestration/scheduled/extendRecurringBudgetPeriods";
 
 const bid = () => `b_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const uid = () => `u_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -31,9 +31,9 @@ const addDays = (d: Date, n: number) => {
 
 /* eslint-disable @typescript-eslint/naming-convention */
 async function seedSource(id: string, start: Date, end: Date) {
-  await db.collection('source_periods').doc(id).set({
+  await db.collection("source_periods").doc(id).set({
     periodId: id,
-    type: 'bi_monthly',
+    type: "bi_monthly",
     startDate: Timestamp.fromDate(start),
     endDate: Timestamp.fromDate(end),
     year: start.getUTCFullYear(),
@@ -42,23 +42,23 @@ async function seedSource(id: string, start: Date, end: Date) {
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
-describe('run_recurring_budget_period_extension (v2, emulator)', () => {
+describe("run_recurring_budget_period_extension (v2, emulator)", () => {
   afterAll(async () => {
     await db.terminate();
   });
 
-  it('extends a bi_monthly budget with bi_monthly PRIME periods + preserves existing spent', async () => {
+  it("extends a bi_monthly budget with bi_monthly PRIME periods + preserves existing spent", async () => {
     const userId = uid();
     const budgetId = bid();
 
-    await db.collection('budgets').doc(budgetId).set({
+    await db.collection("budgets").doc(budgetId).set({
       /* eslint-disable @typescript-eslint/naming-convention */
-      budgetType: 'recurring',
+      budgetType: "recurring",
       isOngoing: true,
       isActive: true,
-      period: 'bi_monthly',
+      period: "bi_monthly",
       amount: 200,
-      name: 'BiMo',
+      name: "BiMo",
       categoryIds: [],
       createdBy: userId,
       access: { createdBy: userId },
@@ -82,13 +82,13 @@ describe('run_recurring_budget_period_extension (v2, emulator)', () => {
 
     // Pre-existing period for source[0] with spent = 50 — must survive untouched.
     const existingId = `${budgetId}_${sourceIds[0]}`;
-    await db.collection('budget_periods').doc(existingId).set({
+    await db.collection("budget_periods").doc(existingId).set({
       /* eslint-disable @typescript-eslint/naming-convention */
       id: existingId,
       budgetId,
       periodId: sourceIds[0],
       sourcePeriodId: sourceIds[0],
-      periodType: 'bi_monthly',
+      periodType: "bi_monthly",
       allocatedAmount: 200,
       spent: 50,
       isActive: true,
@@ -102,14 +102,14 @@ describe('run_recurring_budget_period_extension (v2, emulator)', () => {
     expect(res.totalPeriodsCreated).toBe(3);
 
     // (2) existing spend preserved — NOT reset to 0.
-    const existing = (await db.collection('budget_periods').doc(existingId).get()).data()!;
+    const existing = (await db.collection("budget_periods").doc(existingId).get()).data()!;
     expect(existing.spent).toBe(50);
 
     // (1) the other three sources got bi_monthly PRIME periods, allocated 1:1.
     const periods = (
-      await db.collection('budget_periods').where('budgetId', '==', budgetId).get()
+      await db.collection("budget_periods").where("budgetId", "==", budgetId).get()
     ).docs.map((d) => d.data());
-    const biMonthly = periods.filter((p) => p.periodType === 'bi_monthly');
+    const biMonthly = periods.filter((p) => p.periodType === "bi_monthly");
     expect(biMonthly.length).toBe(4); // 1 existing + 3 new
     const created = biMonthly.filter((p) => p.id !== existingId);
     expect(created.length).toBe(3);

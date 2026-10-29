@@ -5,13 +5,13 @@
  * Handles the creation of budget_periods from source_periods with proper amount allocation.
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from '../../../types';
-import { calculatePeriodAllocatedAmount } from './calculatePeriodAllocatedAmount';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from "../../../types";
+import { calculatePeriodAllocatedAmount } from "./calculatePeriodAllocatedAmount";
 
 // Re-export the new Prime/Non-Prime system orchestrator
-export { generateBudgetPeriodsWithPrimeSystem } from './periodGenerationOrchestrator';
+export { generateBudgetPeriodsWithPrimeSystem } from "./periodGenerationOrchestrator";
 
 /**
  * Result of budget period creation
@@ -61,7 +61,7 @@ export async function determineBudgetPeriodDateRange(
     console.log(`[budgetPeriods] Using budget start date: ${startDate.toISOString()}`);
   } else if (budget.selectedStartPeriod) {
     // Fallback to selected start period
-    const selectedPeriodDoc = await db.collection('source_periods').doc(budget.selectedStartPeriod).get();
+    const selectedPeriodDoc = await db.collection("source_periods").doc(budget.selectedStartPeriod).get();
     if (selectedPeriodDoc.exists) {
       const selectedPeriod = selectedPeriodDoc.data();
       startDate = selectedPeriod!.startDate.toDate();
@@ -74,13 +74,13 @@ export async function determineBudgetPeriodDateRange(
   } else {
     // Final fallback to current date
     startDate = new Date();
-    console.log('[budgetPeriods] No startDate or selectedStartPeriod provided, using current date');
+    console.log("[budgetPeriods] No startDate or selectedStartPeriod provided, using current date");
   }
 
   // Determine end date for period generation based on budget type
   let endDate: Date;
 
-  if (budget.budgetType === 'recurring') {
+  if (budget.budgetType === "recurring") {
     // Recurring budget: Generate 1 year of periods (will be extended by scheduled function)
     endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + 12);
@@ -130,9 +130,9 @@ export async function createBudgetPeriodsFromSource(
   // Query source_periods that overlap with the budget date range
   // Use endDate >= startDate to include periods that started before budget creation
   // but are still active (e.g., current month when creating mid-month)
-  const sourcePeriodsQuery = db.collection('source_periods')
-    .where('endDate', '>=', Timestamp.fromDate(startDate))
-    .where('startDate', '<=', Timestamp.fromDate(endDate));
+  const sourcePeriodsQuery = db.collection("source_periods")
+    .where("endDate", ">=", Timestamp.fromDate(startDate))
+    .where("startDate", "<=", Timestamp.fromDate(endDate));
 
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
@@ -158,9 +158,9 @@ export async function createBudgetPeriodsFromSource(
     // Calculate allocated amount based on actual days in period.
     // bi_monthly is a first-class prime cadence (Per-Period-EE Phase 0) — not
     // clamped. QUARTERLY/YEARLY/CUSTOM have no source period → monthly grid.
-    const budgetPeriodType = budget.period === 'weekly' ? PeriodType.WEEKLY :
-                              budget.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
-                              PeriodType.MONTHLY;
+    const budgetPeriodType = budget.period === "weekly" ? PeriodType.WEEKLY :
+      budget.period === "bi_monthly" ? PeriodType.BI_MONTHLY :
+        PeriodType.MONTHLY;
     const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
 
     const budgetPeriod: BudgetPeriodDocument = {
@@ -178,7 +178,7 @@ export async function createBudgetPeriodsFromSource(
       accessibleBy: budget.accessibleBy,
 
       // === LEGACY FIELDS (Backward compatibility) ===
-      familyId: String(budget.familyId || ''),
+      familyId: String(budget.familyId || ""),
       userId: budget.access?.createdBy || budget.createdBy,
 
       periodType: sourcePeriod.type,
@@ -248,7 +248,7 @@ export async function batchCreateBudgetPeriods(
     const batchPeriods = budgetPeriods.slice(i, i + BATCH_SIZE);
 
     batchPeriods.forEach((budgetPeriod) => {
-      const docRef = db.collection('budget_periods').doc(budgetPeriod.id!);
+      const docRef = db.collection("budget_periods").doc(budgetPeriod.id!);
       batch.set(docRef, budgetPeriod);
     });
 
@@ -288,7 +288,7 @@ export async function updateBudgetPeriodRange(
     updateData.needsScheduledExtension = true; // Flag for scheduled function
   }
 
-  await db.collection('budgets').doc(budgetId).update(updateData);
+  await db.collection("budgets").doc(budgetId).update(updateData);
 
   console.log(`[budgetPeriods] Updated budget ${budgetId} with period range:`, {
     startPeriod: firstPeriodId,
@@ -320,10 +320,10 @@ export async function generateBudgetPeriodsForNewBudget(
   budget: Budget
 ): Promise<CreateBudgetPeriodsResult> {
   console.log(`[budgetPeriods] Starting complete budget period generation workflow for budget ${budgetId}`);
-  console.log(`[budgetPeriods] Delegating to Prime/Non-Prime system (periodGenerationOrchestrator)`);
+  console.log("[budgetPeriods] Delegating to Prime/Non-Prime system (periodGenerationOrchestrator)");
 
   // Import the new orchestrator
-  const { generateBudgetPeriodsWithPrimeSystem } = await import('./periodGenerationOrchestrator');
+  const { generateBudgetPeriodsWithPrimeSystem } = await import("./periodGenerationOrchestrator");
 
   // Delegate to new system
   return generateBudgetPeriodsWithPrimeSystem(db, budgetId, budget);

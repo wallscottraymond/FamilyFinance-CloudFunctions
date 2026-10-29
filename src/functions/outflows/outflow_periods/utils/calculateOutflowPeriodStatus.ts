@@ -11,8 +11,8 @@
  * status calculation based on real payment data.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { TransactionSplitReference, OutflowPeriodStatus, PaymentType } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { TransactionSplitReference, OutflowPeriodStatus, PaymentType } from "../../../../types";
 
 /**
  * Enhanced Status Result with Occurrence Information
@@ -179,18 +179,18 @@ export function getPaymentBreakdown(transactionSplits: TransactionSplitReference
     breakdown.total += split.amount;
 
     switch (split.paymentType) {
-      case PaymentType.REGULAR:
-        breakdown.regular += split.amount;
-        break;
-      case PaymentType.CATCH_UP:
-        breakdown.catchUp += split.amount;
-        break;
-      case PaymentType.ADVANCE:
-        breakdown.advance += split.amount;
-        break;
-      case PaymentType.EXTRA_PRINCIPAL:
-        breakdown.extraPrincipal += split.amount;
-        break;
+    case PaymentType.REGULAR:
+      breakdown.regular += split.amount;
+      break;
+    case PaymentType.CATCH_UP:
+      breakdown.catchUp += split.amount;
+      break;
+    case PaymentType.ADVANCE:
+      breakdown.advance += split.amount;
+      break;
+    case PaymentType.EXTRA_PRINCIPAL:
+      breakdown.extraPrincipal += split.amount;
+      break;
     }
   });
 
@@ -232,7 +232,7 @@ export function calculateEnhancedOutflowPeriodStatus(
   transactionSplits: TransactionSplitReference[],
   numberOfOccurrences: number = 0,
   numberOfOccurrencesPaid: number = 0,
-  frequency: string = 'MONTHLY'
+  frequency: string = "MONTHLY"
 ): EnhancedOutflowPeriodStatusResult {
   // Calculate basic status using existing function
   const status = calculateOutflowPeriodStatus(
@@ -292,17 +292,17 @@ function getFrequencyUnit(frequency: string): string {
   const freq = frequency.toUpperCase();
 
   switch (freq) {
-    case 'WEEKLY':
-      return 'weeks';
-    case 'BIWEEKLY':
-      return 'bi-weekly periods';
-    case 'SEMI_MONTHLY':
-      return 'semi-monthly periods';
-    case 'MONTHLY':
-      return 'months';
-    case 'ANNUALLY':
-      return 'annual periods';
-    default:
-      return 'occurrences';
+  case "WEEKLY":
+    return "weeks";
+  case "BIWEEKLY":
+    return "bi-weekly periods";
+  case "SEMI_MONTHLY":
+    return "semi-monthly periods";
+  case "MONTHLY":
+    return "months";
+  case "ANNUALLY":
+    return "annual periods";
+  default:
+    return "occurrences";
   }
 }

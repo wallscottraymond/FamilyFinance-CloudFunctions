@@ -5,4 +5,4 @@
  * helpers were deleted (they wrote the retired `user_summaries` + had no callers — Derive-Everywhere).
  */
 
-export * from './deleteOutflowPeriodSummary';
+export * from "./deleteOutflowPeriodSummary";

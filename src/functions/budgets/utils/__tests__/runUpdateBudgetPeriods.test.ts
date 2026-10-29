@@ -6,9 +6,9 @@
  * Verifies: current + future periods updated, historical preserved.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { runUpdateBudgetPeriods } from '../runUpdateBudgetPeriods';
-import { Budget, BudgetPeriodDocument, PeriodType } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { runUpdateBudgetPeriods } from "../runUpdateBudgetPeriods";
+import { Budget, BudgetPeriodDocument, PeriodType } from "../../../../types";
 
 // Mock Firestore
 const mockGet = jest.fn();
@@ -26,19 +26,19 @@ const mockFirestore = {
 
 // Helper to create mock budget
 const createMockBudget = (overrides: Partial<Budget> = {}): Budget => ({
-  id: 'budget-123',
-  userId: 'user-123',
+  id: "budget-123",
+  userId: "user-123",
   groupIds: [],
-  name: 'Test Budget',
-  description: 'Test description',
+  name: "Test Budget",
+  description: "Test description",
   amount: 500,
-  currency: 'USD',
-  categoryIds: ['cat-1', 'cat-2'],
-  period: 'monthly',
+  currency: "USD",
+  categoryIds: ["cat-1", "cat-2"],
+  period: "monthly",
   alertThreshold: 80,
   isActive: true,
   isOngoing: true,
-  budgetType: 'recurring',
+  budgetType: "recurring",
   createdAt: Timestamp.now(),
   updatedAt: Timestamp.now(),
   ...overrides
@@ -51,12 +51,12 @@ const createMockBudgetPeriod = (
   overrides: Partial<BudgetPeriodDocument> = {}
 ): BudgetPeriodDocument => ({
   id,
-  budgetId: 'budget-123',
-  budgetName: 'Test Budget',
-  periodId: '2025M04',
-  sourcePeriodId: '2025M04',
+  budgetId: "budget-123",
+  budgetName: "Test Budget",
+  periodId: "2025M04",
+  sourcePeriodId: "2025M04",
   periodType: PeriodType.MONTHLY,
-  periodStart: Timestamp.fromDate(new Date('2025-04-01')),
+  periodStart: Timestamp.fromDate(new Date("2025-04-01")),
   periodEnd: Timestamp.fromDate(periodEnd),
   allocatedAmount: 500,
   originalAmount: 500,
@@ -66,25 +66,25 @@ const createMockBudgetPeriod = (
   checklistItems: [],
   lastCalculated: Timestamp.now(),
   isActive: true,
-  userId: 'user-123',
+  userId: "user-123",
   groupIds: [],
   createdAt: Timestamp.now(),
   updatedAt: Timestamp.now(),
   ...overrides
 } as BudgetPeriodDocument);
 
-describe('runUpdateBudgetPeriods', () => {
-  const budgetId = 'budget-123';
+describe("runUpdateBudgetPeriods", () => {
+  const budgetId = "budget-123";
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     // Setup default mock chain for collection queries
     mockCollection.mockImplementation((collectionName: string) => {
-      if (collectionName === 'budget_periods') {
+      if (collectionName === "budget_periods") {
         return { where: mockWhere };
       }
-      if (collectionName === 'source_periods') {
+      if (collectionName === "source_periods") {
         return { doc: mockDoc };
       }
       return { where: mockWhere, doc: mockDoc };
@@ -103,20 +103,20 @@ describe('runUpdateBudgetPeriods', () => {
     mockDoc.mockReturnValue({
       get: jest.fn().mockResolvedValue({
         exists: true,
-        id: '2025M04',
+        id: "2025M04",
         data: () => ({
-          id: '2025M04',
-          periodType: 'monthly',
-          startDate: Timestamp.fromDate(new Date('2025-04-01')),
-          endDate: Timestamp.fromDate(new Date('2025-04-30')),
+          id: "2025M04",
+          periodType: "monthly",
+          startDate: Timestamp.fromDate(new Date("2025-04-01")),
+          endDate: Timestamp.fromDate(new Date("2025-04-30")),
           daysInPeriod: 30
         })
       })
     });
   });
 
-  describe('No Changes Detection', () => {
-    test('should return early when no relevant fields changed', async () => {
+  describe("No Changes Detection", () => {
+    test("should return early when no relevant fields changed", async () => {
       const budgetBefore = createMockBudget();
       const budgetAfter = createMockBudget();
 
@@ -134,19 +134,19 @@ describe('runUpdateBudgetPeriods', () => {
     });
   });
 
-  describe('Name Change Cascade', () => {
-    test('should detect name change and update current + future periods', async () => {
-      const budgetBefore = createMockBudget({ name: 'Old Name' });
-      const budgetAfter = createMockBudget({ name: 'New Name' });
+  describe("Name Change Cascade", () => {
+    test("should detect name change and update current + future periods", async () => {
+      const budgetBefore = createMockBudget({ name: "Old Name" });
+      const budgetAfter = createMockBudget({ name: "New Name" });
 
       // Mock future period (periodEnd >= today)
       const futurePeriodEnd = new Date();
       futurePeriodEnd.setMonth(futurePeriodEnd.getMonth() + 1);
 
       const mockPeriodDoc = {
-        id: 'period-1',
-        ref: { id: 'period-1' },
-        data: () => createMockBudgetPeriod('period-1', futurePeriodEnd)
+        id: "period-1",
+        ref: { id: "period-1" },
+        data: () => createMockBudgetPeriod("period-1", futurePeriodEnd)
       };
 
       mockGet.mockResolvedValue({
@@ -163,27 +163,27 @@ describe('runUpdateBudgetPeriods', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.fieldsUpdated).toContain('name');
+      expect(result.fieldsUpdated).toContain("name");
       expect(result.periodsQueried).toBe(1);
       expect(result.periodsUpdated).toBe(1);
       expect(mockUpdate).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ budgetName: 'New Name' })
+        expect.objectContaining({ budgetName: "New Name" })
       );
     });
 
-    test('should skip historical periods for name changes', async () => {
-      const budgetBefore = createMockBudget({ name: 'Old Name' });
-      const budgetAfter = createMockBudget({ name: 'New Name' });
+    test("should skip historical periods for name changes", async () => {
+      const budgetBefore = createMockBudget({ name: "Old Name" });
+      const budgetAfter = createMockBudget({ name: "New Name" });
 
       // Mock historical period (periodEnd < today)
       const historicalPeriodEnd = new Date();
       historicalPeriodEnd.setMonth(historicalPeriodEnd.getMonth() - 2);
 
       const mockHistoricalPeriod = {
-        id: 'period-old',
-        ref: { id: 'period-old' },
-        data: () => createMockBudgetPeriod('period-old', historicalPeriodEnd)
+        id: "period-old",
+        ref: { id: "period-old" },
+        data: () => createMockBudgetPeriod("period-old", historicalPeriodEnd)
       };
 
       mockGet.mockResolvedValue({
@@ -207,8 +207,8 @@ describe('runUpdateBudgetPeriods', () => {
     });
   });
 
-  describe('Amount Change Cascade', () => {
-    test('should recalculate allocatedAmount when budget amount changes', async () => {
+  describe("Amount Change Cascade", () => {
+    test("should recalculate allocatedAmount when budget amount changes", async () => {
       const budgetBefore = createMockBudget({ amount: 500 });
       const budgetAfter = createMockBudget({ amount: 750 });
 
@@ -217,9 +217,9 @@ describe('runUpdateBudgetPeriods', () => {
       futurePeriodEnd.setMonth(futurePeriodEnd.getMonth() + 1);
 
       const mockPeriodDoc = {
-        id: 'period-1',
-        ref: { id: 'period-1' },
-        data: () => createMockBudgetPeriod('period-1', futurePeriodEnd, {
+        id: "period-1",
+        ref: { id: "period-1" },
+        data: () => createMockBudgetPeriod("period-1", futurePeriodEnd, {
           spent: 100
         })
       };
@@ -238,7 +238,7 @@ describe('runUpdateBudgetPeriods', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.fieldsUpdated).toContain('amount');
+      expect(result.fieldsUpdated).toContain("amount");
       expect(result.periodsUpdated).toBe(1);
 
       // Verify allocatedAmount was updated
@@ -253,18 +253,18 @@ describe('runUpdateBudgetPeriods', () => {
     });
   });
 
-  describe('Multiple Field Changes', () => {
-    test('should handle multiple field changes in one update', async () => {
+  describe("Multiple Field Changes", () => {
+    test("should handle multiple field changes in one update", async () => {
       const budgetBefore = createMockBudget({
-        name: 'Old Name',
+        name: "Old Name",
         amount: 500,
-        description: 'Old desc',
+        description: "Old desc",
         alertThreshold: 80
       });
       const budgetAfter = createMockBudget({
-        name: 'New Name',
+        name: "New Name",
         amount: 750,
-        description: 'New desc',
+        description: "New desc",
         alertThreshold: 90
       });
 
@@ -273,9 +273,9 @@ describe('runUpdateBudgetPeriods', () => {
       futurePeriodEnd.setMonth(futurePeriodEnd.getMonth() + 1);
 
       const mockPeriodDoc = {
-        id: 'period-1',
-        ref: { id: 'period-1' },
-        data: () => createMockBudgetPeriod('period-1', futurePeriodEnd)
+        id: "period-1",
+        ref: { id: "period-1" },
+        data: () => createMockBudgetPeriod("period-1", futurePeriodEnd)
       };
 
       mockGet.mockResolvedValue({
@@ -292,18 +292,18 @@ describe('runUpdateBudgetPeriods', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.fieldsUpdated).toContain('name');
-      expect(result.fieldsUpdated).toContain('amount');
-      expect(result.fieldsUpdated).toContain('description');
-      expect(result.fieldsUpdated).toContain('alertThreshold');
+      expect(result.fieldsUpdated).toContain("name");
+      expect(result.fieldsUpdated).toContain("amount");
+      expect(result.fieldsUpdated).toContain("description");
+      expect(result.fieldsUpdated).toContain("alertThreshold");
       expect(result.fieldsUpdated.length).toBe(4);
     });
   });
 
-  describe('No Periods Found', () => {
-    test('should handle budget with no periods gracefully', async () => {
-      const budgetBefore = createMockBudget({ name: 'Old Name' });
-      const budgetAfter = createMockBudget({ name: 'New Name' });
+  describe("No Periods Found", () => {
+    test("should handle budget with no periods gracefully", async () => {
+      const budgetBefore = createMockBudget({ name: "Old Name" });
+      const budgetAfter = createMockBudget({ name: "New Name" });
 
       mockGet.mockResolvedValue({
         empty: true,
@@ -324,12 +324,12 @@ describe('runUpdateBudgetPeriods', () => {
     });
   });
 
-  describe('Error Handling', () => {
-    test('should capture errors without throwing', async () => {
-      const budgetBefore = createMockBudget({ name: 'Old Name' });
-      const budgetAfter = createMockBudget({ name: 'New Name' });
+  describe("Error Handling", () => {
+    test("should capture errors without throwing", async () => {
+      const budgetBefore = createMockBudget({ name: "Old Name" });
+      const budgetAfter = createMockBudget({ name: "New Name" });
 
-      mockGet.mockRejectedValue(new Error('Firestore error'));
+      mockGet.mockRejectedValue(new Error("Firestore error"));
 
       const result = await runUpdateBudgetPeriods(
         mockFirestore,
@@ -340,14 +340,14 @@ describe('runUpdateBudgetPeriods', () => {
 
       expect(result.success).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain('Firestore error');
+      expect(result.errors[0]).toContain("Firestore error");
     });
   });
 
-  describe('Mixed Historical and Future Periods', () => {
-    test('should update future periods and skip historical ones', async () => {
-      const budgetBefore = createMockBudget({ name: 'Old Name' });
-      const budgetAfter = createMockBudget({ name: 'New Name' });
+  describe("Mixed Historical and Future Periods", () => {
+    test("should update future periods and skip historical ones", async () => {
+      const budgetBefore = createMockBudget({ name: "Old Name" });
+      const budgetAfter = createMockBudget({ name: "New Name" });
 
       // Mock historical period
       const historicalPeriodEnd = new Date();
@@ -358,15 +358,15 @@ describe('runUpdateBudgetPeriods', () => {
       futurePeriodEnd.setMonth(futurePeriodEnd.getMonth() + 1);
 
       const mockHistoricalPeriod = {
-        id: 'period-old',
-        ref: { id: 'period-old' },
-        data: () => createMockBudgetPeriod('period-old', historicalPeriodEnd)
+        id: "period-old",
+        ref: { id: "period-old" },
+        data: () => createMockBudgetPeriod("period-old", historicalPeriodEnd)
       };
 
       const mockFuturePeriod = {
-        id: 'period-future',
-        ref: { id: 'period-future' },
-        data: () => createMockBudgetPeriod('period-future', futurePeriodEnd)
+        id: "period-future",
+        ref: { id: "period-future" },
+        data: () => createMockBudgetPeriod("period-future", futurePeriodEnd)
       };
 
       mockGet.mockResolvedValue({

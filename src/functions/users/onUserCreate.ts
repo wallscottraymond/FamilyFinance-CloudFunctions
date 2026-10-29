@@ -99,7 +99,7 @@ export const onUserCreate = functions.region("us-central1").runWith({
         defaultBudgetAlertThreshold: 80,
         enableSpendingLimits: false,
         budgetRolloverEnabled: true,
-        budgetRolloverStrategy: 'spread',
+        budgetRolloverStrategy: "spread",
         budgetRolloverSpreadPeriods: 3,
       } as FinancialSettings,
       security: {
@@ -119,10 +119,10 @@ export const onUserCreate = functions.region("us-central1").runWith({
     // Determine role based on environment
     // In dev/emulator mode, create users as ADMIN for easier testing
     // In production, create users as EDITOR (standard role)
-    const isDevMode = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV === 'development';
+    const isDevMode = process.env.FUNCTIONS_EMULATOR === "true" || process.env.NODE_ENV === "development";
     const userRole = isDevMode ? UserRole.ADMIN : UserRole.EDITOR;
 
-    console.log(`Creating user in ${isDevMode ? 'DEV MODE' : 'PRODUCTION'} - assigning role: ${userRole}`);
+    console.log(`Creating user in ${isDevMode ? "DEV MODE" : "PRODUCTION"} - assigning role: ${userRole}`);
 
     const userData: Omit<User, "id" | "createdAt" | "updatedAt"> = {
       email: userRecord.email || "",
@@ -173,18 +173,18 @@ export const onUserCreate = functions.region("us-central1").runWith({
         });
 
       // Mark user as initialized so frontend knows data is ready
-      await db.collection('users').doc(userRecord.uid).update({
+      await db.collection("users").doc(userRecord.uid).update({
         isInitialized: true,
         initializedAt: Timestamp.now()
       });
 
-      console.log(`✅ User ${userRecord.uid} initialization complete (budget: ${budgetId || 'failed'})`);
+      console.log(`✅ User ${userRecord.uid} initialization complete (budget: ${budgetId || "failed"})`);
 
     } catch (initError) {
       console.error(`❌ User initialization failed for ${userRecord.uid}:`, initError);
       // Still mark as initialized to prevent frontend from waiting forever
       // Individual features will handle missing data gracefully
-      await db.collection('users').doc(userRecord.uid).update({
+      await db.collection("users").doc(userRecord.uid).update({
         isInitialized: true,
         initializedAt: Timestamp.now()
       }).catch(() => {
@@ -204,14 +204,14 @@ export const onUserCreate = functions.region("us-central1").runWith({
       const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
 
       // Create period IDs for nested structure
-      const currentPeriodId = `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
-      const nextPeriodId = `${nextMonth.getFullYear()}-M${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
+      const currentPeriodId = `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+      const nextPeriodId = `${nextMonth.getFullYear()}-M${String(nextMonth.getMonth() + 1).padStart(2, "0")}`;
 
       const outflowSummaryExample = {
         ownerId: userRecord.uid,
-        ownerType: 'user' as const,
-        periodType: 'MONTHLY' as const,
-        resourceType: 'outflow' as const,
+        ownerType: "user" as const,
+        periodType: "MONTHLY" as const,
+        resourceType: "outflow" as const,
         windowStart,
         windowEnd,
         periods: {
@@ -272,14 +272,14 @@ export const onUserCreate = functions.region("us-central1").runWith({
       // Budget Summary Example with sample periods
       const budgetSummaryExample = {
         ownerId: userRecord.uid,
-        ownerType: 'user' as const,
-        periodType: 'MONTHLY' as const,
-        resourceType: 'budget' as const,
+        ownerType: "user" as const,
+        periodType: "MONTHLY" as const,
+        resourceType: "budget" as const,
         windowStart,
         windowEnd,
         periods: [
           {
-            periodId: `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, '0')}`,
+            periodId: `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, "0")}`,
             name: "Groceries Budget",
             budgetedAmount: 500.00,
             spentAmount: 342.50,
@@ -289,7 +289,7 @@ export const onUserCreate = functions.region("us-central1").runWith({
             isOverBudget: false
           },
           {
-            periodId: `${nextMonth.getFullYear()}-M${String(nextMonth.getMonth() + 1).padStart(2, '0')}`,
+            periodId: `${nextMonth.getFullYear()}-M${String(nextMonth.getMonth() + 1).padStart(2, "0")}`,
             name: "Dining Out Budget",
             budgetedAmount: 200.00,
             spentAmount: 0,
@@ -308,14 +308,14 @@ export const onUserCreate = functions.region("us-central1").runWith({
       // Income Summary Example with sample periods
       const incomeSummaryExample = {
         ownerId: userRecord.uid,
-        ownerType: 'user' as const,
-        periodType: 'MONTHLY' as const,
-        resourceType: 'income' as const,
+        ownerType: "user" as const,
+        periodType: "MONTHLY" as const,
+        resourceType: "income" as const,
         windowStart,
         windowEnd,
         periods: [
           {
-            periodId: `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, '0')}`,
+            periodId: `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, "0")}`,
             name: "Salary",
             expectedAmount: 5000.00,
             receivedAmount: 5000.00,
@@ -333,14 +333,14 @@ export const onUserCreate = functions.region("us-central1").runWith({
       // Goal Summary Example with sample periods
       const goalSummaryExample = {
         ownerId: userRecord.uid,
-        ownerType: 'user' as const,
-        periodType: 'MONTHLY' as const,
-        resourceType: 'goal' as const,
+        ownerType: "user" as const,
+        periodType: "MONTHLY" as const,
+        resourceType: "goal" as const,
         windowStart,
         windowEnd,
         periods: [
           {
-            periodId: `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, '0')}`,
+            periodId: `${currentMonth.getFullYear()}-M${String(currentMonth.getMonth() + 1).padStart(2, "0")}`,
             name: "Emergency Fund",
             targetAmount: 10000.00,
             currentAmount: 3500.00,
@@ -357,10 +357,10 @@ export const onUserCreate = functions.region("us-central1").runWith({
 
       // Create 4 root-level collections with properly typed example documents
       await Promise.all([
-        db.collection('outflow_summary').doc('example').set(outflowSummaryExample),
-        db.collection('budget_summary').doc('example').set(budgetSummaryExample),
-        db.collection('income_summary').doc('example').set(incomeSummaryExample),
-        db.collection('goal_summary').doc('example').set(goalSummaryExample)
+        db.collection("outflow_summary").doc("example").set(outflowSummaryExample),
+        db.collection("budget_summary").doc("example").set(budgetSummaryExample),
+        db.collection("income_summary").doc("example").set(incomeSummaryExample),
+        db.collection("goal_summary").doc("example").set(goalSummaryExample)
       ]);
 
       console.log(`✅ Created summary collections for user ${userRecord.uid}`);

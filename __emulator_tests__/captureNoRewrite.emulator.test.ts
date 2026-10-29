@@ -15,28 +15,28 @@
  * Run: firebase emulators:exec --only firestore --project demo-convert \
  *        "npx jest --selectProjects emulator --testPathPattern captureNoRewrite"
  */
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   NOW_MS, scenarioIds, scenarioMocks, scenarioRecurring, seedMonthlySourcePeriods, seedScenario,
-} from './helpers/captureScenario';
-import { startCounting } from './helpers/firestoreCounter';
+} from "./helpers/captureScenario";
+import { startCounting } from "./helpers/firestoreCounter";
 
 const mockSync = jest.fn();
 const mockRecurring = jest.fn();
-jest.mock('../src/functions/integrations/plaid', () => {
-  const actual = jest.requireActual('../src/functions/integrations/plaid');
+jest.mock("../src/functions/integrations/plaid", () => {
+  const actual = jest.requireActual("../src/functions/integrations/plaid");
   return {
     ...actual,
     sync_transactions: (...a: unknown[]) => mockSync(...a),
     fetch_recurring_transactions: (...a: unknown[]) => mockRecurring(...a),
-    fetch_plaid_accounts: async () => ({ accounts: [], item_id: 'x', request_id: 'r' }),
+    fetch_plaid_accounts: async () => ({ accounts: [], item_id: "x", request_id: "r" }),
     safe_fetch_liabilities: async () => null,
   };
 });
-jest.mock('../src/utils/encryption', () => {
-  const actual = jest.requireActual('../src/utils/encryption');
-  return { ...actual, decryptAccessToken: () => 'decrypted-token' };
+jest.mock("../src/utils/encryption", () => {
+  const actual = jest.requireActual("../src/utils/encryption");
+  return { ...actual, decryptAccessToken: () => "decrypted-token" };
 });
 
 let db: FirebaseFirestore.Firestore;
@@ -45,57 +45,57 @@ let sync_item_orchestrator: (ctx: unknown, input: unknown) => Promise<any>;
 let invalidate_flag_cache: () => void;
 
 beforeAll(async () => {
-  if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('emulator only (dev==prod)');
+  if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("emulator only (dev==prod)");
   jest.useFakeTimers({
     now: NOW_MS, advanceTimers: true,
-    doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    doNotFake: ["nextTick", "setImmediate", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask", "hrtime", "performance"],
   });
-  if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  if (!admin.apps.length) admin.initializeApp({ projectId: "family-budget-app-cb59b" });
   db = admin.firestore();
   /* eslint-disable @typescript-eslint/no-var-requires */
-  ({ sync_item_orchestrator } = require('../src/functions/orchestrators/plaid/sync_item.orchestrator'));
-  ({ invalidate_flag_cache } = require('../src/functions/infrastructure/feature_flags'));
+  ({ sync_item_orchestrator } = require("../src/functions/orchestrators/plaid/sync_item.orchestrator"));
+  ({ invalidate_flag_cache } = require("../src/functions/infrastructure/feature_flags"));
   /* eslint-enable @typescript-eslint/no-var-requires */
   await seedMonthlySourcePeriods(db, [[2037, 4], [2037, 5], [2037, 6], [2037, 7], [2037, 8], [2037, 9], [2037, 10], [2037, 11], [2037, 12], [2038, 1]]);
 }, 60000);
 afterAll(() => jest.useRealTimers());
 
-const NEW_FIELDS = ['captureRulesVersion', 'plaidIsActive', 'plaidInactiveAckAt', 'mergedIntoId', 'userFrequency', 'removalIntervals'];
+const NEW_FIELDS = ["captureRulesVersion", "plaidIsActive", "plaidInactiveAckAt", "mergedIntoId", "userFrequency", "removalIntervals"];
 
-describe('T1 — repeated syncs rewrite nothing (emulator)', () => {
-  it('5 syncs flag off + 5 flag on → 0 bill/income writes, 0 audit, 0 bumps; every new field kept', async () => {
-    const ids = scenarioIds('qznorw');
+describe("T1 — repeated syncs rewrite nothing (emulator)", () => {
+  it("5 syncs flag off + 5 flag on → 0 bill/income writes, 0 audit, 0 bumps; every new field kept", async () => {
+    const ids = scenarioIds("qznorw");
     await seedScenario(db, ids);
     const mocks = scenarioMocks(ids);
     mockSync.mockImplementation(mocks.sync);
     mockRecurring.mockResolvedValue(scenarioRecurring(ids));
-    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').delete();
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").delete();
     invalidate_flag_cache();
     const sync = (n: string) =>
-      sync_item_orchestrator({ trace_id: `qznorw_${n}`, span_id: 's' }, {
-        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: 'test',
+      sync_item_orchestrator({ trace_id: `qznorw_${n}`, span_id: "s" }, {
+        item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test",
       });
-    await sync('first');
+    await sync("first");
 
     // Phase-1 states on existing records (what the planner / answers leave behind).
-    const o = (s: string) => db.collection('outflows').doc(ids.streams[s]);
-    const i = (s: string) => db.collection('inflows').doc(ids.streams[s]);
+    const o = (s: string) => db.collection("outflows").doc(ids.streams[s]);
+    const i = (s: string) => db.collection("inflows").doc(ids.streams[s]);
     const ack = Timestamp.fromMillis(NOW_MS - 86400000);
     const end_from = Date.UTC(2037, 10, 1);
     /* eslint-disable @typescript-eslint/naming-convention */
-    await o('SPOT').update({ captureRulesVersion: 2, plaidIsActive: true });
-    await o('CCPAY').update({ captureRulesVersion: 2, plaidIsActive: true, plaidInactiveAckAt: ack });
-    await o('XFER').update({ mergedIntoId: 'some_other_bill' });
-    await o('AVANT').update({
-      captureRulesVersion: 2, plaidIsActive: true, userFrequency: 'monthly',
-      removedByUser: true, removalIntervals: [{ fromMs: end_from, toMs: null, mode: 'going_forward' }],
+    await o("SPOT").update({ captureRulesVersion: 2, plaidIsActive: true });
+    await o("CCPAY").update({ captureRulesVersion: 2, plaidIsActive: true, plaidInactiveAckAt: ack });
+    await o("XFER").update({ mergedIntoId: "some_other_bill" });
+    await o("AVANT").update({
+      captureRulesVersion: 2, plaidIsActive: true, userFrequency: "monthly",
+      removedByUser: true, removalIntervals: [{ fromMs: end_from, toMs: null, mode: "going_forward" }],
     });
-    await i('PAY').update({ captureRulesVersion: 2, plaidIsActive: true });
+    await i("PAY").update({ captureRulesVersion: 2, plaidIsActive: true });
     /* eslint-enable @typescript-eslint/naming-convention */
     const snapshot = async () => {
       const out: Record<string, Record<string, unknown>> = {};
-      for (const s of ['SPOT', 'CCPAY', 'XFER', 'AVANT', 'SUNBIT', 'GYM']) out[s] = (await o(s).get()).data()!;
-      out.PAY = (await i('PAY').get()).data()!;
+      for (const s of ["SPOT", "CCPAY", "XFER", "AVANT", "SUNBIT", "GYM"]) out[s] = (await o(s).get()).data()!;
+      out.PAY = (await i("PAY").get()).data()!;
       return out;
     };
     const before = await snapshot();
@@ -118,13 +118,13 @@ describe('T1 — repeated syncs rewrite nothing (emulator)', () => {
     };
     for (let n = 0; n < 5; n++) await run(`off${n}`);
 
-    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? '_feature_flags').doc('convert_to_recurring_v1').set({
+    await db.collection(process.env.FEATURE_FLAGS_COLLECTION_OVERRIDE ?? "_feature_flags").doc("convert_to_recurring_v1").set({
       enabled: true, enabled_user_ids: [ids.userId], enabled_group_ids: [], rollout_percentage: 0,
     });
     invalidate_flag_cache();
     for (let n = 0; n < 5; n++) await run(`on${n}`);
 
-    console.log('[T1] per-run writes:', JSON.stringify(per_run));
+    console.log("[T1] per-run writes:", JSON.stringify(per_run));
     for (const r of per_run) {
       expect({ ...r, reads: 0 }).toEqual({ outflows: 0, inflows: 0, audit: 0, bumps: 0, periods: 0, transactions: 0, reads: 0 });
     }

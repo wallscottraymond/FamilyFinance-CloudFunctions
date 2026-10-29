@@ -9,7 +9,7 @@
  * - isPeriodInPast: Period timing checks
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 import {
   getEffectiveRolloverSettings,
   calculateRolloverForPeriod,
@@ -17,24 +17,24 @@ import {
   findPreviousPeriodOfSameType,
   isPeriodInPast,
   ResolvedRolloverSettings,
-} from '../rolloverCalculation';
-import { Budget, BudgetPeriodDocument, PeriodType, FinancialSettings } from '../../../../types';
+} from "../rolloverCalculation";
+import { Budget, BudgetPeriodDocument, PeriodType, FinancialSettings } from "../../../../types";
 
 // Helper to create mock budget
 const createMockBudget = (overrides: Partial<Budget> = {}): Budget => ({
-  id: 'budget-123',
-  userId: 'user-123',
+  id: "budget-123",
+  userId: "user-123",
   groupIds: [],
-  name: 'Test Budget',
-  description: 'Test description',
+  name: "Test Budget",
+  description: "Test description",
   amount: 500,
-  currency: 'USD',
-  categoryIds: ['cat-1'],
-  period: 'monthly',
+  currency: "USD",
+  categoryIds: ["cat-1"],
+  period: "monthly",
   alertThreshold: 80,
   isActive: true,
   isOngoing: true,
-  budgetType: 'recurring',
+  budgetType: "recurring",
   createdAt: Timestamp.now(),
   updatedAt: Timestamp.now(),
   ...overrides,
@@ -42,14 +42,14 @@ const createMockBudget = (overrides: Partial<Budget> = {}): Budget => ({
 
 // Helper to create mock budget period
 const createMockPeriod = (overrides: Partial<BudgetPeriodDocument> = {}): BudgetPeriodDocument => ({
-  id: 'period-123',
-  budgetId: 'budget-456',
-  budgetName: 'Test Budget',
-  periodId: '2025M01',
-  sourcePeriodId: '2025M01',
+  id: "period-123",
+  budgetId: "budget-456",
+  budgetName: "Test Budget",
+  periodId: "2025M01",
+  sourcePeriodId: "2025M01",
   periodType: PeriodType.MONTHLY,
-  periodStart: Timestamp.fromDate(new Date('2025-01-01')),
-  periodEnd: Timestamp.fromDate(new Date('2025-01-31')),
+  periodStart: Timestamp.fromDate(new Date("2025-01-01")),
+  periodEnd: Timestamp.fromDate(new Date("2025-01-31")),
   allocatedAmount: 500,
   originalAmount: 500,
   spent: 0,
@@ -58,63 +58,63 @@ const createMockPeriod = (overrides: Partial<BudgetPeriodDocument> = {}): Budget
   checklistItems: [],
   lastCalculated: Timestamp.now(),
   isActive: true,
-  userId: 'user-123',
+  userId: "user-123",
   groupIds: [],
   createdAt: Timestamp.now(),
   updatedAt: Timestamp.now(),
   ...overrides,
 });
 
-describe('getEffectiveRolloverSettings', () => {
-  describe('default values', () => {
-    test('should return defaults when no settings provided', () => {
+describe("getEffectiveRolloverSettings", () => {
+  describe("default values", () => {
+    test("should return defaults when no settings provided", () => {
       const budget = createMockBudget();
       const result = getEffectiveRolloverSettings(budget);
 
       expect(result.enabled).toBe(true);
-      expect(result.strategy).toBe('spread');
+      expect(result.strategy).toBe("spread");
       expect(result.spreadPeriods).toBe(3);
     });
   });
 
-  describe('global user settings', () => {
-    test('should use user financial settings when budget has no overrides', () => {
+  describe("global user settings", () => {
+    test("should use user financial settings when budget has no overrides", () => {
       const budget = createMockBudget();
       const userSettings: Partial<FinancialSettings> = {
         budgetRolloverEnabled: false,
-        budgetRolloverStrategy: 'immediate',
+        budgetRolloverStrategy: "immediate",
         budgetRolloverSpreadPeriods: 5,
       };
 
       const result = getEffectiveRolloverSettings(budget, userSettings);
 
       expect(result.enabled).toBe(false);
-      expect(result.strategy).toBe('immediate');
+      expect(result.strategy).toBe("immediate");
       expect(result.spreadPeriods).toBe(5);
     });
   });
 
-  describe('per-budget overrides', () => {
-    test('should use budget settings over user settings', () => {
+  describe("per-budget overrides", () => {
+    test("should use budget settings over user settings", () => {
       const budget = createMockBudget({
         rolloverEnabled: true,
-        rolloverStrategy: 'spread',
+        rolloverStrategy: "spread",
         rolloverSpreadPeriods: 2,
       });
       const userSettings: Partial<FinancialSettings> = {
         budgetRolloverEnabled: false,
-        budgetRolloverStrategy: 'immediate',
+        budgetRolloverStrategy: "immediate",
         budgetRolloverSpreadPeriods: 5,
       };
 
       const result = getEffectiveRolloverSettings(budget, userSettings);
 
       expect(result.enabled).toBe(true);
-      expect(result.strategy).toBe('spread');
+      expect(result.strategy).toBe("spread");
       expect(result.spreadPeriods).toBe(2);
     });
 
-    test('should allow budget to explicitly disable rollover', () => {
+    test("should allow budget to explicitly disable rollover", () => {
       const budget = createMockBudget({
         rolloverEnabled: false,
       });
@@ -128,8 +128,8 @@ describe('getEffectiveRolloverSettings', () => {
     });
   });
 
-  describe('spread periods validation', () => {
-    test('should cap spread periods at 6', () => {
+  describe("spread periods validation", () => {
+    test("should cap spread periods at 6", () => {
       const budget = createMockBudget({
         rolloverSpreadPeriods: 10,
       });
@@ -139,7 +139,7 @@ describe('getEffectiveRolloverSettings', () => {
       expect(result.spreadPeriods).toBe(6);
     });
 
-    test('should enforce minimum of 1 spread period', () => {
+    test("should enforce minimum of 1 spread period", () => {
       const budget = createMockBudget({
         rolloverSpreadPeriods: 0,
       });
@@ -149,7 +149,7 @@ describe('getEffectiveRolloverSettings', () => {
       expect(result.spreadPeriods).toBe(1);
     });
 
-    test('should handle negative spread periods', () => {
+    test("should handle negative spread periods", () => {
       const budget = createMockBudget({
         rolloverSpreadPeriods: -5,
       });
@@ -161,30 +161,30 @@ describe('getEffectiveRolloverSettings', () => {
   });
 });
 
-describe('calculateRolloverForPeriod', () => {
+describe("calculateRolloverForPeriod", () => {
   const enabledSettings: ResolvedRolloverSettings = {
     enabled: true,
-    strategy: 'immediate',
+    strategy: "immediate",
     spreadPeriods: 3,
   };
 
   const disabledSettings: ResolvedRolloverSettings = {
     enabled: false,
-    strategy: 'immediate',
+    strategy: "immediate",
     spreadPeriods: 3,
   };
 
   const spreadSettings: ResolvedRolloverSettings = {
     enabled: true,
-    strategy: 'spread',
+    strategy: "spread",
     spreadPeriods: 3,
   };
 
-  describe('disabled rollover', () => {
-    test('should return zero rollover when disabled', () => {
+  describe("disabled rollover", () => {
+    test("should return zero rollover when disabled", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         spent: 400,
         allocatedAmount: 500,
       });
@@ -198,8 +198,8 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('no previous period', () => {
-    test('should return zero rollover for first period', () => {
+  describe("no previous period", () => {
+    test("should return zero rollover for first period", () => {
       const currentPeriod = createMockPeriod();
 
       const result = calculateRolloverForPeriod(currentPeriod, null, enabledSettings);
@@ -209,11 +209,11 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('underspend (surplus)', () => {
-    test('should carry forward positive surplus', () => {
+  describe("underspend (surplus)", () => {
+    test("should carry forward positive surplus", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 450,
       });
@@ -221,15 +221,15 @@ describe('calculateRolloverForPeriod', () => {
       const result = calculateRolloverForPeriod(currentPeriod, previousPeriod, enabledSettings);
 
       expect(result.rolledOverAmount).toBe(50);
-      expect(result.rolledOverFromPeriodId).toBe('prev-period');
+      expect(result.rolledOverFromPeriodId).toBe("prev-period");
       expect(result.pendingRolloverDeduction).toBe(0);
       expect(result.pendingRolloverPeriods).toBe(0);
     });
 
-    test('should handle zero spending (full surplus)', () => {
+    test("should handle zero spending (full surplus)", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 0,
       });
@@ -239,10 +239,10 @@ describe('calculateRolloverForPeriod', () => {
       expect(result.rolledOverAmount).toBe(500);
     });
 
-    test('should include previous rollover in surplus calculation', () => {
+    test("should include previous rollover in surplus calculation", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         rolledOverAmount: 100, // Had +100 rollover
         spent: 400, // Spent 400 of effective 600
@@ -255,11 +255,11 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('overspend (deficit) - immediate strategy', () => {
-    test('should apply full deficit immediately', () => {
+  describe("overspend (deficit) - immediate strategy", () => {
+    test("should apply full deficit immediately", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 600,
       });
@@ -271,10 +271,10 @@ describe('calculateRolloverForPeriod', () => {
       expect(result.pendingRolloverPeriods).toBe(0);
     });
 
-    test('should handle large overspend', () => {
+    test("should handle large overspend", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 1000,
       });
@@ -285,11 +285,11 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('overspend (deficit) - spread strategy', () => {
-    test('should spread deficit across multiple periods', () => {
+  describe("overspend (deficit) - spread strategy", () => {
+    test("should spread deficit across multiple periods", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 800, // Overspent by 300
       });
@@ -302,17 +302,17 @@ describe('calculateRolloverForPeriod', () => {
       expect(result.pendingRolloverPeriods).toBe(2);
     });
 
-    test('should handle exact division in spread', () => {
+    test("should handle exact division in spread", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 650, // Overspent by 150
       });
 
       const settings: ResolvedRolloverSettings = {
         enabled: true,
-        strategy: 'spread',
+        strategy: "spread",
         spreadPeriods: 3,
       };
 
@@ -325,11 +325,11 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('continuing spread from prior periods', () => {
-    test('should add prior pending deduction to current rollover', () => {
+  describe("continuing spread from prior periods", () => {
+    test("should add prior pending deduction to current rollover", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 500, // No surplus/deficit this period
         pendingRolloverDeduction: 200, // Prior spread still active
@@ -344,10 +344,10 @@ describe('calculateRolloverForPeriod', () => {
       expect(result.pendingRolloverPeriods).toBe(1);
     });
 
-    test('should combine new overspend with prior spread', () => {
+    test("should combine new overspend with prior spread", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         spent: 600, // Overspent by 100 this period
         pendingRolloverDeduction: 150, // Prior spread
@@ -363,22 +363,22 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('modified amounts', () => {
-    test('ignores a synced copy of another period type\'s override (X10)', () => {
+  describe("modified amounts", () => {
+    test("ignores a synced copy of another period type's override (X10)", () => {
       const result = calculateRolloverForPeriod(
         createMockPeriod(),
         createMockPeriod({
-          id: 'prev-period', allocatedAmount: 500, spent: 500,
-          modifiedAmount: 150, isModified: true, modifiedAmountSyncedFrom: 'week',
+          id: "prev-period", allocatedAmount: 500, spent: 500,
+          modifiedAmount: 150, isModified: true, modifiedAmountSyncedFrom: "week",
         } as never),
         enabledSettings
       );
       expect(result.rolledOverAmount).toBe(0); // 500 − 500, not 150 − 500
     });
-    test('should use modifiedAmount when present', () => {
+    test("should use modifiedAmount when present", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         modifiedAmount: 600, // User increased budget ("This Period Only" sets both fields)
         isModified: true,
@@ -392,11 +392,11 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('negative rollover from previous period', () => {
-    test('should include negative rollover in effective amount', () => {
+  describe("negative rollover from previous period", () => {
+    test("should include negative rollover in effective amount", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 500,
         rolledOverAmount: -100, // Had -100 rollover from before
         spent: 450, // Spent 450 of effective 400
@@ -409,18 +409,18 @@ describe('calculateRolloverForPeriod', () => {
     });
   });
 
-  describe('rounding', () => {
-    test('should round to 2 decimal places', () => {
+  describe("rounding", () => {
+    test("should round to 2 decimal places", () => {
       const currentPeriod = createMockPeriod();
       const previousPeriod = createMockPeriod({
-        id: 'prev-period',
+        id: "prev-period",
         allocatedAmount: 100,
         spent: 133, // Overspent by 33
       });
 
       const settings: ResolvedRolloverSettings = {
         enabled: true,
-        strategy: 'spread',
+        strategy: "spread",
         spreadPeriods: 3,
       };
 
@@ -432,8 +432,8 @@ describe('calculateRolloverForPeriod', () => {
   });
 });
 
-describe('calculateEffectiveRemaining', () => {
-  test('should calculate remaining without rollover', () => {
+describe("calculateEffectiveRemaining", () => {
+  test("should calculate remaining without rollover", () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       spent: 300,
@@ -444,7 +444,7 @@ describe('calculateEffectiveRemaining', () => {
     expect(result).toBe(200);
   });
 
-  test('should include positive rollover in remaining', () => {
+  test("should include positive rollover in remaining", () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       rolledOverAmount: 100,
@@ -456,7 +456,7 @@ describe('calculateEffectiveRemaining', () => {
     expect(result).toBe(300); // 500 + 100 - 300
   });
 
-  test('should include negative rollover in remaining', () => {
+  test("should include negative rollover in remaining", () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       rolledOverAmount: -200,
@@ -468,7 +468,7 @@ describe('calculateEffectiveRemaining', () => {
     expect(result).toBe(0); // 500 - 200 - 300
   });
 
-  test('should allow negative remaining', () => {
+  test("should allow negative remaining", () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       rolledOverAmount: -300,
@@ -480,7 +480,7 @@ describe('calculateEffectiveRemaining', () => {
     expect(result).toBe(-100); // 500 - 300 - 300
   });
 
-  test('should use modifiedAmount when present', () => {
+  test("should use modifiedAmount when present", () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       modifiedAmount: 600,
@@ -494,7 +494,7 @@ describe('calculateEffectiveRemaining', () => {
     expect(result).toBe(250); // 600 + 50 - 400
   });
 
-  test('should handle undefined spent', () => {
+  test("should handle undefined spent", () => {
     const period = createMockPeriod({
       allocatedAmount: 500,
       spent: undefined,
@@ -506,17 +506,17 @@ describe('calculateEffectiveRemaining', () => {
   });
 });
 
-describe('findPreviousPeriodOfSameType', () => {
-  const jan2025 = Timestamp.fromDate(new Date('2025-01-01'));
-  const jan2025End = Timestamp.fromDate(new Date('2025-01-31'));
-  const feb2025 = Timestamp.fromDate(new Date('2025-02-01'));
-  const feb2025End = Timestamp.fromDate(new Date('2025-02-28'));
-  const mar2025 = Timestamp.fromDate(new Date('2025-03-01'));
-  const mar2025End = Timestamp.fromDate(new Date('2025-03-31'));
+describe("findPreviousPeriodOfSameType", () => {
+  const jan2025 = Timestamp.fromDate(new Date("2025-01-01"));
+  const jan2025End = Timestamp.fromDate(new Date("2025-01-31"));
+  const feb2025 = Timestamp.fromDate(new Date("2025-02-01"));
+  const feb2025End = Timestamp.fromDate(new Date("2025-02-28"));
+  const mar2025 = Timestamp.fromDate(new Date("2025-03-01"));
+  const mar2025End = Timestamp.fromDate(new Date("2025-03-31"));
 
-  test('should find previous period of same type', () => {
+  test("should find previous period of same type", () => {
     const currentPeriod = createMockPeriod({
-      id: 'feb-period',
+      id: "feb-period",
       periodType: PeriodType.MONTHLY,
       periodStart: feb2025,
       periodEnd: feb2025End,
@@ -524,7 +524,7 @@ describe('findPreviousPeriodOfSameType', () => {
 
     const periods = [
       createMockPeriod({
-        id: 'jan-period',
+        id: "jan-period",
         periodType: PeriodType.MONTHLY,
         periodStart: jan2025,
         periodEnd: jan2025End,
@@ -534,12 +534,12 @@ describe('findPreviousPeriodOfSameType', () => {
 
     const result = findPreviousPeriodOfSameType(periods, currentPeriod);
 
-    expect(result?.id).toBe('jan-period');
+    expect(result?.id).toBe("jan-period");
   });
 
-  test('should return null when no previous period exists', () => {
+  test("should return null when no previous period exists", () => {
     const currentPeriod = createMockPeriod({
-      id: 'jan-period',
+      id: "jan-period",
       periodType: PeriodType.MONTHLY,
       periodStart: jan2025,
       periodEnd: jan2025End,
@@ -550,9 +550,9 @@ describe('findPreviousPeriodOfSameType', () => {
     expect(result).toBeNull();
   });
 
-  test('should ignore periods of different types', () => {
+  test("should ignore periods of different types", () => {
     const currentPeriod = createMockPeriod({
-      id: 'monthly-feb',
+      id: "monthly-feb",
       periodType: PeriodType.MONTHLY,
       periodStart: feb2025,
       periodEnd: feb2025End,
@@ -560,10 +560,10 @@ describe('findPreviousPeriodOfSameType', () => {
 
     const periods = [
       createMockPeriod({
-        id: 'weekly-jan',
+        id: "weekly-jan",
         periodType: PeriodType.WEEKLY,
         periodStart: jan2025,
-        periodEnd: Timestamp.fromDate(new Date('2025-01-07')),
+        periodEnd: Timestamp.fromDate(new Date("2025-01-07")),
       }),
       currentPeriod,
     ];
@@ -573,9 +573,9 @@ describe('findPreviousPeriodOfSameType', () => {
     expect(result).toBeNull();
   });
 
-  test('should return most recent previous period', () => {
+  test("should return most recent previous period", () => {
     const currentPeriod = createMockPeriod({
-      id: 'mar-period',
+      id: "mar-period",
       periodType: PeriodType.MONTHLY,
       periodStart: mar2025,
       periodEnd: mar2025End,
@@ -583,13 +583,13 @@ describe('findPreviousPeriodOfSameType', () => {
 
     const periods = [
       createMockPeriod({
-        id: 'jan-period',
+        id: "jan-period",
         periodType: PeriodType.MONTHLY,
         periodStart: jan2025,
         periodEnd: jan2025End,
       }),
       createMockPeriod({
-        id: 'feb-period',
+        id: "feb-period",
         periodType: PeriodType.MONTHLY,
         periodStart: feb2025,
         periodEnd: feb2025End,
@@ -599,12 +599,12 @@ describe('findPreviousPeriodOfSameType', () => {
 
     const result = findPreviousPeriodOfSameType(periods, currentPeriod);
 
-    expect(result?.id).toBe('feb-period');
+    expect(result?.id).toBe("feb-period");
   });
 
-  test('should not include current period as previous', () => {
+  test("should not include current period as previous", () => {
     const currentPeriod = createMockPeriod({
-      id: 'current',
+      id: "current",
       periodType: PeriodType.MONTHLY,
       periodStart: jan2025,
       periodEnd: jan2025End,
@@ -616,8 +616,8 @@ describe('findPreviousPeriodOfSameType', () => {
   });
 });
 
-describe('isPeriodInPast', () => {
-  test('should return true for period in past', () => {
+describe("isPeriodInPast", () => {
+  test("should return true for period in past", () => {
     const pastDate = new Date();
     pastDate.setDate(pastDate.getDate() - 10);
 
@@ -630,7 +630,7 @@ describe('isPeriodInPast', () => {
     expect(result).toBe(true);
   });
 
-  test('should return false for current period', () => {
+  test("should return false for current period", () => {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 10);
 
@@ -643,7 +643,7 @@ describe('isPeriodInPast', () => {
     expect(result).toBe(false);
   });
 
-  test('should return false for period ending today', () => {
+  test("should return false for period ending today", () => {
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 

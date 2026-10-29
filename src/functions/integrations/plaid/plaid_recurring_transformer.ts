@@ -238,19 +238,19 @@ export function map_plaid_frequency_to_app(
   const freq = String(plaid_frequency).toUpperCase();
 
   switch (freq) {
-    case "WEEKLY":
-      return "weekly";
-    case "BIWEEKLY":
-      return "biweekly";
-    case "SEMI_MONTHLY":
-      return "semimonthly";
-    case "MONTHLY":
-      return "monthly";
-    case "ANNUALLY":
-      return "yearly";
-    case "UNKNOWN":
-    default:
-      return "monthly"; // Default to monthly for unknown
+  case "WEEKLY":
+    return "weekly";
+  case "BIWEEKLY":
+    return "biweekly";
+  case "SEMI_MONTHLY":
+    return "semimonthly";
+  case "MONTHLY":
+    return "monthly";
+  case "ANNUALLY":
+    return "yearly";
+  case "UNKNOWN":
+  default:
+    return "monthly"; // Default to monthly for unknown
   }
 }
 
@@ -634,25 +634,25 @@ export function calculate_next_due_date(
   const next = new Date(last_date);
 
   switch (frequency) {
-    case "weekly":
-      next.setDate(next.getDate() + 7);
-      break;
-    case "biweekly":
-      next.setDate(next.getDate() + 14);
-      break;
-    case "semimonthly":
-      next.setDate(next.getDate() + 15);
-      break;
-    case "monthly":
-      next.setMonth(next.getMonth() + 1);
-      break;
-    case "yearly":
-      next.setFullYear(next.getFullYear() + 1);
-      break;
-    case "unknown":
-    default:
-      next.setMonth(next.getMonth() + 1);
-      break;
+  case "weekly":
+    next.setDate(next.getDate() + 7);
+    break;
+  case "biweekly":
+    next.setDate(next.getDate() + 14);
+    break;
+  case "semimonthly":
+    next.setDate(next.getDate() + 15);
+    break;
+  case "monthly":
+    next.setMonth(next.getMonth() + 1);
+    break;
+  case "yearly":
+    next.setFullYear(next.getFullYear() + 1);
+    break;
+  case "unknown":
+  default:
+    next.setMonth(next.getMonth() + 1);
+    break;
   }
 
   return next;

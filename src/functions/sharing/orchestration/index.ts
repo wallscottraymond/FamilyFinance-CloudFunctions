@@ -2,4 +2,4 @@
  * Sharing Orchestration Module Exports
  */
 
-export * from './triggers';
+export * from "./triggers";

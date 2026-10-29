@@ -1,5 +1,5 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { getFirestore } from 'firebase-admin/firestore';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { getFirestore } from "firebase-admin/firestore";
 
 export const uploadCategories = onCall(async (request) => {
   const categories = [
@@ -431,14 +431,14 @@ export const uploadCategories = onCall(async (request) => {
     const batch = db.batch();
 
     categories.forEach((category) => {
-      const categoryRef = db.collection('categories').doc(category.name);
+      const categoryRef = db.collection("categories").doc(category.name);
       batch.set(categoryRef, category);
     });
 
     await batch.commit();
     return { success: true, count: categories.length };
   } catch (error) {
-    console.error('Error uploading categories:', error);
-    throw new HttpsError('internal', 'Failed to upload categories');
+    console.error("Error uploading categories:", error);
+    throw new HttpsError("internal", "Failed to upload categories");
   }
 });

@@ -17,19 +17,19 @@
  * 6. Direct deletion → auto-recreation
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
 // Initialize Firebase Admin for emulator
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: 'family-budget-app-cb59b'
+    projectId: "family-budget-app-cb59b"
   });
 }
 
 // Point to emulator
-process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
-process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
+process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "localhost:9099";
 
 const db = admin.firestore();
 const auth = admin.auth();
@@ -38,7 +38,7 @@ const auth = admin.auth();
 // Auth + Functions emulators (signup trigger), not the Firestore-only emulator run, and predates
 // per-period Everything Else budgets (one EE per signup → now one per cadence). Finding F6: rewrite
 // the EE lifecycle (create on signup, deletion guard, recreation) as orchestrator-level tests.
-describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
+describe.skip("Everything Else Budget - Emulator E2E Tests", () => {
   let testUserId: string;
   let testUserEmail: string;
   let everythingElseBudgetId: string;
@@ -48,7 +48,7 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
     testUserEmail = `test-${Date.now()}@example.com`;
     const userRecord = await auth.createUser({
       email: testUserEmail,
-      password: 'testpassword123',
+      password: "testpassword123",
       emailVerified: true
     });
     testUserId = userRecord.uid;
@@ -62,20 +62,20 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       await auth.deleteUser(testUserId);
       console.log(`🗑️ Cleaned up test user: ${testUserId}`);
     } catch (error) {
-      console.error('Cleanup error:', error);
+      console.error("Cleanup error:", error);
     }
   });
 
-  describe('1. User Signup Integration', () => {
-    test('should create "everything else" budget on user signup', async () => {
+  describe("1. User Signup Integration", () => {
+    test("should create \"everything else\" budget on user signup", async () => {
       // Simulate user profile creation
-      await db.collection('users').doc(testUserId).set({
+      await db.collection("users").doc(testUserId).set({
         email: testUserEmail,
-        displayName: 'Test User',
+        displayName: "Test User",
         isActive: true,
-        role: 'standard_user',
+        role: "standard_user",
         preferences: {
-          currency: 'USD'
+          currency: "USD"
         },
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now()
@@ -85,9 +85,9 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Query for "everything else" budget
-      const budgetsQuery = await db.collection('budgets')
-        .where('userId', '==', testUserId)
-        .where('isSystemEverythingElse', '==', true)
+      const budgetsQuery = await db.collection("budgets")
+        .where("userId", "==", testUserId)
+        .where("isSystemEverythingElse", "==", true)
         .get();
 
       expect(budgetsQuery.empty).toBe(false);
@@ -97,11 +97,11 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       everythingElseBudgetId = budgetsQuery.docs[0].id;
 
       // Verify budget configuration
-      expect(budget.name).toBe('Everything Else');
+      expect(budget.name).toBe("Everything Else");
       expect(budget.isSystemEverythingElse).toBe(true);
       expect(budget.amount).toBe(0);
       expect(budget.categoryIds).toEqual([]);
-      expect(budget.budgetType).toBe('recurring');
+      expect(budget.budgetType).toBe("recurring");
       expect(budget.isOngoing).toBe(true);
       expect(budget.isActive).toBe(true);
       expect(budget.userId).toBe(testUserId);
@@ -111,20 +111,20 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
     });
   });
 
-  describe('2. Transaction Matching', () => {
-    test('should assign unmatched transaction to "everything else" budget', async () => {
+  describe("2. Transaction Matching", () => {
+    test("should assign unmatched transaction to \"everything else\" budget", async () => {
       // Create a transaction without a matching budget
-      const transactionRef = await db.collection('transactions').add({
+      const transactionRef = await db.collection("transactions").add({
         userId: testUserId,
         groupIds: [],
         isActive: true,
         amount: 50,
-        description: 'Unmatched purchase',
+        description: "Unmatched purchase",
         date: Timestamp.now(),
-        status: 'approved',
-        type: 'expense',
+        status: "approved",
+        type: "expense",
         splits: [{
-          budgetId: 'unassigned',
+          budgetId: "unassigned",
           amount: 50,
           createdAt: Timestamp.now()
         }],
@@ -135,11 +135,11 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
           isPrivate: true
         },
         categories: {
-          primary: 'other',
+          primary: "other",
           tags: []
         },
         metadata: {
-          source: 'manual',
+          source: "manual",
           createdBy: testUserId
         },
         relationships: {
@@ -159,21 +159,21 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       // Verify split was assigned to "everything else" budget
       expect(transaction?.splits[0].budgetId).toBe(everythingElseBudgetId);
 
-      console.log(`✅ Transaction assigned to "everything else" budget`);
+      console.log("✅ Transaction assigned to \"everything else\" budget");
     });
 
-    test('should assign to regular budget first if match exists', async () => {
+    test("should assign to regular budget first if match exists", async () => {
       // Create a regular budget
-      const regularBudgetRef = await db.collection('budgets').add({
+      const regularBudgetRef = await db.collection("budgets").add({
         userId: testUserId,
         groupIds: [],
         isActive: true,
-        name: 'Groceries',
+        name: "Groceries",
         amount: 500,
-        categoryIds: ['food'],
-        budgetType: 'recurring',
+        categoryIds: ["food"],
+        budgetType: "recurring",
         isOngoing: true,
-        startDate: Timestamp.fromDate(new Date('2025-01-01')),
+        startDate: Timestamp.fromDate(new Date("2025-01-01")),
         isSystemEverythingElse: false,
         createdBy: testUserId,
         createdAt: Timestamp.now(),
@@ -183,17 +183,17 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       const regularBudgetId = regularBudgetRef.id;
 
       // Create transaction that should match regular budget
-      const transactionRef = await db.collection('transactions').add({
+      const transactionRef = await db.collection("transactions").add({
         userId: testUserId,
         groupIds: [],
         isActive: true,
         amount: 25,
-        description: 'Grocery purchase',
-        date: Timestamp.fromDate(new Date('2025-01-15')),
-        status: 'approved',
-        type: 'expense',
+        description: "Grocery purchase",
+        date: Timestamp.fromDate(new Date("2025-01-15")),
+        status: "approved",
+        type: "expense",
         splits: [{
-          budgetId: 'unassigned',
+          budgetId: "unassigned",
           amount: 25,
           createdAt: Timestamp.now()
         }],
@@ -204,11 +204,11 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
           isPrivate: true
         },
         categories: {
-          primary: 'food',
+          primary: "food",
           tags: []
         },
         metadata: {
-          source: 'manual',
+          source: "manual",
           createdBy: testUserId
         },
         relationships: {
@@ -228,21 +228,21 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       // Should match regular budget, NOT "everything else"
       expect(transaction?.splits[0].budgetId).toBe(regularBudgetId);
 
-      console.log(`✅ Transaction matched regular budget (not "everything else")`);
+      console.log("✅ Transaction matched regular budget (not \"everything else\")");
     });
   });
 
-  describe('3. Deletion Prevention', () => {
-    test('should reject deletion of "everything else" budget via Cloud Function', async () => {
+  describe("3. Deletion Prevention", () => {
+    test("should reject deletion of \"everything else\" budget via Cloud Function", async () => {
       // This would normally call the deleteBudget Cloud Function
       // For emulator testing, we'll verify the security rules prevent deletion
 
       try {
         // Attempt to delete "everything else" budget directly
-        await db.collection('budgets').doc(everythingElseBudgetId).delete();
+        await db.collection("budgets").doc(everythingElseBudgetId).delete();
 
         // If we get here, deletion was not prevented (test should fail)
-        fail('Budget deletion should have been prevented');
+        fail("Budget deletion should have been prevented");
       } catch (error: any) {
         // Deletion prevented by security rules or trigger
         console.log(`✅ Deletion prevented: ${error.message}`);
@@ -250,67 +250,67 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       }
     });
 
-    test('should verify budget still exists after deletion attempt', async () => {
-      const budgetDoc = await db.collection('budgets').doc(everythingElseBudgetId).get();
+    test("should verify budget still exists after deletion attempt", async () => {
+      const budgetDoc = await db.collection("budgets").doc(everythingElseBudgetId).get();
       expect(budgetDoc.exists).toBe(true);
 
       const budget = budgetDoc.data();
       expect(budget?.isSystemEverythingElse).toBe(true);
 
-      console.log(`✅ Budget still exists after deletion attempt`);
+      console.log("✅ Budget still exists after deletion attempt");
     });
   });
 
-  describe('4. Update Restrictions', () => {
-    test('should reject amount update on "everything else" budget', async () => {
+  describe("4. Update Restrictions", () => {
+    test("should reject amount update on \"everything else\" budget", async () => {
       try {
-        await db.collection('budgets').doc(everythingElseBudgetId).update({
+        await db.collection("budgets").doc(everythingElseBudgetId).update({
           amount: 100
         });
 
         // If we get here, update was not prevented
-        fail('Amount update should have been prevented');
+        fail("Amount update should have been prevented");
       } catch (error: any) {
         console.log(`✅ Amount update prevented: ${error.message}`);
         expect(error).toBeDefined();
       }
     });
 
-    test('should reject categoryIds update on "everything else" budget', async () => {
+    test("should reject categoryIds update on \"everything else\" budget", async () => {
       try {
-        await db.collection('budgets').doc(everythingElseBudgetId).update({
-          categoryIds: ['food', 'groceries']
+        await db.collection("budgets").doc(everythingElseBudgetId).update({
+          categoryIds: ["food", "groceries"]
         });
 
-        fail('CategoryIds update should have been prevented');
+        fail("CategoryIds update should have been prevented");
       } catch (error: any) {
         console.log(`✅ CategoryIds update prevented: ${error.message}`);
         expect(error).toBeDefined();
       }
     });
 
-    test('should reject isSystemEverythingElse flag modification', async () => {
+    test("should reject isSystemEverythingElse flag modification", async () => {
       try {
-        await db.collection('budgets').doc(everythingElseBudgetId).update({
+        await db.collection("budgets").doc(everythingElseBudgetId).update({
           isSystemEverythingElse: false
         });
 
-        fail('System flag modification should have been prevented');
+        fail("System flag modification should have been prevented");
       } catch (error: any) {
         console.log(`✅ System flag modification prevented: ${error.message}`);
         expect(error).toBeDefined();
       }
     });
 
-    test('should allow name update on "everything else" budget', async () => {
-      const newName = 'Miscellaneous Spending';
+    test("should allow name update on \"everything else\" budget", async () => {
+      const newName = "Miscellaneous Spending";
 
-      await db.collection('budgets').doc(everythingElseBudgetId).update({
+      await db.collection("budgets").doc(everythingElseBudgetId).update({
         name: newName,
         updatedAt: Timestamp.now()
       });
 
-      const budgetDoc = await db.collection('budgets').doc(everythingElseBudgetId).get();
+      const budgetDoc = await db.collection("budgets").doc(everythingElseBudgetId).get();
       const budget = budgetDoc.data();
 
       expect(budget?.name).toBe(newName);
@@ -319,20 +319,20 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
     });
   });
 
-  describe('5. Auto-Recreation Safety Net', () => {
-    test('should auto-recreate if budget is deleted via admin', async () => {
+  describe("5. Auto-Recreation Safety Net", () => {
+    test("should auto-recreate if budget is deleted via admin", async () => {
       // Use admin SDK to bypass security rules and delete the budget
-      await db.collection('budgets').doc(everythingElseBudgetId).delete();
+      await db.collection("budgets").doc(everythingElseBudgetId).delete();
 
-      console.log(`🗑️ Deleted "everything else" budget via admin`);
+      console.log("🗑️ Deleted \"everything else\" budget via admin");
 
       // Wait for onBudgetDelete trigger to fire and recreate
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Query for "everything else" budget
-      const budgetsQuery = await db.collection('budgets')
-        .where('userId', '==', testUserId)
-        .where('isSystemEverythingElse', '==', true)
+      const budgetsQuery = await db.collection("budgets")
+        .where("userId", "==", testUserId)
+        .where("isSystemEverythingElse", "==", true)
         .get();
 
       expect(budgetsQuery.empty).toBe(false);
@@ -344,7 +344,7 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       // Verify new budget was created
       expect(newBudgetId).not.toBe(everythingElseBudgetId); // New ID
       expect(budget.isSystemEverythingElse).toBe(true);
-      expect(budget.name).toBe('Everything Else'); // Default name restored
+      expect(budget.name).toBe("Everything Else"); // Default name restored
 
       everythingElseBudgetId = newBudgetId; // Update for subsequent tests
 
@@ -352,27 +352,27 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
     });
   });
 
-  describe('6. Migration Function', () => {
-    test('should detect existing "everything else" budget and skip', async () => {
+  describe("6. Migration Function", () => {
+    test("should detect existing \"everything else\" budget and skip", async () => {
       // This test verifies the migration function would skip this user
-      const existingBudgetQuery = await db.collection('budgets')
-        .where('userId', '==', testUserId)
-        .where('isSystemEverythingElse', '==', true)
+      const existingBudgetQuery = await db.collection("budgets")
+        .where("userId", "==", testUserId)
+        .where("isSystemEverythingElse", "==", true)
         .get();
 
       expect(existingBudgetQuery.empty).toBe(false);
 
       // Migration would skip this user since budget already exists
-      console.log(`✅ Migration function would skip user (budget exists)`);
+      console.log("✅ Migration function would skip user (budget exists)");
     });
   });
 
-  describe('7. Budget Period Generation', () => {
-    test('should verify budget periods were created for "everything else" budget', async () => {
+  describe("7. Budget Period Generation", () => {
+    test("should verify budget periods were created for \"everything else\" budget", async () => {
       // Query for budget periods
-      const periodsQuery = await db.collection('budget_periods')
-        .where('budgetId', '==', everythingElseBudgetId)
-        .where('userId', '==', testUserId)
+      const periodsQuery = await db.collection("budget_periods")
+        .where("budgetId", "==", everythingElseBudgetId)
+        .where("userId", "==", testUserId)
         .get();
 
       expect(periodsQuery.empty).toBe(false);
@@ -392,21 +392,21 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
     });
   });
 
-  describe('8. Complete Workflow', () => {
-    test('should handle complete user journey', async () => {
-      console.log('\n📋 Complete Workflow Test:');
-      console.log('1. ✅ User signed up');
-      console.log('2. ✅ "Everything else" budget auto-created');
-      console.log('3. ✅ Unmatched transaction assigned to "everything else"');
-      console.log('4. ✅ Regular budget takes priority when matched');
-      console.log('5. ✅ Deletion prevented by security rules');
-      console.log('6. ✅ Amount updates rejected');
-      console.log('7. ✅ Name updates allowed');
-      console.log('8. ✅ Auto-recreation works if deleted');
-      console.log('9. ✅ Budget periods generated correctly');
+  describe("8. Complete Workflow", () => {
+    test("should handle complete user journey", async () => {
+      console.log("\n📋 Complete Workflow Test:");
+      console.log("1. ✅ User signed up");
+      console.log("2. ✅ \"Everything else\" budget auto-created");
+      console.log("3. ✅ Unmatched transaction assigned to \"everything else\"");
+      console.log("4. ✅ Regular budget takes priority when matched");
+      console.log("5. ✅ Deletion prevented by security rules");
+      console.log("6. ✅ Amount updates rejected");
+      console.log("7. ✅ Name updates allowed");
+      console.log("8. ✅ Auto-recreation works if deleted");
+      console.log("9. ✅ Budget periods generated correctly");
 
       // Final verification: budget still exists and is functional
-      const budgetDoc = await db.collection('budgets').doc(everythingElseBudgetId).get();
+      const budgetDoc = await db.collection("budgets").doc(everythingElseBudgetId).get();
       expect(budgetDoc.exists).toBe(true);
 
       const budget = budgetDoc.data();
@@ -414,7 +414,7 @@ describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
       expect(budget?.isActive).toBe(true);
       expect(budget?.userId).toBe(testUserId);
 
-      console.log('\n✅ Complete workflow verified successfully!');
+      console.log("\n✅ Complete workflow verified successfully!");
     });
   });
 });

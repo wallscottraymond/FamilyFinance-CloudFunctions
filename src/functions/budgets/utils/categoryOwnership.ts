@@ -13,8 +13,8 @@
  * @module budgets/utils/categoryOwnership
  */
 
-import { getFirestore } from 'firebase-admin/firestore';
-import { Category } from '../../../types';
+import { getFirestore } from "firebase-admin/firestore";
+import { Category } from "../../../types";
 
 const db = getFirestore();
 
@@ -25,7 +25,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 interface CategoryInfo {
   id: string;
   name: string;
-  type: 'Income' | 'Outflow';
+  type: "Income" | "Outflow";
   /** first_category slug + label (Simplified-Transaction-Categories) — the user-facing level. */
   firstCategoryId: string | null;
   firstCategory: string | null;
@@ -78,8 +78,8 @@ export async function getActiveCategories(): Promise<CategoryInfo[]> {
   }
 
   // Query Firestore
-  const snapshot = await db.collection('categories')
-    .where('isActive', '==', true)
+  const snapshot = await db.collection("categories")
+    .where("isActive", "==", true)
     .get();
 
   const categories: CategoryInfo[] = [];
@@ -126,9 +126,9 @@ export async function getUserBudgets(userId: string): Promise<BudgetInfo[]> {
   // SINGLE query on the canonical `userId` field. createdBy == userId == ownerId for every
   // non-shared budget (all written from the same source), so the old dual createdBy+userId
   // query was a strict duplicate — halved here (mirrors SR-3 in budget.repo.get_by_user_id).
-  const snapshot = await db.collection('budgets')
-    .where('userId', '==', userId)
-    .where('isActive', '==', true)
+  const snapshot = await db.collection("budgets")
+    .where("userId", "==", userId)
+    .where("isActive", "==", true)
     .get();
 
   const budgetMap = new Map<string, BudgetInfo>();
@@ -137,7 +137,7 @@ export async function getUserBudgets(userId: string): Promise<BudgetInfo[]> {
       const data = doc.data();
       budgetMap.set(doc.id, {
         id: doc.id,
-        name: data.name || 'Unnamed Budget',
+        name: data.name || "Unnamed Budget",
         categoryIds: data.categoryIds || [],
         isSystemEverythingElse: data.isSystemEverythingElse === true,
       });
@@ -239,7 +239,7 @@ export async function getCategoryOwnership(
     }
   }
 
-  console.log(`[categoryOwnership] Result: ${allCategories.length} categories, ${unassignedCategoryIds.length} unassigned, ${Object.keys(ownershipByFirst).length} firsts, Everything Else: ${everythingElseBudgetId || 'NOT FOUND'}`);
+  console.log(`[categoryOwnership] Result: ${allCategories.length} categories, ${unassignedCategoryIds.length} unassigned, ${Object.keys(ownershipByFirst).length} firsts, Everything Else: ${everythingElseBudgetId || "NOT FOUND"}`);
 
   return {
     ownership,

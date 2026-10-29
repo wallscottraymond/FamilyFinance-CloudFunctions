@@ -10,9 +10,9 @@
  * UPDATED: Now produces FLAT structure with all fields at root level.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { TransactionStream } from 'plaid';
-import { Inflow } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { TransactionStream } from "plaid";
+import { Inflow } from "../../../types";
 
 /**
  * Format Plaid inflow streams to internal Inflow documents (FLAT STRUCTURE)
@@ -53,7 +53,7 @@ export async function formatRecurringInflows(
     // === FINANCIAL DATA ===
     lastAmount: Math.abs(stream.last_amount.amount || 0),
     averageAmount: Math.abs(stream.average_amount.amount || 0),
-    currency: stream.average_amount.iso_currency_code || 'USD',
+    currency: stream.average_amount.iso_currency_code || "USD",
     unofficialCurrency: (stream.average_amount as any).unofficial_currency_code || null,
 
     // === DESCRIPTIVE INFO ===
@@ -70,18 +70,18 @@ export async function formatRecurringInflows(
       : null,
 
     // === CATEGORIZATION (Flat fields from Plaid) ===
-    plaidPrimaryCategory: stream.personal_finance_category?.primary || stream.category?.[0] || 'INCOME',
-    plaidDetailedCategory: stream.personal_finance_category?.detailed || stream.category?.[1] || '',
+    plaidPrimaryCategory: stream.personal_finance_category?.primary || stream.category?.[0] || "INCOME",
+    plaidDetailedCategory: stream.personal_finance_category?.detailed || stream.category?.[1] || "",
     plaidCategoryId: (stream as any).category_id || null,
     internalPrimaryCategory: null, // User hasn't overridden yet
     internalDetailedCategory: null, // User hasn't overridden yet
 
     // === INCOME CLASSIFICATION ===
-    incomeType: stream.personal_finance_category?.detailed === 'INCOME_WAGES' ? 'salary' : 'other',
-    isRegularSalary: stream.personal_finance_category?.detailed === 'INCOME_WAGES',
+    incomeType: stream.personal_finance_category?.detailed === "INCOME_WAGES" ? "salary" : "other",
+    isRegularSalary: stream.personal_finance_category?.detailed === "INCOME_WAGES",
 
     // === STATUS & CONTROL ===
-    source: 'plaid' as const,
+    source: "plaid" as const,
     isActive: stream.is_active,
     isHidden: false, // Default to visible
     isUserModified: stream.is_user_modified || false,

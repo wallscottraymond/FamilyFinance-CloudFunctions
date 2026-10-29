@@ -11,12 +11,12 @@
  * 4. Frequency-based calculation from last date
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 import {
   Inflow,
   PlaidRecurringFrequency,
   IncomeType
-} from '../../../../types';
+} from "../../../../types";
 
 /**
  * Payment prediction result
@@ -24,8 +24,8 @@ import {
 export interface PaymentPrediction {
   expectedDate: Timestamp;
   expectedAmount: number;
-  confidenceLevel: 'high' | 'medium' | 'low';
-  predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override' | 'hourly_calc' | 'commission_calc';
+  confidenceLevel: "high" | "medium" | "low";
+  predictionMethod: "plaid" | "frequency" | "rolling_average" | "user_override" | "hourly_calc" | "commission_calc";
   isInPeriod: boolean;
   daysUntilPayment: number;
 }
@@ -39,61 +39,61 @@ function addFrequencyInterval(date: Date, frequency: PlaidRecurringFrequency | s
   const originalDay = date.getDate();
 
   switch (frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-    case 'WEEKLY':
-      newDate.setDate(newDate.getDate() + 7);
-      break;
+  case PlaidRecurringFrequency.WEEKLY:
+  case "WEEKLY":
+    newDate.setDate(newDate.getDate() + 7);
+    break;
 
-    case PlaidRecurringFrequency.BIWEEKLY:
-    case 'BIWEEKLY':
-      newDate.setDate(newDate.getDate() + 14);
-      break;
+  case PlaidRecurringFrequency.BIWEEKLY:
+  case "BIWEEKLY":
+    newDate.setDate(newDate.getDate() + 14);
+    break;
 
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-    case 'SEMI_MONTHLY':
-      newDate.setDate(newDate.getDate() + 15);
-      break;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+  case "SEMI_MONTHLY":
+    newDate.setDate(newDate.getDate() + 15);
+    break;
 
-    case PlaidRecurringFrequency.MONTHLY:
-    case 'MONTHLY': {
-      const targetMonth = newDate.getMonth() + 1;
-      newDate.setMonth(targetMonth);
-      // Handle month-end overflow (e.g., Jan 31 → Feb 28)
-      if (newDate.getDate() !== originalDay) {
-        // Rolled over to next month, go back to last day of target month
-        newDate.setDate(0); // Sets to last day of previous month
-      }
-      break;
+  case PlaidRecurringFrequency.MONTHLY:
+  case "MONTHLY": {
+    const targetMonth = newDate.getMonth() + 1;
+    newDate.setMonth(targetMonth);
+    // Handle month-end overflow (e.g., Jan 31 → Feb 28)
+    if (newDate.getDate() !== originalDay) {
+      // Rolled over to next month, go back to last day of target month
+      newDate.setDate(0); // Sets to last day of previous month
     }
+    break;
+  }
 
-    case 'QUARTERLY': {
-      const targetMonth = newDate.getMonth() + 3;
-      newDate.setMonth(targetMonth);
-      // Handle month-end overflow
-      if (newDate.getDate() !== originalDay) {
-        newDate.setDate(0);
-      }
-      break;
+  case "QUARTERLY": {
+    const targetMonth = newDate.getMonth() + 3;
+    newDate.setMonth(targetMonth);
+    // Handle month-end overflow
+    if (newDate.getDate() !== originalDay) {
+      newDate.setDate(0);
     }
+    break;
+  }
 
-    case PlaidRecurringFrequency.ANNUALLY:
-    case 'ANNUALLY': {
-      const targetYear = newDate.getFullYear() + 1;
-      newDate.setFullYear(targetYear);
-      // Handle leap year edge case (Feb 29 → Feb 28)
-      if (newDate.getDate() !== originalDay) {
-        newDate.setDate(0);
-      }
-      break;
+  case PlaidRecurringFrequency.ANNUALLY:
+  case "ANNUALLY": {
+    const targetYear = newDate.getFullYear() + 1;
+    newDate.setFullYear(targetYear);
+    // Handle leap year edge case (Feb 29 → Feb 28)
+    if (newDate.getDate() !== originalDay) {
+      newDate.setDate(0);
     }
+    break;
+  }
 
-    default: {
-      const targetMonth = newDate.getMonth() + 1;
-      newDate.setMonth(targetMonth);
-      if (newDate.getDate() !== originalDay) {
-        newDate.setDate(0);
-      }
+  default: {
+    const targetMonth = newDate.getMonth() + 1;
+    newDate.setMonth(targetMonth);
+    if (newDate.getDate() !== originalDay) {
+      newDate.setDate(0);
     }
+  }
   }
 
   return newDate;
@@ -120,66 +120,66 @@ function calculateRollingAverage(inflow: Partial<Inflow>, periods: number = 3): 
  */
 function determineConfidenceLevel(
   inflow: Partial<Inflow>,
-  predictionMethod: PaymentPrediction['predictionMethod']
-): PaymentPrediction['confidenceLevel'] {
+  predictionMethod: PaymentPrediction["predictionMethod"]
+): PaymentPrediction["confidenceLevel"] {
   const incomeType = inflow.incomeType as IncomeType | string;
   const isRegularSalary = inflow.isRegularSalary;
 
   // Check by income type enum first (most accurate)
   switch (incomeType) {
-    case IncomeType.SALARY:
-    case IncomeType.PENSION:
-    case IncomeType.GOVERNMENT:
-    case IncomeType.RENTAL:
-      return 'high';
+  case IncomeType.SALARY:
+  case IncomeType.PENSION:
+  case IncomeType.GOVERNMENT:
+  case IncomeType.RENTAL:
+    return "high";
 
-    case IncomeType.HOURLY:
-      // Variable hours: medium, as documented above (rate × hours, estimate or average alike).
-      return 'medium';
+  case IncomeType.HOURLY:
+    // Variable hours: medium, as documented above (rate × hours, estimate or average alike).
+    return "medium";
 
-    case IncomeType.BASE_PLUS_COMMISSION:
-      return 'medium';
+  case IncomeType.BASE_PLUS_COMMISSION:
+    return "medium";
 
-    case IncomeType.INVESTMENT:
-      return 'medium';
+  case IncomeType.INVESTMENT:
+    return "medium";
 
-    case IncomeType.COMMISSION_ONLY:
-    case IncomeType.BONUS:
-    case IncomeType.FREELANCE:
-      return 'low';
+  case IncomeType.COMMISSION_ONLY:
+  case IncomeType.BONUS:
+  case IncomeType.FREELANCE:
+    return "low";
 
-    case IncomeType.OTHER:
-      return 'low';
+  case IncomeType.OTHER:
+    return "low";
   }
 
   // Fallback: Legacy logic for non-enum income types
   // High confidence: Regular salary with Plaid prediction
-  if (isRegularSalary && predictionMethod === 'plaid') {
-    return 'high';
+  if (isRegularSalary && predictionMethod === "plaid") {
+    return "high";
   }
 
   // High confidence: Regular salary with frequency calculation
-  if (isRegularSalary && predictionMethod === 'frequency') {
-    return 'high';
+  if (isRegularSalary && predictionMethod === "frequency") {
+    return "high";
   }
 
   // Medium confidence: Variable income with rolling average or user override
-  if (predictionMethod === 'rolling_average' || predictionMethod === 'user_override') {
-    return 'medium';
+  if (predictionMethod === "rolling_average" || predictionMethod === "user_override") {
+    return "medium";
   }
 
   // Medium confidence: Non-salary income with Plaid prediction
-  if (predictionMethod === 'plaid' && !isRegularSalary) {
-    return 'medium';
+  if (predictionMethod === "plaid" && !isRegularSalary) {
+    return "medium";
   }
 
   // Low confidence: Commission or bonus (legacy string values)
-  if (incomeType === 'commission' || incomeType === 'bonus') {
-    return 'low';
+  if (incomeType === "commission" || incomeType === "bonus") {
+    return "low";
   }
 
   // Default to medium
-  return 'medium';
+  return "medium";
 }
 
 /**
@@ -197,7 +197,7 @@ function calculateExpectedAmountByType(
   incomeType: IncomeType | string,
   averageAmount: number,
   inflow: Partial<Inflow>
-): { amount: number; method?: PaymentPrediction['predictionMethod'] } {
+): { amount: number; method?: PaymentPrediction["predictionMethod"] } {
   // Access type-specific configs
   const hourlyConfig = inflow.hourlyConfig;
   const commissionConfig = inflow.commissionConfig;
@@ -205,84 +205,84 @@ function calculateExpectedAmountByType(
   const variableConfig = inflow.variableConfig;
 
   switch (incomeType) {
-    // Fixed income types - use average amount
-    case IncomeType.SALARY:
-    case IncomeType.PENSION:
-    case IncomeType.GOVERNMENT:
-    case IncomeType.RENTAL:
-      return { amount: averageAmount };
+  // Fixed income types - use average amount
+  case IncomeType.SALARY:
+  case IncomeType.PENSION:
+  case IncomeType.GOVERNMENT:
+  case IncomeType.RENTAL:
+    return { amount: averageAmount };
 
     // Hourly income - calculate from rate × hours
-    case IncomeType.HOURLY:
-      if (hourlyConfig) {
-        const { hourlyRate, expectedHoursPerPeriod, includeOvertime, overtimeRate, expectedOvertimeHours } = hourlyConfig;
-        let total = hourlyRate * expectedHoursPerPeriod;
-        if (includeOvertime && overtimeRate && expectedOvertimeHours) {
-          total += hourlyRate * overtimeRate * expectedOvertimeHours;
-        }
-        return { amount: Math.round(total * 100) / 100, method: 'hourly_calc' };
+  case IncomeType.HOURLY:
+    if (hourlyConfig) {
+      const { hourlyRate, expectedHoursPerPeriod, includeOvertime, overtimeRate, expectedOvertimeHours } = hourlyConfig;
+      let total = hourlyRate * expectedHoursPerPeriod;
+      if (includeOvertime && overtimeRate && expectedOvertimeHours) {
+        total += hourlyRate * overtimeRate * expectedOvertimeHours;
       }
-      // No hourly setup: variable income, so the user's estimate or a rolling average
-      // (inflows CLAUDE.md: HOURLY → rolling average or user override).
-      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
-        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
-      }
-      if (variableConfig?.useRollingAverage) {
-        const periods = variableConfig.rollingAveragePeriods || 3;
-        return { amount: calculateRollingAverage(inflow, periods), method: 'rolling_average' };
-      }
-      return { amount: averageAmount };
+      return { amount: Math.round(total * 100) / 100, method: "hourly_calc" };
+    }
+    // No hourly setup: variable income, so the user's estimate or a rolling average
+    // (inflows CLAUDE.md: HOURLY → rolling average or user override).
+    if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+      return { amount: variableConfig.userOverrideAmount, method: "user_override" };
+    }
+    if (variableConfig?.useRollingAverage) {
+      const periods = variableConfig.rollingAveragePeriods || 3;
+      return { amount: calculateRollingAverage(inflow, periods), method: "rolling_average" };
+    }
+    return { amount: averageAmount };
 
     // Base + Commission - add base and target
-    case IncomeType.BASE_PLUS_COMMISSION:
-      if (commissionConfig && commissionConfig.basePlusCommission) {
-        const baseAmount = commissionConfig.baseAmount || 0;
-        const targetCommission = commissionConfig.targetCommission || 0;
-        return { amount: baseAmount + targetCommission, method: 'commission_calc' };
-      }
-      return { amount: averageAmount };
+  case IncomeType.BASE_PLUS_COMMISSION:
+    if (commissionConfig && commissionConfig.basePlusCommission) {
+      const baseAmount = commissionConfig.baseAmount || 0;
+      const targetCommission = commissionConfig.targetCommission || 0;
+      return { amount: baseAmount + targetCommission, method: "commission_calc" };
+    }
+    return { amount: averageAmount };
 
     // Commission only - use rolling average or override
-    case IncomeType.COMMISSION_ONLY:
-      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
-        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
-      }
-      if (variableConfig?.useRollingAverage) {
-        const periods = variableConfig.rollingAveragePeriods || 3;
-        return { amount: calculateRollingAverage(inflow, periods), method: 'rolling_average' };
-      }
-      // Fallback to average for commission-only
-      return { amount: averageAmount };
+  case IncomeType.COMMISSION_ONLY:
+    if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+      return { amount: variableConfig.userOverrideAmount, method: "user_override" };
+    }
+    if (variableConfig?.useRollingAverage) {
+      const periods = variableConfig.rollingAveragePeriods || 3;
+      return { amount: calculateRollingAverage(inflow, periods), method: "rolling_average" };
+    }
+    // Fallback to average for commission-only
+    return { amount: averageAmount };
 
     // Bonus - use last bonus amount or average
-    case IncomeType.BONUS:
-      if (bonusConfig?.lastBonusAmount && bonusConfig.lastBonusAmount > 0) {
-        return { amount: bonusConfig.lastBonusAmount };
-      }
-      return { amount: averageAmount };
+  case IncomeType.BONUS:
+    if (bonusConfig?.lastBonusAmount && bonusConfig.lastBonusAmount > 0) {
+      return { amount: bonusConfig.lastBonusAmount };
+    }
+    return { amount: averageAmount };
 
     // Investment income - use average (dividends are typically consistent)
-    case IncomeType.INVESTMENT:
-      return { amount: averageAmount };
+  case IncomeType.INVESTMENT:
+    return { amount: averageAmount };
 
     // Freelance - highly variable, use override or rolling average
-    case IncomeType.FREELANCE:
-      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
-        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
-      }
-      if (variableConfig?.useRollingAverage) {
-        const periods = variableConfig.rollingAveragePeriods || 3;
-        return { amount: calculateRollingAverage(inflow, periods), method: 'rolling_average' };
-      }
-      return { amount: averageAmount };
+  case IncomeType.FREELANCE:
+    if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+      return { amount: variableConfig.userOverrideAmount, method: "user_override" };
+    }
+    if (variableConfig?.useRollingAverage) {
+      const periods = variableConfig.rollingAveragePeriods || 3;
+      return { amount: calculateRollingAverage(inflow, periods), method: "rolling_average" };
+    }
+    return { amount: averageAmount };
 
     // Other / default - use variable config if available, else average
-    case IncomeType.OTHER:
-    default:
-      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
-        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
-      }
-      return { amount: averageAmount };
+  case IncomeType.OTHER:
+  default:
+    if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+      return { amount: variableConfig.userOverrideAmount, method: "user_override" };
+    }
+    return { amount: averageAmount };
   }
 }
 
@@ -315,14 +315,14 @@ export function predictNextPayment(
 
   let expectedDate: Date;
   let expectedAmount: number;
-  let predictionMethod: PaymentPrediction['predictionMethod'];
+  let predictionMethod: PaymentPrediction["predictionMethod"];
 
   // Step 1: Determine expected date
   // Priority: Plaid's predictedNextDate > frequency calculation from lastDate
 
   if (inflow.predictedNextDate) {
     expectedDate = inflow.predictedNextDate.toDate();
-    predictionMethod = 'plaid';
+    predictionMethod = "plaid";
 
     // If predicted date is in the past, calculate forward
     if (expectedDate < fromDate) {
@@ -330,7 +330,7 @@ export function predictNextPayment(
       while (expectedDate < fromDate) {
         expectedDate = addFrequencyInterval(expectedDate, frequency);
       }
-      predictionMethod = 'frequency';
+      predictionMethod = "frequency";
     }
   } else if (inflow.lastDate) {
     // Calculate from last date using frequency
@@ -340,7 +340,7 @@ export function predictNextPayment(
     while (expectedDate < fromDate) {
       expectedDate = addFrequencyInterval(expectedDate, frequency);
     }
-    predictionMethod = 'frequency';
+    predictionMethod = "frequency";
   } else if (inflow.firstDate) {
     // Fallback to first date
     const frequency = inflow.frequency as PlaidRecurringFrequency | string;
@@ -349,12 +349,12 @@ export function predictNextPayment(
     while (expectedDate < fromDate) {
       expectedDate = addFrequencyInterval(expectedDate, frequency);
     }
-    predictionMethod = 'frequency';
+    predictionMethod = "frequency";
   } else {
     // No date available - return prediction for 30 days from now
     expectedDate = new Date(fromDate);
     expectedDate.setDate(expectedDate.getDate() + 30);
-    predictionMethod = 'frequency';
+    predictionMethod = "frequency";
   }
 
   // Step 2: Determine expected amount based on income type
@@ -385,7 +385,7 @@ export function predictNextPayment(
 
   console.log(
     `[predictNextPayment] Inflow: ${inflow.description || inflow.id}, ` +
-    `Expected: ${expectedDate.toISOString().split('T')[0]}, ` +
+    `Expected: ${expectedDate.toISOString().split("T")[0]}, ` +
     `Amount: $${expectedAmount.toFixed(2)}, ` +
     `Method: ${predictionMethod}, Confidence: ${confidenceLevel}`
   );
@@ -461,7 +461,7 @@ export function predictPaymentsInPeriod(
 
   console.log(
     `[predictPaymentsInPeriod] Inflow: ${inflow.description || inflow.id}, ` +
-    `Period: ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}, ` +
+    `Period: ${periodStart.toISOString().split("T")[0]} to ${periodEnd.toISOString().split("T")[0]}, ` +
     `Payments: ${predictions.length}`
   );
 

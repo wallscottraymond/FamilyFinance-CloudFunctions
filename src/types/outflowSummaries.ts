@@ -59,9 +59,9 @@ export interface OutflowStatusCounts {
 export interface OutflowPeriodSummary {
   // Identity
   ownerId: string;                   // User ID or Group ID
-  ownerType: 'user' | 'group';
+  ownerType: "user" | "group";
   periodType: PeriodType;            // MONTHLY, WEEKLY, BI_MONTHLY
-  resourceType: 'outflow';
+  resourceType: "outflow";
 
   // Time Window
   windowStart: Timestamp;            // Start of 2-year window

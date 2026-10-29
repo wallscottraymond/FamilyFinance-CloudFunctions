@@ -108,42 +108,42 @@ export function plan_review_answer(
     return { ok: true, plan };
   }
   switch (answer) {
-    case "same_bill":
-      if (!item.record_id || !item.stream_id) return { ok: false, error: "this question has no bill to merge" };
-      plan.merge = { old_record_id: item.record_id, into_stream_id: item.stream_id };
-      // falls through: the new stream's bill is created now, like "keep separate"
+  case "same_bill":
+    if (!item.record_id || !item.stream_id) return { ok: false, error: "this question has no bill to merge" };
+    plan.merge = { old_record_id: item.record_id, into_stream_id: item.stream_id };
+    // falls through: the new stream's bill is created now, like "keep separate"
     // eslint-disable-next-line no-fallthrough
-    case "track":
-    case "keep_separate":
-      // The item's payments stay held out of fuzzy matching until the bill actually EXISTS: the
-      // capture planner releases them when it creates the v2 record (create_v2), not here — in
-      // between, a merchant guess could still link them to an old bill.
-      plan.resync_item_doc_id = item.plaid_item_doc_id;
-      // Remembered until its bill exists (defect 4): the planner of that Plaid item (or the
-      // account's removal) resolves it — never a silently lost track or orphaned held-out ids.
-      plan.state_change = {
-        add_pending_tracks: [{
-          item_id: item.id,
-          plaid_item_doc_id: item.plaid_item_doc_id,
-          account_id: item.account_id,
-          stream_id: item.stream_id,
-          since_ms: now_ms,
-        }],
-      };
-      break;
-    case "not_bill":
-      // Remembered per user + vendor (D11 / D15); its payments stay normal transactions — still
-      // held out of fuzzy bill matching.
-      plan.state_change = { add_dismissed_vendor_keys: [item.subject_key] };
-      break;
-    case "still_a_bill":
-      plan.record_action = "ack_still_a_bill";
-      break;
-    case "it_ended":
-      plan.record_action = "end";
-      break;
-    default:
-      break;
+  case "track":
+  case "keep_separate":
+    // The item's payments stay held out of fuzzy matching until the bill actually EXISTS: the
+    // capture planner releases them when it creates the v2 record (create_v2), not here — in
+    // between, a merchant guess could still link them to an old bill.
+    plan.resync_item_doc_id = item.plaid_item_doc_id;
+    // Remembered until its bill exists (defect 4): the planner of that Plaid item (or the
+    // account's removal) resolves it — never a silently lost track or orphaned held-out ids.
+    plan.state_change = {
+      add_pending_tracks: [{
+        item_id: item.id,
+        plaid_item_doc_id: item.plaid_item_doc_id,
+        account_id: item.account_id,
+        stream_id: item.stream_id,
+        since_ms: now_ms,
+      }],
+    };
+    break;
+  case "not_bill":
+    // Remembered per user + vendor (D11 / D15); its payments stay normal transactions — still
+    // held out of fuzzy bill matching.
+    plan.state_change = { add_dismissed_vendor_keys: [item.subject_key] };
+    break;
+  case "still_a_bill":
+    plan.record_action = "ack_still_a_bill";
+    break;
+  case "it_ended":
+    plan.record_action = "end";
+    break;
+  default:
+    break;
   }
   return { ok: true, plan };
 }

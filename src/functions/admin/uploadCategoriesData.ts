@@ -1,5 +1,5 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { getFirestore } from 'firebase-admin/firestore';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { getFirestore } from "firebase-admin/firestore";
 
 // Embedded categories data (all 111 categories).
 // GENERATED from live Firestore by scripts/gen-categories-seed.js — do NOT hand-edit;
@@ -1898,15 +1898,15 @@ const CATEGORIES_DATA = {
 export const uploadCategoriesData = onCall({ cors: true }, async (request) => {
   // 1. Authentication check
   if (!request.auth) {
-    console.error('❌ [uploadCategoriesData] Unauthenticated request');
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
+    console.error("❌ [uploadCategoriesData] Unauthenticated request");
+    throw new HttpsError("unauthenticated", "User must be authenticated");
   }
 
   // 2. Admin role check — this overwrites the entire categories collection
-  const isAdmin = request.auth.token?.role === 'admin';
+  const isAdmin = request.auth.token?.role === "admin";
   if (!isAdmin) {
     console.error(`❌ [uploadCategoriesData] Non-admin user attempted upload: ${request.auth.uid}`);
-    throw new HttpsError('permission-denied', 'Only admins can upload categories');
+    throw new HttpsError("permission-denied", "Only admins can upload categories");
   }
 
   try {
@@ -1923,7 +1923,7 @@ export const uploadCategoriesData = onCall({ cors: true }, async (request) => {
       const batchCategories = categories.slice(i, i + batchSize);
 
       batchCategories.forEach((categoryId) => {
-        const categoryRef = db.collection('categories').doc(categoryId);
+        const categoryRef = db.collection("categories").doc(categoryId);
         // merge:true — never destroy out-of-band fields (e.g. the *CategoryId slugs).
         batch.set(categoryRef, {
           ...fullCategoriesData[categoryId],
@@ -1939,7 +1939,7 @@ export const uploadCategoriesData = onCall({ cors: true }, async (request) => {
     console.log(`Successfully uploaded all ${uploadedCount} categories`);
     return { success: true, count: uploadedCount };
   } catch (error) {
-    console.error('Error uploading categories:', error);
-    throw new HttpsError('internal', 'Failed to upload categories: ' + (error as Error).message);
+    console.error("Error uploading categories:", error);
+    throw new HttpsError("internal", "Failed to upload categories: " + (error as Error).message);
   }
 });

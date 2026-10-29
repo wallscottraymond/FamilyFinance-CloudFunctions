@@ -59,7 +59,7 @@ export const on_plaid_item_created = onDocumentCreated(
     // Guard: Required fields
     if (!plaid_item_id || !user_id) {
       console.error(
-        `[on_plaid_item_created] Missing required fields. ` +
+        "[on_plaid_item_created] Missing required fields. " +
         `plaid_item_id=${plaid_item_id}, user_id=${user_id}`
       );
       return;

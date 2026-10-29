@@ -16,22 +16,22 @@ import { PeriodType } from "../../../budgets/types";
  * Payment Type Classification
  */
 export enum PaymentType {
-  REGULAR = 'regular',
-  CATCH_UP = 'catch_up',
-  ADVANCE = 'advance',
-  EXTRA_PRINCIPAL = 'extra_principal'
+  REGULAR = "regular",
+  CATCH_UP = "catch_up",
+  ADVANCE = "advance",
+  EXTRA_PRINCIPAL = "extra_principal"
 }
 
 /**
  * Outflow Period Status
  */
 export enum OutflowPeriodStatus {
-  PENDING = 'pending',
-  DUE_SOON = 'due_soon',
-  PARTIAL = 'partial',
-  PAID = 'paid',
-  PAID_EARLY = 'paid_early',
-  OVERDUE = 'overdue'
+  PENDING = "pending",
+  DUE_SOON = "due_soon",
+  PARTIAL = "partial",
+  PAID = "paid",
+  PAID_EARLY = "paid_early",
+  OVERDUE = "overdue"
 }
 
 // =======================

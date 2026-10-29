@@ -300,7 +300,7 @@ export const budget_repo = {
     if (snap.size >= MAX_BUDGETS_PER_USER) {
       console.warn(
         `[budget_repo.get_by_user_id] user=${user_id} hit the ${MAX_BUDGETS_PER_USER} ` +
-          `budget cap — results may be truncated`
+          "budget cap — results may be truncated"
       );
     }
     // Source the id from the doc ref — legacy Everything-Else docs don't store an `id` field.

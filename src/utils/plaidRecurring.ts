@@ -4,9 +4,9 @@
  * Handles recurring transaction streams (income and expense patterns)
  */
 
-import { PlaidApi, TransactionsRecurringGetRequest } from 'plaid';
-import { db } from '../index';
-import * as admin from 'firebase-admin';
+import { PlaidApi, TransactionsRecurringGetRequest } from "plaid";
+import { db } from "../index";
+import * as admin from "firebase-admin";
 
 export interface RecurringProcessingResult {
   totalStreams: number;
@@ -34,7 +34,7 @@ export async function processRecurringTransactions(
   };
 
   try {
-    console.log('Fetching recurring transactions from Plaid for', accountIds.length, 'accounts...');
+    console.log("Fetching recurring transactions from Plaid for", accountIds.length, "accounts...");
     
     // Call Plaid API for all accounts at once (more efficient)
     const recurringRequest: TransactionsRecurringGetRequest = {
@@ -42,12 +42,12 @@ export async function processRecurringTransactions(
       account_ids: accountIds,
     };
 
-    console.log('Calling Plaid transactionsRecurringGet with account IDs:', recurringRequest.account_ids);
+    console.log("Calling Plaid transactionsRecurringGet with account IDs:", recurringRequest.account_ids);
     
     const recurringResponse = await plaidClient.transactionsRecurringGet(recurringRequest);
     const { inflow_streams: inflowStreams, outflow_streams: outflowStreams } = recurringResponse.data;
 
-    console.log('Retrieved recurring transactions from Plaid', {
+    console.log("Retrieved recurring transactions from Plaid", {
       inflowStreams: inflowStreams.length,
       outflowStreams: outflowStreams.length,
       totalStreams: inflowStreams.length + outflowStreams.length,
@@ -70,7 +70,7 @@ export async function processRecurringTransactions(
     result.totalStreams = result.inflowStreams + result.outflowStreams;
     result.accountsProcessed = accountIds.length;
 
-    console.log('Successfully processed recurring transactions:', {
+    console.log("Successfully processed recurring transactions:", {
       totalStreams: result.totalStreams,
       inflowStreams: result.inflowStreams,
       outflowStreams: result.outflowStreams,
@@ -81,7 +81,7 @@ export async function processRecurringTransactions(
     return result;
 
   } catch (error) {
-    console.error('Failed to process recurring transactions:', error);
+    console.error("Failed to process recurring transactions:", error);
     result.errors++;
     return result;
   }
@@ -94,14 +94,14 @@ async function processInflowStreams(streams: any[], userId: string): Promise<{ p
   let processed = 0;
   let errors = 0;
 
-  console.log('Processing', streams.length, 'inflow streams...');
+  console.log("Processing", streams.length, "inflow streams...");
 
   for (const stream of streams) {
     try {
       const streamId = stream.stream_id;
       console.log(`Processing income stream ${streamId} for account ${stream.account_id}`);
 
-      await db.collection('inflows').doc(streamId).set({
+      await db.collection("inflows").doc(streamId).set({
         id: streamId,
         plaidStreamId: streamId,
         accountId: stream.account_id,
@@ -109,26 +109,26 @@ async function processInflowStreams(streams: any[], userId: string): Promise<{ p
         groupIds: [], // Empty array = private (use groupIds for new sharing model)
         
         // Basic stream info
-        description: stream.description || 'Recurring Income',
+        description: stream.description || "Recurring Income",
         merchantName: stream.merchant_name || null,
         category: stream.category || [],
         
         // Amount information
         averageAmount: Math.abs(stream.average_amount?.amount || 0),
         lastAmount: Math.abs(stream.last_amount?.amount || 0),
-        currency: stream.average_amount?.iso_currency_code || 'USD',
+        currency: stream.average_amount?.iso_currency_code || "USD",
         
         // Frequency and prediction
-        frequency: stream.frequency || 'UNKNOWN',
+        frequency: stream.frequency || "UNKNOWN",
         isActive: stream.is_active || true,
-        status: 'active',
+        status: "active",
         
         // Income-specific fields
-        incomeType: 'other', // Default, user can categorize
+        incomeType: "other", // Default, user can categorize
         taxable: true, // Default assumption
 
         // Source tracking
-        inflowSource: 'plaid', // Source of this inflow: 'user' or 'plaid'
+        inflowSource: "plaid", // Source of this inflow: 'user' or 'plaid'
 
         // Metadata
         firstDate: stream.first_date ? admin.firestore.Timestamp.fromDate(new Date(stream.first_date)) : null,
@@ -158,14 +158,14 @@ async function processOutflowStreams(streams: any[], userId: string): Promise<{ 
   let processed = 0;
   let errors = 0;
 
-  console.log('Processing', streams.length, 'outflow streams...');
+  console.log("Processing", streams.length, "outflow streams...");
 
   for (const stream of streams) {
     try {
       const streamId = stream.stream_id;
       console.log(`Processing outflow stream ${streamId} for account ${stream.account_id}`);
 
-      await db.collection('outflows').doc(streamId).set({
+      await db.collection("outflows").doc(streamId).set({
         id: streamId,
         plaidStreamId: streamId,
         accountId: stream.account_id,
@@ -173,26 +173,26 @@ async function processOutflowStreams(streams: any[], userId: string): Promise<{ 
         groupIds: [], // Empty array = private (use groupIds for new sharing model)
         
         // Basic stream info
-        description: stream.description || 'Recurring Expense',
+        description: stream.description || "Recurring Expense",
         merchantName: stream.merchant_name || null,
         category: stream.category || [],
         
         // Amount information
         averageAmount: Math.abs(stream.average_amount?.amount || 0),
         lastAmount: Math.abs(stream.last_amount?.amount || 0),
-        currency: stream.average_amount?.iso_currency_code || 'USD',
+        currency: stream.average_amount?.iso_currency_code || "USD",
         
         // Frequency and prediction
-        frequency: stream.frequency || 'UNKNOWN',
+        frequency: stream.frequency || "UNKNOWN",
         isActive: stream.is_active || true,
-        status: 'active',
+        status: "active",
         
         // Expense-specific fields
-        expenseType: 'other', // Default, user can categorize
+        expenseType: "other", // Default, user can categorize
         isEssential: false, // User can mark as essential
 
         // Source tracking
-        outflowSource: 'plaid', // Source of this outflow: 'user' or 'plaid'
+        outflowSource: "plaid", // Source of this outflow: 'user' or 'plaid'
 
         // Metadata
         firstDate: stream.first_date ? admin.firestore.Timestamp.fromDate(new Date(stream.first_date)) : null,

@@ -354,12 +354,12 @@ function determine_merge_action(
   confidence: "high" | "medium" | "low"
 ): "merge" | "review" | "keep_separate" {
   switch (confidence) {
-    case "high":
-      return "merge";
-    case "medium":
-      return "review";
-    case "low":
-      return "keep_separate";
+  case "high":
+    return "merge";
+  case "medium":
+    return "review";
+  case "low":
+    return "keep_separate";
   }
 }
 

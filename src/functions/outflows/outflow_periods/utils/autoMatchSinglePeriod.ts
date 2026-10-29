@@ -5,8 +5,8 @@
  * when that period is created. Runs as part of the onOutflowPeriodCreate trigger.
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   OutflowPeriod,
   Outflow,
@@ -14,7 +14,7 @@ import {
   TransactionSplitReference,
   PaymentType,
   OutflowPeriodStatus
-} from '../../../../types';
+} from "../../../../types";
 
 export interface AutoMatchSinglePeriodResult {
   success: boolean;
@@ -56,14 +56,14 @@ export async function autoMatchSinglePeriod(
     // Step 1: Get transactions from the outflow's transactionIds (root level)
     const transactionIds = outflow.transactionIds || [];
     if (transactionIds.length === 0) {
-      console.log(`[autoMatchSinglePeriod] No transactions to match (transactionIds empty)`);
+      console.log("[autoMatchSinglePeriod] No transactions to match (transactionIds empty)");
       result.success = true;
       return result;
     }
 
     console.log(`[autoMatchSinglePeriod] Fetching ${transactionIds.length} transactions...`);
     const transactionPromises = transactionIds.map((txnId: string) =>
-      db.collection('transactions').doc(txnId).get()
+      db.collection("transactions").doc(txnId).get()
     );
 
     const transactionSnaps = await Promise.all(transactionPromises);
@@ -74,7 +74,7 @@ export async function autoMatchSinglePeriod(
     console.log(`[autoMatchSinglePeriod] Found ${transactions.length} existing transactions`);
 
     if (transactions.length === 0) {
-      console.log(`[autoMatchSinglePeriod] No transactions found to match`);
+      console.log("[autoMatchSinglePeriod] No transactions found to match");
       result.success = true;
       return result;
     }
@@ -91,7 +91,7 @@ export async function autoMatchSinglePeriod(
     console.log(`[autoMatchSinglePeriod] ${matchingTransactions.length} transactions fall within this period`);
 
     if (matchingTransactions.length === 0) {
-      console.log(`[autoMatchSinglePeriod] No transactions match this period's date range`);
+      console.log("[autoMatchSinglePeriod] No transactions match this period's date range");
       result.success = true;
       return result;
     }
@@ -114,11 +114,11 @@ export async function autoMatchSinglePeriod(
         splitId: firstSplit.splitId || `${txn.id}_split_0`, // Use splitId field
         transactionDate: txn.transactionDate,
         amount: firstSplit.amount,
-        description: txn.description || txn.merchantName || 'Unknown',
+        description: txn.description || txn.merchantName || "Unknown",
         paymentType: paymentType,
         isAutoMatched: true,
         matchedAt: Timestamp.now(),
-        matchedBy: 'system'
+        matchedBy: "system"
       };
 
       splitReferences.push(splitRef);
@@ -142,7 +142,7 @@ export async function autoMatchSinglePeriod(
     // Step 5: Update the outflow period with split references, transaction IDs, and status
     const assignedTransactionIds = matchingTransactions.map(txn => txn.id);
 
-    const periodRef = db.collection('outflow_periods').doc(periodId);
+    const periodRef = db.collection("outflow_periods").doc(periodId);
     await periodRef.update({
       // Transaction tracking arrays
       transactionIds: assignedTransactionIds,
@@ -161,14 +161,14 @@ export async function autoMatchSinglePeriod(
     result.periodUpdated = true;
     result.success = true;
 
-    console.log(`[autoMatchSinglePeriod] ✓ Successfully updated period:`);
+    console.log("[autoMatchSinglePeriod] ✓ Successfully updated period:");
     console.log(`[autoMatchSinglePeriod]   - Transaction IDs: ${assignedTransactionIds.length}`);
     console.log(`[autoMatchSinglePeriod]   - Transaction Splits: ${splitReferences.length}`);
     console.log(`[autoMatchSinglePeriod]   - Status: ${newStatus}`);
 
   } catch (error: any) {
-    console.error(`[autoMatchSinglePeriod] Error:`, error);
-    result.errors.push(error.message || 'Unknown error');
+    console.error("[autoMatchSinglePeriod] Error:", error);
+    result.errors.push(error.message || "Unknown error");
   }
 
   return result;

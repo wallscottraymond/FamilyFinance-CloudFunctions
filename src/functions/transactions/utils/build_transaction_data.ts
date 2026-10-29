@@ -13,15 +13,15 @@
  * @module transactions/utils/build_transaction_data
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
 import {
   Transaction as FamilyTransaction,
   TransactionSplit,
   TransactionStatus,
   TransactionType,
   PlaidAccount
-} from '../../../types';
+} from "../../../types";
 
 /**
  * Build transaction data from Plaid transaction
@@ -55,15 +55,15 @@ export async function build_transaction_data(
       : Timestamp.now();
 
     // Extract primary and detailed categories from Plaid
-    const category_primary = plaid_transaction.personal_finance_category?.primary || 'OTHER_EXPENSE';
-    const category_detailed = plaid_transaction.personal_finance_category?.detailed || 'OTHER_EXPENSE';
+    const category_primary = plaid_transaction.personal_finance_category?.primary || "OTHER_EXPENSE";
+    const category_detailed = plaid_transaction.personal_finance_category?.detailed || "OTHER_EXPENSE";
 
     console.log(`🏷️ Plaid categories for transaction ${plaid_transaction.transaction_id}: primary=${category_primary}, detailed=${category_detailed}`);
 
     // Create default split for the transaction with NEW FLAT STRUCTURE
     const default_split: TransactionSplit = {
-      splitId: db.collection('_dummy').doc().id,
-      budgetId: 'unassigned', // Will be updated by match_transaction_splits_to_budgets
+      splitId: db.collection("_dummy").doc().id,
+      budgetId: "unassigned", // Will be updated by match_transaction_splits_to_budgets
       amount: absolute_amount,
       description: null,
       isDefault: true,
@@ -113,7 +113,7 @@ export async function build_transaction_data(
       createdBy: user_id,
       updatedBy: user_id,
       currency,
-      description: plaid_transaction.merchant_name || plaid_transaction.name || 'Bank Transaction',
+      description: plaid_transaction.merchant_name || plaid_transaction.name || "Bank Transaction",
 
       // === CATEGORY FIELDS (flattened to root) ===
       internalDetailedCategory: null, // User override (initially null)
@@ -123,7 +123,7 @@ export async function build_transaction_data(
 
       // === PLAID METADATA (flattened to root) ===
       plaidItemId: item_id,
-      source: 'plaid' as const,
+      source: "plaid" as const,
       transactionStatus: plaid_transaction.pending ? TransactionStatus.PENDING : TransactionStatus.APPROVED,
 
       // === TYPE AND IDENTIFIERS ===
@@ -137,25 +137,25 @@ export async function build_transaction_data(
       // === INITIAL PLAID DATA (preserved for reference) ===
       initialPlaidData: {
         plaidAccountId: plaid_transaction.account_id,
-        plaidMerchantName: plaid_transaction.merchant_name || '',
+        plaidMerchantName: plaid_transaction.merchant_name || "",
         plaidName: plaid_transaction.name,
         plaidTransactionId: plaid_transaction.transaction_id,
         plaidPending: plaid_transaction.pending,
-        source: 'plaid' as const,
+        source: "plaid" as const,
       },
     };
 
-    console.log(`✅ [build_transaction_data] Transaction mapped from Plaid (flat structure):`, {
+    console.log("✅ [build_transaction_data] Transaction mapped from Plaid (flat structure):", {
       transactionId: plaid_transaction.transaction_id,
       ownerId: user_id,
       groupId: group_id || null,
-      note: 'Period IDs and budget assignments will be populated by matching functions'
+      note: "Period IDs and budget assignments will be populated by matching functions"
     });
 
     return transaction as FamilyTransaction;
 
   } catch (error) {
-    console.error('Error formatting transaction from Plaid data:', {
+    console.error("Error formatting transaction from Plaid data:", {
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
       transactionId: plaid_transaction.transaction_id,

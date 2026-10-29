@@ -40,7 +40,7 @@ export const on_outflow_created = onDocumentCreated(
     const outflow_data = event.data?.data();
 
     // ===== DIAGNOSTIC LOGGING START =====
-    console.log(`[on_outflow_created] ===== TRIGGER FIRED =====`);
+    console.log("[on_outflow_created] ===== TRIGGER FIRED =====");
     console.log(`[on_outflow_created] outflow_id: ${outflow_id}`);
     console.log(`[on_outflow_created] event.id: ${event.id}`);
     console.log(
@@ -48,7 +48,7 @@ export const on_outflow_created = onDocumentCreated(
     );
     if (outflow_data) {
       console.log(
-        `[on_outflow_created] DIAGNOSTIC - Key fields: ` +
+        "[on_outflow_created] DIAGNOSTIC - Key fields: " +
           `ownerId=${outflow_data.ownerId}, ` +
           `userId=${outflow_data.userId}, ` +
           `isActive=${outflow_data.isActive}, ` +
@@ -138,7 +138,7 @@ export const on_outflow_created = onDocumentCreated(
     };
 
     console.log(
-      `[on_outflow_created] Calling generate_outflow_periods_orchestrator with input: ` +
+      "[on_outflow_created] Calling generate_outflow_periods_orchestrator with input: " +
         `outflow_id=${outflow_id}, user_id=${user_id}`
     );
 
@@ -185,7 +185,7 @@ export const on_outflow_created = onDocumentCreated(
         error
       );
       console.error(
-        `[on_outflow_created] Error stack:`,
+        "[on_outflow_created] Error stack:",
         error instanceof Error ? error.stack : "No stack available"
       );
 

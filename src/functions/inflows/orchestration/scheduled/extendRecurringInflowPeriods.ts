@@ -13,42 +13,42 @@
  * Memory: 512MiB, Timeout: 300s (5 minutes)
  */
 
-import { onSchedule } from 'firebase-functions/v2/scheduler';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   InflowPeriod,
   SourcePeriod,
   PlaidRecurringFrequency
-} from '../../../../types';
-import { calculateAllOccurrencesInPeriod } from '../../inflow_periods/utils/calculateAllOccurrencesInPeriod';
-import { RemovalMode, is_stored_period_active } from '../../../domain/recurring/recurring_suppression.service';
+} from "../../../../types";
+import { calculateAllOccurrencesInPeriod } from "../../inflow_periods/utils/calculateAllOccurrencesInPeriod";
+import { RemovalMode, is_stored_period_active } from "../../../domain/recurring/recurring_suppression.service";
 
 /**
  * Scheduled function to extend recurring inflow periods
  * Runs monthly on the 1st at 2:00 AM UTC
  */
 export const extendRecurringInflowPeriods = onSchedule({
-  schedule: '0 2 1 * *', // Cron: minute hour day month dayOfWeek
-  timeZone: 'UTC',
-  region: 'us-central1',
-  memory: '512MiB',
+  schedule: "0 2 1 * *", // Cron: minute hour day month dayOfWeek
+  timeZone: "UTC",
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 300,
 }, async (event) => {
-  console.log('[extendRecurringInflowPeriods] Starting scheduled inflow period extension...');
+  console.log("[extendRecurringInflowPeriods] Starting scheduled inflow period extension...");
 
   const db = admin.firestore();
   const now = Timestamp.now();
 
   try {
     // Get all active inflows
-    const activeInflowsQuery = db.collection('inflows')
-      .where('isActive', '==', true);
+    const activeInflowsQuery = db.collection("inflows")
+      .where("isActive", "==", true);
 
     const activeInflowsSnapshot = await activeInflowsQuery.get();
 
     if (activeInflowsSnapshot.empty) {
-      console.log('[extendRecurringInflowPeriods] No active inflows found to maintain');
+      console.log("[extendRecurringInflowPeriods] No active inflows found to maintain");
       return;
     }
 
@@ -65,14 +65,14 @@ export const extendRecurringInflowPeriods = onSchedule({
     console.log(`[extendRecurringInflowPeriods] Maintaining 1-year window: ${today.toISOString()} to ${oneYearFromToday.toISOString()}`);
 
     // Get all source periods for the rolling window
-    const sourcePeriodsQuery = db.collection('source_periods')
-      .where('startDate', '>=', Timestamp.fromDate(today))
-      .where('startDate', '<=', Timestamp.fromDate(oneYearFromToday));
+    const sourcePeriodsQuery = db.collection("source_periods")
+      .where("startDate", ">=", Timestamp.fromDate(today))
+      .where("startDate", "<=", Timestamp.fromDate(oneYearFromToday));
 
     const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
     if (sourcePeriodsSnapshot.empty) {
-      console.warn('[extendRecurringInflowPeriods] No source periods found in rolling window - may need source period generation');
+      console.warn("[extendRecurringInflowPeriods] No source periods found in rolling window - may need source period generation");
       return;
     }
 
@@ -94,12 +94,12 @@ export const extendRecurringInflowPeriods = onSchedule({
     }
 
     // Log final summary
-    console.log(`[extendRecurringInflowPeriods] Maintenance complete:`);
+    console.log("[extendRecurringInflowPeriods] Maintenance complete:");
     console.log(`   - Inflows processed: ${inflowsProcessed}`);
     console.log(`   - Total periods created: ${totalPeriodsCreated}`);
 
   } catch (error) {
-    console.error('[extendRecurringInflowPeriods] Fatal error in scheduled inflow period extension:', error);
+    console.error("[extendRecurringInflowPeriods] Fatal error in scheduled inflow period extension:", error);
     throw error; // Re-throw to mark the function execution as failed
   }
 });
@@ -109,30 +109,30 @@ export const extendRecurringInflowPeriods = onSchedule({
  */
 function calculatePaymentCycle(inflow: any) {
   const incomeAmount = Math.abs(
-    typeof inflow.averageAmount === 'number'
+    typeof inflow.averageAmount === "number"
       ? inflow.averageAmount
       : inflow.averageAmount?.amount || 0
   );
 
   let cycleDays: number;
   switch (inflow.frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      cycleDays = 7;
-      break;
-    case PlaidRecurringFrequency.BIWEEKLY:
-      cycleDays = 14;
-      break;
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      cycleDays = 15;
-      break;
-    case PlaidRecurringFrequency.MONTHLY:
-      cycleDays = 30;
-      break;
-    case PlaidRecurringFrequency.ANNUALLY:
-      cycleDays = 365;
-      break;
-    default:
-      cycleDays = 30;
+  case PlaidRecurringFrequency.WEEKLY:
+    cycleDays = 7;
+    break;
+  case PlaidRecurringFrequency.BIWEEKLY:
+    cycleDays = 14;
+    break;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+    cycleDays = 15;
+    break;
+  case PlaidRecurringFrequency.MONTHLY:
+    cycleDays = 30;
+    break;
+  case PlaidRecurringFrequency.ANNUALLY:
+    cycleDays = 365;
+    break;
+  default:
+    cycleDays = 30;
   }
 
   const dailyRate = incomeAmount / cycleDays;
@@ -185,7 +185,7 @@ async function batchCreateInflowPeriods(
     const batchPeriods = inflowPeriods.slice(i, i + BATCH_SIZE);
 
     batchPeriods.forEach((inflowPeriod) => {
-      const docRef = db.collection('inflow_periods').doc(inflowPeriod.id!);
+      const docRef = db.collection("inflow_periods").doc(inflowPeriod.id!);
       batch.set(docRef, inflowPeriod);
     });
 
@@ -214,8 +214,8 @@ export async function extendInflowPeriodsFor(
   console.log(`[extendRecurringInflowPeriods] Processing inflow: ${inflow.description || inflow.merchantName || inflow.id}`);
 
   // Get existing inflow periods for this inflow
-  const existingPeriodsQuery = db.collection('inflow_periods')
-    .where('inflowId', '==', inflow.id);
+  const existingPeriodsQuery = db.collection("inflow_periods")
+    .where("inflowId", "==", inflow.id);
 
   const existingPeriodsSnapshot = await existingPeriodsQuery.get();
   const existingPeriodIds = new Set(
@@ -294,7 +294,7 @@ export async function extendInflowPeriodsFor(
       lastCalculated: now,
 
       // === PAYMENT CYCLE INFO ===
-      currency: inflow.currency || 'USD',
+      currency: inflow.currency || "USD",
       cycleDays: cycleInfo.cycleDays,
       cycleStartDate: cycleInfo.cycleStartDate,
       cycleEndDate: cycleInfo.cycleEndDate,
@@ -313,8 +313,8 @@ export async function extendInflowPeriodsFor(
       // === CATEGORIZATION ===
       internalDetailedCategory: inflow.internalDetailedCategory || null,
       internalPrimaryCategory: inflow.internalPrimaryCategory || null,
-      plaidPrimaryCategory: inflow.plaidPrimaryCategory || 'INCOME',
-      plaidDetailedCategory: inflow.plaidDetailedCategory || '',
+      plaidPrimaryCategory: inflow.plaidPrimaryCategory || "INCOME",
+      plaidDetailedCategory: inflow.plaidDetailedCategory || "",
 
       // === STATUS & CONTROL ===
       isActive: is_stored_period_active(
@@ -342,12 +342,12 @@ export async function extendInflowPeriodsFor(
       // === USER INTERACTION ===
       rules: [],
       tags: inflow.tags || [],
-      type: inflow.type || 'income',
+      type: inflow.type || "income",
       note: null,
       userCustomName: inflow.userCustomName || null,
 
       // === SOURCE ===
-      source: inflow.source || 'plaid',
+      source: inflow.source || "plaid",
 
       // === TRANSACTION TRACKING ===
       transactionIds: [],

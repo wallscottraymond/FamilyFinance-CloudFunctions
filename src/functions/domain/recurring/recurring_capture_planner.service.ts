@@ -277,12 +277,12 @@ export function stream_vendor(s: { merchant_name: string | null; description: st
 
 const app_frequency = (raw: string): string | null => {
   switch (String(raw).toUpperCase()) {
-    case "WEEKLY": return "weekly";
-    case "BIWEEKLY": return "biweekly";
-    case "SEMI_MONTHLY": return "semimonthly";
-    case "MONTHLY": return "monthly";
-    case "ANNUALLY": return "yearly";
-    default: return null;
+  case "WEEKLY": return "weekly";
+  case "BIWEEKLY": return "biweekly";
+  case "SEMI_MONTHLY": return "semimonthly";
+  case "MONTHLY": return "monthly";
+  case "ANNUALLY": return "yearly";
+  default: return null;
   }
 };
 

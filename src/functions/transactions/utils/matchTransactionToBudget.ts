@@ -7,8 +7,8 @@
  * that share the same budget.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { queryDocuments } from '../../../utils/firestore';
+import { Timestamp } from "firebase-admin/firestore";
+import { queryDocuments } from "../../../utils/firestore";
 
 /**
  * Match a transaction to a budget based on its date and category
@@ -29,10 +29,10 @@ export async function matchTransactionToBudget(
   console.log(`🔍 Looking for active budgets for user ${userId}, transaction date: ${transactionDate.toISOString()}`);
 
   // Query all active budgets for the user
-  const budgetsQuery = await queryDocuments('budgets', {
+  const budgetsQuery = await queryDocuments("budgets", {
     where: [
-      { field: 'createdBy', operator: '==', value: userId },
-      { field: 'isActive', operator: '==', value: true }
+      { field: "createdBy", operator: "==", value: userId },
+      { field: "isActive", operator: "==", value: true }
     ]
   });
 
@@ -80,7 +80,7 @@ export async function matchTransactionToBudget(
 
         return {
           budgetId: budget.id!,
-          budgetName: budgetData.name || 'General'
+          budgetName: budgetData.name || "General"
         };
       }
     }
@@ -90,6 +90,6 @@ export async function matchTransactionToBudget(
 
   return {
     budgetId: undefined,
-    budgetName: 'General'
+    budgetName: "General"
   };
 }

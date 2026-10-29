@@ -8,13 +8,13 @@ import { updatePeriodNames } from "./updatePeriodNames";
  * Operation types supported by batch update
  */
 export type SummaryOperation =
-  | { type: 'recalculate'; data: RecalculateOperationData }
-  | { type: 'updateNames'; data: UpdateNamesOperationData };
+  | { type: "recalculate"; data: RecalculateOperationData }
+  | { type: "updateNames"; data: UpdateNamesOperationData };
 
 interface RecalculateOperationData {
   sourcePeriodId: string;
   ownerId: string;
-  ownerType: 'user' | 'group';
+  ownerType: "user" | "group";
   periodType: PeriodType;
 }
 
@@ -57,12 +57,12 @@ export async function batchUpdateSummary(params: {
 
   try {
     // Fetch current summary or prepare new one
-    const summaryRef = db.collection('outflow_summary').doc(summaryId);
+    const summaryRef = db.collection("outflow_summary").doc(summaryId);
     const summaryDoc = await summaryRef.get();
 
     let currentPeriods: { [sourcePeriodId: string]: OutflowPeriodEntry[] } = {};
-    let ownerId: string = '';
-    let ownerType: 'user' | 'group' = 'user';
+    let ownerId: string = "";
+    let ownerType: "user" | "group" = "user";
     let periodType: PeriodType = PeriodType.MONTHLY;
 
     if (summaryDoc.exists) {
@@ -74,10 +74,10 @@ export async function batchUpdateSummary(params: {
 
       console.log(`📖 Loaded existing summary with ${Object.keys(currentPeriods).length} period groups`);
     } else {
-      console.log(`📝 Summary does not exist, will create new one`);
+      console.log("📝 Summary does not exist, will create new one");
       // Extract owner info from first recalculate operation
-      const firstRecalc = operations.find(op => op.type === 'recalculate');
-      if (firstRecalc && firstRecalc.type === 'recalculate') {
+      const firstRecalc = operations.find(op => op.type === "recalculate");
+      if (firstRecalc && firstRecalc.type === "recalculate") {
         ownerId = firstRecalc.data.ownerId;
         ownerType = firstRecalc.data.ownerType;
         periodType = firstRecalc.data.periodType;
@@ -89,7 +89,7 @@ export async function batchUpdateSummary(params: {
 
     for (const operation of operations) {
       try {
-        if (operation.type === 'recalculate') {
+        if (operation.type === "recalculate") {
           const { sourcePeriodId, ownerId, ownerType, periodType } = operation.data;
 
           console.log(`🔄 Executing recalculate for period: ${sourcePeriodId}`);
@@ -108,7 +108,7 @@ export async function batchUpdateSummary(params: {
             delete updatedPeriods[sourcePeriodId];
           }
 
-        } else if (operation.type === 'updateNames') {
+        } else if (operation.type === "updateNames") {
           const { outflowId, merchant, userCustomName } = operation.data;
 
           console.log(`🔄 Executing updateNames for outflow: ${outflowId}`);
@@ -151,7 +151,7 @@ export async function batchUpdateSummary(params: {
         ownerId,
         ownerType,
         periodType,
-        resourceType: 'outflow' as const,
+        resourceType: "outflow" as const,
         windowStart,
         windowEnd,
         createdAt: now
@@ -178,7 +178,7 @@ export async function batchUpdateSummary(params: {
  */
 export function getSummaryId(
   ownerId: string,
-  ownerType: 'user' | 'group',
+  ownerType: "user" | "group",
   periodType: PeriodType
 ): string {
   const typeStr = periodType.toLowerCase();

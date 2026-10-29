@@ -13,8 +13,8 @@
  * See: src/functions/rules/CLAUDE.md for comprehensive documentation
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { BaseDocument } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { BaseDocument } from "../../../types";
 
 // ============================================================================
 // MAIN RULE INTERFACE
@@ -108,7 +108,7 @@ export interface CategoryRule extends BaseDocument {
  * }
  */
 export interface RuleConditions {
-  operator: 'AND' | 'OR';          // How to combine condition groups
+  operator: "AND" | "OR";          // How to combine condition groups
   conditionGroups: ConditionGroup[]; // Array of condition groups
 }
 
@@ -118,7 +118,7 @@ export interface RuleConditions {
  * Allows nesting for complex logic like: (A AND B) OR (C AND D)
  */
 export interface ConditionGroup {
-  operator: 'AND' | 'OR';          // How to combine conditions in this group
+  operator: "AND" | "OR";          // How to combine conditions in this group
   conditions: RuleCondition[];     // Array of individual conditions
   nested?: ConditionGroup[];       // Optional nested groups for deeper logic
 }
@@ -139,15 +139,15 @@ export interface RuleCondition {
  * These correspond to transaction fields that rules can evaluate.
  */
 export type RuleConditionField =
-  | 'merchantName'             // plaidData.merchantName or current merchantName
-  | 'description'              // plaidData.description or current description
-  | 'amount'                   // Transaction amount
-  | 'date'                     // Transaction date
-  | 'plaidCategory'            // plaidData.category (joined array)
-  | 'plaidDetailedCategory'    // plaidData.detailedCategory
-  | 'plaidPrimaryCategory'     // plaidData.primaryCategory
-  | 'dayOfWeek'                // Day of week (0-6, Sunday=0)
-  | 'tags';                    // Transaction tags array
+  | "merchantName"             // plaidData.merchantName or current merchantName
+  | "description"              // plaidData.description or current description
+  | "amount"                   // Transaction amount
+  | "date"                     // Transaction date
+  | "plaidCategory"            // plaidData.category (joined array)
+  | "plaidDetailedCategory"    // plaidData.detailedCategory
+  | "plaidPrimaryCategory"     // plaidData.primaryCategory
+  | "dayOfWeek"                // Day of week (0-6, Sunday=0)
+  | "tags";                    // Transaction tags array
 
 // ============================================================================
 // CONDITION TYPES
@@ -165,7 +165,7 @@ export type RuleConditionField =
  * { regex: "^(Smiths|Smith's) Gas$", caseSensitive: false }
  */
 export interface StringCondition {
-  type: 'string';
+  type: "string";
   equals?: string;                 // Exact match
   contains?: string;               // Substring match
   startsWith?: string;             // Prefix match
@@ -186,7 +186,7 @@ export interface StringCondition {
  * { equals: 45.99 }            // Exact amount
  */
 export interface NumberRange {
-  type: 'number';
+  type: "number";
   equals?: number;                 // Exact value
   min?: number;                    // Minimum value (inclusive)
   max?: number;                    // Maximum value (inclusive)
@@ -205,7 +205,7 @@ export interface NumberRange {
  * { relative: { unit: 'days', value: 30, direction: 'past' } } // Last 30 days
  */
 export interface DateRange {
-  type: 'date';
+  type: "date";
   before?: Timestamp;              // Before specific date
   after?: Timestamp;               // After specific date
   between?: {                      // Date range
@@ -224,9 +224,9 @@ export interface DateRange {
  * { unit: 'weeks', value: 2, direction: 'future' }   // Next 2 weeks
  */
 export interface RelativeDateCondition {
-  unit: 'days' | 'weeks' | 'months' | 'years';
+  unit: "days" | "weeks" | "months" | "years";
   value: number;                   // How many units
-  direction: 'past' | 'future';    // Direction from now
+  direction: "past" | "future";    // Direction from now
 }
 
 /**
@@ -241,7 +241,7 @@ export interface RelativeDateCondition {
  * { excludes: ["FAST_FOOD"] }
  */
 export interface CategoryCondition {
-  type: 'category';
+  type: "category";
   exactMatch?: string;             // Exact category match
   primaryMatch?: string;           // Match primary category
   includes?: string[];             // Must include one of these
@@ -259,7 +259,7 @@ export interface CategoryCondition {
  * { excludes: ["tag3"] }              // Must not include
  */
 export interface ArrayCondition {
-  type: 'array';
+  type: "array";
   includes?: string[];             // Must include all (AND)
   excludes?: string[];             // Must exclude all
   includesAny?: string[];          // Must include at least one (OR)
@@ -438,8 +438,8 @@ export interface DeleteRuleRequest {
  */
 export interface ListRulesRequest {
   isActive?: boolean;              // Filter by active status
-  sortBy?: 'priority' | 'createdAt' | 'matchCount' | 'name';
-  sortDirection?: 'asc' | 'desc';
+  sortBy?: "priority" | "createdAt" | "matchCount" | "name";
+  sortDirection?: "asc" | "desc";
   limit?: number;
 }
 
@@ -549,7 +549,7 @@ export interface RuleValidationResult {
 export interface RuleConflict {
   ruleId1: string;
   ruleId2: string;
-  conflictType: 'category' | 'tag' | 'budget' | 'priority';
+  conflictType: "category" | "tag" | "budget" | "priority";
   description: string;
   resolution?: string;             // Suggested resolution
 }

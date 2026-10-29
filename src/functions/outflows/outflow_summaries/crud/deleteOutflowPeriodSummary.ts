@@ -9,9 +9,9 @@
  * deletion and ensure summary totals remain accurate.
  */
 
-import { OutflowPeriod } from '../../../../types';
-import { batchUpdateSummary, getSummaryId } from '../utils/batchUpdateSummary';
-import { determinePeriodType } from '../utils/periodTypeHelpers';
+import { OutflowPeriod } from "../../../../types";
+import { batchUpdateSummary, getSummaryId } from "../utils/batchUpdateSummary";
+import { determinePeriodType } from "../utils/periodTypeHelpers";
 
 /**
  * Update outflow summaries for a deleted period
@@ -37,50 +37,50 @@ import { determinePeriodType } from '../utils/periodTypeHelpers';
 export async function deleteOutflowPeriodSummary(
   periodData: OutflowPeriod
 ): Promise<void> {
-  console.log('[deleteOutflowPeriodSummary] Updating outflow summaries after deletion...');
+  console.log("[deleteOutflowPeriodSummary] Updating outflow summaries after deletion...");
 
   // Determine period type from source period ID
   const periodType = determinePeriodType(periodData.sourcePeriodId);
 
   // Update user summary (recalculate without deleted period)
-  const userSummaryId = getSummaryId(periodData.ownerId, 'user', periodType);
+  const userSummaryId = getSummaryId(periodData.ownerId, "user", periodType);
   console.log(`[deleteOutflowPeriodSummary] ✓ Updating user summary: ${userSummaryId}`);
 
   await batchUpdateSummary({
     summaryId: userSummaryId,
     operations: [{
-      type: 'recalculate',
+      type: "recalculate",
       data: {
         sourcePeriodId: periodData.sourcePeriodId,
         ownerId: periodData.ownerId,
-        ownerType: 'user',
+        ownerType: "user",
         periodType
       }
     }]
   });
 
-  console.log(`[deleteOutflowPeriodSummary] ✓ User summary updated successfully`);
+  console.log("[deleteOutflowPeriodSummary] ✓ User summary updated successfully");
 
   // Update group summary if period belonged to a group
   if (periodData.groupId) {
-    const groupSummaryId = getSummaryId(periodData.groupId, 'group', periodType);
+    const groupSummaryId = getSummaryId(periodData.groupId, "group", periodType);
     console.log(`[deleteOutflowPeriodSummary] ✓ Updating group summary: ${groupSummaryId}`);
 
     await batchUpdateSummary({
       summaryId: groupSummaryId,
       operations: [{
-        type: 'recalculate',
+        type: "recalculate",
         data: {
           sourcePeriodId: periodData.sourcePeriodId,
           ownerId: periodData.groupId,
-          ownerType: 'group',
+          ownerType: "group",
           periodType
         }
       }]
     });
 
-    console.log(`[deleteOutflowPeriodSummary] ✓ Group summary updated successfully`);
+    console.log("[deleteOutflowPeriodSummary] ✓ Group summary updated successfully");
   }
 
-  console.log('[deleteOutflowPeriodSummary] ✓ Summary updates complete after deletion');
+  console.log("[deleteOutflowPeriodSummary] ✓ Summary updates complete after deletion");
 }

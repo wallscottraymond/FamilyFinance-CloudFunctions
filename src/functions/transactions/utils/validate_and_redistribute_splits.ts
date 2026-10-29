@@ -14,7 +14,7 @@
  * @module transactions/utils/validate_and_redistribute_splits
  */
 
-import { Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from "@google-cloud/firestore";
 
 export interface TransactionSplit {
   splitId: string;
@@ -63,7 +63,7 @@ export function validate_and_redistribute_splits(
   if (!splits || splits.length === 0) {
     return {
       is_valid: false,
-      error: 'No splits provided'
+      error: "No splits provided"
     };
   }
 
@@ -202,16 +202,16 @@ function redistribute_underage(
   // Create unallocated split for the remainder
   const unallocated_split: TransactionSplit = {
     splitId: `unallocated_${Date.now()}`,
-    budgetId: 'unassigned',
+    budgetId: "unassigned",
     amount: remainder,
-    description: 'Unallocated',
+    description: "Unallocated",
     isDefault: false,
     monthlyPeriodId: null,
     weeklyPeriodId: null,
     biWeeklyPeriodId: null,
     outflowId: null,
-    plaidPrimaryCategory: 'Uncategorized',
-    plaidDetailedCategory: 'Uncategorized',
+    plaidPrimaryCategory: "Uncategorized",
+    plaidDetailedCategory: "Uncategorized",
     internalPrimaryCategory: null,
     internalDetailedCategory: null,
     isIgnored: false,

@@ -183,14 +183,14 @@ export async function assign_transactions_batch_orchestrator(
       caller_candidates
         ? Promise.resolve(caller_candidates)
         : scoped
-        ? load_recurring_candidates_scoped(
-          ctx,
-          input.candidate_outflow_ids ?? [],
-          input.candidate_inflow_ids ?? [],
-          window_start_ms,
-          window_end_ms
-        )
-        : load_recurring_candidates(ctx, input.user_id, window_start_ms, window_end_ms),
+          ? load_recurring_candidates_scoped(
+            ctx,
+            input.candidate_outflow_ids ?? [],
+            input.candidate_inflow_ids ?? [],
+            window_start_ms,
+            window_end_ms
+          )
+          : load_recurring_candidates(ctx, input.user_id, window_start_ms, window_end_ms),
       source_period_repo.get_overlapping(
         ctx,
         Timestamp.fromMillis(span_start_ms),

@@ -7,10 +7,10 @@
  * Usage: firebase functions:call createMissingEverythingElseBudgets
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { createEverythingElseBudget } from '../utils/createEverythingElseBudget';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { createEverythingElseBudget } from "../utils/createEverythingElseBudget";
 
 /**
  * Summary of migration results
@@ -57,25 +57,25 @@ interface MigrationResponse {
  * @returns Migration summary with created/skipped/error counts
  */
 export const createMissingEverythingElseBudgets = onCall({
-  region: 'us-central1',
-  memory: '512MiB',
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 540, // 9 minutes for large migrations
 }, async (request): Promise<MigrationResponse> => {
-  console.log('🔧 [createMissingEverythingElseBudgets] Migration started');
+  console.log("🔧 [createMissingEverythingElseBudgets] Migration started");
 
   // 1. Authentication check
   if (!request.auth) {
-    console.error('❌ [createMissingEverythingElseBudgets] Unauthenticated request');
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
+    console.error("❌ [createMissingEverythingElseBudgets] Unauthenticated request");
+    throw new HttpsError("unauthenticated", "User must be authenticated");
   }
 
   // 2. Admin role check
-  const isAdmin = request.auth.token?.role === 'admin';
+  const isAdmin = request.auth.token?.role === "admin";
   if (!isAdmin) {
     console.error(`❌ [createMissingEverythingElseBudgets] Non-admin user attempted migration: ${request.auth.uid}`);
     throw new HttpsError(
-      'permission-denied',
-      'Only admins can run migration functions'
+      "permission-denied",
+      "Only admins can run migration functions"
     );
   }
 
@@ -83,13 +83,13 @@ export const createMissingEverythingElseBudgets = onCall({
 
   try {
     // 3. Query all active users
-    console.log('📊 [createMissingEverythingElseBudgets] Querying active users...');
-    const usersSnapshot = await db.collection('users')
-      .where('isActive', '==', true)
+    console.log("📊 [createMissingEverythingElseBudgets] Querying active users...");
+    const usersSnapshot = await db.collection("users")
+      .where("isActive", "==", true)
       .get();
 
     if (usersSnapshot.empty) {
-      console.warn('⚠️ [createMissingEverythingElseBudgets] No active users found');
+      console.warn("⚠️ [createMissingEverythingElseBudgets] No active users found");
       return {
         success: true,
         summary: {
@@ -124,9 +124,9 @@ export const createMissingEverythingElseBudgets = onCall({
 
       try {
         // 6. Check if user already has "everything else" budget
-        const existingBudgetQuery = await db.collection('budgets')
-          .where('userId', '==', userId)
-          .where('isSystemEverythingElse', '==', true)
+        const existingBudgetQuery = await db.collection("budgets")
+          .where("userId", "==", userId)
+          .where("isSystemEverythingElse", "==", true)
           .get();
 
         if (!existingBudgetQuery.empty) {
@@ -137,7 +137,7 @@ export const createMissingEverythingElseBudgets = onCall({
         }
 
         // 7. Create "everything else" budget for user
-        const userCurrency = userData.preferences?.currency || 'USD';
+        const userCurrency = userData.preferences?.currency || "USD";
         const budgetId = await createEverythingElseBudget(db, userId, userCurrency);
 
         console.log(`✅ [createMissingEverythingElseBudgets] Created "everything else" budget for user ${userId}: ${budgetId}`);
@@ -149,7 +149,7 @@ export const createMissingEverythingElseBudgets = onCall({
         errorCount++;
         errorDetails.push({
           userId,
-          error: error.message || 'Unknown error'
+          error: error.message || "Unknown error"
         });
       }
     }
@@ -163,7 +163,7 @@ export const createMissingEverythingElseBudgets = onCall({
       timestamp: Timestamp.now()
     };
 
-    console.log('🎉 [createMissingEverythingElseBudgets] Migration completed:', summary);
+    console.log("🎉 [createMissingEverythingElseBudgets] Migration completed:", summary);
 
     return {
       success: true,
@@ -173,12 +173,12 @@ export const createMissingEverythingElseBudgets = onCall({
 
   } catch (error: any) {
     // 10. Handle complete failure
-    console.error('❌ [createMissingEverythingElseBudgets] Migration failed:', error);
+    console.error("❌ [createMissingEverythingElseBudgets] Migration failed:", error);
     return {
       success: false,
       error: {
-        code: 'migration-failed',
-        message: error.message || 'Failed to complete migration'
+        code: "migration-failed",
+        message: error.message || "Failed to complete migration"
       }
     };
   }

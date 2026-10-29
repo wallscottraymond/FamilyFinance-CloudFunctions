@@ -138,31 +138,31 @@ export async function resolve_recurring_reconciliation(
         : await inflow_period_repo.get_by_ids(ctx, period_ids);
 
   const to_period = ({ id, data }: { id: string; data: Record<string, unknown> }): ResolvedReconciliationPeriod => {
-      const per_occurrence = Number(data.amountPerOccurrence ?? 0) || recurring_amount;
-      let due_dates_ms = Array.isArray(data.occurrenceDueDates)
-        ? data.occurrenceDueDates
-          .map((d: unknown) => to_ms(d))
-          .filter((d: number | null): d is number => d !== null)
-        : [];
+    const per_occurrence = Number(data.amountPerOccurrence ?? 0) || recurring_amount;
+    let due_dates_ms = Array.isArray(data.occurrenceDueDates)
+      ? data.occurrenceDueDates
+        .map((d: unknown) => to_ms(d))
+        .filter((d: number | null): d is number => d !== null)
+      : [];
       // Fallback for legacy periods missing the array: a single occurrence at the
       // period's due date (the domain still filters to [start,end]). Regeneration
       // backfills the real array; this just covers the transitional window.
-      if (due_dates_ms.length === 0) {
-        const due = to_ms(data.firstDueDateInPeriod);
-        if (due !== null) due_dates_ms = [due];
-      }
-      return {
-        period_id: id,
-        start_ms: to_ms(data.periodStartDate) ?? 0,
-        end_ms: to_ms(data.periodEndDate) ?? 0,
-        due_date_ms: to_ms(data.firstDueDateInPeriod),
-        amount_per_occurrence: per_occurrence,
-        occurrence_due_dates_ms: due_dates_ms,
-        is_variable_amount,
-        period_type: String(data.periodType ?? ""),
-        stored_fingerprint: fingerprint_stored(data.reconciliation),
-        ...(data.carryActive === true ? { carry_active: true } : {}),
-      };
+    if (due_dates_ms.length === 0) {
+      const due = to_ms(data.firstDueDateInPeriod);
+      if (due !== null) due_dates_ms = [due];
+    }
+    return {
+      period_id: id,
+      start_ms: to_ms(data.periodStartDate) ?? 0,
+      end_ms: to_ms(data.periodEndDate) ?? 0,
+      due_date_ms: to_ms(data.firstDueDateInPeriod),
+      amount_per_occurrence: per_occurrence,
+      occurrence_due_dates_ms: due_dates_ms,
+      is_variable_amount,
+      period_type: String(data.periodType ?? ""),
+      stored_fingerprint: fingerprint_stored(data.reconciliation),
+      ...(data.carryActive === true ? { carry_active: true } : {}),
+    };
   };
   const periods: ResolvedReconciliationPeriod[] = period_docs.filter(({ data }) => data.isActive !== false).map(to_period);
   const removal_intervals_all = (recurring as { removal_intervals?: RemovalInterval[] }).removal_intervals;

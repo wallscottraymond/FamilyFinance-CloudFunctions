@@ -1,4 +1,4 @@
-import { Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from "@google-cloud/firestore";
 
 /**
  * Split Validation & Redistribution Utility
@@ -61,7 +61,7 @@ export function validateAndRedistributeSplits(
   if (!splits || splits.length === 0) {
     return {
       isValid: false,
-      error: 'No splits provided'
+      error: "No splits provided"
     };
   }
 
@@ -200,16 +200,16 @@ function redistributeUnderage(
   // Create unallocated split for the remainder
   const unallocatedSplit: TransactionSplit = {
     splitId: `unallocated_${Date.now()}`,
-    budgetId: 'unassigned',
+    budgetId: "unassigned",
     amount: remainder,
-    description: 'Unallocated',
+    description: "Unallocated",
     isDefault: false,
     monthlyPeriodId: null,
     weeklyPeriodId: null,
     biWeeklyPeriodId: null,
     outflowId: null,
-    plaidPrimaryCategory: 'Uncategorized',
-    plaidDetailedCategory: 'Uncategorized',
+    plaidPrimaryCategory: "Uncategorized",
+    plaidDetailedCategory: "Uncategorized",
     internalPrimaryCategory: null,
     internalDetailedCategory: null,
     isIgnored: false,

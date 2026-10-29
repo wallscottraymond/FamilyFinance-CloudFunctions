@@ -166,7 +166,7 @@ describe("an unreadable stored pick (retired slug)", () => {
     const r = resolve_split_category_edit({ ...retired, spendStatus: "ignored" }, retired, txn, catalog);
     expect(r).toMatchObject({ categorySource: "user", firstCategoryId: "retired_slug" });
   });
-  it('"use auto" still resets it to Plaid', () => {
+  it("\"use auto\" still resets it to Plaid", () => {
     const r = resolve_split_category_edit({ ...retired, categorySource: "plaid" }, retired, txn, catalog);
     expect(r).toMatchObject({ categorySource: "plaid", firstCategoryId: "groceries" });
   });

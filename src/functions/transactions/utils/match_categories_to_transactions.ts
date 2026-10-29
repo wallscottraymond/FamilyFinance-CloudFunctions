@@ -10,9 +10,9 @@
  * @module transactions/utils/match_categories_to_transactions
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { Transaction as FamilyTransaction, TransactionCategory } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { Transaction as FamilyTransaction, TransactionCategory } from "../../../types";
 
 /**
  * Match categories to transactions based on additional business logic (in-memory)
@@ -89,7 +89,7 @@ export async function match_categories_to_transactions(
           matched_count++;
         }
       } catch (error) {
-        console.error(`Error matching category for transaction:`, error);
+        console.error("Error matching category for transaction:", error);
       }
     }
 
@@ -98,7 +98,7 @@ export async function match_categories_to_transactions(
     return transactions; // Return modified array
 
   } catch (error) {
-    console.error('Error in match_categories_to_transactions:', error);
+    console.error("Error in match_categories_to_transactions:", error);
     return transactions; // Return original array on error
   }
 }
@@ -114,8 +114,8 @@ export async function lookup_category_by_merchant(merchant_name: string): Promis
     console.log(`  🔍 Looking up merchant in categories collection: "${merchant_name}"`);
 
     // Query categories collection for matching merchant
-    const categories_snapshot = await db.collection('categories')
-      .where('merchants', 'array-contains', merchant_name.toLowerCase())
+    const categories_snapshot = await db.collection("categories")
+      .where("merchants", "array-contains", merchant_name.toLowerCase())
       .limit(1)
       .get();
 
@@ -127,7 +127,7 @@ export async function lookup_category_by_merchant(merchant_name: string): Promis
 
     return null;
   } catch (error) {
-    console.error('Error looking up category by merchant:', error);
+    console.error("Error looking up category by merchant:", error);
     return null;
   }
 }
@@ -143,7 +143,7 @@ export async function lookup_category_by_transaction_name(transaction_name: stri
     console.log(`  🔍 Looking up transaction name in categories collection: "${transaction_name}"`);
 
     // Query categories collection for matching keywords in transaction name
-    const categories_snapshot = await db.collection('categories').get();
+    const categories_snapshot = await db.collection("categories").get();
 
     for (const doc of categories_snapshot.docs) {
       const category_data = doc.data();
@@ -163,7 +163,7 @@ export async function lookup_category_by_transaction_name(transaction_name: stri
 
     return null;
   } catch (error) {
-    console.error('Error looking up category by transaction name:', error);
+    console.error("Error looking up category by transaction name:", error);
     return null;
   }
 }

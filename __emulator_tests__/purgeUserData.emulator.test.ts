@@ -20,11 +20,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 
 // Mock the Plaid revoke + token decrypt BEFORE importing the orchestrator.
-jest.mock('../src/functions/integrations/plaid', () => ({
+jest.mock("../src/functions/integrations/plaid", () => ({
   remove_item: jest.fn(),
 }));
-jest.mock('../src/utils/encryption', () => ({
-  ...jest.requireActual('../src/utils/encryption'),
+jest.mock("../src/utils/encryption", () => ({
+  ...jest.requireActual("../src/utils/encryption"),
   decryptAccessToken: (t: string) => t, // passthrough — no real key needed
 }));
 

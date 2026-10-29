@@ -9,13 +9,13 @@
  */
 
 // === CRUD Operations ===
-export * from './crud';
+export * from "./crud";
 
 // === Resource Sharing ===
-export * from './sharing';
+export * from "./sharing";
 
 // === Permission Checks ===
-export * from './permissions';
+export * from "./permissions";
 
 // === API Endpoints ===
 // export * from './api';
@@ -30,7 +30,7 @@ export * from './permissions';
 // export * from './dev';
 
 // === Types ===
-export * from './types';
+export * from "./types";
 
 // === Utilities ===
-export * from './utils';
+export * from "./utils";

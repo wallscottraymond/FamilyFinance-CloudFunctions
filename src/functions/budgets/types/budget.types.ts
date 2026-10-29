@@ -9,4 +9,4 @@ export type {
   Budget,
   BudgetPeriod,
   BudgetPeriodDocument,
-} from '../../../types';
+} from "../../../types";

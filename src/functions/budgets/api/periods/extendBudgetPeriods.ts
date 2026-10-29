@@ -12,18 +12,18 @@
  * Memory: 256MiB, Timeout: 30s
  */
 
-import { onCall, CallableRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
+import { onCall, CallableRequest } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
 import {
   Budget,
   BudgetPeriodDocument,
   SourcePeriod,
   UserRole,
   PeriodType
-} from '../../../../types';
-import { authenticateRequest } from '../../../../utils/auth';
-import { batchCreateBudgetPeriods } from '../../utils/budgetPeriods';
-import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
+} from "../../../../types";
+import { authenticateRequest } from "../../../../utils/auth";
+import { batchCreateBudgetPeriods } from "../../utils/budgetPeriods";
+import { calculatePeriodAllocatedAmount } from "../../utils/calculatePeriodAllocatedAmount";
 
 interface ExtendBudgetPeriodsRequest {
   periodId: string;       // Target period we need budget data for
@@ -42,8 +42,8 @@ interface ExtendBudgetPeriodsResponse {
  * Called when frontend needs budget data for a period that doesn't exist yet
  */
 export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<ExtendBudgetPeriodsResponse>>({
-  region: 'us-central1',
-  memory: '256MiB',
+  region: "us-central1",
+  memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request: CallableRequest<ExtendBudgetPeriodsRequest>) => {
   try {
@@ -52,14 +52,14 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     // Authenticate user
     const { user, userData } = await authenticateRequest(request, UserRole.VIEWER);
     if (!user || !userData) {
-      throw new Error('Authentication required');
+      throw new Error("Authentication required");
     }
     const db = admin.firestore();
     
     console.log(`Creating budget periods for period: ${periodId} for user: ${user.uid}`);
 
     // Get the target source period
-    const targetPeriodDoc = await db.collection('source_periods').doc(periodId).get();
+    const targetPeriodDoc = await db.collection("source_periods").doc(periodId).get();
     if (!targetPeriodDoc.exists) {
       throw new Error(`Source period not found: ${periodId}`);
     }
@@ -67,21 +67,21 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     const targetPeriod = { id: targetPeriodDoc.id, ...targetPeriodDoc.data() } as SourcePeriod;
     
     // Find active budgets that need extension
-    let budgetsQuery = db.collection('budgets')
-      .where('isActive', '==', true);
+    let budgetsQuery = db.collection("budgets")
+      .where("isActive", "==", true);
     
     if (familyId) {
       // If familyId provided, get family budgets
-      budgetsQuery = budgetsQuery.where('familyId', '==', familyId);
+      budgetsQuery = budgetsQuery.where("familyId", "==", familyId);
     } else {
       // Otherwise get user's personal budgets
-      budgetsQuery = budgetsQuery.where('createdBy', '==', user.uid);
+      budgetsQuery = budgetsQuery.where("createdBy", "==", user.uid);
     }
     
     const budgetsSnapshot = await budgetsQuery.get();
     
     if (budgetsSnapshot.empty) {
-      console.log('No active budgets found');
+      console.log("No active budgets found");
       return {
         success: true,
         budgetPeriodsCreated: 0,
@@ -100,9 +100,9 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
       const budget = { id: budgetDoc.id, ...budgetDoc.data() } as Budget;
 
       // Check if this budget already has this period
-      const existingPeriodQuery = await db.collection('budget_periods')
-        .where('budgetId', '==', budget.id)
-        .where('periodId', '==', periodId)
+      const existingPeriodQuery = await db.collection("budget_periods")
+        .where("budgetId", "==", budget.id)
+        .where("periodId", "==", periodId)
         .get();
 
       if (!existingPeriodQuery.empty) {
@@ -135,9 +135,9 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
       // bi_monthly is a first-class prime cadence (Per-Period-EE Phase 0) — do NOT
       // clamp it to monthly. quarterly/yearly/custom have no source period, so they
       // allocate on the monthly grid.
-      const budgetPeriodType = budget.period === 'weekly' ? PeriodType.WEEKLY :
-                                budget.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
-                                PeriodType.MONTHLY;
+      const budgetPeriodType = budget.period === "weekly" ? PeriodType.WEEKLY :
+        budget.period === "bi_monthly" ? PeriodType.BI_MONTHLY :
+          PeriodType.MONTHLY;
       const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, targetPeriod);
 
       const budgetPeriod: BudgetPeriodDocument = {
@@ -145,7 +145,7 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
         budgetId: budget.id!,
         periodId: targetPeriod.id!,
         sourcePeriodId: targetPeriod.id!,
-        familyId: String(budget.familyId || userData.familyId || ''),
+        familyId: String(budget.familyId || userData.familyId || ""),
 
         // Ownership
         userId: budget.createdBy,
@@ -180,7 +180,7 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     }
     
     if (budgetPeriodsToCreate.length === 0) {
-      console.log('No budget periods need to be created');
+      console.log("No budget periods need to be created");
       return {
         success: true,
         budgetPeriodsCreated: 0,
@@ -205,15 +205,15 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
         };
       } else {
         // Check if this period extends the current range
-        const currentEndPeriodDoc = await db.collection('source_periods').doc(budget.activePeriodRange.endPeriod).get();
+        const currentEndPeriodDoc = await db.collection("source_periods").doc(budget.activePeriodRange.endPeriod).get();
         const currentEndTime = currentEndPeriodDoc.data()?.startDate?.toMillis() || 0;
 
         if (targetPeriod.startDate.toMillis() > currentEndTime) {
-          updateData['activePeriodRange.endPeriod'] = targetPeriod.id;
+          updateData["activePeriodRange.endPeriod"] = targetPeriod.id;
         }
       }
 
-      await db.collection('budgets').doc(budget.id!).update(updateData);
+      await db.collection("budgets").doc(budget.id!).update(updateData);
     }
     
     console.log(`Successfully created ${budgetPeriodsToCreate.length} budget periods`);
@@ -225,12 +225,12 @@ export const extendBudgetPeriods = onCall<ExtendBudgetPeriodsRequest, Promise<Ex
     };
     
   } catch (error) {
-    console.error('Error extending budget periods:', error);
+    console.error("Error extending budget periods:", error);
     return {
       success: false,
       budgetPeriodsCreated: 0,
       budgetsExtended: [],
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 });

@@ -8,9 +8,9 @@
  * - Group-level category preferences
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { Transaction as FamilyTransaction, TransactionCategory } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { Transaction as FamilyTransaction, TransactionCategory } from "../../../types";
 
 /**
  * Match categories to transactions based on additional business logic (in-memory)
@@ -87,7 +87,7 @@ export async function matchCategoriesToTransactions(
           matchedCount++;
         }
       } catch (error) {
-        console.error(`Error matching category for transaction:`, error);
+        console.error("Error matching category for transaction:", error);
       }
     }
 
@@ -96,7 +96,7 @@ export async function matchCategoriesToTransactions(
     return transactions; // Return modified array
 
   } catch (error) {
-    console.error('Error in matchCategoriesToTransactions:', error);
+    console.error("Error in matchCategoriesToTransactions:", error);
     return transactions; // Return original array on error
   }
 }
@@ -112,8 +112,8 @@ export async function lookupCategoryByMerchant(merchantName: string): Promise<Tr
     console.log(`  🔍 Looking up merchant in categories collection: "${merchantName}"`);
 
     // Query categories collection for matching merchant
-    const categoriesSnapshot = await db.collection('categories')
-      .where('merchants', 'array-contains', merchantName.toLowerCase())
+    const categoriesSnapshot = await db.collection("categories")
+      .where("merchants", "array-contains", merchantName.toLowerCase())
       .limit(1)
       .get();
 
@@ -125,7 +125,7 @@ export async function lookupCategoryByMerchant(merchantName: string): Promise<Tr
 
     return null;
   } catch (error) {
-    console.error('Error looking up category by merchant:', error);
+    console.error("Error looking up category by merchant:", error);
     return null;
   }
 }
@@ -141,7 +141,7 @@ export async function lookupCategoryByTransactionName(transactionName: string): 
     console.log(`  🔍 Looking up transaction name in categories collection: "${transactionName}"`);
 
     // Query categories collection for matching keywords in transaction name
-    const categoriesSnapshot = await db.collection('categories').get();
+    const categoriesSnapshot = await db.collection("categories").get();
 
     for (const doc of categoriesSnapshot.docs) {
       const categoryData = doc.data();
@@ -161,7 +161,7 @@ export async function lookupCategoryByTransactionName(transactionName: string): 
 
     return null;
   } catch (error) {
-    console.error('Error looking up category by transaction name:', error);
+    console.error("Error looking up category by transaction name:", error);
     return null;
   }
 }

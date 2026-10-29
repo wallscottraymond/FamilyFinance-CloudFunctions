@@ -6,9 +6,9 @@
  * Non-prime periods derive their amounts from overlapping prime periods.
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod, BudgetPeriod } from '../../../types';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod, BudgetPeriod } from "../../../types";
 
 /**
  * Maps a Budget's period field to the corresponding PeriodType
@@ -23,15 +23,15 @@ export function getPrimePeriodType(budgetPeriod: BudgetPeriod): PeriodType {
   // MONTHLY (the previous `default` silently clamped it — the old comment claiming
   // "BI_MONTHLY maps to BI_MONTHLY" was never actually implemented).
   switch (budgetPeriod as string) {
-    case 'weekly':
-      return PeriodType.WEEKLY;
-    case 'bi_monthly':
-      return PeriodType.BI_MONTHLY;
-    case 'monthly':
-      return PeriodType.MONTHLY;
-    default:
-      // QUARTERLY, YEARLY, CUSTOM — no matching source period → monthly grid.
-      return PeriodType.MONTHLY;
+  case "weekly":
+    return PeriodType.WEEKLY;
+  case "bi_monthly":
+    return PeriodType.BI_MONTHLY;
+  case "monthly":
+    return PeriodType.MONTHLY;
+  default:
+    // QUARTERLY, YEARLY, CUSTOM — no matching source period → monthly grid.
+    return PeriodType.MONTHLY;
   }
 }
 
@@ -140,10 +140,10 @@ export async function generatePrimeBudgetPeriods(
   console.log(`[primePeriodGeneration] Prime period type: ${primePeriodType}`);
 
   // Query source_periods that match the prime period type and overlap with budget date range
-  const sourcePeriodsQuery = db.collection('source_periods')
-    .where('type', '==', primePeriodType)
-    .where('endDate', '>=', Timestamp.fromDate(startDate))
-    .where('startDate', '<=', Timestamp.fromDate(endDate));
+  const sourcePeriodsQuery = db.collection("source_periods")
+    .where("type", "==", primePeriodType)
+    .where("endDate", ">=", Timestamp.fromDate(startDate))
+    .where("startDate", "<=", Timestamp.fromDate(endDate));
 
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
@@ -191,8 +191,8 @@ export async function generatePrimeBudgetPeriods(
       actualDays: daysInPeriod,
       allocatedAmount: allocatedAmount.toFixed(2),
       dailyRate: dailyRate.toFixed(2),
-      actualStart: actualStart.toISOString().split('T')[0],
-      actualEnd: actualEnd.toISOString().split('T')[0],
+      actualStart: actualStart.toISOString().split("T")[0],
+      actualEnd: actualEnd.toISOString().split("T")[0],
     });
 
     // Create prime budget period document
@@ -210,7 +210,7 @@ export async function generatePrimeBudgetPeriods(
       accessibleBy: budget.accessibleBy,
 
       // === LEGACY FIELDS (Backward compatibility) ===
-      familyId: String(budget.familyId || ''),
+      familyId: String(budget.familyId || ""),
       userId: budget.access?.createdBy || budget.createdBy,
 
       // Period context

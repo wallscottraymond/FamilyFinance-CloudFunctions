@@ -39,11 +39,11 @@
  * See CLAUDE.md for detailed workflow examples and data architecture.
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { authenticateRequest, UserRole } from '../../../../utils/auth';
-import { PaymentType, TransactionSplitReference, Transaction, OutflowPeriod, TransactionSplit, RecurringOutflow } from '../../../../types';
-import * as admin from 'firebase-admin';
-import { findMatchingOutflowPeriods, findMatchingOutflowPeriodsBySourcePeriod, validatePeriodsFound } from '../utils/findMatchingOutflowPeriods';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { authenticateRequest, UserRole } from "../../../../utils/auth";
+import { PaymentType, TransactionSplitReference, Transaction, OutflowPeriod, TransactionSplit, RecurringOutflow } from "../../../../types";
+import * as admin from "firebase-admin";
+import { findMatchingOutflowPeriods, findMatchingOutflowPeriodsBySourcePeriod, validatePeriodsFound } from "../utils/findMatchingOutflowPeriods";
 import { bump_derive_version } from "../../../repositories/derive_version.repo";
 
 /**
@@ -53,7 +53,7 @@ export interface AssignSplitToAllOutflowPeriodsRequest {
   transactionId: string;
   splitId: string;
   outflowId: string;  // Parent outflow ID (not period ID!)
-  paymentType?: 'regular' | 'catch_up' | 'advance' | 'extra_principal';
+  paymentType?: "regular" | "catch_up" | "advance" | "extra_principal";
   clearBudgetAssignment?: boolean;  // Clear budget fields when moving to outflow
   targetPeriodId?: string;  // Optional: Specific period ID to assign to (for advance payments across multiple periods)
 }
@@ -76,7 +76,7 @@ export interface AssignSplitToAllOutflowPeriodsResponse {
  */
 export const assignSplitToAllOutflowPeriods = onCall(
   {
-    memory: '256MiB',
+    memory: "256MiB",
     timeoutSeconds: 30,
   },
   async (request) => {
@@ -89,14 +89,14 @@ export const assignSplitToAllOutflowPeriods = onCall(
         transactionId,
         splitId,
         outflowId,
-        paymentType = 'regular',
+        paymentType = "regular",
         clearBudgetAssignment = false,
         targetPeriodId
       } = request.data as AssignSplitToAllOutflowPeriodsRequest;
 
       // Validate required fields
       if (!transactionId || !splitId || !outflowId) {
-        throw new HttpsError('invalid-argument', 'transactionId, splitId, and outflowId are required');
+        throw new HttpsError("invalid-argument", "transactionId, splitId, and outflowId are required");
       }
 
       // Validate payment type
@@ -107,7 +107,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
         PaymentType.EXTRA_PRINCIPAL
       ];
       if (!validPaymentTypes.includes(paymentType as PaymentType)) {
-        throw new HttpsError('invalid-argument', `Invalid payment type: ${paymentType}`);
+        throw new HttpsError("invalid-argument", `Invalid payment type: ${paymentType}`);
       }
 
       console.log(`[assignSplitToAll] User ${userId} assigning split ${splitId} to outflow ${outflowId}`);
@@ -115,33 +115,33 @@ export const assignSplitToAllOutflowPeriods = onCall(
       const db = admin.firestore();
 
       // Step 1: Get and validate transaction
-      const transactionRef = db.collection('transactions').doc(transactionId);
+      const transactionRef = db.collection("transactions").doc(transactionId);
       const transactionDoc = await transactionRef.get();
 
       if (!transactionDoc.exists) {
-        throw new HttpsError('not-found', `Transaction ${transactionId} not found`);
+        throw new HttpsError("not-found", `Transaction ${transactionId} not found`);
       }
 
       const transaction = { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
 
       // Verify user owns the transaction
       if (transaction.ownerId !== userId) {
-        throw new HttpsError('permission-denied', 'You can only assign your own transaction splits');
+        throw new HttpsError("permission-denied", "You can only assign your own transaction splits");
       }
 
       // Step 2: Get and validate outflow
-      const outflowRef = db.collection('outflows').doc(outflowId);
+      const outflowRef = db.collection("outflows").doc(outflowId);
       const outflowDoc = await outflowRef.get();
 
       if (!outflowDoc.exists) {
-        throw new HttpsError('not-found', `Outflow ${outflowId} not found`);
+        throw new HttpsError("not-found", `Outflow ${outflowId} not found`);
       }
 
       const outflow = { id: outflowDoc.id, ...outflowDoc.data() } as RecurringOutflow;
 
       // Verify user owns the outflow
       if (outflow.userId !== userId) {
-        throw new HttpsError('permission-denied', 'You can only assign splits to your own outflows');
+        throw new HttpsError("permission-denied", "You can only assign splits to your own outflows");
       }
 
       // Step 3: Find the split in the transaction
@@ -149,14 +149,14 @@ export const assignSplitToAllOutflowPeriods = onCall(
       const splitIndex = splits.findIndex(s => s.splitId === splitId);
 
       if (splitIndex === -1) {
-        throw new HttpsError('not-found', `Split ${splitId} not found in transaction ${transactionId}`);
+        throw new HttpsError("not-found", `Split ${splitId} not found in transaction ${transactionId}`);
       }
 
       const split = splits[splitIndex];
 
       // Step 4: Check if split is already assigned to an outflow
       if (split.outflowId && split.outflowId !== outflowId) {
-        throw new HttpsError('failed-precondition', 'Split is already assigned to another outflow. Unassign it first.');
+        throw new HttpsError("failed-precondition", "Split is already assigned to another outflow. Unassign it first.");
       }
 
       // Step 5: Find all matching outflow periods
@@ -178,7 +178,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
       const updatedSplit: TransactionSplit = {
         ...splits[splitIndex],
         // Clear budget assignment if requested
-        budgetId: clearBudgetAssignment ? '' : splits[splitIndex].budgetId,
+        budgetId: clearBudgetAssignment ? "" : splits[splitIndex].budgetId,
         // Set outflow assignment
         outflowId: outflowId,
         // Payment classification
@@ -196,7 +196,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
         updatedAt: admin.firestore.Timestamp.now()
       });
 
-      console.log(`[assignSplitToAll] Updated transaction split with all period references`);
+      console.log("[assignSplitToAll] Updated transaction split with all period references");
 
       // Derive-input write → bump the per-user derive version: invalidates the derive cache
       // and is the mobile app's transaction-change signal (on_transaction_written doesn't bump).
@@ -219,7 +219,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
       const batch = db.batch();
 
       if (matchingPeriods.monthlyPeriodId) {
-        const monthlyRef = db.collection('outflow_periods').doc(matchingPeriods.monthlyPeriodId);
+        const monthlyRef = db.collection("outflow_periods").doc(matchingPeriods.monthlyPeriodId);
         batch.update(monthlyRef, {
           transactionSplits: admin.firestore.FieldValue.arrayUnion(splitRef),
           updatedAt: admin.firestore.Timestamp.now()
@@ -227,7 +227,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
       }
 
       if (matchingPeriods.weeklyPeriodId) {
-        const weeklyRef = db.collection('outflow_periods').doc(matchingPeriods.weeklyPeriodId);
+        const weeklyRef = db.collection("outflow_periods").doc(matchingPeriods.weeklyPeriodId);
         batch.update(weeklyRef, {
           transactionSplits: admin.firestore.FieldValue.arrayUnion(splitRef),
           updatedAt: admin.firestore.Timestamp.now()
@@ -235,7 +235,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
       }
 
       if (matchingPeriods.biWeeklyPeriodId) {
-        const biWeeklyRef = db.collection('outflow_periods').doc(matchingPeriods.biWeeklyPeriodId);
+        const biWeeklyRef = db.collection("outflow_periods").doc(matchingPeriods.biWeeklyPeriodId);
         batch.update(biWeeklyRef, {
           transactionSplits: admin.firestore.FieldValue.arrayUnion(splitRef),
           updatedAt: admin.firestore.Timestamp.now()
@@ -255,7 +255,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       if (matchingPeriods.monthlyPeriodId) {
         periodFetchPromises.push(
-          db.collection('outflow_periods').doc(matchingPeriods.monthlyPeriodId).get()
+          db.collection("outflow_periods").doc(matchingPeriods.monthlyPeriodId).get()
             .then(doc => {
               if (doc.exists) {
                 cachedPeriods.monthly = { id: doc.id, ...doc.data() } as OutflowPeriod;
@@ -266,7 +266,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       if (matchingPeriods.weeklyPeriodId) {
         periodFetchPromises.push(
-          db.collection('outflow_periods').doc(matchingPeriods.weeklyPeriodId).get()
+          db.collection("outflow_periods").doc(matchingPeriods.weeklyPeriodId).get()
             .then(doc => {
               if (doc.exists) {
                 cachedPeriods.weekly = { id: doc.id, ...doc.data() } as OutflowPeriod;
@@ -277,7 +277,7 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       if (matchingPeriods.biWeeklyPeriodId) {
         periodFetchPromises.push(
-          db.collection('outflow_periods').doc(matchingPeriods.biWeeklyPeriodId).get()
+          db.collection("outflow_periods").doc(matchingPeriods.biWeeklyPeriodId).get()
             .then(doc => {
               if (doc.exists) {
                 cachedPeriods.biWeekly = { id: doc.id, ...doc.data() } as OutflowPeriod;
@@ -302,19 +302,19 @@ export const assignSplitToAllOutflowPeriods = onCall(
       if (matchingPeriods.monthlyPeriodId && cachedPeriods.monthly) {
         monthlyPeriod = cachedPeriods.monthly;
         // Status is calculated on read, no need to store it
-        console.log(`[assignSplitToAll] Monthly period updated`);
+        console.log("[assignSplitToAll] Monthly period updated");
       }
 
       if (matchingPeriods.weeklyPeriodId && cachedPeriods.weekly) {
         weeklyPeriod = cachedPeriods.weekly;
         // Status is calculated on read, no need to store it
-        console.log(`[assignSplitToAll] Weekly period updated`);
+        console.log("[assignSplitToAll] Weekly period updated");
       }
 
       if (matchingPeriods.biWeeklyPeriodId && cachedPeriods.biWeekly) {
         biWeeklyPeriod = cachedPeriods.biWeekly;
         // Status is calculated on read, no need to store it
-        console.log(`[assignSplitToAll] Bi-weekly period updated`);
+        console.log("[assignSplitToAll] Bi-weekly period updated");
       }
 
       // No status batch needed anymore - status is calculated on read
@@ -333,13 +333,13 @@ export const assignSplitToAllOutflowPeriods = onCall(
 
       return response;
     } catch (error: any) {
-      console.error('[assignSplitToAll] Error:', error);
+      console.error("[assignSplitToAll] Error:", error);
 
       if (error instanceof HttpsError) {
         throw error;
       }
 
-      throw new HttpsError('internal', error.message || 'Failed to assign split to outflow periods');
+      throw new HttpsError("internal", error.message || "Failed to assign split to outflow periods");
     }
   }
 );

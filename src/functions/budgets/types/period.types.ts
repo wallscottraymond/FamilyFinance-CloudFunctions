@@ -8,6 +8,6 @@
 export type {
   SourcePeriod,
   BudgetPeriodDocument,
-} from '../../../types';
+} from "../../../types";
 
-export { PeriodType } from '../../../types';
+export { PeriodType } from "../../../types";

@@ -8,17 +8,17 @@ import { getDocument } from "../../../../utils/firestore";
 
 // Map resource types to collection names
 const RESOURCE_COLLECTIONS: Record<string, string> = {
-  budget: 'budgets',
-  transaction: 'transactions',
-  outflow: 'outflows',
-  inflow: 'inflows',
-  rule: 'rules',
+  budget: "budgets",
+  transaction: "transactions",
+  outflow: "outflows",
+  inflow: "inflows",
+  rule: "rules",
 };
 
-const ALL_RESOURCE_TYPES = ['budget', 'transaction', 'outflow', 'inflow', 'rule'];
+const ALL_RESOURCE_TYPES = ["budget", "transaction", "outflow", "inflow", "rule"];
 
 interface GetUserAccessibleResourcesRequest {
-  resourceType?: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType?: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   minAccessLevel?: ResourceRole;
 }
 
@@ -26,7 +26,7 @@ interface AccessibleResource {
   resourceId: string;
   resourceType: string;
   accessLevel: ResourceRole;
-  accessSource: 'owner' | 'direct' | 'group';
+  accessSource: "owner" | "direct" | "group";
   groupId?: string;
 }
 
@@ -51,19 +51,19 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
   memory: "512MiB",
   timeoutSeconds: 60,
 }, async (request) => {
-  console.log('[getUserAccessibleResources] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[getUserAccessibleResources] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
     const { resourceType, minAccessLevel } = request.data || {};
 
     // Get the user's group memberships
-    const user = await getDocument<User>('users', callerUserId);
+    const user = await getDocument<User>("users", callerUserId);
     const userGroupIds: string[] = user?.groupIds || [];
 
     // Determine which resource types to query
@@ -89,8 +89,8 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
 
       // Query for owned resources
       const ownedQuery = db.collection(collectionName)
-        .where('userId', '==', callerUserId)
-        .where('isActive', '==', true);
+        .where("userId", "==", callerUserId)
+        .where("isActive", "==", true);
 
       const ownedSnapshot = await ownedQuery.get();
 
@@ -104,7 +104,7 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
             resourceId: doc.id,
             resourceType: type,
             accessLevel: ResourceRole.OWNER,
-            accessSource: 'owner',
+            accessSource: "owner",
           });
         }
       }
@@ -119,8 +119,8 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
 
         for (const groupIdChunk of groupIdChunks) {
           const groupShareQuery = db.collection(collectionName)
-            .where('groupIds', 'array-contains-any', groupIdChunk)
-            .where('isActive', '==', true);
+            .where("groupIds", "array-contains-any", groupIdChunk)
+            .where("isActive", "==", true);
 
           const groupShareSnapshot = await groupShareQuery.get();
 
@@ -138,7 +138,7 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
             let matchedGroupId: string | undefined;
 
             for (const share of sharing.sharedWith) {
-              if (share.type === 'group' && userGroupIds.includes(share.targetId)) {
+              if (share.type === "group" && userGroupIds.includes(share.targetId)) {
                 const shareRole = share.role as ResourceRole;
                 if (!highestRole || roleHierarchy[shareRole] > roleHierarchy[highestRole]) {
                   highestRole = shareRole;
@@ -153,7 +153,7 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
                 resourceId: doc.id,
                 resourceType: type,
                 accessLevel: highestRole,
-                accessSource: 'group',
+                accessSource: "group",
                 groupId: matchedGroupId,
               });
             }
@@ -163,8 +163,8 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
 
       // Query for resources directly shared with user
       const directShareQuery = db.collection(collectionName)
-        .where('sharing.isShared', '==', true)
-        .where('isActive', '==', true);
+        .where("sharing.isShared", "==", true)
+        .where("isActive", "==", true);
 
       const directShareSnapshot = await directShareQuery.get();
 
@@ -179,7 +179,7 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
 
         // Check for direct user share
         const userShare = sharing.sharedWith.find(
-          (s: any) => s.type === 'user' && s.targetId === callerUserId
+          (s: any) => s.type === "user" && s.targetId === callerUserId
         );
 
         if (userShare) {
@@ -190,7 +190,7 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
               resourceId: doc.id,
               resourceType: type,
               accessLevel: shareRole,
-              accessSource: 'direct',
+              accessSource: "direct",
             });
           }
         }
@@ -205,12 +205,12 @@ export const getUserAccessibleResources = onCall<GetUserAccessibleResourcesReque
     };
 
   } catch (error: any) {
-    console.error('[getUserAccessibleResources] Error:', error);
+    console.error("[getUserAccessibleResources] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to get accessible resources');
+    throw new HttpsError("internal", "Failed to get accessible resources");
   }
 });

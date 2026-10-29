@@ -16,9 +16,9 @@
  * - March 2025: 5 Wednesdays (5, 12, 19, 26, and partial week to April 2)
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, OutflowOccurrence } from '../../../../types';
-import { occurrence_dates_in_window } from '../../../domain/outflows/outflow_period.service';
+import { Timestamp } from "firebase-admin/firestore";
+import { RecurringOutflow, SourcePeriod, OutflowOccurrence } from "../../../../types";
+import { occurrence_dates_in_window } from "../../../domain/outflows/outflow_period.service";
 
 /**
  * Result of calculating all occurrences in a period
@@ -101,18 +101,18 @@ export function calculateAllOccurrencesInPeriod(
   const periodEnd = sourcePeriod.endDate.toDate();
 
   console.log(
-    `[calculateAllOccurrencesInPeriod] Calculating for ${outflow.description || 'Unnamed'} ` +
-    `(${outflow.frequency}) in period ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`
+    `[calculateAllOccurrencesInPeriod] Calculating for ${outflow.description || "Unnamed"} ` +
+    `(${outflow.frequency}) in period ${periodStart.toISOString().split("T")[0]} to ${periodEnd.toISOString().split("T")[0]}`
   );
 
   // Step 1: Start with Plaid's predicted date or last known occurrence
   let referenceDate: Date;
   if (outflow.predictedNextDate) {
     referenceDate = outflow.predictedNextDate.toDate();
-    console.log(`[calculateAllOccurrencesInPeriod] Using Plaid predictedNextDate: ${referenceDate.toISOString().split('T')[0]}`);
+    console.log(`[calculateAllOccurrencesInPeriod] Using Plaid predictedNextDate: ${referenceDate.toISOString().split("T")[0]}`);
   } else {
     referenceDate = outflow.lastDate.toDate();
-    console.log(`[calculateAllOccurrencesInPeriod] No predictedNextDate, using lastDate: ${referenceDate.toISOString().split('T')[0]}`);
+    console.log(`[calculateAllOccurrencesInPeriod] No predictedNextDate, using lastDate: ${referenceDate.toISOString().split("T")[0]}`);
   }
 
   // Step 2: Rewind to find the first occurrence at or before period start
@@ -159,7 +159,7 @@ export function calculateAllOccurrencesInPeriod(
 
   console.log(
     `[calculateAllOccurrencesInPeriod] Result: ${result.numberOfOccurrences} occurrence(s) found for ` +
-    `${outflow.description || 'Unnamed'} in period ${sourcePeriod.id}`
+    `${outflow.description || "Unnamed"} in period ${sourcePeriod.id}`
   );
 
   return result;

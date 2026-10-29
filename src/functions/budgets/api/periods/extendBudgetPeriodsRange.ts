@@ -15,18 +15,18 @@
  * Memory: 512MiB, Timeout: 60s (increased for batch processing)
  */
 
-import { onCall, CallableRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
+import { onCall, CallableRequest } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
 import {
   Budget,
   BudgetPeriodDocument,
   SourcePeriod,
   PeriodType,
   UserRole
-} from '../../../../types';
-import { authenticateRequest } from '../../../../utils/auth';
-import { batchCreateBudgetPeriods } from '../../utils/budgetPeriods';
-import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
+} from "../../../../types";
+import { authenticateRequest } from "../../../../utils/auth";
+import { batchCreateBudgetPeriods } from "../../utils/budgetPeriods";
+import { calculatePeriodAllocatedAmount } from "../../utils/calculatePeriodAllocatedAmount";
 
 interface ExtendBudgetPeriodsRangeRequest {
   startPeriodId: string;    // First period we need budget data for
@@ -50,8 +50,8 @@ interface ExtendBudgetPeriodsRangeResponse {
  * Called proactively when frontend detects user approaching periods without budget data
  */
 export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, Promise<ExtendBudgetPeriodsRangeResponse>>({
-  region: 'us-central1',
-  memory: '512MiB',
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 60,
 }, async (request: CallableRequest<ExtendBudgetPeriodsRangeRequest>) => {
   try {
@@ -60,18 +60,18 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
     // Authenticate user
     const { user, userData } = await authenticateRequest(request, UserRole.VIEWER);
     if (!user || !userData) {
-      throw new Error('Authentication required');
+      throw new Error("Authentication required");
     }
     const db = admin.firestore();
     
     console.log(`Extending budget periods range: ${startPeriodId} to ${endPeriodId} (${periodType}) for user: ${user.uid}`);
     
     // Get all source periods in the requested range
-    const sourcePeriodsQuery = await db.collection('source_periods')
-      .where('type', '==', periodType)
-      .where('id', '>=', startPeriodId)
-      .where('id', '<=', endPeriodId)
-      .orderBy('id')
+    const sourcePeriodsQuery = await db.collection("source_periods")
+      .where("type", "==", periodType)
+      .where("id", ">=", startPeriodId)
+      .where("id", "<=", endPeriodId)
+      .orderBy("id")
       .limit(maxPeriods)
       .get();
     
@@ -86,19 +86,19 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
     console.log(`Found ${sourcePeriods.length} source periods in range`);
     
     // Find active budgets that need extension
-    let budgetsQuery = db.collection('budgets')
-      .where('isActive', '==', true);
+    let budgetsQuery = db.collection("budgets")
+      .where("isActive", "==", true);
     
     if (familyId) {
-      budgetsQuery = budgetsQuery.where('familyId', '==', familyId);
+      budgetsQuery = budgetsQuery.where("familyId", "==", familyId);
     } else {
-      budgetsQuery = budgetsQuery.where('createdBy', '==', user.uid);
+      budgetsQuery = budgetsQuery.where("createdBy", "==", user.uid);
     }
     
     const budgetsSnapshot = await budgetsQuery.get();
     
     if (budgetsSnapshot.empty) {
-      console.log('No active budgets found to extend');
+      console.log("No active budgets found to extend");
       return {
         success: true,
         budgetPeriodsCreated: 0,
@@ -115,10 +115,10 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
     console.log(`Found ${budgets.length} active budgets to potentially extend`);
     
     // Check which budget periods already exist to avoid duplicates
-    const existingPeriodsQuery = await db.collection('budget_periods')
-      .where('userId', '==', user.uid)
-      .where('periodType', '==', periodType)
-      .where('periodId', 'in', sourcePeriods.map(p => p.id!))
+    const existingPeriodsQuery = await db.collection("budget_periods")
+      .where("userId", "==", user.uid)
+      .where("periodType", "==", periodType)
+      .where("periodId", "in", sourcePeriods.map(p => p.id!))
       .get();
     
     const existingPeriodIds = new Set<string>();
@@ -155,9 +155,9 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
         // Calculate allocated amount based on actual days in period.
         // bi_monthly is a first-class prime cadence (Per-Period-EE Phase 0) — not
         // clamped to monthly. quarterly/yearly/custom allocate on the monthly grid.
-        const budgetPeriodType = budget.period === 'weekly' ? PeriodType.WEEKLY :
-                                  budget.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
-                                  PeriodType.MONTHLY;
+        const budgetPeriodType = budget.period === "weekly" ? PeriodType.WEEKLY :
+          budget.period === "bi_monthly" ? PeriodType.BI_MONTHLY :
+            PeriodType.MONTHLY;
         const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
         
         const budgetPeriod: BudgetPeriodDocument = {
@@ -165,7 +165,7 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
           budgetId: budget.id!,
           periodId: sourcePeriod.id!,
           sourcePeriodId: sourcePeriod.id!, // Direct reference to source_periods.id for mapping
-          familyId: String(budget.familyId || userData.familyId || ''),
+          familyId: String(budget.familyId || userData.familyId || ""),
           
           // Ownership
           userId: budget.createdBy,
@@ -201,7 +201,7 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
     }
     
     if (budgetPeriodsToCreate.length === 0) {
-      console.log('No budget periods need to be created');
+      console.log("No budget periods need to be created");
       return {
         success: true,
         budgetPeriodsCreated: 0,
@@ -225,11 +225,11 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
       // Only update if this is extending beyond current range
       if (!budget.activePeriodRange || 
           latestPeriod.startDate.toMillis() > 
-          (await db.collection('source_periods').doc(budget.activePeriodRange.endPeriod).get())
+          (await db.collection("source_periods").doc(budget.activePeriodRange.endPeriod).get())
             .data()?.startDate?.toMillis()) {
         
-        await db.collection('budgets').doc(budgetId).update({
-          'activePeriodRange.endPeriod': latestPeriod.id,
+        await db.collection("budgets").doc(budgetId).update({
+          "activePeriodRange.endPeriod": latestPeriod.id,
           lastExtended: now,
         });
       }
@@ -248,14 +248,14 @@ export const extendBudgetPeriodsRange = onCall<ExtendBudgetPeriodsRangeRequest, 
     };
     
   } catch (error) {
-    console.error('Error extending budget periods range:', error);
+    console.error("Error extending budget periods range:", error);
     return {
       success: false,
       budgetPeriodsCreated: 0,
       budgetsExtended: [],
       periodsProcessed: [],
       skippedPeriods: [],
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 });

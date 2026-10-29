@@ -4,7 +4,7 @@
  * Shared utilities for determining period types from source period IDs.
  */
 
-import { PeriodType } from '../../../../types';
+import { PeriodType } from "../../../../types";
 
 /**
  * Determine PeriodType from sourcePeriodId format
@@ -26,11 +26,11 @@ import { PeriodType } from '../../../../types';
  */
 export function determinePeriodType(sourcePeriodId: string): PeriodType {
   // Check for bi-monthly FIRST (since "BM" contains "M")
-  if (sourcePeriodId.includes('BM')) {
+  if (sourcePeriodId.includes("BM")) {
     return PeriodType.BI_MONTHLY;
-  } else if (sourcePeriodId.includes('W')) {
+  } else if (sourcePeriodId.includes("W")) {
     return PeriodType.WEEKLY;
-  } else if (sourcePeriodId.includes('M')) {
+  } else if (sourcePeriodId.includes("M")) {
     return PeriodType.MONTHLY;
   }
   // Default to monthly if unable to determine

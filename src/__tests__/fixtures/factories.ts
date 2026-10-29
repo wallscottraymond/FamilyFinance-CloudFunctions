@@ -10,7 +10,7 @@
  * const budget = createTestBudget({ name: 'Groceries', amount: 500 });
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 import {
   Budget,
   BudgetPeriod,
@@ -22,10 +22,10 @@ import {
   PeriodType,
   PaymentType,
   ChecklistItem,
-} from '../../types';
-import { TEST_USER, TEST_ACCOUNT, DEFAULTS } from './constants';
-import { CATEGORIES } from './categories';
-import { now, currentMonthStart, currentMonthEnd, currentMonthPeriodId } from './dateHelpers';
+} from "../../types";
+import { TEST_USER, TEST_ACCOUNT, DEFAULTS } from "./constants";
+import { CATEGORIES } from "./categories";
+import { now, currentMonthStart, currentMonthEnd, currentMonthPeriodId } from "./dateHelpers";
 
 // ============================================================================
 // TRANSACTION SPLIT FACTORY
@@ -51,7 +51,7 @@ export const createTestTransactionSplit = (options: CreateTransactionSplitOption
 
   return {
     splitId: options.splitId || `split_${Date.now()}`,
-    budgetId: options.budgetId || 'unassigned',
+    budgetId: options.budgetId || "unassigned",
     budgetName: options.budgetName,
 
     // Source period IDs (null when not calculated)
@@ -60,8 +60,8 @@ export const createTestTransactionSplit = (options: CreateTransactionSplitOption
     biWeeklyPeriodId: null,
 
     // Category information
-    plaidPrimaryCategory: options.plaidPrimaryCategory || 'FOOD_AND_DRINK',
-    plaidDetailedCategory: options.plaidDetailedCategory || 'FOOD_AND_DRINK_GROCERIES',
+    plaidPrimaryCategory: options.plaidPrimaryCategory || "FOOD_AND_DRINK",
+    plaidDetailedCategory: options.plaidDetailedCategory || "FOOD_AND_DRINK_GROCERIES",
     internalPrimaryCategory: null,
     internalDetailedCategory: null,
 
@@ -141,22 +141,22 @@ export const createTestTransaction = (options: CreateTransactionOptions): Transa
     createdBy: ownerId,
     updatedBy: ownerId,
     currency: DEFAULTS.CURRENCY,
-    description: options.description || 'Test Transaction',
+    description: options.description || "Test Transaction",
 
     // Category fields
     internalDetailedCategory: null,
     internalPrimaryCategory: null,
-    plaidDetailedCategory: options.plaidDetailedCategory || 'FOOD_AND_DRINK_GROCERIES',
-    plaidPrimaryCategory: options.plaidPrimaryCategory || 'FOOD_AND_DRINK',
+    plaidDetailedCategory: options.plaidDetailedCategory || "FOOD_AND_DRINK_GROCERIES",
+    plaidPrimaryCategory: options.plaidPrimaryCategory || "FOOD_AND_DRINK",
 
     // Plaid metadata
     plaidItemId: TEST_ACCOUNT.PLAID_ITEM,
-    source: 'manual',
+    source: "manual",
     transactionStatus: options.transactionStatus || TransactionStatus.APPROVED,
 
     // Type and identifiers
     type: options.type || TransactionType.EXPENSE,
-    name: options.description || 'Test Transaction',
+    name: options.description || "Test Transaction",
     merchantName: options.merchantName || null,
 
     // Splits
@@ -165,11 +165,11 @@ export const createTestTransaction = (options: CreateTransactionOptions): Transa
     // Initial Plaid data
     initialPlaidData: {
       plaidAccountId: options.accountId || TEST_ACCOUNT.CHECKING,
-      plaidMerchantName: options.merchantName || '',
-      plaidName: options.description || 'Test Transaction',
+      plaidMerchantName: options.merchantName || "",
+      plaidName: options.description || "Test Transaction",
       plaidTransactionId: txnId,
       plaidPending: false,
-      source: 'plaid',
+      source: "plaid",
     },
   };
 };
@@ -216,7 +216,7 @@ export const createTestBudget = (options: CreateBudgetOptions): Budget => {
     currency: DEFAULTS.CURRENCY,
     categoryIds: options.categoryIds || [CATEGORIES.FOOD_GROCERIES],
     period: options.period || BudgetPeriod.MONTHLY,
-    budgetType: 'recurring',
+    budgetType: "recurring",
     isOngoing: options.isOngoing !== false, // Default true
 
     // Dates
@@ -236,7 +236,7 @@ export const createTestBudget = (options: CreateBudgetOptions): Budget => {
 
     // Legacy fields (for backward compatibility)
     userId: ownerId,
-    familyId: groupIds[0] || '',
+    familyId: groupIds[0] || "",
     groupId: groupIds[0] || null,
 
     // AccessControl
@@ -317,7 +317,7 @@ export const createTestBudgetPeriod = (options: CreateBudgetPeriodOptions): Budg
     groupIds: groupIds,
     isPrivate: groupIds.length === 0,
     userId: ownerId,
-    familyId: groupIds[0] || '',
+    familyId: groupIds[0] || "",
     groupId: groupIds[0] || null,
   };
 };
@@ -341,7 +341,7 @@ export const createTestChecklistItem = (options: CreateChecklistItemOptions): Ch
   return {
     id: options.id || `checklist_${Date.now()}`,
     name: options.name,
-    transactionSplit: '',
+    transactionSplit: "",
     expectedAmount: options.expectedAmount,
     actualAmount: options.actualAmount || 0,
     isChecked: options.isChecked || false,

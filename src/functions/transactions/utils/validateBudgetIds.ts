@@ -5,8 +5,8 @@
  * Auto-fixes invalid budgetIds to the user's "Everything Else" system budget.
  */
 
-import { getFirestore, FieldPath } from 'firebase-admin/firestore';
-import { TransactionSplit } from '../../../types';
+import { getFirestore, FieldPath } from "firebase-admin/firestore";
+import { TransactionSplit } from "../../../types";
 
 const db = getFirestore();
 
@@ -31,16 +31,16 @@ export async function validateAndFixBudgetIds(
     ...new Set(
       splits
         .map(s => s.budgetId)
-        .filter(id => id && id !== 'unassigned' && id !== 'auto')
+        .filter(id => id && id !== "unassigned" && id !== "auto")
     )
   ];
 
   if (budgetIds.length === 0) {
-    console.log('[validateBudgetIds] No budgetIds to validate (all unassigned or auto)');
+    console.log("[validateBudgetIds] No budgetIds to validate (all unassigned or auto)");
     return splits;
   }
 
-  console.log(`[validateBudgetIds] Checking ${budgetIds.length} unique budgetIds: ${budgetIds.join(', ')}`);
+  console.log(`[validateBudgetIds] Checking ${budgetIds.length} unique budgetIds: ${budgetIds.join(", ")}`);
 
   try {
     // Step 2: Fetch budgets to check existence and active status
@@ -52,26 +52,26 @@ export async function validateAndFixBudgetIds(
     for (let i = 0; i < budgetIds.length; i += 30) {
       const batchIds = budgetIds.slice(i, i + 30);
 
-      const budgetsSnapshot = await db.collection('budgets')
-        .where('userId', '==', userId)
-        .where('isActive', '==', true)
-        .where(FieldPath.documentId(), 'in', batchIds)
+      const budgetsSnapshot = await db.collection("budgets")
+        .where("userId", "==", userId)
+        .where("isActive", "==", true)
+        .where(FieldPath.documentId(), "in", batchIds)
         .get();
 
       budgetsSnapshot.docs.forEach(doc => {
         validBudgetIds.add(doc.id);
         const budgetData = doc.data();
-        budgetNames.set(doc.id, budgetData.name || 'General');
+        budgetNames.set(doc.id, budgetData.name || "General");
       });
     }
 
     console.log(`[validateBudgetIds] Found ${validBudgetIds.size} valid budgets out of ${budgetIds.length}`);
 
     // Step 3: Find "Everything Else" budget as fallback
-    const everythingElseSnapshot = await db.collection('budgets')
-      .where('userId', '==', userId)
-      .where('isSystemEverythingElse', '==', true)
-      .where('isActive', '==', true)
+    const everythingElseSnapshot = await db.collection("budgets")
+      .where("userId", "==", userId)
+      .where("isSystemEverythingElse", "==", true)
+      .where("isActive", "==", true)
       .limit(1)
       .get();
 
@@ -81,10 +81,10 @@ export async function validateAndFixBudgetIds(
 
     const everythingElseBudgetName = everythingElseSnapshot.empty
       ? null
-      : (everythingElseSnapshot.docs[0].data().name || 'Everything Else');
+      : (everythingElseSnapshot.docs[0].data().name || "Everything Else");
 
     if (!everythingElseBudgetId) {
-      console.warn('[validateBudgetIds] WARNING: No "Everything Else" budget found for user. Invalid budgetIds will remain unchanged.');
+      console.warn("[validateBudgetIds] WARNING: No \"Everything Else\" budget found for user. Invalid budgetIds will remain unchanged.");
     } else {
       // Add "everything else" budget to the maps
       budgetNames.set(everythingElseBudgetId, everythingElseBudgetName!);
@@ -94,7 +94,7 @@ export async function validateAndFixBudgetIds(
     let fixedCount = 0;
     const fixedSplits = splits.map(split => {
       // Skip validation for 'unassigned' and 'auto' special values
-      if (!split.budgetId || split.budgetId === 'unassigned' || split.budgetId === 'auto') {
+      if (!split.budgetId || split.budgetId === "unassigned" || split.budgetId === "auto") {
         return split;
       }
 
@@ -102,13 +102,13 @@ export async function validateAndFixBudgetIds(
       if (!validBudgetIds.has(split.budgetId)) {
         console.warn(
           `[validateBudgetIds] Invalid budgetId: ${split.budgetId} (split: ${split.splitId}) - ` +
-          `auto-fixing to ${everythingElseBudgetId || 'unassigned'}`
+          `auto-fixing to ${everythingElseBudgetId || "unassigned"}`
         );
         fixedCount++;
 
         return {
           ...split,
-          budgetId: everythingElseBudgetId || 'unassigned',
+          budgetId: everythingElseBudgetId || "unassigned",
           budgetName: everythingElseBudgetId ? everythingElseBudgetName : undefined
         };
       }
@@ -127,13 +127,13 @@ export async function validateAndFixBudgetIds(
     if (fixedCount > 0) {
       console.log(`[validateBudgetIds] Auto-fixed ${fixedCount} invalid budgetIds`);
     } else {
-      console.log('[validateBudgetIds] All budgetIds valid ✓');
+      console.log("[validateBudgetIds] All budgetIds valid ✓");
     }
 
     return fixedSplits;
 
   } catch (error) {
-    console.error('[validateBudgetIds] Error validating budgetIds:', error);
+    console.error("[validateBudgetIds] Error validating budgetIds:", error);
     // On error, return original splits to avoid blocking transaction creation
     return splits;
   }
@@ -153,12 +153,12 @@ export async function isValidBudgetId(
   budgetId: string
 ): Promise<boolean> {
   // Special values are always valid
-  if (!budgetId || budgetId === 'unassigned' || budgetId === 'auto') {
+  if (!budgetId || budgetId === "unassigned" || budgetId === "auto") {
     return true;
   }
 
   try {
-    const budgetDoc = await db.collection('budgets')
+    const budgetDoc = await db.collection("budgets")
       .doc(budgetId)
       .get();
 
@@ -170,7 +170,7 @@ export async function isValidBudgetId(
     return budgetData?.userId === userId && budgetData?.isActive === true;
 
   } catch (error) {
-    console.error('[isValidBudgetId] Error checking budgetId:', error);
+    console.error("[isValidBudgetId] Error checking budgetId:", error);
     return false;
   }
 }

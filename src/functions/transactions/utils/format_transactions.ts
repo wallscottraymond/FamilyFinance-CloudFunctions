@@ -13,11 +13,11 @@
  * @module transactions/utils/format_transactions
  */
 
-import { PlaidAccount } from '../../../types';
-import { queryDocuments } from '../../../utils/firestore';
-import { Transaction as PlaidTransaction } from 'plaid';
-import { build_transaction_data } from './build_transaction_data';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { PlaidAccount } from "../../../types";
+import { queryDocuments } from "../../../utils/firestore";
+import { Transaction as PlaidTransaction } from "plaid";
+import { build_transaction_data } from "./build_transaction_data";
+import { Transaction as FamilyTransaction } from "../../../types";
 
 /**
  * Format transactions from Plaid sync data (pure mapping, no DB writes)
@@ -53,10 +53,10 @@ export async function format_transactions(
     const account_ids = [...new Set(added_transactions.map(t => t.account_id))];
     console.log(`Looking for ${account_ids.length} unique accounts`);
 
-    const account_query = await queryDocuments('accounts', {
+    const account_query = await queryDocuments("accounts", {
       where: [
-        { field: 'accountId', operator: 'in', value: account_ids },
-        { field: 'userId', operator: '==', value: user_id }
+        { field: "accountId", operator: "in", value: account_ids },
+        { field: "userId", operator: "==", value: user_id }
       ]
     });
 
@@ -101,14 +101,14 @@ export async function format_transactions(
     return formatted_transactions;
 
   } catch (error) {
-    console.error('Error formatting transactions:', error);
+    console.error("Error formatting transactions:", error);
     return formatted_transactions; // Return partial results
   }
 }
 
 // Re-export utilities for backward compatibility
-export { match_categories_to_transactions } from './match_categories_to_transactions';
-export { match_transaction_to_budget } from './match_transaction_to_budget';
+export { match_categories_to_transactions } from "./match_categories_to_transactions";
+export { match_transaction_to_budget } from "./match_transaction_to_budget";
 
 // Legacy exports for backward compatibility during migration
 export { format_transactions as formatTransactions };

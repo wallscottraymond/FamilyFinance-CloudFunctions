@@ -8,9 +8,9 @@
  * This version operates in-memory on transaction arrays with batch period queries.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { Transaction as FamilyTransaction } from "../../../types";
 
 /**
  * Match transaction splits to source periods (batch in-memory processing)
@@ -33,11 +33,11 @@ import { Transaction as FamilyTransaction } from '../../../types';
 export async function matchTransactionSplitsToSourcePeriods(
   transactions: FamilyTransaction[]
 ): Promise<FamilyTransaction[]> {
-  console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] === STARTING PERIOD MATCHING ===`);
+  console.log("🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] === STARTING PERIOD MATCHING ===");
   console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Processing ${transactions.length} transactions`);
 
   if (transactions.length === 0) {
-    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] No transactions to process, returning empty array`);
+    console.log("🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] No transactions to process, returning empty array");
     return transactions;
   }
 
@@ -52,14 +52,14 @@ export async function matchTransactionSplitsToSourcePeriods(
 
     // Query ALL source periods (they are app-wide, not user-specific)
     // We'll filter in memory based on transaction dates
-    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Querying ALL source_periods collection...`);
-    const periodsSnapshot = await db.collection('source_periods')
+    console.log("🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Querying ALL source_periods collection...");
+    const periodsSnapshot = await db.collection("source_periods")
       .get();
 
     console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] ✅ FOUND ${periodsSnapshot.size} SOURCE PERIODS (app-wide)`);
 
     if (periodsSnapshot.size === 0) {
-      console.error(`❌❌❌ [matchTransactionSplitsToSourcePeriods] NO SOURCE PERIODS FOUND! Cannot match transactions to periods. Please run generateSourcePeriods.`);
+      console.error("❌❌❌ [matchTransactionSplitsToSourcePeriods] NO SOURCE PERIODS FOUND! Cannot match transactions to periods. Please run generateSourcePeriods.");
       return transactions;
     }
 
@@ -71,8 +71,8 @@ export async function matchTransactionSplitsToSourcePeriods(
       endDate: (doc.data().endDate as Timestamp).toMillis()
     }));
 
-    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Period types found: ${periods.slice(0, 5).map(p => p.type).join(', ')}`);
-    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Sample period date ranges: ${periods.slice(0, 3).map(p => `${p.type}: ${new Date(p.startDate).toISOString()} to ${new Date(p.endDate).toISOString()}`).join(' | ')}`);
+    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Period types found: ${periods.slice(0, 5).map(p => p.type).join(", ")}`);
+    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] Sample period date ranges: ${periods.slice(0, 3).map(p => `${p.type}: ${new Date(p.startDate).toISOString()} to ${new Date(p.endDate).toISOString()}`).join(" | ")}`);
 
     // Process each transaction
     let matchedCount = 0;
@@ -87,15 +87,15 @@ export async function matchTransactionSplitsToSourcePeriods(
       );
 
       if (matchingPeriods.length > 0) {
-        console.log(`  ✅✅✅ Transaction date ${new Date(txnDate).toISOString()} matched ${matchingPeriods.length} periods: ${matchingPeriods.map(p => `${p.type}(${p.id})`).join(', ')}`);
+        console.log(`  ✅✅✅ Transaction date ${new Date(txnDate).toISOString()} matched ${matchingPeriods.length} periods: ${matchingPeriods.map(p => `${p.type}(${p.id})`).join(", ")}`);
       } else {
         console.log(`  ❌❌❌ Transaction date ${new Date(txnDate).toISOString()} matched NO periods`);
       }
 
       // Extract period IDs by type
-      const monthlyPeriod = matchingPeriods.find(p => p.type === 'monthly');
-      const weeklyPeriod = matchingPeriods.find(p => p.type === 'weekly');
-      const biWeeklyPeriod = matchingPeriods.find(p => p.type === 'bi_monthly'); // Fixed: was 'bi_weekly', should be 'bi_monthly'
+      const monthlyPeriod = matchingPeriods.find(p => p.type === "monthly");
+      const weeklyPeriod = matchingPeriods.find(p => p.type === "weekly");
+      const biWeeklyPeriod = matchingPeriods.find(p => p.type === "bi_monthly"); // Fixed: was 'bi_weekly', should be 'bi_monthly'
 
       // Update all splits in the transaction with period IDs
       const updatedSplits = transaction.splits.map(split => ({
@@ -115,13 +115,13 @@ export async function matchTransactionSplitsToSourcePeriods(
       }
     });
 
-    console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] === PERIOD MATCHING COMPLETE ===`);
+    console.log("🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] === PERIOD MATCHING COMPLETE ===");
     console.log(`🗓️🗓️🗓️ [matchTransactionSplitsToSourcePeriods] ✅ Successfully matched ${matchedCount} of ${transactions.length} transactions to source periods`);
 
     return transactions;
 
   } catch (error) {
-    console.error('[matchTransactionSplitsToSourcePeriods] Error matching transaction splits to source periods:', error);
+    console.error("[matchTransactionSplitsToSourcePeriods] Error matching transaction splits to source periods:", error);
     return transactions; // Return original array on error
   }
 }

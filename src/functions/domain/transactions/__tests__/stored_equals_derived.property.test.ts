@@ -124,7 +124,7 @@ it("engine (stored) == period page (counted) across cadences, starts, ends, refu
       raw.budgetId = k < 0.4 && match.real_budgets.length
         ? pick(match.real_budgets).id
         : k < 0.7 ? pick(Object.values(EE_IDS)) // any lens's Everything Else
-        : "deleted_budget";
+          : "deleted_budget";
     }
     // Bills: a manual "remove from bill" detach, or a manual pin to a bill.
     const bill_roll = r();

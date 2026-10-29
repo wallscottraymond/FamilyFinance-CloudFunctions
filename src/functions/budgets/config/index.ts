@@ -4,4 +4,4 @@
  * Centralized export for all budget configuration constants.
  */
 
-export * from './periodConfig';
+export * from "./periodConfig";

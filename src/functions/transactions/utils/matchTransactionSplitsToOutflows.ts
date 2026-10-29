@@ -10,9 +10,9 @@
  * Returns both modified transactions and outflow period updates for batching.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { Transaction as FamilyTransaction } from "../../../types";
 
 /**
  * Result of outflow matching with both transactions and period updates
@@ -65,11 +65,11 @@ export async function matchTransactionSplitsToOutflows(
     const oneMonthForward = new Date(now);
     oneMonthForward.setMonth(now.getMonth() + 1);
 
-    const outflowPeriodsSnapshot = await db.collection('outflow_periods')
-      .where('userId', '==', userId)
-      .where('isDuePeriod', '==', true)
-      .where('expectedDueDate', '>=', Timestamp.fromDate(threeMonthsAgo))
-      .where('expectedDueDate', '<=', Timestamp.fromDate(oneMonthForward))
+    const outflowPeriodsSnapshot = await db.collection("outflow_periods")
+      .where("userId", "==", userId)
+      .where("isDuePeriod", "==", true)
+      .where("expectedDueDate", ">=", Timestamp.fromDate(threeMonthsAgo))
+      .where("expectedDueDate", "<=", Timestamp.fromDate(oneMonthForward))
       .get();
 
     console.log(`📝 [matchTransactionSplitsToOutflows] Found ${outflowPeriodsSnapshot.size} due outflow periods`);
@@ -168,7 +168,7 @@ export async function matchTransactionSplitsToOutflows(
     return { transactions, outflowUpdates };
 
   } catch (error) {
-    console.error('[matchTransactionSplitsToOutflows] Error matching splits to outflows:', error);
+    console.error("[matchTransactionSplitsToOutflows] Error matching splits to outflows:", error);
     return { transactions, outflowUpdates }; // Return original data on error
   }
 }

@@ -18,8 +18,8 @@
  * This test validates the calculation logic produces reasonable results.
  */
 
-import { PeriodType } from '../../../types';
-import { calculatePeriodAllocatedAmount } from '../utils/calculatePeriodAllocatedAmount';
+import { PeriodType } from "../../../types";
+import { calculatePeriodAllocatedAmount } from "../utils/calculatePeriodAllocatedAmount";
 import {
   roundToCents,
   amountsEqual,
@@ -29,28 +29,28 @@ import {
   createBiMonthlySourcePeriods,
   createWeeklySourcePeriods,
   calculatePeriodTypeTotals,
-} from './helpers/budgetTestHelpers';
+} from "./helpers/budgetTestHelpers";
 
-describe('Budget Period Amount Sum Validation', () => {
+describe("Budget Period Amount Sum Validation", () => {
   // ============================================================================
   // MONTHLY BUDGET SUM VALIDATION
   // ============================================================================
 
-  describe('Monthly Budget Sum Validation', () => {
-    describe('Single Month - Same Type Returns Same Amount', () => {
+  describe("Monthly Budget Sum Validation", () => {
+    describe("Single Month - Same Type Returns Same Amount", () => {
       const months = [
-        { month: 1, name: 'January', days: 31 },
-        { month: 2, name: 'February', days: 28 },
-        { month: 3, name: 'March', days: 31 },
-        { month: 4, name: 'April', days: 30 },
-        { month: 5, name: 'May', days: 31 },
-        { month: 6, name: 'June', days: 30 },
-        { month: 7, name: 'July', days: 31 },
-        { month: 8, name: 'August', days: 31 },
-        { month: 9, name: 'September', days: 30 },
-        { month: 10, name: 'October', days: 31 },
-        { month: 11, name: 'November', days: 30 },
-        { month: 12, name: 'December', days: 31 },
+        { month: 1, name: "January", days: 31 },
+        { month: 2, name: "February", days: 28 },
+        { month: 3, name: "March", days: 31 },
+        { month: 4, name: "April", days: 30 },
+        { month: 5, name: "May", days: 31 },
+        { month: 6, name: "June", days: 30 },
+        { month: 7, name: "July", days: 31 },
+        { month: 8, name: "August", days: 31 },
+        { month: 9, name: "September", days: 30 },
+        { month: 10, name: "October", days: 31 },
+        { month: 11, name: "November", days: 30 },
+        { month: 12, name: "December", days: 31 },
       ];
 
       for (const { month, name, days } of months) {
@@ -78,8 +78,8 @@ describe('Budget Period Amount Sum Validation', () => {
       }
     });
 
-    describe('Single Month - Bi-Monthly Conversion', () => {
-      it('should sum bi-monthly periods to approximately budget amount', () => {
+    describe("Single Month - Bi-Monthly Conversion", () => {
+      it("should sum bi-monthly periods to approximately budget amount", () => {
         const budgetAmount = 100;
         const month = 1; // January
         const days = 31;
@@ -112,8 +112,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('Single Month - Weekly Conversion', () => {
-      it('should sum weekly periods to approximately budget amount', () => {
+    describe("Single Month - Weekly Conversion", () => {
+      it("should sum weekly periods to approximately budget amount", () => {
         const budgetAmount = 100;
         const month = 1; // January
 
@@ -132,8 +132,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('Multi-Month Ranges', () => {
-      it('should have consistent sums for Q1 (Jan-Mar)', () => {
+    describe("Multi-Month Ranges", () => {
+      it("should have consistent sums for Q1 (Jan-Mar)", () => {
         const budgetAmount = 200;
 
         const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 3);
@@ -160,7 +160,7 @@ describe('Budget Period Amount Sum Validation', () => {
         expect(Math.abs(summaries.weekly.totalAmount - summaries.monthly.totalAmount)).toBeLessThan(maxAllowedDiff);
       });
 
-      it('should have consistent sums for full year', () => {
+      it("should have consistent sums for full year", () => {
         const budgetAmount = 1000;
 
         const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 12);
@@ -190,8 +190,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('User Example 1: Feb 1 - March 19', () => {
-      it('should have full monthly periods return budget amount for same type', () => {
+    describe("User Example 1: Feb 1 - March 19", () => {
+      it("should have full monthly periods return budget amount for same type", () => {
         // NOTE: The calculation function returns full budget amount for same-type periods
         // regardless of the actual date range. This is by design - same type = same amount.
         // For partial periods like "March 1-19", the actual allocation is handled
@@ -225,7 +225,7 @@ describe('Budget Period Amount Sum Validation', () => {
         expect(marchTotal).toBe(budgetAmount); // Same type = same amount
       });
 
-      it('should have bi-monthly periods sum to correct day-based total', () => {
+      it("should have bi-monthly periods sum to correct day-based total", () => {
         // Bi-monthly periods use day-based calculation (cross-type conversion)
         // This gives the accurate total for Feb 1 - March 19
         const budgetAmount = 100;
@@ -285,9 +285,9 @@ describe('Budget Period Amount Sum Validation', () => {
   // BI-MONTHLY BUDGET SUM VALIDATION
   // ============================================================================
 
-  describe('Bi-Monthly Budget Sum Validation', () => {
-    describe('Same Type Returns Same Amount', () => {
-      it('should return budget amount for bi-monthly period when same type', () => {
+  describe("Bi-Monthly Budget Sum Validation", () => {
+    describe("Same Type Returns Same Amount", () => {
+      it("should return budget amount for bi-monthly period when same type", () => {
         const budgetAmount = 100;
 
         const firstHalf = createMockSourcePeriod({
@@ -317,8 +317,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('Monthly Conversion', () => {
-      it('should calculate monthly as approximately 2x bi-monthly', () => {
+    describe("Monthly Conversion", () => {
+      it("should calculate monthly as approximately 2x bi-monthly", () => {
         const budgetAmount = 100; // Per bi-monthly period
 
         const monthlyPeriod = createMockSourcePeriod({
@@ -341,8 +341,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('User Example 2: Feb 1 - April 13 (Bi-Monthly Budget)', () => {
-      it('should have bi-monthly periods sum to 5 periods total', () => {
+    describe("User Example 2: Feb 1 - April 13 (Bi-Monthly Budget)", () => {
+      it("should have bi-monthly periods sum to 5 periods total", () => {
         const budgetAmount = 100;
 
         const biMonthlyPeriods = [
@@ -404,9 +404,9 @@ describe('Budget Period Amount Sum Validation', () => {
   // WEEKLY BUDGET SUM VALIDATION
   // ============================================================================
 
-  describe('Weekly Budget Sum Validation', () => {
-    describe('Same Type Returns Same Amount', () => {
-      it('should return budget amount for full weekly period when same type', () => {
+  describe("Weekly Budget Sum Validation", () => {
+    describe("Same Type Returns Same Amount", () => {
+      it("should return budget amount for full weekly period when same type", () => {
         const budgetAmount = 100;
 
         const week = createMockSourcePeriod({
@@ -422,8 +422,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('Monthly Conversion', () => {
-      it('should calculate monthly as approximately 4.3x weekly', () => {
+    describe("Monthly Conversion", () => {
+      it("should calculate monthly as approximately 4.3x weekly", () => {
         const budgetAmount = 100; // Per week
 
         const monthlyPeriod = createMockSourcePeriod({
@@ -446,8 +446,8 @@ describe('Budget Period Amount Sum Validation', () => {
       });
     });
 
-    describe('Full Year Consistency', () => {
-      it('should have weekly periods cover full year consistently', () => {
+    describe("Full Year Consistency", () => {
+      it("should have weekly periods cover full year consistently", () => {
         const budgetAmount = 150;
 
         const weeklyPeriods = createWeeklySourcePeriods(
@@ -473,8 +473,8 @@ describe('Budget Period Amount Sum Validation', () => {
   // EDGE CASES
   // ============================================================================
 
-  describe('Edge Cases', () => {
-    it('should handle zero budget amount', () => {
+  describe("Edge Cases", () => {
+    it("should handle zero budget amount", () => {
       const budgetAmount = 0;
 
       const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 1);
@@ -498,7 +498,7 @@ describe('Budget Period Amount Sum Validation', () => {
       expect(summaries.weekly.totalAmount).toBe(0);
     });
 
-    it('should handle leap year February', () => {
+    it("should handle leap year February", () => {
       const budgetAmount = 100;
 
       // February 2024 (leap year - 29 days)
@@ -515,7 +515,7 @@ describe('Budget Period Amount Sum Validation', () => {
       expect(total).toBe(budgetAmount);
     });
 
-    it('should handle very large budget amounts', () => {
+    it("should handle very large budget amounts", () => {
       const budgetAmount = 1000000; // $1 million
 
       const monthlyPeriod = createMockSourcePeriod({
@@ -531,7 +531,7 @@ describe('Budget Period Amount Sum Validation', () => {
       expect(total).toBe(budgetAmount);
     });
 
-    it('should handle decimal budget amounts', () => {
+    it("should handle decimal budget amounts", () => {
       const budgetAmount = 99.99;
 
       const monthlyPeriod = createMockSourcePeriod({
@@ -552,8 +552,8 @@ describe('Budget Period Amount Sum Validation', () => {
   // CROSS-TYPE CONVERSION VALIDATION
   // ============================================================================
 
-  describe('Cross-Type Conversion Validation', () => {
-    it('should maintain reasonable proportions when converting monthly to weekly', () => {
+  describe("Cross-Type Conversion Validation", () => {
+    it("should maintain reasonable proportions when converting monthly to weekly", () => {
       const budgetAmount = 100;
 
       // Full week within January
@@ -576,7 +576,7 @@ describe('Budget Period Amount Sum Validation', () => {
       expect(amountsEqual(weeklyAmount, expected, 0.02)).toBe(true);
     });
 
-    it('should maintain reasonable proportions when converting weekly to monthly', () => {
+    it("should maintain reasonable proportions when converting weekly to monthly", () => {
       const budgetAmount = 100;
 
       const monthlyPeriod = createMockSourcePeriod({
@@ -598,7 +598,7 @@ describe('Budget Period Amount Sum Validation', () => {
       expect(amountsEqual(monthlyAmount, expected, 0.02)).toBe(true);
     });
 
-    it('should maintain reasonable proportions when converting bi-monthly to weekly', () => {
+    it("should maintain reasonable proportions when converting bi-monthly to weekly", () => {
       const budgetAmount = 100;
 
       // Week within first half of month

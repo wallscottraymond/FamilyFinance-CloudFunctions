@@ -11,9 +11,9 @@
  * structure will remain untouched and continue to work.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { TransactionStream } from 'plaid';
-import { Outflow } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { TransactionStream } from "plaid";
+import { Outflow } from "../../../../types";
 
 /**
  * Format Plaid outflow streams to flat Outflow documents
@@ -55,7 +55,7 @@ export async function formatRecurringOutflows(
       // === FINANCIAL DATA ===
       lastAmount: Math.abs(stream.last_amount.amount || 0),
       averageAmount: Math.abs(stream.average_amount.amount || 0),
-      currency: stream.average_amount.iso_currency_code || 'USD',
+      currency: stream.average_amount.iso_currency_code || "USD",
 
       // === DESCRIPTIVE INFO ===
       description: stream.description || null,
@@ -71,8 +71,8 @@ export async function formatRecurringOutflows(
         : null,
 
       // === CATEGORIZATION ===
-      plaidPrimaryCategory: stream.personal_finance_category?.primary || stream.category?.[0] || 'GENERAL_SERVICES',
-      plaidDetailedCategory: stream.personal_finance_category?.detailed || stream.category?.[1] || '',
+      plaidPrimaryCategory: stream.personal_finance_category?.primary || stream.category?.[0] || "GENERAL_SERVICES",
+      plaidDetailedCategory: stream.personal_finance_category?.detailed || stream.category?.[1] || "",
       internalPrimaryCategory: null,  // User hasn't overridden yet
       internalDetailedCategory: null,  // User hasn't overridden yet
       type: determineTransactionType(stream),
@@ -82,7 +82,7 @@ export async function formatRecurringOutflows(
       isEssential: isEssentialExpense(stream),
 
       // === STATUS & CONTROL ===
-      source: 'plaid',
+      source: "plaid",
       isActive: stream.is_active,
       isHidden: false,
       isUserModified: stream.is_user_modified || false,
@@ -114,11 +114,11 @@ function determineTransactionType(stream: TransactionStream): string {
 
   // Fall back to frequency-based classification
   const freq = stream.frequency?.toUpperCase();
-  if (freq === 'MONTHLY' || freq === 'ANNUALLY') {
-    return 'subscription';
+  if (freq === "MONTHLY" || freq === "ANNUALLY") {
+    return "subscription";
   }
 
-  return 'recurring';
+  return "recurring";
 }
 
 /**
@@ -126,29 +126,29 @@ function determineTransactionType(stream: TransactionStream): string {
  *
  * Legacy field maintained for backward compatibility with existing UI/logic.
  */
-function determineExpenseType(stream: TransactionStream): 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other' {
+function determineExpenseType(stream: TransactionStream): "subscription" | "utility" | "loan" | "rent" | "insurance" | "tax" | "other" {
   const detailed = stream.personal_finance_category?.detailed?.toUpperCase();
 
-  if (detailed?.includes('UTILITIES') || detailed?.includes('ELECTRIC') || detailed?.includes('GAS') || detailed?.includes('WATER')) {
-    return 'utility';
+  if (detailed?.includes("UTILITIES") || detailed?.includes("ELECTRIC") || detailed?.includes("GAS") || detailed?.includes("WATER")) {
+    return "utility";
   }
-  if (detailed?.includes('RENT') || detailed?.includes('MORTGAGE')) {
-    return 'rent';
+  if (detailed?.includes("RENT") || detailed?.includes("MORTGAGE")) {
+    return "rent";
   }
-  if (detailed?.includes('INSURANCE')) {
-    return 'insurance';
+  if (detailed?.includes("INSURANCE")) {
+    return "insurance";
   }
-  if (detailed?.includes('LOAN') || detailed?.includes('CREDIT_CARD_PAYMENT')) {
-    return 'loan';
+  if (detailed?.includes("LOAN") || detailed?.includes("CREDIT_CARD_PAYMENT")) {
+    return "loan";
   }
-  if (detailed?.includes('TAX')) {
-    return 'tax';
+  if (detailed?.includes("TAX")) {
+    return "tax";
   }
-  if (stream.frequency === 'MONTHLY' || stream.frequency === 'ANNUALLY') {
-    return 'subscription';
+  if (stream.frequency === "MONTHLY" || stream.frequency === "ANNUALLY") {
+    return "subscription";
   }
 
-  return 'other';
+  return "other";
 }
 
 /**
@@ -161,18 +161,18 @@ function isEssentialExpense(stream: TransactionStream): boolean {
   const detailed = stream.personal_finance_category?.detailed?.toUpperCase();
 
   const essentialCategories = [
-    'RENT',
-    'MORTGAGE',
-    'UTILITIES',
-    'ELECTRIC',
-    'GAS',
-    'WATER',
-    'INSURANCE',
-    'LOAN',
-    'HEALTHCARE',
-    'MEDICAL',
-    'PHARMACY',
-    'FOOD_AND_DRINK_GROCERIES'
+    "RENT",
+    "MORTGAGE",
+    "UTILITIES",
+    "ELECTRIC",
+    "GAS",
+    "WATER",
+    "INSURANCE",
+    "LOAN",
+    "HEALTHCARE",
+    "MEDICAL",
+    "PHARMACY",
+    "FOOD_AND_DRINK_GROCERIES"
   ];
 
   return essentialCategories.some(cat =>

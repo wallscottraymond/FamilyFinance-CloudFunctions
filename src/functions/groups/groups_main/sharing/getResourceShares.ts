@@ -7,15 +7,15 @@ import { getDocument } from "../../../../utils/firestore";
 
 // Map resource types to collection names
 const RESOURCE_COLLECTIONS: Record<string, string> = {
-  budget: 'budgets',
-  transaction: 'transactions',
-  outflow: 'outflows',
-  inflow: 'inflows',
-  rule: 'rules',
+  budget: "budgets",
+  transaction: "transactions",
+  outflow: "outflows",
+  inflow: "inflows",
+  rule: "rules",
 };
 
 interface GetResourceSharesRequest {
-  resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   resourceId: string;
 }
 
@@ -36,12 +36,12 @@ export const getResourceShares = onCall<GetResourceSharesRequest, Promise<GetRes
   memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
-  console.log('[getResourceShares] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[getResourceShares] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
@@ -49,11 +49,11 @@ export const getResourceShares = onCall<GetResourceSharesRequest, Promise<GetRes
 
     // Validate request data
     if (!resourceType || !RESOURCE_COLLECTIONS[resourceType]) {
-      throw new HttpsError('invalid-argument', 'Valid resourceType is required');
+      throw new HttpsError("invalid-argument", "Valid resourceType is required");
     }
 
-    if (!resourceId || typeof resourceId !== 'string') {
-      throw new HttpsError('invalid-argument', 'resourceId is required');
+    if (!resourceId || typeof resourceId !== "string") {
+      throw new HttpsError("invalid-argument", "resourceId is required");
     }
 
     const collectionName = RESOURCE_COLLECTIONS[resourceType];
@@ -61,13 +61,13 @@ export const getResourceShares = onCall<GetResourceSharesRequest, Promise<GetRes
     // Get the resource
     const resource = await getDocument<any>(collectionName, resourceId);
     if (!resource) {
-      throw new HttpsError('not-found', `${resourceType} not found`);
+      throw new HttpsError("not-found", `${resourceType} not found`);
     }
 
     // Check if caller is the owner
     const ownerId = resource.ownerId || resource.userId || resource.createdBy;
     if (ownerId !== callerUserId) {
-      throw new HttpsError('permission-denied', 'Only the resource owner can view all shares');
+      throw new HttpsError("permission-denied", "Only the resource owner can view all shares");
     }
 
     // Get current sharing configuration
@@ -86,12 +86,12 @@ export const getResourceShares = onCall<GetResourceSharesRequest, Promise<GetRes
     };
 
   } catch (error: any) {
-    console.error('[getResourceShares] Error:', error);
+    console.error("[getResourceShares] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to get resource shares');
+    throw new HttpsError("internal", "Failed to get resource shares");
   }
 });

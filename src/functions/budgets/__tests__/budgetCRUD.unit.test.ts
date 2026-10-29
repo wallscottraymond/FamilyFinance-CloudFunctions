@@ -16,15 +16,15 @@
  * - Error handling
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { BudgetPeriod, UserRole } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { BudgetPeriod, UserRole } from "../../../types";
 
 // ============================================================================
 // MOCK SETUP
 // ============================================================================
 
 // Mock firestore utils
-jest.mock('../../../utils/firestore', () => ({
+jest.mock("../../../utils/firestore", () => ({
   getDocument: jest.fn(),
   createDocument: jest.fn(),
   updateDocument: jest.fn(),
@@ -32,7 +32,7 @@ jest.mock('../../../utils/firestore', () => ({
 }));
 
 // Mock auth utils
-jest.mock('../../../utils/auth', () => ({
+jest.mock("../../../utils/auth", () => ({
   authMiddleware: jest.fn(),
   createErrorResponse: jest.fn((code, message) => ({
     success: false,
@@ -46,15 +46,15 @@ jest.mock('../../../utils/auth', () => ({
 }));
 
 // Mock validation
-jest.mock('../../../utils/validation', () => ({
+jest.mock("../../../utils/validation", () => ({
   validateRequest: jest.fn(),
   createBudgetSchema: {},
   validateCategoryIds: jest.fn(),
 }));
 
-import { getDocument, createDocument, updateDocument } from '../../../utils/firestore';
-import { checkFamilyAccess } from '../../../utils/auth';
-import { validateRequest, validateCategoryIds } from '../../../utils/validation';
+import { getDocument, createDocument, updateDocument } from "../../../utils/firestore";
+import { checkFamilyAccess } from "../../../utils/auth";
+import { validateRequest, validateCategoryIds } from "../../../utils/validation";
 
 // ============================================================================
 // TEST DATA FACTORIES
@@ -62,14 +62,14 @@ import { validateRequest, validateCategoryIds } from '../../../utils/validation'
 
 function createMockUser(overrides: Partial<any> = {}) {
   return {
-    id: 'test-user-123',
-    email: 'test@example.com',
-    displayName: 'Test User',
+    id: "test-user-123",
+    email: "test@example.com",
+    displayName: "Test User",
     role: UserRole.EDITOR,
-    familyId: 'family-123',
+    familyId: "family-123",
     isActive: true,
     preferences: {
-      currency: 'USD',
+      currency: "USD",
     },
     ...overrides,
   };
@@ -77,34 +77,34 @@ function createMockUser(overrides: Partial<any> = {}) {
 
 function createMockBudgetData(overrides: Partial<any> = {}): any {
   return {
-    id: 'budget-123',
-    name: 'Groceries',
-    description: 'Monthly grocery budget',
+    id: "budget-123",
+    name: "Groceries",
+    description: "Monthly grocery budget",
     amount: 500,
-    currency: 'USD',
-    categoryIds: ['FOOD_AND_DRINK_GROCERIES'],
+    currency: "USD",
+    categoryIds: ["FOOD_AND_DRINK_GROCERIES"],
     period: BudgetPeriod.MONTHLY,
-    budgetType: 'recurring',
+    budgetType: "recurring",
     isOngoing: true,
-    startDate: Timestamp.fromDate(new Date('2025-01-01')),
-    endDate: Timestamp.fromDate(new Date('2025-01-31')),
+    startDate: Timestamp.fromDate(new Date("2025-01-01")),
+    endDate: Timestamp.fromDate(new Date("2025-01-31")),
     budgetEndDate: null,
     spent: 0,
     remaining: 500,
     alertThreshold: 80,
-    memberIds: ['test-user-123'],
+    memberIds: ["test-user-123"],
     isShared: false,
     isActive: true,
-    userId: 'test-user-123',
-    familyId: 'family-123',
+    userId: "test-user-123",
+    familyId: "family-123",
     groupIds: [],
-    createdBy: 'test-user-123',
-    ownerId: 'test-user-123',
+    createdBy: "test-user-123",
+    ownerId: "test-user-123",
     isPrivate: true,
     isSystemEverythingElse: false,
     access: {
-      createdBy: 'test-user-123',
-      ownerId: 'test-user-123',
+      createdBy: "test-user-123",
+      ownerId: "test-user-123",
       isPrivate: true,
     },
     createdAt: Timestamp.now(),
@@ -116,11 +116,11 @@ function createMockBudgetData(overrides: Partial<any> = {}): any {
 // Helper functions for request/response mocking exported for potential use in other tests
 export const httpMocks = {
   createRequest: (overrides: Partial<any> = {}) => ({
-    method: 'GET',
+    method: "GET",
     query: {},
     body: {},
     get: jest.fn((header: string) => {
-      if (header === 'Authorization') return 'Bearer mock-token';
+      if (header === "Authorization") return "Bearer mock-token";
       return undefined;
     }),
     ...overrides,
@@ -139,7 +139,7 @@ export const httpMocks = {
 // createBudget TESTS
 // ============================================================================
 
-describe('createBudget', () => {
+describe("createBudget", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -148,15 +148,15 @@ describe('createBudget', () => {
   // SUCCESSFUL CREATION
   // --------------------------------------------------------------------------
 
-  describe('Successful Budget Creation', () => {
-    it('should create budget with valid data and all required fields', async () => {
+  describe("Successful Budget Creation", () => {
+    it("should create budget with valid data and all required fields", async () => {
       const mockUser = createMockUser();
       const validBudgetData = {
-        name: 'Groceries',
+        name: "Groceries",
         amount: 500,
-        categoryIds: ['FOOD_AND_DRINK_GROCERIES'],
+        categoryIds: ["FOOD_AND_DRINK_GROCERIES"],
         period: BudgetPeriod.MONTHLY,
-        startDate: '2025-01-01T00:00:00Z',
+        startDate: "2025-01-01T00:00:00Z",
       };
 
       // Mock validation
@@ -167,12 +167,12 @@ describe('createBudget', () => {
       (validateCategoryIds as jest.Mock).mockResolvedValue({
         isValid: true,
         invalidIds: [],
-        validCategories: [{ id: 'FOOD_AND_DRINK_GROCERIES', name: 'Groceries', type: 'expense' }],
+        validCategories: [{ id: "FOOD_AND_DRINK_GROCERIES", name: "Groceries", type: "expense" }],
       });
 
       (getDocument as jest.Mock).mockResolvedValueOnce(mockUser); // User doc
       (createDocument as jest.Mock).mockResolvedValue({
-        id: 'new-budget-123',
+        id: "new-budget-123",
         ...validBudgetData,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -183,59 +183,59 @@ describe('createBudget', () => {
       expect(validateCategoryIds).toBeDefined();
     });
 
-    it('should create WEEKLY period budget', () => {
+    it("should create WEEKLY period budget", () => {
       const budget = createMockBudgetData({ period: BudgetPeriod.WEEKLY });
       expect(budget.period).toBe(BudgetPeriod.WEEKLY);
     });
 
-    it('should create MONTHLY period budget', () => {
+    it("should create MONTHLY period budget", () => {
       const budget = createMockBudgetData({ period: BudgetPeriod.MONTHLY });
       expect(budget.period).toBe(BudgetPeriod.MONTHLY);
     });
 
-    it('should create QUARTERLY period budget', () => {
+    it("should create QUARTERLY period budget", () => {
       const budget = createMockBudgetData({ period: BudgetPeriod.QUARTERLY });
       expect(budget.period).toBe(BudgetPeriod.QUARTERLY);
     });
 
-    it('should create YEARLY period budget', () => {
+    it("should create YEARLY period budget", () => {
       const budget = createMockBudgetData({ period: BudgetPeriod.YEARLY });
       expect(budget.period).toBe(BudgetPeriod.YEARLY);
     });
 
-    it('should create recurring budget by default', () => {
+    it("should create recurring budget by default", () => {
       const budget = createMockBudgetData();
-      expect(budget.budgetType).toBe('recurring');
+      expect(budget.budgetType).toBe("recurring");
       expect(budget.isOngoing).toBe(true);
     });
 
-    it('should create limited budget with end date', () => {
+    it("should create limited budget with end date", () => {
       const budget = createMockBudgetData({
-        budgetType: 'limited',
+        budgetType: "limited",
         isOngoing: false,
-        budgetEndDate: Timestamp.fromDate(new Date('2025-06-30')),
+        budgetEndDate: Timestamp.fromDate(new Date("2025-06-30")),
       });
 
-      expect(budget.budgetType).toBe('limited');
+      expect(budget.budgetType).toBe("limited");
       expect(budget.isOngoing).toBe(false);
       expect(budget.budgetEndDate).toBeDefined();
     });
 
-    it('should set default alertThreshold to 80', () => {
+    it("should set default alertThreshold to 80", () => {
       const budget = createMockBudgetData();
       expect(budget.alertThreshold).toBe(80);
     });
 
-    it('should convert single groupId to groupIds array', () => {
+    it("should convert single groupId to groupIds array", () => {
       // Given a single groupId, it should be converted to array
-      const groupId = 'group-123';
+      const groupId = "group-123";
       const groupIds: string[] = groupId ? [groupId] : [];
 
-      expect(groupIds).toEqual(['group-123']);
+      expect(groupIds).toEqual(["group-123"]);
       expect(Array.isArray(groupIds)).toBe(true);
     });
 
-    it('should set isPrivate=true when no groupId provided', () => {
+    it("should set isPrivate=true when no groupId provided", () => {
       const groupIds: string[] = [];
       const isPrivate = groupIds.length === 0;
 
@@ -245,15 +245,15 @@ describe('createBudget', () => {
       expect(budget.isPrivate).toBe(true);
     });
 
-    it('should set isPrivate=false when groupId provided', () => {
-      const groupIds: string[] = ['group-123'];
+    it("should set isPrivate=false when groupId provided", () => {
+      const groupIds: string[] = ["group-123"];
       const isPrivate = groupIds.length === 0;
 
       expect(isPrivate).toBe(false);
     });
 
-    it('should populate RBAC fields correctly', () => {
-      const userId = 'test-user-123';
+    it("should populate RBAC fields correctly", () => {
+      const userId = "test-user-123";
       const budget = createMockBudgetData({ userId });
 
       expect(budget.createdBy).toBe(userId);
@@ -268,8 +268,8 @@ describe('createBudget', () => {
   // AUTHENTICATION TESTS
   // --------------------------------------------------------------------------
 
-  describe('Authentication', () => {
-    it('should reject unauthenticated request', async () => {
+  describe("Authentication", () => {
+    it("should reject unauthenticated request", async () => {
       // Simulating the behavior of createBudget Cloud Function
       const request = { auth: null };
 
@@ -278,21 +278,21 @@ describe('createBudget', () => {
       expect(isAuthenticated).toBe(false);
 
       // Error message should match
-      const errorMessage = 'User must be authenticated';
-      expect(errorMessage).toBe('User must be authenticated');
+      const errorMessage = "User must be authenticated";
+      expect(errorMessage).toBe("User must be authenticated");
     });
 
-    it('should reject when user profile not found', async () => {
+    it("should reject when user profile not found", async () => {
       // Reset mock completely to ensure clean state
       (getDocument as jest.Mock).mockReset();
       (getDocument as jest.Mock).mockResolvedValue(null);
 
       // The function should handle user not found
-      const userDoc = await getDocument('users', 'nonexistent-user');
+      const userDoc = await getDocument("users", "nonexistent-user");
       expect(userDoc).toBeNull();
 
-      const errorMessage = 'User profile not found';
-      expect(errorMessage).toBe('User profile not found');
+      const errorMessage = "User profile not found";
+      expect(errorMessage).toBe("User profile not found");
     });
   });
 
@@ -300,22 +300,22 @@ describe('createBudget', () => {
   // AUTHORIZATION TESTS
   // --------------------------------------------------------------------------
 
-  describe('Authorization - Role Checks', () => {
-    it('should reject VIEWER role', () => {
+  describe("Authorization - Role Checks", () => {
+    it("should reject VIEWER role", () => {
       const user = createMockUser({ role: UserRole.VIEWER });
 
       const canCreate = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
       expect(canCreate).toBe(false);
     });
 
-    it('should allow EDITOR role', () => {
+    it("should allow EDITOR role", () => {
       const user = createMockUser({ role: UserRole.EDITOR });
 
       const canCreate = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
       expect(canCreate).toBe(true);
     });
 
-    it('should allow ADMIN role', () => {
+    it("should allow ADMIN role", () => {
       const user = createMockUser({ role: UserRole.ADMIN });
 
       const canCreate = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
@@ -327,30 +327,30 @@ describe('createBudget', () => {
   // VALIDATION TESTS
   // --------------------------------------------------------------------------
 
-  describe('Input Validation', () => {
-    it('should reject empty name', () => {
-      const validation = { error: '"name" is not allowed to be empty' };
+  describe("Input Validation", () => {
+    it("should reject empty name", () => {
+      const validation = { error: "\"name\" is not allowed to be empty" };
       const hasError = !!validation.error;
 
       expect(hasError).toBe(true);
-      expect(validation.error).toContain('name');
+      expect(validation.error).toContain("name");
     });
 
-    it('should reject name exceeding 100 characters', () => {
-      const longName = 'A'.repeat(101);
+    it("should reject name exceeding 100 characters", () => {
+      const longName = "A".repeat(101);
       const isValid = longName.length <= 100;
 
       expect(isValid).toBe(false);
     });
 
-    it('should reject negative amount', () => {
+    it("should reject negative amount", () => {
       const amount = -100;
       const isValid = amount > 0;
 
       expect(isValid).toBe(false);
     });
 
-    it('should reject zero amount for non-system budgets', () => {
+    it("should reject zero amount for non-system budgets", () => {
       const amount = 0;
       const isSystemBudget = false;
 
@@ -359,7 +359,7 @@ describe('createBudget', () => {
       expect(isValid).toBe(false);
     });
 
-    it('should accept zero amount for system budgets', () => {
+    it("should accept zero amount for system budgets", () => {
       const amount = 0;
       const isSystemBudget = true;
 
@@ -368,33 +368,33 @@ describe('createBudget', () => {
       expect(isValid).toBe(true);
     });
 
-    it('should reject invalid period type', () => {
-      const invalidPeriod = 'INVALID_PERIOD';
+    it("should reject invalid period type", () => {
+      const invalidPeriod = "INVALID_PERIOD";
       const validPeriods = Object.values(BudgetPeriod);
 
       const isValid = validPeriods.includes(invalidPeriod as BudgetPeriod);
       expect(isValid).toBe(false);
     });
 
-    it('should reject missing startDate', () => {
-      const validation = { error: '"startDate" is required' };
+    it("should reject missing startDate", () => {
+      const validation = { error: "\"startDate\" is required" };
       const hasError = !!validation.error;
 
       expect(hasError).toBe(true);
-      expect(validation.error).toContain('startDate');
+      expect(validation.error).toContain("startDate");
     });
 
-    it('should reject budgetEndDate before startDate', () => {
-      const startDate = new Date('2025-06-01');
-      const budgetEndDate = new Date('2025-01-01');
+    it("should reject budgetEndDate before startDate", () => {
+      const startDate = new Date("2025-06-01");
+      const budgetEndDate = new Date("2025-01-01");
 
       const isValid = budgetEndDate > startDate;
       expect(isValid).toBe(false);
     });
 
-    it('should accept budgetEndDate after startDate', () => {
-      const startDate = new Date('2025-01-01');
-      const budgetEndDate = new Date('2025-06-30');
+    it("should accept budgetEndDate after startDate", () => {
+      const startDate = new Date("2025-01-01");
+      const budgetEndDate = new Date("2025-06-30");
 
       const isValid = budgetEndDate > startDate;
       expect(isValid).toBe(true);
@@ -405,14 +405,14 @@ describe('createBudget', () => {
   // CATEGORY VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('Category Validation', () => {
-    it('should validate categoryIds exist in categories collection', async () => {
-      const categoryIds = ['FOOD_AND_DRINK_GROCERIES'];
+  describe("Category Validation", () => {
+    it("should validate categoryIds exist in categories collection", async () => {
+      const categoryIds = ["FOOD_AND_DRINK_GROCERIES"];
 
       (validateCategoryIds as jest.Mock).mockResolvedValue({
         isValid: true,
         invalidIds: [],
-        validCategories: [{ id: 'FOOD_AND_DRINK_GROCERIES', name: 'Groceries', type: 'expense' }],
+        validCategories: [{ id: "FOOD_AND_DRINK_GROCERIES", name: "Groceries", type: "expense" }],
       });
 
       const result = await validateCategoryIds(categoryIds);
@@ -420,21 +420,21 @@ describe('createBudget', () => {
       expect(result.invalidIds).toHaveLength(0);
     });
 
-    it('should reject invalid category IDs', async () => {
-      const categoryIds = ['INVALID_CATEGORY'];
+    it("should reject invalid category IDs", async () => {
+      const categoryIds = ["INVALID_CATEGORY"];
 
       (validateCategoryIds as jest.Mock).mockResolvedValue({
         isValid: false,
-        invalidIds: ['INVALID_CATEGORY'],
+        invalidIds: ["INVALID_CATEGORY"],
         validCategories: [],
       });
 
       const result = await validateCategoryIds(categoryIds);
       expect(result.isValid).toBe(false);
-      expect(result.invalidIds).toContain('INVALID_CATEGORY');
+      expect(result.invalidIds).toContain("INVALID_CATEGORY");
     });
 
-    it('should reject empty categoryIds array', () => {
+    it("should reject empty categoryIds array", () => {
       const categoryIds: string[] = [];
       const isValid = categoryIds.length >= 1;
 
@@ -446,35 +446,35 @@ describe('createBudget', () => {
   // SHARED BUDGET TESTS
   // --------------------------------------------------------------------------
 
-  describe('Shared Budget Creation', () => {
-    it('should require family membership for shared budgets', () => {
+  describe("Shared Budget Creation", () => {
+    it("should require family membership for shared budgets", () => {
       const user = createMockUser({ familyId: undefined });
       const isShared = true;
 
       const canCreateShared = isShared && user.familyId;
       expect(canCreateShared).toBeFalsy();
 
-      const errorMessage = 'User must belong to a family to create shared budgets';
-      expect(errorMessage).toContain('family');
+      const errorMessage = "User must belong to a family to create shared budgets";
+      expect(errorMessage).toContain("family");
     });
 
-    it('should use family currency for shared budgets', () => {
+    it("should use family currency for shared budgets", () => {
       // User with family membership context
-      const _user = createMockUser({ familyId: 'family-123' });
+      const _user = createMockUser({ familyId: "family-123" });
       void _user; // User context established for shared budget scenario
-      const family = { settings: { currency: 'EUR' } };
+      const family = { settings: { currency: "EUR" } };
 
       // For shared budgets, use family currency
-      const currency = family.settings?.currency || 'USD';
-      expect(currency).toBe('EUR');
+      const currency = family.settings?.currency || "USD";
+      expect(currency).toBe("EUR");
     });
 
-    it('should use user currency for personal budgets', () => {
-      const user = createMockUser({ preferences: { currency: 'CAD' } });
+    it("should use user currency for personal budgets", () => {
+      const user = createMockUser({ preferences: { currency: "CAD" } });
 
       // For personal budgets, use user currency
-      const currency = user.preferences?.currency || 'USD';
-      expect(currency).toBe('CAD');
+      const currency = user.preferences?.currency || "USD";
+      expect(currency).toBe("CAD");
     });
   });
 });
@@ -483,7 +483,7 @@ describe('createBudget', () => {
 // updateBudget TESTS
 // ============================================================================
 
-describe('updateBudget', () => {
+describe("updateBudget", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -492,19 +492,19 @@ describe('updateBudget', () => {
   // METHOD VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('HTTP Method Validation', () => {
-    it('should reject non-PUT methods', () => {
-      const methods = ['GET', 'POST', 'DELETE', 'PATCH'];
+  describe("HTTP Method Validation", () => {
+    it("should reject non-PUT methods", () => {
+      const methods = ["GET", "POST", "DELETE", "PATCH"];
 
       methods.forEach(method => {
-        const isAllowed = method === 'PUT';
+        const isAllowed = method === "PUT";
         expect(isAllowed).toBe(false);
       });
     });
 
-    it('should accept PUT method', () => {
-      const method = 'PUT';
-      const isAllowed = method === 'PUT';
+    it("should accept PUT method", () => {
+      const method = "PUT";
+      const isAllowed = method === "PUT";
       expect(isAllowed).toBe(true);
     });
   });
@@ -513,15 +513,15 @@ describe('updateBudget', () => {
   // PARAMETER VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('Parameter Validation', () => {
-    it('should reject missing budget ID', () => {
+  describe("Parameter Validation", () => {
+    it("should reject missing budget ID", () => {
       const budgetId = undefined;
       const hasId = !!budgetId;
 
       expect(hasId).toBe(false);
 
-      const errorMessage = 'Budget ID is required';
-      expect(errorMessage).toContain('required');
+      const errorMessage = "Budget ID is required";
+      expect(errorMessage).toContain("required");
     });
   });
 
@@ -529,11 +529,11 @@ describe('updateBudget', () => {
   // BUDGET EXISTENCE
   // --------------------------------------------------------------------------
 
-  describe('Budget Existence', () => {
-    it('should return 404 for non-existent budget', async () => {
+  describe("Budget Existence", () => {
+    it("should return 404 for non-existent budget", async () => {
       (getDocument as jest.Mock).mockResolvedValue(null);
 
-      const budget = await getDocument('budgets', 'nonexistent-budget');
+      const budget = await getDocument("budgets", "nonexistent-budget");
       expect(budget).toBeNull();
 
       const status = budget ? 200 : 404;
@@ -545,18 +545,18 @@ describe('updateBudget', () => {
   // AUTHORIZATION
   // --------------------------------------------------------------------------
 
-  describe('Authorization - Ownership', () => {
-    it('should allow owner to update budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'user-123' });
-      const user = createMockUser({ id: 'user-123' });
+  describe("Authorization - Ownership", () => {
+    it("should allow owner to update budget", () => {
+      const budget = createMockBudgetData({ createdBy: "user-123" });
+      const user = createMockUser({ id: "user-123" });
 
       const isOwner = budget.createdBy === user.id;
       expect(isOwner).toBe(true);
     });
 
-    it('should reject non-owner update for personal budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'other-user' });
-      const user = createMockUser({ id: 'user-123', role: UserRole.VIEWER });
+    it("should reject non-owner update for personal budget", () => {
+      const budget = createMockBudgetData({ createdBy: "other-user" });
+      const user = createMockUser({ id: "user-123", role: UserRole.VIEWER });
 
       const isOwner = budget.createdBy === user.id;
       const isEditor = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
@@ -565,9 +565,9 @@ describe('updateBudget', () => {
       expect(canUpdate).toBe(false);
     });
 
-    it('should allow EDITOR to update any budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'other-user' });
-      const user = createMockUser({ id: 'user-123', role: UserRole.EDITOR });
+    it("should allow EDITOR to update any budget", () => {
+      const budget = createMockBudgetData({ createdBy: "other-user" });
+      const user = createMockUser({ id: "user-123", role: UserRole.EDITOR });
 
       const isOwner = budget.createdBy === user.id;
       const isEditor = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
@@ -576,9 +576,9 @@ describe('updateBudget', () => {
       expect(canUpdate).toBe(true);
     });
 
-    it('should allow ADMIN to update any budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'other-user' });
-      const user = createMockUser({ id: 'user-123', role: UserRole.ADMIN });
+    it("should allow ADMIN to update any budget", () => {
+      const budget = createMockBudgetData({ createdBy: "other-user" });
+      const user = createMockUser({ id: "user-123", role: UserRole.ADMIN });
 
       const isOwner = budget.createdBy === user.id;
       const isEditor = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
@@ -592,16 +592,16 @@ describe('updateBudget', () => {
   // REGULAR BUDGET UPDATES
   // --------------------------------------------------------------------------
 
-  describe('Regular Budget Updates', () => {
-    it('should update budget name', async () => {
-      const updateData = { name: 'Updated Groceries' };
+  describe("Regular Budget Updates", () => {
+    it("should update budget name", async () => {
+      const updateData = { name: "Updated Groceries" };
       const existingBudget = createMockBudgetData();
 
       const updatedBudget = { ...existingBudget, ...updateData };
-      expect(updatedBudget.name).toBe('Updated Groceries');
+      expect(updatedBudget.name).toBe("Updated Groceries");
     });
 
-    it('should update budget amount and recalculate remaining', async () => {
+    it("should update budget amount and recalculate remaining", async () => {
       const updateData = { amount: 600 };
       const existingBudget = createMockBudgetData({ spent: 100 });
 
@@ -618,15 +618,15 @@ describe('updateBudget', () => {
       expect(updatedBudget.remaining).toBe(500);
     });
 
-    it('should update categoryIds', async () => {
-      const updateData = { categoryIds: ['FOOD_AND_DRINK_GROCERIES', 'FOOD_AND_DRINK_RESTAURANTS'] };
+    it("should update categoryIds", async () => {
+      const updateData = { categoryIds: ["FOOD_AND_DRINK_GROCERIES", "FOOD_AND_DRINK_RESTAURANTS"] };
       const existingBudget = createMockBudgetData();
 
       const updatedBudget = { ...existingBudget, ...updateData };
       expect(updatedBudget.categoryIds).toHaveLength(2);
     });
 
-    it('should update alertThreshold', async () => {
+    it("should update alertThreshold", async () => {
       const updateData = { alertThreshold: 90 };
       const existingBudget = createMockBudgetData();
 
@@ -634,7 +634,7 @@ describe('updateBudget', () => {
       expect(updatedBudget.alertThreshold).toBe(90);
     });
 
-    it('should update isActive to deactivate budget', async () => {
+    it("should update isActive to deactivate budget", async () => {
       const updateData = { isActive: false };
       const existingBudget = createMockBudgetData();
 
@@ -647,60 +647,60 @@ describe('updateBudget', () => {
   // SYSTEM BUDGET PROTECTION
   // --------------------------------------------------------------------------
 
-  describe('System Budget Protection', () => {
-    it('should reject modifying isSystemEverythingElse flag', () => {
+  describe("System Budget Protection", () => {
+    it("should reject modifying isSystemEverythingElse flag", () => {
       const updateData = { isSystemEverythingElse: false };
 
-      const hasSystemFlag = 'isSystemEverythingElse' in updateData;
+      const hasSystemFlag = "isSystemEverythingElse" in updateData;
       expect(hasSystemFlag).toBe(true);
 
-      const errorMessage = 'Cannot modify system budget flag';
-      expect(errorMessage).toContain('Cannot modify');
+      const errorMessage = "Cannot modify system budget flag";
+      expect(errorMessage).toContain("Cannot modify");
     });
 
-    it('should reject amount update on system budget', () => {
+    it("should reject amount update on system budget", () => {
       const existingBudget = createMockBudgetData({ isSystemEverythingElse: true });
       const updateData = { amount: 100 };
 
       const isSystemBudget = existingBudget.isSystemEverythingElse === true;
-      const hasAmountUpdate = 'amount' in updateData;
+      const hasAmountUpdate = "amount" in updateData;
 
       const shouldReject = isSystemBudget && hasAmountUpdate;
       expect(shouldReject).toBe(true);
 
-      const errorMessage = 'Cannot edit amount on "Everything Else" budget - amount is calculated from spending';
-      expect(errorMessage).toContain('Cannot edit amount');
+      const errorMessage = "Cannot edit amount on \"Everything Else\" budget - amount is calculated from spending";
+      expect(errorMessage).toContain("Cannot edit amount");
     });
 
-    it('should allow name change on system budget', () => {
+    it("should allow name change on system budget", () => {
       const existingBudget = createMockBudgetData({ isSystemEverythingElse: true });
-      const updateData = { name: 'Miscellaneous' };
+      const updateData = { name: "Miscellaneous" };
 
       // Verify this is a system budget
       expect(existingBudget.isSystemEverythingElse).toBe(true);
 
-      const allowedFields = ['name', 'updatedAt'];
+      const allowedFields = ["name", "updatedAt"];
       const updateKeys = Object.keys(updateData);
       const hasOnlyAllowedFields = updateKeys.every(key => allowedFields.includes(key));
 
       expect(hasOnlyAllowedFields).toBe(true);
     });
 
-    it('should reject other field updates on system budget', () => {
+    it("should reject other field updates on system budget", () => {
       const existingBudget = createMockBudgetData({ isSystemEverythingElse: true });
       expect(existingBudget.isSystemEverythingElse).toBe(true);
 
-      const updateData = { categoryIds: ['new-category'] };
+      const updateData = { categoryIds: ["new-category"] };
 
-      const allowedFields = ['name', 'updatedAt'];
+      const allowedFields = ["name", "updatedAt"];
       const updateKeys = Object.keys(updateData);
       const invalidFields = updateKeys.filter(f => !allowedFields.includes(f));
 
       expect(invalidFields.length).toBeGreaterThan(0);
-      expect(invalidFields).toContain('categoryIds');
+      expect(invalidFields).toContain("categoryIds");
 
-      const errorMessage = `Only name can be changed on 'Everything Else' budget. Cannot edit: ${invalidFields.join(', ')}`;
-      expect(errorMessage).toContain('categoryIds');
+      const errorMessage = `Only name can be changed on 'Everything Else' budget. Cannot edit: ${invalidFields.join(", ")}`;
+      expect(errorMessage).toContain("categoryIds");
     });
   });
 
@@ -708,13 +708,13 @@ describe('updateBudget', () => {
   // FAMILY/SHARED BUDGET ACCESS
   // --------------------------------------------------------------------------
 
-  describe('Shared Budget Access', () => {
-    it('should check family access for shared budgets', async () => {
+  describe("Shared Budget Access", () => {
+    it("should check family access for shared budgets", async () => {
       const budget = createMockBudgetData({
         isShared: true,
-        familyId: 'family-123',
+        familyId: "family-123",
       });
-      const userId = 'user-123';
+      const userId = "user-123";
 
       (checkFamilyAccess as jest.Mock).mockResolvedValue(true);
 
@@ -722,12 +722,12 @@ describe('updateBudget', () => {
       expect(hasAccess).toBe(true);
     });
 
-    it('should reject non-family member access to shared budget', async () => {
+    it("should reject non-family member access to shared budget", async () => {
       const budget = createMockBudgetData({
         isShared: true,
-        familyId: 'family-123',
+        familyId: "family-123",
       });
-      const userId = 'outsider-456';
+      const userId = "outsider-456";
 
       (checkFamilyAccess as jest.Mock).mockResolvedValue(false);
 
@@ -741,7 +741,7 @@ describe('updateBudget', () => {
 // deleteBudget TESTS
 // ============================================================================
 
-describe('deleteBudget', () => {
+describe("deleteBudget", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -750,19 +750,19 @@ describe('deleteBudget', () => {
   // METHOD VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('HTTP Method Validation', () => {
-    it('should reject non-DELETE methods', () => {
-      const methods = ['GET', 'POST', 'PUT', 'PATCH'];
+  describe("HTTP Method Validation", () => {
+    it("should reject non-DELETE methods", () => {
+      const methods = ["GET", "POST", "PUT", "PATCH"];
 
       methods.forEach(method => {
-        const isAllowed = method === 'DELETE';
+        const isAllowed = method === "DELETE";
         expect(isAllowed).toBe(false);
       });
     });
 
-    it('should accept DELETE method', () => {
-      const method = 'DELETE';
-      const isAllowed = method === 'DELETE';
+    it("should accept DELETE method", () => {
+      const method = "DELETE";
+      const isAllowed = method === "DELETE";
       expect(isAllowed).toBe(true);
     });
   });
@@ -771,15 +771,15 @@ describe('deleteBudget', () => {
   // PARAMETER VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('Parameter Validation', () => {
-    it('should reject missing budget ID', () => {
+  describe("Parameter Validation", () => {
+    it("should reject missing budget ID", () => {
       const budgetId = undefined;
       const hasId = !!budgetId;
 
       expect(hasId).toBe(false);
 
-      const errorMessage = 'Budget ID is required';
-      expect(errorMessage).toContain('required');
+      const errorMessage = "Budget ID is required";
+      expect(errorMessage).toContain("required");
     });
   });
 
@@ -787,11 +787,11 @@ describe('deleteBudget', () => {
   // BUDGET EXISTENCE
   // --------------------------------------------------------------------------
 
-  describe('Budget Existence', () => {
-    it('should return 404 for non-existent budget', async () => {
+  describe("Budget Existence", () => {
+    it("should return 404 for non-existent budget", async () => {
       (getDocument as jest.Mock).mockResolvedValue(null);
 
-      const budget = await getDocument('budgets', 'nonexistent-budget');
+      const budget = await getDocument("budgets", "nonexistent-budget");
       expect(budget).toBeNull();
 
       const status = budget ? 200 : 404;
@@ -803,18 +803,18 @@ describe('deleteBudget', () => {
   // AUTHORIZATION
   // --------------------------------------------------------------------------
 
-  describe('Authorization - Ownership', () => {
-    it('should allow owner to delete budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'user-123' });
-      const user = createMockUser({ id: 'user-123' });
+  describe("Authorization - Ownership", () => {
+    it("should allow owner to delete budget", () => {
+      const budget = createMockBudgetData({ createdBy: "user-123" });
+      const user = createMockUser({ id: "user-123" });
 
       const isOwner = budget.createdBy === user.id;
       expect(isOwner).toBe(true);
     });
 
-    it('should reject non-owner delete for personal budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'other-user' });
-      const user = createMockUser({ id: 'user-123', role: UserRole.VIEWER });
+    it("should reject non-owner delete for personal budget", () => {
+      const budget = createMockBudgetData({ createdBy: "other-user" });
+      const user = createMockUser({ id: "user-123", role: UserRole.VIEWER });
 
       const isOwner = budget.createdBy === user.id;
       const isEditor = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
@@ -823,19 +823,19 @@ describe('deleteBudget', () => {
       expect(canDelete).toBe(false);
     });
 
-    it('should allow EDITOR to delete budget', () => {
+    it("should allow EDITOR to delete budget", () => {
       // Budget owned by other user
-      createMockBudgetData({ createdBy: 'other-user' });
-      const user = createMockUser({ id: 'user-123', role: UserRole.EDITOR });
+      createMockBudgetData({ createdBy: "other-user" });
+      const user = createMockUser({ id: "user-123", role: UserRole.EDITOR });
 
       const isEditor = user.role === UserRole.EDITOR || user.role === UserRole.ADMIN;
       expect(isEditor).toBe(true);
     });
 
-    it('should allow ADMIN to delete budget', () => {
+    it("should allow ADMIN to delete budget", () => {
       // Budget owned by other user
-      createMockBudgetData({ createdBy: 'other-user' });
-      const user = createMockUser({ id: 'user-123', role: UserRole.ADMIN });
+      createMockBudgetData({ createdBy: "other-user" });
+      const user = createMockUser({ id: "user-123", role: UserRole.ADMIN });
 
       const isAdmin = user.role === UserRole.ADMIN;
       expect(isAdmin).toBe(true);
@@ -846,8 +846,8 @@ describe('deleteBudget', () => {
   // SOFT DELETE
   // --------------------------------------------------------------------------
 
-  describe('Soft Delete Behavior', () => {
-    it('should set isActive to false (soft delete)', async () => {
+  describe("Soft Delete Behavior", () => {
+    it("should set isActive to false (soft delete)", async () => {
       const existingBudget = createMockBudgetData();
 
       (updateDocument as jest.Mock).mockResolvedValue({
@@ -855,7 +855,7 @@ describe('deleteBudget', () => {
         isActive: false,
       });
 
-      const result = await updateDocument('budgets', existingBudget.id, { isActive: false }) as any;
+      const result = await updateDocument("budgets", existingBudget.id, { isActive: false }) as any;
       expect(result.isActive).toBe(false);
     });
   });
@@ -864,24 +864,24 @@ describe('deleteBudget', () => {
   // SYSTEM BUDGET PROTECTION
   // --------------------------------------------------------------------------
 
-  describe('System Budget Protection', () => {
-    it('should prevent deletion of "Everything Else" system budget', () => {
+  describe("System Budget Protection", () => {
+    it("should prevent deletion of \"Everything Else\" system budget", () => {
       const existingBudget = createMockBudgetData({
         isSystemEverythingElse: true,
-        name: 'Everything Else',
+        name: "Everything Else",
       });
 
       const isSystemBudget = existingBudget.isSystemEverythingElse === true;
       expect(isSystemBudget).toBe(true);
 
-      const errorMessage = 'The "Everything Else" budget is a system budget and cannot be deleted';
-      expect(errorMessage).toContain('cannot be deleted');
+      const errorMessage = "The \"Everything Else\" budget is a system budget and cannot be deleted";
+      expect(errorMessage).toContain("cannot be deleted");
     });
 
-    it('should allow deletion of regular budget', () => {
+    it("should allow deletion of regular budget", () => {
       const existingBudget = createMockBudgetData({
         isSystemEverythingElse: false,
-        name: 'Groceries',
+        name: "Groceries",
       });
 
       const isSystemBudget = existingBudget.isSystemEverythingElse === true;
@@ -898,7 +898,7 @@ describe('deleteBudget', () => {
 // getBudget TESTS
 // ============================================================================
 
-describe('getBudget', () => {
+describe("getBudget", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -907,19 +907,19 @@ describe('getBudget', () => {
   // METHOD VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('HTTP Method Validation', () => {
-    it('should reject non-GET methods', () => {
-      const methods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+  describe("HTTP Method Validation", () => {
+    it("should reject non-GET methods", () => {
+      const methods = ["POST", "PUT", "DELETE", "PATCH"];
 
       methods.forEach(method => {
-        const isAllowed = method === 'GET';
+        const isAllowed = method === "GET";
         expect(isAllowed).toBe(false);
       });
     });
 
-    it('should accept GET method', () => {
-      const method = 'GET';
-      const isAllowed = method === 'GET';
+    it("should accept GET method", () => {
+      const method = "GET";
+      const isAllowed = method === "GET";
       expect(isAllowed).toBe(true);
     });
   });
@@ -928,15 +928,15 @@ describe('getBudget', () => {
   // PARAMETER VALIDATION
   // --------------------------------------------------------------------------
 
-  describe('Parameter Validation', () => {
-    it('should reject missing budget ID', () => {
+  describe("Parameter Validation", () => {
+    it("should reject missing budget ID", () => {
       const budgetId = undefined;
       const hasId = !!budgetId;
 
       expect(hasId).toBe(false);
 
-      const errorMessage = 'Budget ID is required';
-      expect(errorMessage).toContain('required');
+      const errorMessage = "Budget ID is required";
+      expect(errorMessage).toContain("required");
     });
   });
 
@@ -944,22 +944,22 @@ describe('getBudget', () => {
   // BUDGET EXISTENCE
   // --------------------------------------------------------------------------
 
-  describe('Budget Existence', () => {
-    it('should return 404 for non-existent budget', async () => {
+  describe("Budget Existence", () => {
+    it("should return 404 for non-existent budget", async () => {
       (getDocument as jest.Mock).mockResolvedValue(null);
 
-      const budget = await getDocument('budgets', 'nonexistent-budget');
+      const budget = await getDocument("budgets", "nonexistent-budget");
       expect(budget).toBeNull();
 
       const status = budget ? 200 : 404;
       expect(status).toBe(404);
     });
 
-    it('should return budget when found', async () => {
+    it("should return budget when found", async () => {
       const mockBudget = createMockBudgetData();
       (getDocument as jest.Mock).mockResolvedValue(mockBudget);
 
-      const budget = await getDocument('budgets', 'budget-123');
+      const budget = await getDocument("budgets", "budget-123");
       expect(budget).toBeDefined();
       expect(budget).toEqual(mockBudget);
     });
@@ -969,32 +969,32 @@ describe('getBudget', () => {
   // AUTHORIZATION
   // --------------------------------------------------------------------------
 
-  describe('Authorization - Access Control', () => {
-    it('should allow owner to view budget', () => {
-      const budget = createMockBudgetData({ createdBy: 'user-123' });
-      const user = createMockUser({ id: 'user-123' });
+  describe("Authorization - Access Control", () => {
+    it("should allow owner to view budget", () => {
+      const budget = createMockBudgetData({ createdBy: "user-123" });
+      const user = createMockUser({ id: "user-123" });
 
       const isOwner = budget.createdBy === user.id;
       expect(isOwner).toBe(true);
     });
 
-    it('should allow memberIds to view budget', () => {
+    it("should allow memberIds to view budget", () => {
       const budget = createMockBudgetData({
-        createdBy: 'other-user',
-        memberIds: ['user-123', 'other-user'],
+        createdBy: "other-user",
+        memberIds: ["user-123", "other-user"],
       });
-      const user = createMockUser({ id: 'user-123' });
+      const user = createMockUser({ id: "user-123" });
 
       const isMember = (budget.memberIds || []).includes(user.id);
       expect(isMember).toBe(true);
     });
 
-    it('should reject non-owner, non-member access', () => {
+    it("should reject non-owner, non-member access", () => {
       const budget = createMockBudgetData({
-        createdBy: 'other-user',
-        memberIds: ['other-user'],
+        createdBy: "other-user",
+        memberIds: ["other-user"],
       });
-      const user = createMockUser({ id: 'outsider-456' });
+      const user = createMockUser({ id: "outsider-456" });
 
       const isOwner = budget.createdBy === user.id;
       const isMember = (budget.memberIds || []).includes(user.id);
@@ -1008,13 +1008,13 @@ describe('getBudget', () => {
   // SHARED BUDGET ACCESS
   // --------------------------------------------------------------------------
 
-  describe('Shared Budget Access', () => {
-    it('should allow family member access to shared budget', async () => {
+  describe("Shared Budget Access", () => {
+    it("should allow family member access to shared budget", async () => {
       const budget = createMockBudgetData({
         isShared: true,
-        familyId: 'family-123',
+        familyId: "family-123",
       });
-      const userId = 'user-123';
+      const userId = "user-123";
 
       (checkFamilyAccess as jest.Mock).mockResolvedValue(true);
 
@@ -1022,12 +1022,12 @@ describe('getBudget', () => {
       expect(hasAccess).toBe(true);
     });
 
-    it('should reject non-family member access to shared budget', async () => {
+    it("should reject non-family member access to shared budget", async () => {
       const budget = createMockBudgetData({
         isShared: true,
-        familyId: 'family-123',
+        familyId: "family-123",
       });
-      const userId = 'outsider-456';
+      const userId = "outsider-456";
 
       (checkFamilyAccess as jest.Mock).mockResolvedValue(false);
 
@@ -1040,14 +1040,14 @@ describe('getBudget', () => {
   // SPENT AMOUNT CALCULATION
   // --------------------------------------------------------------------------
 
-  describe('Spent Amount Calculation', () => {
-    it('should recalculate spent before returning budget', async () => {
+  describe("Spent Amount Calculation", () => {
+    it("should recalculate spent before returning budget", async () => {
       const budget = createMockBudgetData({ spent: 0, remaining: 500 });
 
       // Simulate transactions query
       const transactions = [
-        { amount: 50, status: 'approved', type: 'expense' },
-        { amount: 75, status: 'approved', type: 'expense' },
+        { amount: 50, status: "approved", type: "expense" },
+        { amount: 75, status: "approved", type: "expense" },
       ];
 
       const totalSpent = transactions.reduce((sum, t) => sum + t.amount, 0);
@@ -1066,15 +1066,15 @@ describe('getBudget', () => {
       expect(updatedBudget.remaining).toBe(375);
     });
 
-    it('should only count approved expense transactions', () => {
+    it("should only count approved expense transactions", () => {
       const transactions = [
-        { amount: 50, status: 'approved', type: 'expense' }, // Counts
-        { amount: 100, status: 'pending', type: 'expense' }, // Doesn't count
-        { amount: 200, status: 'approved', type: 'income' }, // Doesn't count
+        { amount: 50, status: "approved", type: "expense" }, // Counts
+        { amount: 100, status: "pending", type: "expense" }, // Doesn't count
+        { amount: 200, status: "approved", type: "income" }, // Doesn't count
       ];
 
       const validTransactions = transactions.filter(
-        t => t.status === 'approved' && t.type === 'expense'
+        t => t.status === "approved" && t.type === "expense"
       );
       expect(validTransactions).toHaveLength(1);
 
@@ -1088,9 +1088,9 @@ describe('getBudget', () => {
 // INTEGRATION VALIDATION TESTS
 // ============================================================================
 
-describe('Budget CRUD Integration Validation', () => {
-  describe('Validation Schema Compatibility', () => {
-    it('should accept valid BudgetPeriod enum values', () => {
+describe("Budget CRUD Integration Validation", () => {
+  describe("Validation Schema Compatibility", () => {
+    it("should accept valid BudgetPeriod enum values", () => {
       const validPeriods = [
         BudgetPeriod.WEEKLY,
         BudgetPeriod.MONTHLY,
@@ -1105,8 +1105,8 @@ describe('Budget CRUD Integration Validation', () => {
       });
     });
 
-    it('should accept valid budget types', () => {
-      const validTypes = ['recurring', 'limited'];
+    it("should accept valid budget types", () => {
+      const validTypes = ["recurring", "limited"];
 
       validTypes.forEach(type => {
         const isValid = validTypes.includes(type);
@@ -1114,7 +1114,7 @@ describe('Budget CRUD Integration Validation', () => {
       });
     });
 
-    it('should enforce alertThreshold range (0-100)', () => {
+    it("should enforce alertThreshold range (0-100)", () => {
       const validValues = [0, 50, 80, 100];
       const invalidValues = [-1, 101, 200];
 
@@ -1130,10 +1130,10 @@ describe('Budget CRUD Integration Validation', () => {
     });
   });
 
-  describe('Access Control Field Generation', () => {
-    it('should generate consistent access control fields', () => {
-      const userId = 'test-user';
-      const groupIds = ['group-1'];
+  describe("Access Control Field Generation", () => {
+    it("should generate consistent access control fields", () => {
+      const userId = "test-user";
+      const groupIds = ["group-1"];
 
       const access = {
         createdBy: userId,
@@ -1146,8 +1146,8 @@ describe('Budget CRUD Integration Validation', () => {
       expect(access.isPrivate).toBe(false);
     });
 
-    it('should handle empty groupIds for private budgets', () => {
-      const userId = 'test-user';
+    it("should handle empty groupIds for private budgets", () => {
+      const userId = "test-user";
       const groupIds: string[] = [];
 
       const access = {
@@ -1160,12 +1160,12 @@ describe('Budget CRUD Integration Validation', () => {
     });
   });
 
-  describe('Date Validation', () => {
-    it('should accept valid ISO date strings', () => {
+  describe("Date Validation", () => {
+    it("should accept valid ISO date strings", () => {
       const validDates = [
-        '2025-01-01T00:00:00Z',
-        '2025-12-31T23:59:59Z',
-        '2024-02-29T12:00:00Z', // Leap year
+        "2025-01-01T00:00:00Z",
+        "2025-12-31T23:59:59Z",
+        "2024-02-29T12:00:00Z", // Leap year
       ];
 
       validDates.forEach(dateStr => {
@@ -1175,8 +1175,8 @@ describe('Budget CRUD Integration Validation', () => {
       });
     });
 
-    it('should handle Timestamp conversions', () => {
-      const date = new Date('2025-01-01');
+    it("should handle Timestamp conversions", () => {
+      const date = new Date("2025-01-01");
       const timestamp = Timestamp.fromDate(date);
 
       expect(timestamp).toBeDefined();

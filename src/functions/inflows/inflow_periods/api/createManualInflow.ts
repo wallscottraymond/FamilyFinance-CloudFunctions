@@ -9,13 +9,13 @@
  * 2. Triggers period generation via onInflowCreated trigger
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { is_convert_to_recurring_enabled } from '../../../infrastructure/feature_flags';
-import { to_convert_frequency } from '../../../domain/recurring/manual_inflow.service';
-import { create_manual_inflow_orchestrator } from '../../../orchestrators/recurring/create_manual_inflow.orchestrator';
-import { ConvertRefusedError } from '../../../types';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { is_convert_to_recurring_enabled } from "../../../infrastructure/feature_flags";
+import { to_convert_frequency } from "../../../domain/recurring/manual_inflow.service";
+import { create_manual_inflow_orchestrator } from "../../../orchestrators/recurring/create_manual_inflow.orchestrator";
+import { ConvertRefusedError } from "../../../types";
 import {
   IncomeType,
   IncomeVariability,
@@ -24,7 +24,7 @@ import {
   BonusIncomeConfig,
   VariableIncomeConfig,
   PlaidRecurringFrequency
-} from '../../../../types';
+} from "../../../../types";
 
 interface CreateManualInflowRequest {
   // Required fields
@@ -58,55 +58,55 @@ interface CreateManualInflowResponse {
  */
 function getDefaultVariability(incomeType: IncomeType): IncomeVariability {
   switch (incomeType) {
-    case IncomeType.SALARY:
-    case IncomeType.PENSION:
-      return IncomeVariability.FIXED;
-    case IncomeType.RENTAL:
-    case IncomeType.GOVERNMENT:
-      return IncomeVariability.LOW;
-    case IncomeType.HOURLY:
-    case IncomeType.BASE_PLUS_COMMISSION:
-    case IncomeType.INVESTMENT:
-      return IncomeVariability.MEDIUM;
-    case IncomeType.COMMISSION_ONLY:
-    case IncomeType.BONUS:
-    case IncomeType.FREELANCE:
-      return IncomeVariability.HIGH;
-    default:
-      return IncomeVariability.MEDIUM;
+  case IncomeType.SALARY:
+  case IncomeType.PENSION:
+    return IncomeVariability.FIXED;
+  case IncomeType.RENTAL:
+  case IncomeType.GOVERNMENT:
+    return IncomeVariability.LOW;
+  case IncomeType.HOURLY:
+  case IncomeType.BASE_PLUS_COMMISSION:
+  case IncomeType.INVESTMENT:
+    return IncomeVariability.MEDIUM;
+  case IncomeType.COMMISSION_ONLY:
+  case IncomeType.BONUS:
+  case IncomeType.FREELANCE:
+    return IncomeVariability.HIGH;
+  default:
+    return IncomeVariability.MEDIUM;
   }
 }
 
 export const createManualInflow = onCall(
   {
-    region: 'us-central1',
-    memory: '256MiB',
+    region: "us-central1",
+    memory: "256MiB",
     timeoutSeconds: 30,
   },
   async (request): Promise<CreateManualInflowResponse> => {
     // Verify authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const userId = request.auth.uid;
     const data = request.data as CreateManualInflowRequest;
 
     // Validate required fields
-    if (!data.name || data.name.trim() === '') {
-      throw new HttpsError('invalid-argument', 'Name is required');
+    if (!data.name || data.name.trim() === "") {
+      throw new HttpsError("invalid-argument", "Name is required");
     }
-    if (typeof data.amount !== 'number' || data.amount <= 0) {
-      throw new HttpsError('invalid-argument', 'Amount must be a positive number');
+    if (typeof data.amount !== "number" || data.amount <= 0) {
+      throw new HttpsError("invalid-argument", "Amount must be a positive number");
     }
     if (!data.frequency) {
-      throw new HttpsError('invalid-argument', 'Frequency is required');
+      throw new HttpsError("invalid-argument", "Frequency is required");
     }
     if (!data.firstExpectedDate) {
-      throw new HttpsError('invalid-argument', 'First expected date is required');
+      throw new HttpsError("invalid-argument", "First expected date is required");
     }
     if (!data.incomeType) {
-      throw new HttpsError('invalid-argument', 'Income type is required');
+      throw new HttpsError("invalid-argument", "Income type is required");
     }
 
     const db = admin.firestore();
@@ -117,10 +117,10 @@ export const createManualInflow = onCall(
     try {
       firstDate = new Date(data.firstExpectedDate);
       if (isNaN(firstDate.getTime())) {
-        throw new Error('Invalid date');
+        throw new Error("Invalid date");
       }
     } catch {
-      throw new HttpsError('invalid-argument', 'Invalid first expected date format');
+      throw new HttpsError("invalid-argument", "Invalid first expected date format");
     }
 
     // D43 (flag on): Add Income through the shared builder — stamped v2, the caller's own account
@@ -131,7 +131,7 @@ export const createManualInflow = onCall(
       if (frequency) {
         try {
           const { inflow_id } = await create_manual_inflow_orchestrator(
-            { trace_id: `createManualInflow_${userId}_${Date.now()}`, span_id: 'createManualInflow' },
+            { trace_id: `createManualInflow_${userId}_${Date.now()}`, span_id: "createManualInflow" },
             userId,
             {
               name: data.name.trim(),
@@ -150,17 +150,17 @@ export const createManualInflow = onCall(
               source_transaction_id: data.sourceTransactionId || null,
             }
           );
-          return { success: true, inflowId: inflow_id, message: 'Manual income created successfully. Periods were generated.' };
+          return { success: true, inflowId: inflow_id, message: "Manual income created successfully. Periods were generated." };
         } catch (error: any) {
-          if (error instanceof ConvertRefusedError) throw new HttpsError('permission-denied', error.message);
+          if (error instanceof ConvertRefusedError) throw new HttpsError("permission-denied", error.message);
           if (error instanceof HttpsError) throw error;
-          throw new HttpsError('invalid-argument', error?.message || 'Failed to create manual inflow');
+          throw new HttpsError("invalid-argument", error?.message || "Failed to create manual inflow");
         }
       }
     }
 
     // Generate unique ID
-    const inflowId = db.collection('inflows').doc().id;
+    const inflowId = db.collection("inflows").doc().id;
 
     console.log(`[createManualInflow] Creating manual inflow: ${inflowId} for user: ${userId}`);
 
@@ -185,13 +185,13 @@ export const createManualInflow = onCall(
         isPrivate: true,
 
         // === PLAID IDENTIFIERS (null for manual) ===
-        plaidItemId: '',
-        accountId: data.accountId || '',
+        plaidItemId: "",
+        accountId: data.accountId || "",
 
         // === FINANCIAL DATA ===
         lastAmount: data.amount,
         averageAmount: data.amount,
-        currency: 'USD',
+        currency: "USD",
         unofficialCurrency: null,
 
         // === DESCRIPTIVE INFO ===
@@ -206,8 +206,8 @@ export const createManualInflow = onCall(
         predictedNextDate: predictedNextDate,
 
         // === CATEGORIZATION ===
-        plaidPrimaryCategory: 'INCOME',
-        plaidDetailedCategory: 'INCOME_OTHER',
+        plaidPrimaryCategory: "INCOME",
+        plaidDetailedCategory: "INCOME_OTHER",
         plaidCategoryId: null,
         internalPrimaryCategory: null,
         internalDetailedCategory: null,
@@ -225,11 +225,11 @@ export const createManualInflow = onCall(
         variableConfig: data.variableConfig || null,
 
         // === STATUS & CONTROL ===
-        source: 'manual',
+        source: "manual",
         isActive: true,
         isHidden: false,
         isUserModified: false,
-        plaidStatus: 'MANUAL',
+        plaidStatus: "MANUAL",
         plaidConfidenceLevel: null,
 
         // === TRANSACTION REFERENCES ===
@@ -246,7 +246,7 @@ export const createManualInflow = onCall(
       };
 
       // Write to Firestore
-      await db.collection('inflows').doc(inflowId).set(inflowDoc);
+      await db.collection("inflows").doc(inflowId).set(inflowDoc);
 
       console.log(`[createManualInflow] Successfully created inflow: ${inflowId}`);
 
@@ -255,15 +255,15 @@ export const createManualInflow = onCall(
       return {
         success: true,
         inflowId,
-        message: 'Manual income created successfully. Periods will be generated automatically.'
+        message: "Manual income created successfully. Periods will be generated automatically."
       };
 
     } catch (error: any) {
-      console.error('[createManualInflow] Error:', error);
+      console.error("[createManualInflow] Error:", error);
       if (error instanceof HttpsError) {
         throw error;
       }
-      throw new HttpsError('internal', error.message || 'Failed to create manual inflow');
+      throw new HttpsError("internal", error.message || "Failed to create manual inflow");
     }
   }
 );

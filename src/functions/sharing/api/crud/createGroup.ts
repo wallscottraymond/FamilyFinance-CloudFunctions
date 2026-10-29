@@ -80,7 +80,7 @@ export const createGroup = onRequest({
         role: GroupRole.OWNER,
         joinedAt: admin.firestore.Timestamp.now(),
         invitedBy: user.id!,
-        status: 'active'
+        status: "active"
       };
 
       // Create group document

@@ -5,10 +5,10 @@
  * This is the final step in the transaction processing pipeline.
  */
 
-import { Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { Transaction as FamilyTransaction } from '../../../types';
-import { OutflowPeriodUpdate } from './matchTransactionSplitsToOutflows';
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { Transaction as FamilyTransaction } from "../../../types";
+import { OutflowPeriodUpdate } from "./matchTransactionSplitsToOutflows";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 /**
@@ -28,7 +28,7 @@ export async function batchCreateTransactions(
   console.log(`📦 [batchCreateTransactions] Batch creating ${transactions.length} transactions and ${outflowUpdates.length} outflow updates`);
 
   if (transactions.length === 0) {
-    console.log(`⏭️ [batchCreateTransactions] No transactions to create`);
+    console.log("⏭️ [batchCreateTransactions] No transactions to create");
     return 0;
   }
 
@@ -49,7 +49,7 @@ export async function batchCreateTransactions(
       for (const transaction of batchTransactions) {
         // Use transactionId field as Firestore document ID
         const transactionId = transaction.transactionId;
-        const docRef = db.collection('transactions').doc(transactionId);
+        const docRef = db.collection("transactions").doc(transactionId);
 
         // Add createdAt and updatedAt timestamps
         const transactionData = {
@@ -66,7 +66,7 @@ export async function batchCreateTransactions(
             monthlyPeriodId: transactionData.splits[0].monthlyPeriodId,
             weeklyPeriodId: transactionData.splits[0].weeklyPeriodId,
             biWeeklyPeriodId: transactionData.splits[0].biWeeklyPeriodId,
-          } : 'NO SPLITS'
+          } : "NO SPLITS"
         });
 
         batch.set(docRef, transactionData);
@@ -78,12 +78,12 @@ export async function batchCreateTransactions(
         const updatesForBatch = outflowUpdates.slice(0, Math.min(outflowUpdates.length, BATCH_SIZE - batchTransactions.length));
 
         for (const update of updatesForBatch) {
-          const periodRef = db.collection('outflow_periods').doc(update.periodId);
+          const periodRef = db.collection("outflow_periods").doc(update.periodId);
 
           // Add transaction split reference to the outflow period
           batch.update(periodRef, {
             transactionSplits: FieldValue.arrayUnion(update.transactionSplitRef),
-            status: 'paid', // Mark as paid when transaction is matched
+            status: "paid", // Mark as paid when transaction is matched
             updatedAt: Timestamp.now()
           });
         }
@@ -108,11 +108,11 @@ export async function batchCreateTransactions(
         const batchUpdates = remainingUpdates.slice(i, i + BATCH_SIZE);
 
         for (const update of batchUpdates) {
-          const periodRef = db.collection('outflow_periods').doc(update.periodId);
+          const periodRef = db.collection("outflow_periods").doc(update.periodId);
 
           batch.update(periodRef, {
             transactionSplits: FieldValue.arrayUnion(update.transactionSplitRef),
-            status: 'paid',
+            status: "paid",
             updatedAt: Timestamp.now()
           });
         }
@@ -132,7 +132,7 @@ export async function batchCreateTransactions(
     return totalCreated;
 
   } catch (error) {
-    console.error('[batchCreateTransactions] Error in batch creation:', error);
+    console.error("[batchCreateTransactions] Error in batch creation:", error);
     throw error; // Throw to indicate failure
   }
 }

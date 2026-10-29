@@ -56,7 +56,7 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
   amount: amountSchema,
   categoryIds: Joi.array().items(Joi.string().min(1)).min(1).required(), // Changed to categoryIds with dynamic validation
   period: Joi.string().valid(...Object.values(BudgetPeriod)).required(),
-  budgetType: Joi.string().valid('recurring', 'limited').optional().default('recurring'),
+  budgetType: Joi.string().valid("recurring", "limited").optional().default("recurring"),
   startDate: dateSchema.required(),
   endDate: dateSchema.optional(), // Legacy field for backward compatibility
   alertThreshold: Joi.number().min(0).max(100).optional().default(80),
@@ -66,9 +66,9 @@ export const createBudgetSchema = Joi.object<CreateBudgetRequest>({
 
   // Budget end date functionality
   isOngoing: Joi.boolean().optional().default(true),
-  budgetEndDate: Joi.when('isOngoing', {
+  budgetEndDate: Joi.when("isOngoing", {
     is: false,
-    then: dateSchema.required().greater(Joi.ref('startDate')),
+    then: dateSchema.required().greater(Joi.ref("startDate")),
     otherwise: Joi.forbidden()
   }),
 });
@@ -291,7 +291,7 @@ export async function validateCategoryIds(categoryIds: string[]): Promise<{
     
     // Get all provided category IDs from the database
     const categoryPromises = categoryIds.map(id => 
-      db.collection('categories').doc(id).get()
+      db.collection("categories").doc(id).get()
     );
     
     const categoryDocs = await Promise.all(categoryPromises);
@@ -313,8 +313,8 @@ export async function validateCategoryIds(categoryIds: string[]): Promise<{
         } else {
           validCategories.push({
             id: categoryId,
-            name: data?.name || 'Unknown',
-            type: data?.type || 'Unknown'
+            name: data?.name || "Unknown",
+            type: data?.type || "Unknown"
           });
         }
       }
@@ -327,7 +327,7 @@ export async function validateCategoryIds(categoryIds: string[]): Promise<{
     };
     
   } catch (error) {
-    console.error('Error validating category IDs:', error);
+    console.error("Error validating category IDs:", error);
     return {
       isValid: false,
       invalidIds: categoryIds, // Mark all as invalid if we can't validate

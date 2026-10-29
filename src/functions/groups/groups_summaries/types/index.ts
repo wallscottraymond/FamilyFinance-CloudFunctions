@@ -14,7 +14,7 @@ export interface GroupOutflowSummary {
   // Identity
   groupId: string;
   summaryId: string;           // e.g., '2025M12', '2025W50'
-  periodType: 'weekly' | 'bi_monthly' | 'monthly' | 'annual';
+  periodType: "weekly" | "bi_monthly" | "monthly" | "annual";
 
   // Period boundaries
   periodStartDate: FirebaseFirestore.Timestamp;
@@ -79,7 +79,7 @@ export interface GroupInflowSummary {
   // Identity
   groupId: string;
   summaryId: string;
-  periodType: 'weekly' | 'bi_monthly' | 'monthly' | 'annual';
+  periodType: "weekly" | "bi_monthly" | "monthly" | "annual";
 
   // Period boundaries
   periodStartDate: FirebaseFirestore.Timestamp;

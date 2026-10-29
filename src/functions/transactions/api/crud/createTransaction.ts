@@ -111,8 +111,8 @@ export const createTransaction = onRequest({
 
       // Create default split for the transaction (NEW FLAT STRUCTURE)
       const defaultSplit: TransactionSplit = {
-        splitId: admin.firestore().collection('_dummy').doc().id,
-        budgetId: transactionData.budgetId || 'unassigned',
+        splitId: admin.firestore().collection("_dummy").doc().id,
+        budgetId: transactionData.budgetId || "unassigned",
         amount: transactionData.amount,
         description: null,
         isDefault: true,
@@ -152,12 +152,12 @@ export const createTransaction = onRequest({
       // Create transaction using NEW FLAT STRUCTURE
       const transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
         // === ROOT-LEVEL QUERY FIELDS ===
-        transactionId: admin.firestore().collection('_dummy').doc().id, // Generate ID for manual transactions
+        transactionId: admin.firestore().collection("_dummy").doc().id, // Generate ID for manual transactions
         userId: user.id!, // canonical owner field (rule 8); vendor-history queries filter on it
         ownerId: user.id!,
         groupId: groupIds.length > 0 ? groupIds[0] : null,
         transactionDate,
-        accountId: '', // Not available for manual transactions
+        accountId: "", // Not available for manual transactions
         createdBy: user.id!,
         updatedBy: user.id!,
         currency: (family as any).settings.currency,
@@ -170,8 +170,8 @@ export const createTransaction = onRequest({
         plaidPrimaryCategory: transactionData.category,
 
         // === PLAID METADATA (flattened to root) ===
-        plaidItemId: '', // Not applicable for manual transactions
-        source: 'manual' as const,
+        plaidItemId: "", // Not applicable for manual transactions
+        source: "manual" as const,
         transactionStatus: permissionCheck.requiresApproval ? TransactionStatus.PENDING : TransactionStatus.APPROVED,
 
         // === TYPE AND IDENTIFIERS ===
@@ -185,12 +185,12 @@ export const createTransaction = onRequest({
 
         // === INITIAL PLAID DATA (not applicable for manual transactions) ===
         initialPlaidData: {
-          plaidAccountId: '',
-          plaidMerchantName: '',
+          plaidAccountId: "",
+          plaidMerchantName: "",
           plaidName: transactionData.description,
-          plaidTransactionId: '',
+          plaidTransactionId: "",
           plaidPending: false,
-          source: 'plaid' as const, // Keep as plaid type for consistency
+          source: "plaid" as const, // Keep as plaid type for consistency
         },
       };
 

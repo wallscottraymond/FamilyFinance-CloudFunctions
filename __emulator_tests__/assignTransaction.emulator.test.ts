@@ -9,18 +9,18 @@
  * Prereqs: firebase emulators:exec --only firestore "npm run test:emulator"
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
-process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
+process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || "localhost:8080";
 if (!admin.apps.length) {
-  admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  admin.initializeApp({ projectId: "family-budget-app-cb59b" });
 }
 const db = admin.firestore();
 
-import { assign_transaction_orchestrator } from '../src/functions/orchestrators/transactions/assign_transaction.orchestrator';
-import { assign_transactions_batch_orchestrator } from '../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator';
-import { invalidate_category_cache } from '../src/functions/repositories/category.repo';
+import { assign_transaction_orchestrator } from "../src/functions/orchestrators/transactions/assign_transaction.orchestrator";
+import { assign_transactions_batch_orchestrator } from "../src/functions/orchestrators/transactions/assign_transactions_batch.orchestrator";
+import { invalidate_category_cache } from "../src/functions/repositories/category.repo";
 
 const ctx = () => ({ trace_id: `t_${Date.now()}`, span_id: `s_${Date.now()}` });
 const uid = () => `u_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -31,35 +31,35 @@ const tsAgo = (days: number) => Timestamp.fromDate(new Date(Date.now() - days * 
 
 /* eslint-disable @typescript-eslint/naming-convention */
 async function seedBudget(id: string, userId: string, fields: Record<string, unknown>) {
-  await db.collection('budgets').doc(id).set({
+  await db.collection("budgets").doc(id).set({
     id, userId, createdBy: userId, groupIds: [], isActive: true,
     access: { ownerId: userId, createdBy: userId, groupIds: [], isPrivate: true },
-    name: id, amount: 0, currency: 'USD', categoryIds: [], period: 'monthly',
-    startDate: ts('2026-01-01'), endDate: ts('2027-01-01'), isOngoing: true,
+    name: id, amount: 0, currency: "USD", categoryIds: [], period: "monthly",
+    startDate: ts("2026-01-01"), endDate: ts("2027-01-01"), isOngoing: true,
     isSystemEverythingElse: false, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     ...fields,
   });
 }
 
 async function seedSourcePeriod(id: string, type: string, startISO: string, endISO: string) {
-  await db.collection('source_periods').doc(id).set({
+  await db.collection("source_periods").doc(id).set({
     periodId: id, type, startDate: ts(startISO), endDate: ts(endISO), year: 2026,
   });
 }
 
 async function seedTransaction(id: string, userId: string, splits: Array<Record<string, unknown>>) {
-  await db.collection('transactions').doc(id).set({
-    transactionId: id, userId, isActive: true, transactionDate: ts('2026-06-15'),
-    merchantName: 'Test Merchant', name: 'Test txn', splits,
+  await db.collection("transactions").doc(id).set({
+    transactionId: id, userId, isActive: true, transactionDate: ts("2026-06-15"),
+    merchantName: "Test Merchant", name: "Test txn", splits,
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   });
 }
 function split(splitId: string, plaidCat: string, amount: number, over: Record<string, unknown> = {}) {
   return {
-    splitId, budgetId: 'unassigned', plaidPrimaryCategory: plaidCat, plaidDetailedCategory: plaidCat,
+    splitId, budgetId: "unassigned", plaidPrimaryCategory: plaidCat, plaidDetailedCategory: plaidCat,
     internalPrimaryCategory: null, internalDetailedCategory: null, amount,
     monthlyPeriodId: null, weeklyPeriodId: null, biWeeklyPeriodId: null,
-    isDefault: false, paymentDate: ts('2026-06-15'), rules: [], tags: [],
+    isDefault: false, paymentDate: ts("2026-06-15"), rules: [], tags: [],
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(), ...over,
   };
 }
@@ -67,14 +67,14 @@ function split(splitId: string, plaidCat: string, amount: number, over: Record<s
 
 /* eslint-disable @typescript-eslint/naming-convention */
 async function seedOutflow(id: string, userId: string, transactionIds: string[], over: Record<string, unknown> = {}) {
-  await db.collection('outflows').doc(id).set({
+  await db.collection("outflows").doc(id).set({
     id, ownerId: userId, createdBy: userId, groupIds: [], isActive: true, isHidden: false,
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
-    averageAmount: 813.83, currency: 'USD', description: 'Online Payment To CU', merchantName: '',
-    userCustomName: 'Kia Telluride Payment', frequency: 'monthly',
-    firstDate: ts('2026-05-21'), lastDate: ts('2026-06-15'), predictedNextDate: ts('2026-07-15'),
-    plaidPrimaryCategory: 'LOAN_PAYMENTS', plaidDetailedCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
-    type: 'recurring', source: 'plaid', isUserModified: false, transactionIds, tags: [], rules: [],
+    averageAmount: 813.83, currency: "USD", description: "Online Payment To CU", merchantName: "",
+    userCustomName: "Kia Telluride Payment", frequency: "monthly",
+    firstDate: ts("2026-05-21"), lastDate: ts("2026-06-15"), predictedNextDate: ts("2026-07-15"),
+    plaidPrimaryCategory: "LOAN_PAYMENTS", plaidDetailedCategory: "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT",
+    type: "recurring", source: "plaid", isUserModified: false, transactionIds, tags: [], rules: [],
     removedByUser: false, removalIntervals: [], ...over,
   });
 }
@@ -91,7 +91,7 @@ async function seedOutflowPeriod(
   amount: number,
   dueDaysAgo: number
 ) {
-  await db.collection('outflow_periods').doc(id).set({
+  await db.collection("outflow_periods").doc(id).set({
     id, userId, ownerId: userId, outflowId, isActive: true,
     firstDueDateInPeriod: tsAgo(dueDaysAgo), merchantName: merchant,
     amountPerOccurrence: amount, expectedAmount: amount, totalAmountDue: amount,
@@ -99,49 +99,49 @@ async function seedOutflowPeriod(
   });
 }
 async function seedFuzzyExpenseTxn(id: string, userId: string, merchant: string, amount: number, daysAgo: number) {
-  await db.collection('transactions').doc(id).set({
+  await db.collection("transactions").doc(id).set({
     transactionId: id, userId, isActive: true, transactionDate: tsAgo(daysAgo),
-    merchantName: merchant, name: merchant, type: 'expense',
-    splits: [split('s1', 'RENT_AND_UTILITIES', amount)],
+    merchantName: merchant, name: merchant, type: "expense",
+    splits: [split("s1", "RENT_AND_UTILITIES", amount)],
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   });
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
-describe('assign_transaction_orchestrator (emulator)', () => {
+describe("assign_transaction_orchestrator (emulator)", () => {
   beforeAll(async () => {
     // The categories collection translates the Plaid code to OUR category; budgets own slugs (A2).
-    await db.collection('categories').doc('FOOD_AND_DRINK').set({
-      isActive: true, type: 'Outflow', firstCategoryId: 'ra_eating_out', overallCategoryId: 'ra_food',
-      first_category: 'Eating out', overall_category: 'Food',
+    await db.collection("categories").doc("FOOD_AND_DRINK").set({
+      isActive: true, type: "Outflow", firstCategoryId: "ra_eating_out", overallCategoryId: "ra_food",
+      first_category: "Eating out", overall_category: "Food",
     });
     invalidate_category_cache();
   });
   afterAll(async () => { await db.terminate(); });
 
-  it('assigns per-split (category → budget, else Everything Else) + writes splitBudgetIds + fans out', async () => {
+  it("assigns per-split (category → budget, else Everything Else) + writes splitBudgetIds + fans out", async () => {
     const userId = uid();
     const txnId = `txn_${Date.now()}`;
     // A MONTHLY groceries budget + all three per-lens Everything Else budgets.
-    await seedBudget(`groceries_${txnId}`, userId, { categoryIds: ['ra_eating_out'], isSystemEverythingElse: false, period: 'monthly' });
-    await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'monthly' });
-    await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'weekly' });
-    await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'bi_monthly' });
-    await seedSourcePeriod(`${txnId}_2026M06`, 'monthly', '2026-06-01', '2026-06-30');
-    await seedSourcePeriod(`${txnId}_2026W24`, 'weekly', '2026-06-14', '2026-06-20');
+    await seedBudget(`groceries_${txnId}`, userId, { categoryIds: ["ra_eating_out"], isSystemEverythingElse: false, period: "monthly" });
+    await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ["ALL"], isSystemEverythingElse: true, period: "monthly" });
+    await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ["ALL"], isSystemEverythingElse: true, period: "weekly" });
+    await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ["ALL"], isSystemEverythingElse: true, period: "bi_monthly" });
+    await seedSourcePeriod(`${txnId}_2026M06`, "monthly", "2026-06-01", "2026-06-30");
+    await seedSourcePeriod(`${txnId}_2026W24`, "weekly", "2026-06-14", "2026-06-20");
     // Split 1 → Groceries (FOOD_AND_DRINK); Split 2 → Everything Else (TRAVEL, unowned)
     await seedTransaction(txnId, userId, [
-      split('s1', 'FOOD_AND_DRINK', 60),
-      split('s2', 'TRAVEL', 40),
+      split("s1", "FOOD_AND_DRINK", 60),
+      split("s2", "TRAVEL", 40),
     ]);
 
     const res = await assign_transaction_orchestrator(ctx(), { user_id: userId, transaction_id: txnId });
     expect(res.found).toBe(true);
     expect(res.changed).toBe(true);
 
-    const doc = (await db.collection('transactions').doc(txnId).get()).data()!;
-    const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === 's1');
-    const s2 = doc.splits.find((s: { splitId: string }) => s.splitId === 's2');
+    const doc = (await db.collection("transactions").doc(txnId).get()).data()!;
+    const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === "s1");
+    const s2 = doc.splits.find((s: { splitId: string }) => s.splitId === "s2");
     // s1 (FOOD_AND_DRINK → eating out) is owned by the groceries budget in EVERY lens — a
     // budget of any cadence owns its categories in every view, as the period page counts it.
     expect(s1.budgetId).toBe(`groceries_${txnId}`); // legacy alias = monthly lens
@@ -161,7 +161,7 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     );
 
     // fan-out enqueued for the touched budgets (all lenses) — one coalesced recompute per user
-    const jobs = (await db.collection('_jobs').where('job_type', '==', 'recompute_budget_spent').get())
+    const jobs = (await db.collection("_jobs").where("job_type", "==", "recompute_budget_spent").get())
       .docs.map((d) => d.data())
       .filter((j) => (j.payload as { user_id?: string })?.user_id === userId);
     expect(jobs).toHaveLength(1);
@@ -170,13 +170,13 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     );
   });
 
-  it('is idempotent — a second run makes no change (skip-if-unchanged)', async () => {
+  it("is idempotent — a second run makes no change (skip-if-unchanged)", async () => {
     const userId = uid();
     const txnId = `txn2_${Date.now()}`;
-    await seedBudget(`g_${txnId}`, userId, { categoryIds: ['ra_eating_out'], isSystemEverythingElse: false });
+    await seedBudget(`g_${txnId}`, userId, { categoryIds: ["ra_eating_out"], isSystemEverythingElse: false });
     await seedBudget(`ee_${txnId}`, userId, { isSystemEverythingElse: true });
-    await seedSourcePeriod(`${txnId}_m`, 'monthly', '2026-06-01', '2026-06-30');
-    await seedTransaction(txnId, userId, [split('s1', 'FOOD_AND_DRINK', 100)]);
+    await seedSourcePeriod(`${txnId}_m`, "monthly", "2026-06-01", "2026-06-30");
+    await seedTransaction(txnId, userId, [split("s1", "FOOD_AND_DRINK", 100)]);
 
     const first = await assign_transaction_orchestrator(ctx(), { user_id: userId, transaction_id: txnId });
     expect(first.changed).toBe(true);
@@ -184,53 +184,53 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     expect(second.changed).toBe(false); // already settled → no write, no new fan-out
   });
 
-  it('returns found:false for a missing transaction', async () => {
-    const res = await assign_transaction_orchestrator(ctx(), { user_id: uid(), transaction_id: 'nope' });
+  it("returns found:false for a missing transaction", async () => {
+    const res = await assign_transaction_orchestrator(ctx(), { user_id: uid(), transaction_id: "nope" });
     expect(res.found).toBe(false);
   });
 
   // S1 backfill (Derive-On-Read-Regression-Audit): an empty-merchant bill payment whose
   // split link was never set gets linked DETERMINISTICALLY via the outflow's Plaid stream
   // `transactionIds` — the fuzzy period matcher misses it (blank merchant, no period seeded).
-  it('links a single-split bill payment to its outflow via stream transactionIds (deterministic)', async () => {
+  it("links a single-split bill payment to its outflow via stream transactionIds (deterministic)", async () => {
     const userId = uid();
     const txnId = `billpay_${Date.now()}`;
-    await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'monthly' });
-    await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'weekly' });
-    await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ['ALL'], isSystemEverythingElse: true, period: 'bi_monthly' });
-    await seedSourcePeriod(`${txnId}_2026M06`, 'monthly', '2026-06-01', '2026-06-30');
+    await seedBudget(`ee_m_${txnId}`, userId, { categoryIds: ["ALL"], isSystemEverythingElse: true, period: "monthly" });
+    await seedBudget(`ee_w_${txnId}`, userId, { categoryIds: ["ALL"], isSystemEverythingElse: true, period: "weekly" });
+    await seedBudget(`ee_b_${txnId}`, userId, { categoryIds: ["ALL"], isSystemEverythingElse: true, period: "bi_monthly" });
+    await seedSourcePeriod(`${txnId}_2026M06`, "monthly", "2026-06-01", "2026-06-30");
     // The outflow's Plaid stream claims this transaction id — but NO outflow_period is seeded,
     // so the fuzzy matcher has zero candidates. Deterministic stream linking must still fire.
     await seedOutflow(`kia_${txnId}`, userId, [txnId]);
     // Single split, empty merchant, no outflowId — exactly the unlinked historical case.
-    await db.collection('transactions').doc(txnId).set({
-      transactionId: txnId, userId, isActive: true, transactionDate: ts('2026-06-15'),
-      merchantName: '', name: 'Online Payment To CU', type: 'expense',
-      splits: [split('s1', 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', 813.83)],
+    await db.collection("transactions").doc(txnId).set({
+      transactionId: txnId, userId, isActive: true, transactionDate: ts("2026-06-15"),
+      merchantName: "", name: "Online Payment To CU", type: "expense",
+      splits: [split("s1", "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", 813.83)],
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     });
 
     const res = await assign_transaction_orchestrator(ctx(), { user_id: userId, transaction_id: txnId });
     expect(res.found).toBe(true);
 
-    const doc = (await db.collection('transactions').doc(txnId).get()).data()!;
-    const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === 's1');
+    const doc = (await db.collection("transactions").doc(txnId).get()).data()!;
+    const s1 = doc.splits.find((s: { splitId: string }) => s.splitId === "s1");
     expect(s1.outflowId).toBe(`kia_${txnId}`); // deterministically linked from the stream
   });
 
   // READ-COST FIX: the batch orchestrator loads recurring candidates ONCE (preloaded) and
   // filters them to each txn's ±90d window in memory. This proves that yields the SAME fuzzy
   // match as the single-item path (which queries per-transaction) — a pure perf change.
-  it('batch preloaded-candidate path fuzzy-matches a bill IDENTICALLY to the single-item path', async () => {
+  it("batch preloaded-candidate path fuzzy-matches a bill IDENTICALLY to the single-item path", async () => {
     const userId = uid();
     const billId = `bill_${Date.now()}`;
-    const merchant = 'Acme Utilities Co';
+    const merchant = "Acme Utilities Co";
     const amount = 137.5;
     // Bill def with NO stream transactionIds → the txn cannot deterministically link → fuzzy.
     await seedOutflow(billId, userId, [], { merchantName: merchant, userCustomName: merchant });
     // One DUE occurrence ~3 days ago (inside both the ±90d match window and the batch preload window).
     await seedOutflowPeriod(`${billId}_p`, userId, billId, merchant, amount, 3);
-    await seedBudget(`ee_${billId}`, userId, { isSystemEverythingElse: true, period: 'monthly' });
+    await seedBudget(`ee_${billId}`, userId, { isSystemEverythingElse: true, period: "monthly" });
     // Two IDENTICAL fuzzy txns (distinct ids) — one per path.
     const txnSingle = `fzS_${Date.now()}`;
     const txnBatch = `fzB_${Date.now()}`;
@@ -241,9 +241,9 @@ describe('assign_transaction_orchestrator (emulator)', () => {
     await assign_transactions_batch_orchestrator(ctx(), { user_id: userId, transaction_ids: [txnBatch] });
 
     const pick = (docId: string) =>
-      db.collection('transactions').doc(docId).get().then((d) => {
+      db.collection("transactions").doc(docId).get().then((d) => {
         const s = (d.data()!.splits as Array<{ splitId: string; outflowId?: string }>)
-          .find((x) => x.splitId === 's1');
+          .find((x) => x.splitId === "s1");
         return s?.outflowId ?? null;
       });
     const singleOutflow = await pick(txnSingle);

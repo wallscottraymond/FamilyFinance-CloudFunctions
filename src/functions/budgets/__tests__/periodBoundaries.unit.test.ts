@@ -14,7 +14,7 @@
  * - Period date ranges don't have gaps
  */
 
-import { PeriodType } from '../../../types';
+import { PeriodType } from "../../../types";
 import {
   getDaysInMonth,
   createTimestamp,
@@ -22,16 +22,16 @@ import {
   createMockSourcePeriod,
   createMonthlySourcePeriods,
   createWeeklySourcePeriods,
-} from './helpers/budgetTestHelpers';
+} from "./helpers/budgetTestHelpers";
 
-describe('Period Boundaries', () => {
+describe("Period Boundaries", () => {
   // ============================================================================
   // BI-MONTHLY BOUNDARIES
   // ============================================================================
 
-  describe('Bi-Monthly Period Boundaries', () => {
-    describe('First Half (Days 1-15)', () => {
-      it('should always start on day 1', () => {
+  describe("Bi-Monthly Period Boundaries", () => {
+    describe("First Half (Days 1-15)", () => {
+      it("should always start on day 1", () => {
         for (let month = 1; month <= 12; month++) {
           const period = createMockSourcePeriod({
             type: PeriodType.BI_MONTHLY,
@@ -47,7 +47,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should always end on day 15', () => {
+      it("should always end on day 15", () => {
         for (let month = 1; month <= 12; month++) {
           const period = createMockSourcePeriod({
             type: PeriodType.BI_MONTHLY,
@@ -63,7 +63,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should always have exactly 15 days', () => {
+      it("should always have exactly 15 days", () => {
         for (let month = 1; month <= 12; month++) {
           const period = createMockSourcePeriod({
             type: PeriodType.BI_MONTHLY,
@@ -80,8 +80,8 @@ describe('Period Boundaries', () => {
       });
     });
 
-    describe('Second Half (Days 16-End)', () => {
-      it('should always start on day 16', () => {
+    describe("Second Half (Days 16-End)", () => {
+      it("should always start on day 16", () => {
         for (let month = 1; month <= 12; month++) {
           const daysInMonth = getDaysInMonth(2025, month - 1);
           const period = createMockSourcePeriod({
@@ -98,7 +98,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should always end on last day of month', () => {
+      it("should always end on last day of month", () => {
         for (let month = 1; month <= 12; month++) {
           const daysInMonth = getDaysInMonth(2025, month - 1);
           const period = createMockSourcePeriod({
@@ -115,7 +115,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should have correct days for each month type', () => {
+      it("should have correct days for each month type", () => {
         const expectedDays: { [month: number]: number } = {
           1: 16,  // January: 31 - 15 = 16
           2: 13,  // February (non-leap): 28 - 15 = 13
@@ -147,7 +147,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should have 14 days for leap year February', () => {
+      it("should have 14 days for leap year February", () => {
         // February 2024 (leap year): 29 - 15 = 14 days
         const period = createMockSourcePeriod({
           type: PeriodType.BI_MONTHLY,
@@ -163,8 +163,8 @@ describe('Period Boundaries', () => {
       });
     });
 
-    describe('Bi-Monthly Coverage', () => {
-      it('should have no gaps between first and second half', () => {
+    describe("Bi-Monthly Coverage", () => {
+      it("should have no gaps between first and second half", () => {
         for (let month = 1; month <= 12; month++) {
           const daysInMonth = getDaysInMonth(2025, month - 1);
 
@@ -197,7 +197,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should cover entire month with no overlap', () => {
+      it("should cover entire month with no overlap", () => {
         for (let month = 1; month <= 12; month++) {
           const daysInMonth = getDaysInMonth(2025, month - 1);
 
@@ -232,8 +232,8 @@ describe('Period Boundaries', () => {
   // MONTHLY BOUNDARIES
   // ============================================================================
 
-  describe('Monthly Period Boundaries', () => {
-    it('should start on day 1 for all months', () => {
+  describe("Monthly Period Boundaries", () => {
+    it("should start on day 1 for all months", () => {
       const periods = createMonthlySourcePeriods(2025, 1, 2025, 12);
 
       for (const period of periods) {
@@ -242,7 +242,7 @@ describe('Period Boundaries', () => {
       }
     });
 
-    it('should end on last day of each month', () => {
+    it("should end on last day of each month", () => {
       const periods = createMonthlySourcePeriods(2025, 1, 2025, 12);
 
       for (const period of periods) {
@@ -253,7 +253,7 @@ describe('Period Boundaries', () => {
       }
     });
 
-    it('should have correct days for each month', () => {
+    it("should have correct days for each month", () => {
       const expectedDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
       const periods = createMonthlySourcePeriods(2025, 1, 2025, 12);
 
@@ -263,7 +263,7 @@ describe('Period Boundaries', () => {
       }
     });
 
-    it('should handle leap year February correctly', () => {
+    it("should handle leap year February correctly", () => {
       const leapYearPeriods = createMonthlySourcePeriods(2024, 2, 2024, 2);
       const febPeriod = leapYearPeriods[0];
 
@@ -276,9 +276,9 @@ describe('Period Boundaries', () => {
   // WEEKLY BOUNDARIES
   // ============================================================================
 
-  describe('Weekly Period Boundaries', () => {
-    describe('Week Start Day (Sunday)', () => {
-      it('should start weeks on Sunday for full weeks', () => {
+  describe("Weekly Period Boundaries", () => {
+    describe("Week Start Day (Sunday)", () => {
+      it("should start weeks on Sunday for full weeks", () => {
         // Generate weeks for January 2025
         // January 1, 2025 is a Wednesday
         // First Sunday is January 5, 2025
@@ -293,7 +293,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should clip weeks to budget boundaries when budget starts mid-week', () => {
+      it("should clip weeks to budget boundaries when budget starts mid-week", () => {
         // If budget starts mid-week (Wednesday Jan 8), the first week is clipped
         // to start from the budget start date (not the previous Sunday)
         // This ensures sum calculations are accurate for the budget period
@@ -314,8 +314,8 @@ describe('Period Boundaries', () => {
       });
     });
 
-    describe('Week End Day (Saturday)', () => {
-      it('should end full weeks on Saturday', () => {
+    describe("Week End Day (Saturday)", () => {
+      it("should end full weeks on Saturday", () => {
         const weeks = createWeeklySourcePeriods(
           new Date(2025, 0, 5), // Sunday
           new Date(2025, 0, 25)
@@ -329,8 +329,8 @@ describe('Period Boundaries', () => {
       });
     });
 
-    describe('Week Duration', () => {
-      it('should have 7 days for full weeks', () => {
+    describe("Week Duration", () => {
+      it("should have 7 days for full weeks", () => {
         const weeks = createWeeklySourcePeriods(
           new Date(2025, 0, 5), // Sunday Jan 5
           new Date(2025, 0, 25)
@@ -343,7 +343,7 @@ describe('Period Boundaries', () => {
         }
       });
 
-      it('should handle partial week at budget end', () => {
+      it("should handle partial week at budget end", () => {
         // Budget ends on Wednesday Jan 22
         const weeks = createWeeklySourcePeriods(
           new Date(2025, 0, 5), // Sunday Jan 5
@@ -360,8 +360,8 @@ describe('Period Boundaries', () => {
       });
     });
 
-    describe('Weeks Crossing Month Boundaries', () => {
-      it('should create weeks that span month boundaries', () => {
+    describe("Weeks Crossing Month Boundaries", () => {
+      it("should create weeks that span month boundaries", () => {
         // Create weeks for Jan-Feb transition
         const weeks = createWeeklySourcePeriods(
           new Date(2025, 0, 26), // Sunday Jan 26
@@ -378,7 +378,7 @@ describe('Period Boundaries', () => {
         expect(endMonth).toBe(1);   // February
       });
 
-      it('should not skip days when crossing month boundaries', () => {
+      it("should not skip days when crossing month boundaries", () => {
         // Generate weeks for Jan 26 - Feb 15
         const weeks = createWeeklySourcePeriods(
           new Date(2025, 0, 26),
@@ -404,8 +404,8 @@ describe('Period Boundaries', () => {
   // CROSS-PERIOD BOUNDARY ALIGNMENT
   // ============================================================================
 
-  describe('Cross-Period Boundary Alignment', () => {
-    it('should have bi-monthly boundary on day 15 regardless of week alignment', () => {
+  describe("Cross-Period Boundary Alignment", () => {
+    it("should have bi-monthly boundary on day 15 regardless of week alignment", () => {
       // Day 15 is always the bi-monthly boundary
       // This should not change based on what day of the week it is
 
@@ -427,7 +427,7 @@ describe('Period Boundaries', () => {
       }
     });
 
-    it('should have monthly totals equal bi-monthly totals when periods align', () => {
+    it("should have monthly totals equal bi-monthly totals when periods align", () => {
       // For any complete month, the sum of:
       // - 2 bi-monthly periods (1-15 and 16-end)
       // Should equal:
@@ -476,8 +476,8 @@ describe('Period Boundaries', () => {
   // PARTIAL PERIOD BOUNDARIES
   // ============================================================================
 
-  describe('Partial Period Boundaries', () => {
-    it('should handle budget starting mid-month', () => {
+  describe("Partial Period Boundaries", () => {
+    it("should handle budget starting mid-month", () => {
       // Budget starts on Jan 15
       const partialMonth = createMockSourcePeriod({
         type: PeriodType.MONTHLY,
@@ -491,7 +491,7 @@ describe('Period Boundaries', () => {
       expect(days).toBe(17); // Jan 15-31
     });
 
-    it('should handle budget ending mid-month', () => {
+    it("should handle budget ending mid-month", () => {
       // Budget ends on March 19
       const partialMonth = createMockSourcePeriod({
         type: PeriodType.MONTHLY,
@@ -505,7 +505,7 @@ describe('Period Boundaries', () => {
       expect(days).toBe(19); // March 1-19
     });
 
-    it('should handle budget starting and ending mid-month', () => {
+    it("should handle budget starting and ending mid-month", () => {
       // Budget from Jan 10 to Jan 25
       const partialMonth = createMockSourcePeriod({
         type: PeriodType.MONTHLY,
@@ -519,7 +519,7 @@ describe('Period Boundaries', () => {
       expect(days).toBe(16); // Jan 10-25
     });
 
-    it('should handle partial bi-monthly at budget end', () => {
+    it("should handle partial bi-monthly at budget end", () => {
       // Budget ends on April 13 (13 days into first bi-monthly)
       const partialBiMonthly = createMockSourcePeriod({
         type: PeriodType.BI_MONTHLY,

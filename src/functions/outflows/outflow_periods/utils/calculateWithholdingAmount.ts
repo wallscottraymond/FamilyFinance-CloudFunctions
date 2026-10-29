@@ -8,8 +8,8 @@
  * This is the single source of truth for withholding amount calculations.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from "../../../../types";
 
 /**
  * Payment cycle information
@@ -104,24 +104,24 @@ export function calculatePaymentCycle(outflow: RecurringOutflow): PaymentCycleIn
   // Calculate cycle days based on frequency
   let cycleDays: number;
   switch (outflow.frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      cycleDays = 7;
-      break;
-    case PlaidRecurringFrequency.BIWEEKLY:
-      cycleDays = 14;
-      break;
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      cycleDays = 15; // Approximate - twice per month
-      break;
-    case PlaidRecurringFrequency.MONTHLY:
-      cycleDays = 30; // Use 30 as average for cycle tracking
-      break;
-    case PlaidRecurringFrequency.ANNUALLY:
-      cycleDays = 365;
-      break;
-    default:
-      console.warn(`[calculatePaymentCycle] Unknown frequency: ${outflow.frequency}, defaulting to 30 days`);
-      cycleDays = 30;
+  case PlaidRecurringFrequency.WEEKLY:
+    cycleDays = 7;
+    break;
+  case PlaidRecurringFrequency.BIWEEKLY:
+    cycleDays = 14;
+    break;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+    cycleDays = 15; // Approximate - twice per month
+    break;
+  case PlaidRecurringFrequency.MONTHLY:
+    cycleDays = 30; // Use 30 as average for cycle tracking
+    break;
+  case PlaidRecurringFrequency.ANNUALLY:
+    cycleDays = 365;
+    break;
+  default:
+    console.warn(`[calculatePaymentCycle] Unknown frequency: ${outflow.frequency}, defaulting to 30 days`);
+    cycleDays = 30;
   }
 
   // Use the outflow's lastDate as cycle end, calculate cycle start
@@ -189,41 +189,41 @@ export function calculateWithholdingAmount(
 
   // Calculate withholding based on frequency type
   switch (cycleInfo.frequency) {
-    case PlaidRecurringFrequency.MONTHLY:
-      // For monthly bills, use day-by-day calculation with actual month days
-      // This handles month-spanning periods correctly (e.g., weeks across Feb-Mar)
-      amountWithheld = calculateMonthlyWithholding(cycleInfo.billAmount, sourcePeriod);
+  case PlaidRecurringFrequency.MONTHLY:
+    // For monthly bills, use day-by-day calculation with actual month days
+    // This handles month-spanning periods correctly (e.g., weeks across Feb-Mar)
+    amountWithheld = calculateMonthlyWithholding(cycleInfo.billAmount, sourcePeriod);
 
-      console.log(
-        `[calculateWithholdingAmount] ${outflow.description} - Period: ${sourcePeriod.id}, ` +
+    console.log(
+      `[calculateWithholdingAmount] ${outflow.description} - Period: ${sourcePeriod.id}, ` +
         `Monthly day-by-day: $${amountWithheld.toFixed(2)}`
-      );
-      break;
+    );
+    break;
 
-    case PlaidRecurringFrequency.WEEKLY:
-    case PlaidRecurringFrequency.BIWEEKLY:
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-    case PlaidRecurringFrequency.ANNUALLY:
-      // For other frequencies, use simple daily rate calculation
-      const targetDays = getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate);
-      const dailyRate = cycleInfo.billAmount / cycleInfo.cycleDays;
-      amountWithheld = dailyRate * targetDays;
+  case PlaidRecurringFrequency.WEEKLY:
+  case PlaidRecurringFrequency.BIWEEKLY:
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+  case PlaidRecurringFrequency.ANNUALLY:
+    // For other frequencies, use simple daily rate calculation
+    const targetDays = getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate);
+    const dailyRate = cycleInfo.billAmount / cycleInfo.cycleDays;
+    amountWithheld = dailyRate * targetDays;
 
-      console.log(
-        `[calculateWithholdingAmount] ${outflow.description} - Period: ${sourcePeriod.id}, ` +
+    console.log(
+      `[calculateWithholdingAmount] ${outflow.description} - Period: ${sourcePeriod.id}, ` +
         `${cycleInfo.frequency}: ${targetDays} days × $${dailyRate.toFixed(2)}/day = $${amountWithheld.toFixed(2)}`
-      );
-      break;
+    );
+    break;
 
-    default:
-      // Fallback: use cycle days as divisor
-      const fallbackDays = getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate);
-      const fallbackRate = cycleInfo.billAmount / cycleInfo.cycleDays;
-      amountWithheld = fallbackRate * fallbackDays;
+  default:
+    // Fallback: use cycle days as divisor
+    const fallbackDays = getDaysInPeriod(sourcePeriod.startDate, sourcePeriod.endDate);
+    const fallbackRate = cycleInfo.billAmount / cycleInfo.cycleDays;
+    amountWithheld = fallbackRate * fallbackDays;
 
-      console.warn(
-        `[calculateWithholdingAmount] Unknown frequency ${cycleInfo.frequency}, using fallback calculation`
-      );
+    console.warn(
+      `[calculateWithholdingAmount] Unknown frequency ${cycleInfo.frequency}, using fallback calculation`
+    );
   }
 
   // Check if due date falls within this period
@@ -234,7 +234,7 @@ export function calculateWithholdingAmount(
   if (isDuePeriod) {
     console.log(
       `[calculateWithholdingAmount] ${outflow.description} - DUE in ${sourcePeriod.id}: ` +
-      `$${amountDue.toFixed(2)} on ${cycleEnd.toISOString().split('T')[0]}`
+      `$${amountDue.toFixed(2)} on ${cycleEnd.toISOString().split("T")[0]}`
     );
   }
 

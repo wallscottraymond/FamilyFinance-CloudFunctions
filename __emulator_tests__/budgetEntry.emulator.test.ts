@@ -9,15 +9,15 @@
  * Prereqs: firebase emulators:exec --only firestore "npm run test:emulator"
  */
 
-import * as admin from 'firebase-admin';
+import * as admin from "firebase-admin";
 
-process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
+process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || "localhost:8080";
 if (!admin.apps.length) {
-  admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  admin.initializeApp({ projectId: "family-budget-app-cb59b" });
 }
 const db = admin.firestore();
 
-import { create_budget } from '../src/functions/entry/callable/create_budget.entry';
+import { create_budget } from "../src/functions/entry/callable/create_budget.entry";
 
 const uid = () => `u_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const ikey = () => `k_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -35,12 +35,12 @@ const run = (data: unknown, userId?: string): Promise<any> =>
 function validData(userId: string, overrides: Record<string, unknown> = {}) {
   return {
     idempotency_key: ikey(),
-    name: 'Groceries',
+    name: "Groceries",
     amount: 300,
-    category_ids: ['cat_a'],
-    period: 'monthly',
-    budget_type: 'recurring',
-    start_date: '2026-06-01T00:00:00.000Z',
+    category_ids: ["cat_a"],
+    period: "monthly",
+    budget_type: "recurring",
+    start_date: "2026-06-01T00:00:00.000Z",
     alert_threshold: 80,
     is_shared: false,
     is_ongoing: true,
@@ -48,33 +48,33 @@ function validData(userId: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('create_budget entry (emulator E2E)', () => {
+describe("create_budget entry (emulator E2E)", () => {
   afterAll(async () => {
     await db.terminate();
   });
 
-  it('rejects unauthenticated callers', async () => {
+  it("rejects unauthenticated callers", async () => {
     await expect(run(validData(uid()))).rejects.toMatchObject({
-      code: 'unauthenticated',
+      code: "unauthenticated",
     });
   });
 
-  it('rejects invalid input with invalid-argument', async () => {
+  it("rejects invalid input with invalid-argument", async () => {
     const userId = uid();
     // amount must be positive → schema failure.
     await expect(run(validData(userId, { amount: -5 }), userId)).rejects.toMatchObject({
-      code: 'invalid-argument',
+      code: "invalid-argument",
     });
   });
 
-  it('rejects a non-ongoing budget without an end date', async () => {
+  it("rejects a non-ongoing budget without an end date", async () => {
     const userId = uid();
     await expect(
       run(validData(userId, { is_ongoing: false }), userId)
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it('creates a budget and returns the success envelope', async () => {
+  it("creates a budget and returns the success envelope", async () => {
     const userId = uid();
     const res = await run(validData(userId), userId);
 
@@ -84,12 +84,12 @@ describe('create_budget entry (emulator E2E)', () => {
     expect(res.data.processing_background).toBe(true);
 
     // Persisted through the full entry → orchestrator → Firestore path.
-    const budgetDoc = await db.collection('budgets').doc(res.data.budget_id).get();
+    const budgetDoc = await db.collection("budgets").doc(res.data.budget_id).get();
     expect(budgetDoc.exists).toBe(true);
 
     const jobs = await db
-      .collection('_jobs')
-      .where('job_type', '==', 'process_budget_created')
+      .collection("_jobs")
+      .where("job_type", "==", "process_budget_created")
       .get();
     const matching = jobs.docs.filter(
       (d) => (d.data().payload as { budget_id?: string })?.budget_id === res.data.budget_id

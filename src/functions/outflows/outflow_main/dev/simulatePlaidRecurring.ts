@@ -19,10 +19,10 @@
  * GET http://127.0.0.1:5001/family-budget-app-cb59b/us-central1/simulatePlaidRecurring?permutation=standard
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import { formatRecurringInflows } from '../../../inflows/utils/formatRecurringInflows';
-import { enhanceRecurringInflows } from '../../../inflows/utils/enhanceRecurringInflows';
-import { formatRecurringOutflows, enhanceRecurringOutflows, batchCreateInflowStreams, batchCreateOutflowStreams } from '../utils';
+import { onRequest } from "firebase-functions/v2/https";
+import { formatRecurringInflows } from "../../../inflows/utils/formatRecurringInflows";
+import { enhanceRecurringInflows } from "../../../inflows/utils/enhanceRecurringInflows";
+import { formatRecurringOutflows, enhanceRecurringOutflows, batchCreateInflowStreams, batchCreateOutflowStreams } from "../utils";
 
 // Mock Plaid Response - Permutation 1: "standard"
 const MOCK_PLAID_STANDARD = {
@@ -146,24 +146,24 @@ const MOCK_PLAID_STANDARD = {
  */
 function getMockPlaidData(permutation: string) {
   switch (permutation) {
-    case 'standard':
-    default:
-      return MOCK_PLAID_STANDARD;
+  case "standard":
+  default:
+    return MOCK_PLAID_STANDARD;
   }
 }
 
 export const simulatePlaidRecurring = onRequest({
   cors: true,
-  memory: '512MiB',
+  memory: "512MiB",
   timeoutSeconds: 60,
 }, async (req, res) => {
   try {
     // Extract query parameters
-    const userId = (req.query.userId as string) || 'IKzBkwEZb6MdJkdDVnVyTFAFj5i1';
-    const groupId = (req.query.groupId as string) || 'test-family-1';
-    const permutation = (req.query.permutation as string) || 'standard';
+    const userId = (req.query.userId as string) || "IKzBkwEZb6MdJkdDVnVyTFAFj5i1";
+    const groupId = (req.query.groupId as string) || "test-family-1";
+    const permutation = (req.query.permutation as string) || "standard";
 
-    console.log(`🧪 [simulatePlaidRecurring] Starting simulation...`);
+    console.log("🧪 [simulatePlaidRecurring] Starting simulation...");
     console.log(`   Permutation: ${permutation}`);
     console.log(`   User ID: ${userId}`);
     console.log(`   Group ID: ${groupId}`);
@@ -188,11 +188,11 @@ export const simulatePlaidRecurring = onRequest({
     };
 
     // Mock Plaid item ID
-    const mockPlaidItemId = 'test-plaid-item-123';
+    const mockPlaidItemId = "test-plaid-item-123";
 
     // === INFLOW PIPELINE ===
     if (rawInflowStreams.length > 0) {
-      console.log(`🔄 === STARTING INFLOW PIPELINE ===`);
+      console.log("🔄 === STARTING INFLOW PIPELINE ===");
 
       try {
         // Step 1: Format inflow streams (Plaid → Internal structure)
@@ -216,16 +216,16 @@ export const simulatePlaidRecurring = onRequest({
         result.inflowsUpdated = inflowResult.updated;
         result.errors.push(...inflowResult.errors);
         // Store inflow IDs from formatted inflows
-        result.details.inflows = formattedInflows.map(i => i.id || 'unknown');
+        result.details.inflows = formattedInflows.map(i => i.id || "unknown");
       } catch (error: any) {
-        console.error('❌ Inflow pipeline error:', error);
+        console.error("❌ Inflow pipeline error:", error);
         result.errors.push(`Inflow pipeline: ${error.message}`);
       }
     }
 
     // === OUTFLOW PIPELINE ===
     if (rawOutflowStreams.length > 0) {
-      console.log(`🔄 === STARTING OUTFLOW PIPELINE ===`);
+      console.log("🔄 === STARTING OUTFLOW PIPELINE ===");
 
       try {
         // Step 1: Format outflow streams (Plaid → Internal structure)
@@ -249,14 +249,14 @@ export const simulatePlaidRecurring = onRequest({
         result.outflowsUpdated = outflowResult.updated;
         result.errors.push(...outflowResult.errors);
         // Store outflow IDs from formatted outflows
-        result.details.outflows = formattedOutflows.map(o => o.id || 'unknown');
+        result.details.outflows = formattedOutflows.map(o => o.id || "unknown");
       } catch (error: any) {
-        console.error('❌ Outflow pipeline error:', error);
+        console.error("❌ Outflow pipeline error:", error);
         result.errors.push(`Outflow pipeline: ${error.message}`);
       }
     }
 
-    console.log(`✅ Simulation complete:`, result);
+    console.log("✅ Simulation complete:", result);
 
     // Return response
     res.status(200).json({
@@ -268,10 +268,10 @@ export const simulatePlaidRecurring = onRequest({
     });
 
   } catch (error: any) {
-    console.error('❌ Error in simulatePlaidRecurring:', error);
+    console.error("❌ Error in simulatePlaidRecurring:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Unknown error'
+      error: error.message || "Unknown error"
     });
   }
 });

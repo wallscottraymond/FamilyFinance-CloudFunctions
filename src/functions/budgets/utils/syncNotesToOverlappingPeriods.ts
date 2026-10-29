@@ -13,9 +13,9 @@
  * not across different budgets.
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { BudgetPeriodDocument, PeriodType } from '../../../types';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { BudgetPeriodDocument, PeriodType } from "../../../types";
 
 export interface NoteSyncResult {
   success: boolean;
@@ -68,31 +68,31 @@ export async function syncNotesToOverlappingPeriods(
   };
 
   try {
-    console.log('[syncNotesToOverlappingPeriods] ════════════════════════════════════════════');
-    console.log('[syncNotesToOverlappingPeriods] SYNCING NOTES TO OVERLAPPING PERIODS');
-    console.log('[syncNotesToOverlappingPeriods] ════════════════════════════════════════════');
+    console.log("[syncNotesToOverlappingPeriods] ════════════════════════════════════════════");
+    console.log("[syncNotesToOverlappingPeriods] SYNCING NOTES TO OVERLAPPING PERIODS");
+    console.log("[syncNotesToOverlappingPeriods] ════════════════════════════════════════════");
     console.log(`[syncNotesToOverlappingPeriods] Source period: ${sourcePeriod.id}`);
     console.log(`[syncNotesToOverlappingPeriods] Source type: ${sourcePeriod.periodType}`);
     console.log(`[syncNotesToOverlappingPeriods] Budget ID: ${sourcePeriod.budgetId}`);
-    console.log(`[syncNotesToOverlappingPeriods] Notes: "${newNotes?.substring(0, 50)}${(newNotes?.length || 0) > 50 ? '...' : ''}"`);
+    console.log(`[syncNotesToOverlappingPeriods] Notes: "${newNotes?.substring(0, 50)}${(newNotes?.length || 0) > 50 ? "..." : ""}"`);
 
     const sourceStart = sourcePeriod.periodStart.toDate();
     const sourceEnd = sourcePeriod.periodEnd.toDate();
     const otherTypes = getOtherPeriodTypes(sourcePeriod.periodType);
 
-    console.log(`[syncNotesToOverlappingPeriods] Looking for overlapping periods of types: ${otherTypes.join(', ')}`);
+    console.log(`[syncNotesToOverlappingPeriods] Looking for overlapping periods of types: ${otherTypes.join(", ")}`);
 
     // Query all periods of other types for the same budget
-    const periodsSnapshot = await db.collection('budget_periods')
-      .where('budgetId', '==', sourcePeriod.budgetId)
-      .where('periodType', 'in', otherTypes)
+    const periodsSnapshot = await db.collection("budget_periods")
+      .where("budgetId", "==", sourcePeriod.budgetId)
+      .where("periodType", "in", otherTypes)
       .get();
 
     result.periodsQueried = periodsSnapshot.size;
     console.log(`[syncNotesToOverlappingPeriods] Found ${periodsSnapshot.size} periods of other types`);
 
     if (periodsSnapshot.empty) {
-      console.log('[syncNotesToOverlappingPeriods] No other period types found for this budget');
+      console.log("[syncNotesToOverlappingPeriods] No other period types found for this budget");
       result.success = true;
       return result;
     }
@@ -134,15 +134,15 @@ export async function syncNotesToOverlappingPeriods(
       result.periodTypes = Array.from(updatedTypes);
       console.log(`[syncNotesToOverlappingPeriods] ✓ Synced notes to ${updatedCount} periods`);
     } else {
-      console.log('[syncNotesToOverlappingPeriods] No overlapping periods needed update');
+      console.log("[syncNotesToOverlappingPeriods] No overlapping periods needed update");
     }
 
     result.success = true;
-    console.log('[syncNotesToOverlappingPeriods] ════════════════════════════════════════════');
+    console.log("[syncNotesToOverlappingPeriods] ════════════════════════════════════════════");
 
   } catch (error: any) {
-    console.error('[syncNotesToOverlappingPeriods] Error:', error);
-    result.errors.push(error.message || 'Unknown error');
+    console.error("[syncNotesToOverlappingPeriods] Error:", error);
+    result.errors.push(error.message || "Unknown error");
   }
 
   return result;
@@ -171,7 +171,7 @@ export async function syncChecklistToOverlappingPeriods(
   };
 
   try {
-    console.log('[syncChecklistToOverlappingPeriods] Syncing checklist items');
+    console.log("[syncChecklistToOverlappingPeriods] Syncing checklist items");
     console.log(`[syncChecklistToOverlappingPeriods] Source period: ${sourcePeriod.id}`);
     console.log(`[syncChecklistToOverlappingPeriods] Items count: ${newChecklistItems?.length || 0}`);
 
@@ -180,9 +180,9 @@ export async function syncChecklistToOverlappingPeriods(
     const otherTypes = getOtherPeriodTypes(sourcePeriod.periodType);
 
     // Query all periods of other types for the same budget
-    const periodsSnapshot = await db.collection('budget_periods')
-      .where('budgetId', '==', sourcePeriod.budgetId)
-      .where('periodType', 'in', otherTypes)
+    const periodsSnapshot = await db.collection("budget_periods")
+      .where("budgetId", "==", sourcePeriod.budgetId)
+      .where("periodType", "in", otherTypes)
       .get();
 
     result.periodsQueried = periodsSnapshot.size;
@@ -223,8 +223,8 @@ export async function syncChecklistToOverlappingPeriods(
     result.success = true;
 
   } catch (error: any) {
-    console.error('[syncChecklistToOverlappingPeriods] Error:', error);
-    result.errors.push(error.message || 'Unknown error');
+    console.error("[syncChecklistToOverlappingPeriods] Error:", error);
+    result.errors.push(error.message || "Unknown error");
   }
 
   return result;
@@ -254,17 +254,17 @@ export async function syncModifiedAmountToOverlappingPeriods(
   };
 
   try {
-    console.log('[syncModifiedAmountToOverlappingPeriods] Syncing modified amount');
+    console.log("[syncModifiedAmountToOverlappingPeriods] Syncing modified amount");
     console.log(`[syncModifiedAmountToOverlappingPeriods] Source period: ${sourcePeriod.id}`);
-    console.log(`[syncModifiedAmountToOverlappingPeriods] Modified amount: $${newModifiedAmount?.toFixed(2) || 'none'}`);
+    console.log(`[syncModifiedAmountToOverlappingPeriods] Modified amount: $${newModifiedAmount?.toFixed(2) || "none"}`);
 
     const sourceStart = sourcePeriod.periodStart.toDate();
     const sourceEnd = sourcePeriod.periodEnd.toDate();
     const otherTypes = getOtherPeriodTypes(sourcePeriod.periodType);
 
-    const periodsSnapshot = await db.collection('budget_periods')
-      .where('budgetId', '==', sourcePeriod.budgetId)
-      .where('periodType', 'in', otherTypes)
+    const periodsSnapshot = await db.collection("budget_periods")
+      .where("budgetId", "==", sourcePeriod.budgetId)
+      .where("periodType", "in", otherTypes)
       .get();
 
     result.periodsQueried = periodsSnapshot.size;
@@ -327,8 +327,8 @@ export async function syncModifiedAmountToOverlappingPeriods(
     result.success = true;
 
   } catch (error: any) {
-    console.error('[syncModifiedAmountToOverlappingPeriods] Error:', error);
-    result.errors.push(error.message || 'Unknown error');
+    console.error("[syncModifiedAmountToOverlappingPeriods] Error:", error);
+    result.errors.push(error.message || "Unknown error");
   }
 
   return result;

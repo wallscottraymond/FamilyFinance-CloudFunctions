@@ -100,7 +100,7 @@ export const updateTransaction = onRequest({
 
       // Convert transactionDate string to Timestamp if needed
       const updateDataForFirestore: any = { ...updateData };
-      if (updateData.transactionDate && typeof updateData.transactionDate === 'string') {
+      if (updateData.transactionDate && typeof updateData.transactionDate === "string") {
         updateDataForFirestore.transactionDate = admin.firestore.Timestamp.fromDate(
           new Date(updateData.transactionDate)
         );

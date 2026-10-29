@@ -14,8 +14,8 @@
  * @see User Example 2: Bi-monthly budget $100/bi-monthly from Feb 1 - April 13
  */
 
-import { PeriodType } from '../../../../types';
-import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
+import { PeriodType } from "../../../../types";
+import { calculatePeriodAllocatedAmount } from "../../utils/calculatePeriodAllocatedAmount";
 import {
   roundToCents,
   amountsEqual,
@@ -25,15 +25,15 @@ import {
   createMockSourcePeriod,
   createWeeklySourcePeriods,
   getBiMonthlyDailyRate,
-} from '../helpers/budgetTestHelpers';
+} from "../helpers/budgetTestHelpers";
 
-describe('Bi-Monthly Budget Amount Calculations', () => {
+describe("Bi-Monthly Budget Amount Calculations", () => {
   // ============================================================================
   // BASIC BI-MONTHLY → BI-MONTHLY (SAME TYPE)
   // ============================================================================
 
-  describe('Bi-Monthly to Bi-Monthly (same type)', () => {
-    it('should return the same amount when budget and target are both bi-monthly', () => {
+  describe("Bi-Monthly to Bi-Monthly (same type)", () => {
+    it("should return the same amount when budget and target are both bi-monthly", () => {
       // Arrange
       const budgetAmount = 100;
       const targetPeriod = createMockSourcePeriod({
@@ -56,7 +56,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       expect(result).toBe(100);
     });
 
-    it('should return same amount for both halves of any month', () => {
+    it("should return same amount for both halves of any month", () => {
       // Arrange
       const budgetAmount = 100;
 
@@ -102,8 +102,8 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
   // BI-MONTHLY → MONTHLY CONVERSION
   // ============================================================================
 
-  describe('Bi-Monthly to Monthly conversion', () => {
-    it('should calculate monthly amount as 2x bi-monthly for full month', () => {
+  describe("Bi-Monthly to Monthly conversion", () => {
+    it("should calculate monthly amount as 2x bi-monthly for full month", () => {
       // Arrange: $100/bi-monthly → $200/month
       const budgetAmount = 100;
       const targetPeriod = createMockSourcePeriod({
@@ -124,11 +124,11 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       // Assert: For bi-monthly budget, monthly should be proportionally calculated
       // The implementation uses daily rate from bi-monthly * days in monthly
       // This may not be exactly 200 depending on implementation
-      expect(typeof result).toBe('number');
+      expect(typeof result).toBe("number");
       expect(result > 0).toBe(true);
     });
 
-    it('should calculate partial month correctly', () => {
+    it("should calculate partial month correctly", () => {
       // Arrange: $100/bi-monthly, partial month April 1-13
       const budgetAmount = 100;
       const targetPeriod = createMockSourcePeriod({
@@ -156,8 +156,8 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
   // BI-MONTHLY → WEEKLY CONVERSION
   // ============================================================================
 
-  describe('Bi-Monthly to Weekly conversion', () => {
-    it('should calculate weekly amount within first half of month', () => {
+  describe("Bi-Monthly to Weekly conversion", () => {
+    it("should calculate weekly amount within first half of month", () => {
       // Arrange: $100/bi-monthly for first half (15 days)
       // Daily rate = $100 / 15 = $6.67
       // Weekly (7 days) = 7 * $6.67 = $46.67
@@ -183,7 +183,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should calculate weekly amount within second half of month', () => {
+    it("should calculate weekly amount within second half of month", () => {
       // Arrange: $100/bi-monthly for second half (Jan 16-31 = 16 days)
       // Note: Current implementation uses default 15 days when target period is WEEKLY
       // because WEEKLY periods don't have biMonthlyHalf metadata.
@@ -214,7 +214,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should handle week spanning bi-monthly boundary (15th/16th)', () => {
+    it("should handle week spanning bi-monthly boundary (15th/16th)", () => {
       // Arrange: Week Jan 12-18 spans the bi-monthly boundary
       // Jan 12-15: 4 days at first half rate ($100/15)
       // Jan 16-18: 3 days at second half rate ($100/16)
@@ -235,7 +235,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       );
 
       // Assert: Implementation may vary, but result should be reasonable
-      expect(typeof result).toBe('number');
+      expect(typeof result).toBe("number");
       expect(result > 0).toBe(true);
     });
   });
@@ -244,8 +244,8 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
   // USER EXAMPLE 2: BI-MONTHLY BUDGET FEB 1 - APRIL 13
   // ============================================================================
 
-  describe('User Example 2: Bi-Monthly $100/bi-monthly from Feb 1 - April 13', () => {
-    it('should return $100 for each full bi-monthly period', () => {
+  describe("User Example 2: Bi-Monthly $100/bi-monthly from Feb 1 - April 13", () => {
+    it("should return $100 for each full bi-monthly period", () => {
       // Feb 1-15: $100
       const feb1_15 = createMockSourcePeriod({
         type: PeriodType.BI_MONTHLY,
@@ -273,7 +273,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       expect(result2).toBe(100);
     });
 
-    it('should calculate partial bi-monthly period (April 1-13) correctly', () => {
+    it("should calculate partial bi-monthly period (April 1-13) correctly", () => {
       // April 1-13: partial first half (13 out of 15 days)
       // Expected: $100 * (13/15) = $86.67
       const apr1_13 = createMockSourcePeriod({
@@ -292,7 +292,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       expect(result).toBe(100);
     });
 
-    it('should have bi-monthly periods sum to expected total', () => {
+    it("should have bi-monthly periods sum to expected total", () => {
       // Create bi-monthly periods for Feb 1 - April 13
       const biMonthlyPeriods = [
         // February
@@ -342,7 +342,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       expect(total).toBe(400);
     });
 
-    it('should have cross-type conversions (monthly and weekly) match within tolerance', () => {
+    it("should have cross-type conversions (monthly and weekly) match within tolerance", () => {
       // NOTE: This test compares monthly and weekly totals (both cross-type conversions)
       // The bi-monthly total uses same-type behavior which returns full amount ($100 each)
       // Cross-type conversions use day-based calculations which vary by period type
@@ -397,8 +397,8 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
   // SECOND HALF VARIATIONS BY MONTH
   // ============================================================================
 
-  describe('Second Half Day Variations', () => {
-    it('should correctly identify days in second half for each month', () => {
+  describe("Second Half Day Variations", () => {
+    it("should correctly identify days in second half for each month", () => {
       const testCases = [
         { month: 1, year: 2025, daysInMonth: 31, secondHalfDays: 16 },
         { month: 2, year: 2025, daysInMonth: 28, secondHalfDays: 13 },
@@ -419,7 +419,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       }
     });
 
-    it('should calculate correct daily rate for varying second half days', () => {
+    it("should calculate correct daily rate for varying second half days", () => {
       const budgetAmount = 100;
 
       // January (16 days in second half): $100/16 = $6.25
@@ -440,8 +440,8 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
   // BI-MONTHLY BOUNDARIES
   // ============================================================================
 
-  describe('Bi-Monthly Boundaries', () => {
-    it('should have first half always end on day 15', () => {
+  describe("Bi-Monthly Boundaries", () => {
+    it("should have first half always end on day 15", () => {
       for (let month = 1; month <= 12; month++) {
         const firstHalf = createMockSourcePeriod({
           type: PeriodType.BI_MONTHLY,
@@ -457,7 +457,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       }
     });
 
-    it('should have second half always start on day 16', () => {
+    it("should have second half always start on day 16", () => {
       for (let month = 1; month <= 12; month++) {
         const daysInMonth = getDaysInMonth(2025, month - 1);
         const secondHalf = createMockSourcePeriod({
@@ -474,7 +474,7 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       }
     });
 
-    it('should have first half + second half = full month days', () => {
+    it("should have first half + second half = full month days", () => {
       for (let month = 1; month <= 12; month++) {
         const daysInMonth = getDaysInMonth(2025, month - 1);
 
@@ -508,8 +508,8 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
   // EDGE CASES
   // ============================================================================
 
-  describe('Edge Cases', () => {
-    it('should handle week crossing month boundary', () => {
+  describe("Edge Cases", () => {
+    it("should handle week crossing month boundary", () => {
       // Week spanning Jan 26 - Feb 1
       const budgetAmount = 100;
       const crossMonthWeek = createMockSourcePeriod({
@@ -527,11 +527,11 @@ describe('Bi-Monthly Budget Amount Calculations', () => {
       );
 
       // Should produce a valid result
-      expect(typeof result).toBe('number');
+      expect(typeof result).toBe("number");
       expect(result > 0).toBe(true);
     });
 
-    it('should handle February leap year second half correctly', () => {
+    it("should handle February leap year second half correctly", () => {
       // February 2024 (leap year): second half is 16-29 (14 days)
       const budgetAmount = 100;
       const febLeapSecondHalf = createMockSourcePeriod({

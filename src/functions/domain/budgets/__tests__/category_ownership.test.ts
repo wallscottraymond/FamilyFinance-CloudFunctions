@@ -29,7 +29,7 @@ describe("plan_view_claims (canon A3 per view, A3b ≥ 1)", () => {
 
   it("refuses to leave another budget with no categories (A3b)", () => {
     const r = plan_view_claims({ budget_id: "new", added_category_ids: ["shopping"], view_budgets: view, first_of });
-    expect(r.validation_errors?.[0]).toContain('"Shopping" would have no categories left');
+    expect(r.validation_errors?.[0]).toContain("\"Shopping\" would have no categories left");
   });
 
   it("only the same view counts — another view's budgets are not passed in, so nothing is taken", () => {

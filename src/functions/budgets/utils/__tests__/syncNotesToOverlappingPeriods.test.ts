@@ -5,18 +5,18 @@
  * across overlapping periods of different types.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { BudgetPeriodDocument, PeriodType } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { BudgetPeriodDocument, PeriodType } from "../../../../types";
 
 // Mock firebase-admin
-jest.mock('firebase-admin', () => ({
+jest.mock("firebase-admin", () => ({
   firestore: Object.assign(
     jest.fn(() => ({
       collection: jest.fn(),
       batch: jest.fn()
     })),
     // admin.firestore.FieldValue.delete() — the clear path uses it
-    { FieldValue: { delete: () => '__delete__' } }
+    { FieldValue: { delete: () => "__delete__" } }
   ),
   initializeApp: jest.fn()
 }));
@@ -26,9 +26,9 @@ import {
   syncNotesToOverlappingPeriods,
   syncChecklistToOverlappingPeriods,
   syncModifiedAmountToOverlappingPeriods
-} from '../syncNotesToOverlappingPeriods';
+} from "../syncNotesToOverlappingPeriods";
 
-describe('syncNotesToOverlappingPeriods', () => {
+describe("syncNotesToOverlappingPeriods", () => {
   let mockDb: any;
   let mockBatch: any;
 
@@ -50,14 +50,14 @@ describe('syncNotesToOverlappingPeriods', () => {
   });
 
   const createMockPeriod = (overrides: Partial<BudgetPeriodDocument> = {}): BudgetPeriodDocument => ({
-    id: 'period-1',
-    budgetId: 'budget-123',
-    budgetName: 'Test Budget',
-    periodId: 'source-1',
-    sourcePeriodId: 'source-1',
+    id: "period-1",
+    budgetId: "budget-123",
+    budgetName: "Test Budget",
+    periodId: "source-1",
+    sourcePeriodId: "source-1",
     periodType: PeriodType.MONTHLY,
-    periodStart: Timestamp.fromDate(new Date('2025-04-01')),
-    periodEnd: Timestamp.fromDate(new Date('2025-04-30')),
+    periodStart: Timestamp.fromDate(new Date("2025-04-01")),
+    periodEnd: Timestamp.fromDate(new Date("2025-04-30")),
     allocatedAmount: 500,
     originalAmount: 500,
     isModified: false,
@@ -65,29 +65,29 @@ describe('syncNotesToOverlappingPeriods', () => {
     lastCalculated: Timestamp.now(),
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
-    userId: 'user-123',
+    userId: "user-123",
     groupIds: [],
     isActive: true,
     ...overrides
   });
 
-  describe('syncNotesToOverlappingPeriods', () => {
-    it('should sync notes to overlapping periods of other types', async () => {
+  describe("syncNotesToOverlappingPeriods", () => {
+    it("should sync notes to overlapping periods of other types", async () => {
       const sourcePeriod = createMockPeriod({
         periodType: PeriodType.MONTHLY,
-        userNotes: 'New note'
+        userNotes: "New note"
       });
 
       // Mock overlapping weekly periods
       const mockWeeklyPeriod = {
-        id: 'weekly-period-1',
-        ref: { id: 'weekly-period-1' },
+        id: "weekly-period-1",
+        ref: { id: "weekly-period-1" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.WEEKLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-07')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-13')),
-          userNotes: 'Old note'
+          periodStart: Timestamp.fromDate(new Date("2025-04-07")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-13")),
+          userNotes: "Old note"
         })
       };
 
@@ -100,7 +100,7 @@ describe('syncNotesToOverlappingPeriods', () => {
       const result = await syncNotesToOverlappingPeriods(
         mockDb,
         sourcePeriod,
-        'New note'
+        "New note"
       );
 
       expect(result.success).toBe(true);
@@ -109,27 +109,27 @@ describe('syncNotesToOverlappingPeriods', () => {
       expect(mockBatch.update).toHaveBeenCalledWith(
         mockWeeklyPeriod.ref,
         expect.objectContaining({
-          userNotes: 'New note',
-          notesSyncedFrom: 'period-1'
+          userNotes: "New note",
+          notesSyncedFrom: "period-1"
         })
       );
       expect(mockBatch.commit).toHaveBeenCalled();
     });
 
-    it('should skip periods that already have the same notes', async () => {
+    it("should skip periods that already have the same notes", async () => {
       const sourcePeriod = createMockPeriod({
-        userNotes: 'Same note'
+        userNotes: "Same note"
       });
 
       const mockPeriod = {
-        id: 'period-2',
-        ref: { id: 'period-2' },
+        id: "period-2",
+        ref: { id: "period-2" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.WEEKLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-07')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-13')),
-          userNotes: 'Same note' // Same notes
+          periodStart: Timestamp.fromDate(new Date("2025-04-07")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-13")),
+          userNotes: "Same note" // Same notes
         })
       };
 
@@ -142,7 +142,7 @@ describe('syncNotesToOverlappingPeriods', () => {
       const result = await syncNotesToOverlappingPeriods(
         mockDb,
         sourcePeriod,
-        'Same note'
+        "Same note"
       );
 
       expect(result.success).toBe(true);
@@ -150,21 +150,21 @@ describe('syncNotesToOverlappingPeriods', () => {
       expect(mockBatch.update).not.toHaveBeenCalled();
     });
 
-    it('should not sync to non-overlapping periods', async () => {
+    it("should not sync to non-overlapping periods", async () => {
       const sourcePeriod = createMockPeriod({
-        periodStart: Timestamp.fromDate(new Date('2025-04-01')),
-        periodEnd: Timestamp.fromDate(new Date('2025-04-30'))
+        periodStart: Timestamp.fromDate(new Date("2025-04-01")),
+        periodEnd: Timestamp.fromDate(new Date("2025-04-30"))
       });
 
       // Non-overlapping period (May)
       const mockPeriod = {
-        id: 'period-2',
-        ref: { id: 'period-2' },
+        id: "period-2",
+        ref: { id: "period-2" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.WEEKLY,
-          periodStart: Timestamp.fromDate(new Date('2025-05-05')),
-          periodEnd: Timestamp.fromDate(new Date('2025-05-11'))
+          periodStart: Timestamp.fromDate(new Date("2025-05-05")),
+          periodEnd: Timestamp.fromDate(new Date("2025-05-11"))
         })
       };
 
@@ -177,14 +177,14 @@ describe('syncNotesToOverlappingPeriods', () => {
       const result = await syncNotesToOverlappingPeriods(
         mockDb,
         sourcePeriod,
-        'New note'
+        "New note"
       );
 
       expect(result.success).toBe(true);
       expect(result.periodsUpdated).toBe(0);
     });
 
-    it('should return success with no updates when no other periods exist', async () => {
+    it("should return success with no updates when no other periods exist", async () => {
       const sourcePeriod = createMockPeriod();
 
       mockDb.collection().get.mockResolvedValue({
@@ -196,7 +196,7 @@ describe('syncNotesToOverlappingPeriods', () => {
       const result = await syncNotesToOverlappingPeriods(
         mockDb,
         sourcePeriod,
-        'New note'
+        "New note"
       );
 
       expect(result.success).toBe(true);
@@ -205,22 +205,22 @@ describe('syncNotesToOverlappingPeriods', () => {
     });
   });
 
-  describe('syncChecklistToOverlappingPeriods', () => {
-    it('should sync checklist items to overlapping periods', async () => {
+  describe("syncChecklistToOverlappingPeriods", () => {
+    it("should sync checklist items to overlapping periods", async () => {
       const sourcePeriod = createMockPeriod();
       const newChecklistItems = [
-        { id: '1', text: 'Item 1', completed: false },
-        { id: '2', text: 'Item 2', completed: true }
+        { id: "1", text: "Item 1", completed: false },
+        { id: "2", text: "Item 2", completed: true }
       ];
 
       const mockPeriod = {
-        id: 'period-2',
-        ref: { id: 'period-2' },
+        id: "period-2",
+        ref: { id: "period-2" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.WEEKLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-07')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-13')),
+          periodStart: Timestamp.fromDate(new Date("2025-04-07")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-13")),
           checklistItems: []
         })
       };
@@ -243,24 +243,24 @@ describe('syncNotesToOverlappingPeriods', () => {
         mockPeriod.ref,
         expect.objectContaining({
           checklistItems: newChecklistItems,
-          checklistSyncedFrom: 'period-1'
+          checklistSyncedFrom: "period-1"
         })
       );
     });
   });
 
-  describe('syncModifiedAmountToOverlappingPeriods', () => {
-    it('should sync modified amount to overlapping periods', async () => {
+  describe("syncModifiedAmountToOverlappingPeriods", () => {
+    it("should sync modified amount to overlapping periods", async () => {
       const sourcePeriod = createMockPeriod();
 
       const mockPeriod = {
-        id: 'period-2',
-        ref: { id: 'period-2' },
+        id: "period-2",
+        ref: { id: "period-2" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.WEEKLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-07')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-13')),
+          periodStart: Timestamp.fromDate(new Date("2025-04-07")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-13")),
           modifiedAmount: undefined,
           isModified: false
         })
@@ -285,25 +285,25 @@ describe('syncNotesToOverlappingPeriods', () => {
         expect.objectContaining({
           modifiedAmount: 750,
           isModified: true,
-          modifiedAmountSyncedFrom: 'period-1'
+          modifiedAmountSyncedFrom: "period-1"
         })
       );
     });
 
-    it('should clear modified amount when undefined', async () => {
+    it("should clear modified amount when undefined", async () => {
       const sourcePeriod = createMockPeriod();
 
       const mockPeriod = {
-        id: 'period-2',
-        ref: { id: 'period-2' },
+        id: "period-2",
+        ref: { id: "period-2" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.WEEKLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-07')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-13')),
+          periodStart: Timestamp.fromDate(new Date("2025-04-07")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-13")),
           modifiedAmount: 750,
           isModified: true,
-          modifiedAmountSyncedFrom: 'period-1'
+          modifiedAmountSyncedFrom: "period-1"
         })
       };
 
@@ -330,32 +330,32 @@ describe('syncNotesToOverlappingPeriods', () => {
     });
   });
 
-  describe('syncModifiedAmountToOverlappingPeriods — clearing never touches a direct override', () => {
-    it('leaves another period\'s own (direct) override and other sources\' copies alone', async () => {
-      const sourcePeriod = createMockPeriod({ periodType: PeriodType.WEEKLY, id: 'week-1' });
+  describe("syncModifiedAmountToOverlappingPeriods — clearing never touches a direct override", () => {
+    it("leaves another period's own (direct) override and other sources' copies alone", async () => {
+      const sourcePeriod = createMockPeriod({ periodType: PeriodType.WEEKLY, id: "week-1" });
       const direct = {
-        id: 'month-1',
-        ref: { id: 'month-1' },
+        id: "month-1",
+        ref: { id: "month-1" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.MONTHLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-01')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-30')),
+          periodStart: Timestamp.fromDate(new Date("2025-04-01")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-30")),
           modifiedAmount: 300,
           isModified: true,
         })
       };
       const other_copy = {
-        id: 'half-1',
-        ref: { id: 'half-1' },
+        id: "half-1",
+        ref: { id: "half-1" },
         data: () => ({
-          budgetId: 'budget-123',
+          budgetId: "budget-123",
           periodType: PeriodType.BI_MONTHLY,
-          periodStart: Timestamp.fromDate(new Date('2025-04-01')),
-          periodEnd: Timestamp.fromDate(new Date('2025-04-15')),
+          periodStart: Timestamp.fromDate(new Date("2025-04-01")),
+          periodEnd: Timestamp.fromDate(new Date("2025-04-15")),
           modifiedAmount: 300,
           isModified: true,
-          modifiedAmountSyncedFrom: 'month-1',
+          modifiedAmountSyncedFrom: "month-1",
         })
       };
       mockDb.collection().get.mockResolvedValue({ empty: false, size: 2, docs: [direct, other_copy] });
@@ -368,20 +368,20 @@ describe('syncNotesToOverlappingPeriods', () => {
     });
   });
 
-  describe('error handling', () => {
-    it('should handle Firestore errors gracefully', async () => {
+  describe("error handling", () => {
+    it("should handle Firestore errors gracefully", async () => {
       const sourcePeriod = createMockPeriod();
 
-      mockDb.collection().get.mockRejectedValue(new Error('Firestore error'));
+      mockDb.collection().get.mockRejectedValue(new Error("Firestore error"));
 
       const result = await syncNotesToOverlappingPeriods(
         mockDb,
         sourcePeriod,
-        'New note'
+        "New note"
       );
 
       expect(result.success).toBe(false);
-      expect(result.errors).toContain('Firestore error');
+      expect(result.errors).toContain("Firestore error");
     });
   });
 });

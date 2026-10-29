@@ -2,8 +2,8 @@
  * Batch create outflow periods using Firestore batch operations
  */
 
-import * as admin from 'firebase-admin';
-import { OutflowPeriod } from '../../../../types';
+import * as admin from "firebase-admin";
+import { OutflowPeriod } from "../../../../types";
 
 /**
  * Efficiently create multiple outflow_periods using Firestore batch operations
@@ -22,7 +22,7 @@ export async function batchCreateOutflowPeriods(
     const batchPeriods = outflowPeriods.slice(i, i + BATCH_SIZE);
 
     batchPeriods.forEach((outflowPeriod) => {
-      const docRef = db.collection('outflow_periods').doc(outflowPeriod.id!);
+      const docRef = db.collection("outflow_periods").doc(outflowPeriod.id!);
       batch.set(docRef, outflowPeriod);
     });
 

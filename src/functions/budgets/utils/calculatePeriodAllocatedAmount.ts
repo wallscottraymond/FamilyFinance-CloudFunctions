@@ -8,8 +8,8 @@
  * all budget period creation and extension functions.
  */
 
-import { PeriodType, SourcePeriod } from '../../../types';
-import * as admin from 'firebase-admin';
+import { PeriodType, SourcePeriod } from "../../../types";
+import * as admin from "firebase-admin";
 
 /**
  * Days in a standard week
@@ -71,7 +71,7 @@ function calculateMonthlyToTarget(
 
   console.log(
     `[calculateMonthlyToTarget] Monthly: $${monthlyAmount}, ` +
-    `Target: ${targetPeriod.id} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}), ` +
+    `Target: ${targetPeriod.id} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]}), ` +
     `Allocation: $${totalAllocation.toFixed(2)}`
   );
 
@@ -122,44 +122,44 @@ export function calculatePeriodAllocatedAmount(
   let allocation: number;
 
   switch (budgetPeriodType) {
-    case PeriodType.MONTHLY:
-      // For monthly budgets, use day-by-day calculation to handle month-spanning periods
-      allocation = calculateMonthlyToTarget(budgetAmount, targetPeriod);
-      break;
+  case PeriodType.MONTHLY:
+    // For monthly budgets, use day-by-day calculation to handle month-spanning periods
+    allocation = calculateMonthlyToTarget(budgetAmount, targetPeriod);
+    break;
 
-    case PeriodType.BI_MONTHLY:
-      // For bi-monthly budgets, calculate daily rate from the bi-monthly period
-      // Get actual bi-monthly period days based on metadata
-      const biMonthlyDays = targetPeriod.metadata?.biMonthlyHalf === 1 ? 15 :
-        (targetPeriod.metadata?.month ? getDaysInMonth(targetPeriod.year, targetPeriod.metadata.month - 1) - 15 : 15);
-      const biMonthlyDailyRate = budgetAmount / biMonthlyDays;
-      allocation = biMonthlyDailyRate * targetDays;
+  case PeriodType.BI_MONTHLY:
+    // For bi-monthly budgets, calculate daily rate from the bi-monthly period
+    // Get actual bi-monthly period days based on metadata
+    const biMonthlyDays = targetPeriod.metadata?.biMonthlyHalf === 1 ? 15 :
+      (targetPeriod.metadata?.month ? getDaysInMonth(targetPeriod.year, targetPeriod.metadata.month - 1) - 15 : 15);
+    const biMonthlyDailyRate = budgetAmount / biMonthlyDays;
+    allocation = biMonthlyDailyRate * targetDays;
 
-      console.log(
-        `[calculatePeriodAllocatedAmount] Bi-monthly: $${budgetAmount} (${biMonthlyDays} days), ` +
+    console.log(
+      `[calculatePeriodAllocatedAmount] Bi-monthly: $${budgetAmount} (${biMonthlyDays} days), ` +
         `Target: ${targetPeriod.id} (${targetDays} days), Daily rate: $${biMonthlyDailyRate.toFixed(2)}, ` +
         `Allocation: $${allocation.toFixed(2)}`
-      );
-      break;
+    );
+    break;
 
-    case PeriodType.WEEKLY:
-      // For weekly budgets, divide by 7 to get daily rate
-      const weeklyDailyRate = budgetAmount / DAYS_IN_WEEK;
-      allocation = weeklyDailyRate * targetDays;
+  case PeriodType.WEEKLY:
+    // For weekly budgets, divide by 7 to get daily rate
+    const weeklyDailyRate = budgetAmount / DAYS_IN_WEEK;
+    allocation = weeklyDailyRate * targetDays;
 
-      console.log(
-        `[calculatePeriodAllocatedAmount] Weekly: $${budgetAmount}, ` +
+    console.log(
+      `[calculatePeriodAllocatedAmount] Weekly: $${budgetAmount}, ` +
         `Target: ${targetPeriod.id} (${targetDays} days), Daily rate: $${weeklyDailyRate.toFixed(2)}, ` +
         `Allocation: $${allocation.toFixed(2)}`
-      );
-      break;
+    );
+    break;
 
-    default:
-      console.warn(
-        `[calculatePeriodAllocatedAmount] Unknown budget period type: ${budgetPeriodType}, using target days`
-      );
-      const defaultDailyRate = budgetAmount / targetDays;
-      allocation = defaultDailyRate * targetDays;
+  default:
+    console.warn(
+      `[calculatePeriodAllocatedAmount] Unknown budget period type: ${budgetPeriodType}, using target days`
+    );
+    const defaultDailyRate = budgetAmount / targetDays;
+    allocation = defaultDailyRate * targetDays;
   }
 
   return allocation;
@@ -179,15 +179,15 @@ export function getDailyRate(
   periodDays?: number
 ): number {
   switch (budgetPeriodType) {
-    case PeriodType.MONTHLY:
-      // Use provided period days or default to 30
-      return budgetAmount / (periodDays || 30);
-    case PeriodType.BI_MONTHLY:
-      // Use provided period days or default to 15
-      return budgetAmount / (periodDays || 15);
-    case PeriodType.WEEKLY:
-      return budgetAmount / DAYS_IN_WEEK;
-    default:
-      return budgetAmount / (periodDays || 30);
+  case PeriodType.MONTHLY:
+    // Use provided period days or default to 30
+    return budgetAmount / (periodDays || 30);
+  case PeriodType.BI_MONTHLY:
+    // Use provided period days or default to 15
+    return budgetAmount / (periodDays || 15);
+  case PeriodType.WEEKLY:
+    return budgetAmount / DAYS_IN_WEEK;
+  default:
+    return budgetAmount / (periodDays || 30);
   }
 }

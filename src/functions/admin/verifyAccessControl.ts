@@ -16,10 +16,10 @@
  * - Inflow Periods
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import { getFirestore } from 'firebase-admin/firestore';
-import { authMiddleware, UserRole } from '../../utils/auth';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { onRequest } from "firebase-functions/v2/https";
+import { getFirestore } from "firebase-admin/firestore";
+import { authMiddleware, UserRole } from "../../utils/auth";
+import { initializeApp, getApps } from "firebase-admin/app";
 
 // Initialize Firebase Admin if not already initialized
 if (getApps().length === 0) {
@@ -49,46 +49,46 @@ function verifyAccessControlStructure(docId: string, data: any): { valid: boolea
 
   // Check root-level query-critical fields
   if (!data.userId) {
-    issues.push('Missing userId at root level');
+    issues.push("Missing userId at root level");
   }
 
   if (data.groupId === undefined) {
-    issues.push('Missing groupId field at root level (should be null or string)');
+    issues.push("Missing groupId field at root level (should be null or string)");
   }
 
   if (!Array.isArray(data.accessibleBy)) {
-    issues.push('Missing or invalid accessibleBy array at root level');
+    issues.push("Missing or invalid accessibleBy array at root level");
   } else {
     // Verify accessibleBy always includes userId
     if (!data.accessibleBy.includes(data.userId)) {
-      issues.push('accessibleBy array does not include userId');
+      issues.push("accessibleBy array does not include userId");
     }
 
     // If groupId exists, accessibleBy should have more than just userId
     if (data.groupId && data.accessibleBy.length === 1) {
-      issues.push('Document has groupId but accessibleBy only contains userId (should include group members)');
+      issues.push("Document has groupId but accessibleBy only contains userId (should include group members)");
     }
 
     // If no groupId, accessibleBy should only be [userId]
     if (!data.groupId && data.accessibleBy.length > 1) {
-      issues.push('Document has no groupId but accessibleBy has multiple members');
+      issues.push("Document has no groupId but accessibleBy has multiple members");
     }
   }
 
   if (!data.isActive) {
-    issues.push('Missing isActive field at root level');
+    issues.push("Missing isActive field at root level");
   }
 
   // Check nested access control object
   if (!data.access) {
-    issues.push('Missing nested access object');
+    issues.push("Missing nested access object");
   } else {
     if (data.access.ownerId !== data.userId) {
-      issues.push('access.ownerId does not match root userId');
+      issues.push("access.ownerId does not match root userId");
     }
 
     if (data.access.isPrivate === undefined) {
-      issues.push('Missing access.isPrivate field');
+      issues.push("Missing access.isPrivate field");
     } else {
       // Verify isPrivate matches groupId presence
       const expectedIsPrivate = !data.groupId;
@@ -98,10 +98,10 @@ function verifyAccessControlStructure(docId: string, data: any): { valid: boolea
     }
 
     if (!data.access.sharing) {
-      issues.push('Missing access.sharing object');
+      issues.push("Missing access.sharing object");
     } else {
       if (data.access.sharing.isShared === undefined) {
-        issues.push('Missing access.sharing.isShared field');
+        issues.push("Missing access.sharing.isShared field");
       } else {
         // Verify isShared matches groupId presence
         const expectedIsShared = !!data.groupId;
@@ -111,11 +111,11 @@ function verifyAccessControlStructure(docId: string, data: any): { valid: boolea
       }
 
       if (!Array.isArray(data.access.sharing.sharedWith)) {
-        issues.push('Missing or invalid access.sharing.sharedWith array');
+        issues.push("Missing or invalid access.sharing.sharedWith array");
       } else {
         // If groupId exists, sharedWith should have entries
         if (data.groupId && data.access.sharing.sharedWith.length === 0) {
-          issues.push('Document has groupId but access.sharing.sharedWith is empty');
+          issues.push("Document has groupId but access.sharing.sharedWith is empty");
         }
 
         // Verify sharedWith entries match accessibleBy (minus owner)
@@ -124,7 +124,7 @@ function verifyAccessControlStructure(docId: string, data: any): { valid: boolea
 
         const missingInSharedWith = expectedSharedWith.filter((id: string) => !sharedWithIds.includes(id));
         if (missingInSharedWith.length > 0) {
-          issues.push(`accessibleBy contains members not in sharedWith: ${missingInSharedWith.join(', ')}`);
+          issues.push(`accessibleBy contains members not in sharedWith: ${missingInSharedWith.join(", ")}`);
         }
       }
     }
@@ -168,14 +168,14 @@ async function verifyCollection(collectionName: string, limit: number = 50): Pro
         result.failed++;
         result.issues.push({
           docId: doc.id,
-          issue: verification.issues.join('; '),
+          issue: verification.issues.join("; "),
           details: {
             userId: data.userId,
             groupId: data.groupId,
             accessibleBy: data.accessibleBy,
-            'access.isPrivate': data.access?.isPrivate,
-            'access.sharing.isShared': data.access?.sharing?.isShared,
-            'access.sharing.sharedWith': data.access?.sharing?.sharedWith?.length || 0
+            "access.isPrivate": data.access?.isPrivate,
+            "access.sharing.isShared": data.access?.sharing?.isShared,
+            "access.sharing.sharedWith": data.access?.sharing?.sharedWith?.length || 0
           }
         });
       }
@@ -183,8 +183,8 @@ async function verifyCollection(collectionName: string, limit: number = 50): Pro
   } catch (error) {
     console.error(`Error verifying collection ${collectionName}:`, error);
     result.issues.push({
-      docId: 'N/A',
-      issue: `Collection verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      docId: "N/A",
+      issue: `Collection verification failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       details: error
     });
   }
@@ -197,7 +197,7 @@ async function verifyCollection(collectionName: string, limit: number = 50): Pro
  */
 export const verifyAccessControl = onRequest({
   cors: true,
-  memory: '512MiB',
+  memory: "512MiB",
   timeoutSeconds: 120,
 }, async (req, res) => {
   // Authenticate + require ADMIN — this endpoint reads user data across all collections
@@ -212,12 +212,12 @@ export const verifyAccessControl = onRequest({
 
     // Collections to verify
     const collectionsToVerify = [
-      'transactions',
-      'accounts',
-      'budgets',
-      'outflows',
-      'outflow_periods',
-      'inflow_periods'
+      "transactions",
+      "accounts",
+      "budgets",
+      "outflows",
+      "outflow_periods",
+      "inflow_periods"
     ];
 
     const results: VerificationResult[] = [];
@@ -249,34 +249,34 @@ export const verifyAccessControl = onRequest({
 
     const allPassed = overallStats.totalFailed === 0;
 
-    console.log('\n' + '='.repeat(80));
-    console.log('VERIFICATION SUMMARY');
-    console.log('='.repeat(80));
+    console.log("\n" + "=".repeat(80));
+    console.log("VERIFICATION SUMMARY");
+    console.log("=".repeat(80));
     console.log(`Total Documents Checked: ${overallStats.totalDocuments}`);
     console.log(`Passed: ${overallStats.totalPassed} (${((overallStats.totalPassed / overallStats.totalDocuments) * 100).toFixed(1)}%)`);
     console.log(`Failed: ${overallStats.totalFailed} (${((overallStats.totalFailed / overallStats.totalDocuments) * 100).toFixed(1)}%)`);
     console.log(`Collections with Issues: ${overallStats.collectionsWithIssues} / ${overallStats.totalCollections}`);
-    console.log('='.repeat(80));
+    console.log("=".repeat(80));
 
     if (allPassed) {
-      console.log('✅ ALL VERIFICATIONS PASSED! Access control is correctly implemented.');
+      console.log("✅ ALL VERIFICATIONS PASSED! Access control is correctly implemented.");
     } else {
-      console.log('❌ VERIFICATION FAILED! Please review the issues above.');
+      console.log("❌ VERIFICATION FAILED! Please review the issues above.");
     }
 
     res.status(200).json({
       success: allPassed,
-      message: allPassed ? 'All access control verifications passed' : 'Some verifications failed',
+      message: allPassed ? "All access control verifications passed" : "Some verifications failed",
       overallStats,
       results,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ Error during access control verification:', error);
+    console.error("❌ Error during access control verification:", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
       timestamp: new Date().toISOString()
     });
   }

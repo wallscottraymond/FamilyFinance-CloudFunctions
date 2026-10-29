@@ -12,15 +12,15 @@
  * - Edge cases handled properly
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { calculateAllOccurrencesInPeriod } from '../utils/calculateAllOccurrencesInPeriod';
+import { Timestamp } from "firebase-admin/firestore";
+import { calculateAllOccurrencesInPeriod } from "../utils/calculateAllOccurrencesInPeriod";
 import {
   RecurringOutflow,
   SourcePeriod,
   PlaidRecurringFrequency
-} from '../../../../types';
+} from "../../../../types";
 
-describe('calculateAllOccurrencesInPeriod', () => {
+describe("calculateAllOccurrencesInPeriod", () => {
   // Helper to create test outflow
   const createTestOutflow = (
     frequency: PlaidRecurringFrequency,
@@ -51,18 +51,18 @@ describe('calculateAllOccurrencesInPeriod', () => {
     } as SourcePeriod;
   };
 
-  describe('WEEKLY frequency', () => {
-    it('should calculate 1 occurrence for weekly bill in weekly period', () => {
+  describe("WEEKLY frequency", () => {
+    it("should calculate 1 occurrence for weekly bill in weekly period", () => {
       // Week of Jan 1-7, 2025 (Wednesday start)
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Gym',
-        new Date('2025-01-01') // Wednesday
+        "Weekly Gym",
+        new Date("2025-01-01") // Wednesday
       );
       const period = createTestPeriod(
-        '2025-W01',
-        new Date('2025-01-01'),
-        new Date('2025-01-07')
+        "2025-W01",
+        new Date("2025-01-01"),
+        new Date("2025-01-07")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -76,7 +76,7 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.occurrences).toBeDefined();
       expect(result.occurrences).toHaveLength(1);
       expect(result.occurrences[0]).toMatchObject({
-        id: expect.stringContaining('2025-W01_occ_0'),
+        id: expect.stringContaining("2025-W01_occ_0"),
         dueDate: result.occurrenceDueDates[0],
         isPaid: false,
         transactionId: null,
@@ -91,17 +91,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
       });
     });
 
-    it('should calculate ~8 occurrences for weekly bill in bi-monthly period', () => {
+    it("should calculate ~8 occurrences for weekly bill in bi-monthly period", () => {
       // Bi-monthly period (2 weeks)
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Gym',
-        new Date('2025-01-01')
+        "Weekly Gym",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-BW01',
-        new Date('2025-01-01'),
-        new Date('2025-01-14') // 2 weeks
+        "2025-BW01",
+        new Date("2025-01-01"),
+        new Date("2025-01-14") // 2 weeks
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -117,17 +117,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
       });
     });
 
-    it('should calculate ~4 occurrences for weekly bill in monthly period', () => {
+    it("should calculate ~4 occurrences for weekly bill in monthly period", () => {
       // January 2025 (31 days)
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Gym',
-        new Date('2025-01-01') // Wednesday
+        "Weekly Gym",
+        new Date("2025-01-01") // Wednesday
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -142,17 +142,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('BIWEEKLY frequency', () => {
-    it('should calculate 0 or 1 occurrence for biweekly bill in weekly period', () => {
+  describe("BIWEEKLY frequency", () => {
+    it("should calculate 0 or 1 occurrence for biweekly bill in weekly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.BIWEEKLY,
-        'Biweekly Subscription',
-        new Date('2025-01-01')
+        "Biweekly Subscription",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-W01',
-        new Date('2025-01-01'),
-        new Date('2025-01-07')
+        "2025-W01",
+        new Date("2025-01-01"),
+        new Date("2025-01-07")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -161,16 +161,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.occurrenceDueDates).toHaveLength(result.numberOfOccurrences);
     });
 
-    it('should calculate 1 occurrence for biweekly bill in bi-monthly period', () => {
+    it("should calculate 1 occurrence for biweekly bill in bi-monthly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.BIWEEKLY,
-        'Biweekly Subscription',
-        new Date('2025-01-01')
+        "Biweekly Subscription",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-BW01',
-        new Date('2025-01-01'),
-        new Date('2025-01-14')
+        "2025-BW01",
+        new Date("2025-01-01"),
+        new Date("2025-01-14")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -178,16 +178,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.numberOfOccurrences).toBe(1);
     });
 
-    it('should calculate ~2 occurrences for biweekly bill in monthly period', () => {
+    it("should calculate ~2 occurrences for biweekly bill in monthly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.BIWEEKLY,
-        'Biweekly Subscription',
-        new Date('2025-01-01')
+        "Biweekly Subscription",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -197,17 +197,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('SEMI_MONTHLY frequency', () => {
-    it('should calculate 2-3 occurrences for semi-monthly bill in monthly period', () => {
+  describe("SEMI_MONTHLY frequency", () => {
+    it("should calculate 2-3 occurrences for semi-monthly bill in monthly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.SEMI_MONTHLY,
-        'Semi-monthly Bill',
-        new Date('2025-01-01')
+        "Semi-monthly Bill",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -220,17 +220,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('MONTHLY frequency', () => {
-    it('should calculate 0 occurrences for monthly bill in weekly period', () => {
+  describe("MONTHLY frequency", () => {
+    it("should calculate 0 occurrences for monthly bill in weekly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.MONTHLY,
-        'Monthly Rent',
-        new Date('2025-01-15') // Mid-month
+        "Monthly Rent",
+        new Date("2025-01-15") // Mid-month
       );
       const period = createTestPeriod(
-        '2025-W01',
-        new Date('2025-01-01'),
-        new Date('2025-01-07')
+        "2025-W01",
+        new Date("2025-01-01"),
+        new Date("2025-01-07")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -239,16 +239,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.occurrenceDueDates).toHaveLength(0);
     });
 
-    it('should calculate 0 or 1 occurrence for monthly bill in bi-monthly period', () => {
+    it("should calculate 0 or 1 occurrence for monthly bill in bi-monthly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.MONTHLY,
-        'Monthly Rent',
-        new Date('2025-01-15')
+        "Monthly Rent",
+        new Date("2025-01-15")
       );
       const period = createTestPeriod(
-        '2025-BW01',
-        new Date('2025-01-01'),
-        new Date('2025-01-14')
+        "2025-BW01",
+        new Date("2025-01-01"),
+        new Date("2025-01-14")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -256,16 +256,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.numberOfOccurrences).toBeLessThanOrEqual(1);
     });
 
-    it('should calculate 1 occurrence for monthly bill in monthly period', () => {
+    it("should calculate 1 occurrence for monthly bill in monthly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.MONTHLY,
-        'Monthly Rent',
-        new Date('2025-01-15')
+        "Monthly Rent",
+        new Date("2025-01-15")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -280,17 +280,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('ANNUALLY frequency', () => {
-    it('should calculate 0 or 1 occurrence for annual bill in monthly period', () => {
+  describe("ANNUALLY frequency", () => {
+    it("should calculate 0 or 1 occurrence for annual bill in monthly period", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.ANNUALLY,
-        'Annual Subscription',
-        new Date('2025-01-15')
+        "Annual Subscription",
+        new Date("2025-01-15")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -304,17 +304,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('Parallel array consistency', () => {
-    it('should maintain consistent array lengths across all outputs', () => {
+  describe("Parallel array consistency", () => {
+    it("should maintain consistent array lengths across all outputs", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Test',
-        new Date('2025-01-01')
+        "Weekly Test",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -328,16 +328,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.occurrences.length).toBe(result.occurrenceDueDates.length);
     });
 
-    it('should have all due dates within period range', () => {
+    it("should have all due dates within period range", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Test',
-        new Date('2025-01-01')
+        "Weekly Test",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -350,17 +350,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('Edge cases', () => {
-    it('should handle month with 5 Mondays (31-day month starting on Wednesday)', () => {
+  describe("Edge cases", () => {
+    it("should handle month with 5 Mondays (31-day month starting on Wednesday)", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Monday Bill',
-        new Date('2025-01-06') // First Monday in Jan 2025
+        "Weekly Monday Bill",
+        new Date("2025-01-06") // First Monday in Jan 2025
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -369,16 +369,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.numberOfOccurrences).toBe(4);
     });
 
-    it('should handle February (28 days)', () => {
+    it("should handle February (28 days)", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Test',
-        new Date('2025-02-05') // Wednesday
+        "Weekly Test",
+        new Date("2025-02-05") // Wednesday
       );
       const period = createTestPeriod(
-        '2025-M02',
-        new Date('2025-02-01'),
-        new Date('2025-02-28')
+        "2025-M02",
+        new Date("2025-02-01"),
+        new Date("2025-02-28")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -386,16 +386,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.numberOfOccurrences).toBe(4);
     });
 
-    it('should handle period where reference date is far in the future', () => {
+    it("should handle period where reference date is far in the future", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Future Weekly Bill',
-        new Date('2026-06-01') // Far future
+        "Future Weekly Bill",
+        new Date("2026-06-01") // Far future
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -404,16 +404,16 @@ describe('calculateAllOccurrencesInPeriod', () => {
       expect(result.numberOfOccurrences).toBeGreaterThan(0);
     });
 
-    it('should handle period where reference date is in the past', () => {
+    it("should handle period where reference date is in the past", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Past Weekly Bill',
-        new Date('2024-01-01') // Far past
+        "Past Weekly Bill",
+        new Date("2024-01-01") // Far past
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -423,17 +423,17 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('Weekend adjustment', () => {
-    it('should adjust draw dates for Saturday due dates', () => {
+  describe("Weekend adjustment", () => {
+    it("should adjust draw dates for Saturday due dates", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Saturday Bill',
-        new Date('2025-01-04') // Saturday
+        "Saturday Bill",
+        new Date("2025-01-04") // Saturday
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -449,19 +449,19 @@ describe('calculateAllOccurrencesInPeriod', () => {
     });
   });
 
-  describe('Occurrence objects structure (NEW)', () => {
-    it('should create properly structured occurrence objects for all occurrences', () => {
+  describe("Occurrence objects structure (NEW)", () => {
+    it("should create properly structured occurrence objects for all occurrences", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Test',
-        new Date('2025-01-01')
+        "Weekly Test",
+        new Date("2025-01-01")
       );
       (outflow as any).averageAmount = 10.00; // Add amount to outflow
 
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
@@ -496,41 +496,41 @@ describe('calculateAllOccurrencesInPeriod', () => {
       });
     });
 
-    it('should handle occurrence objects for monthly bill (single occurrence)', () => {
+    it("should handle occurrence objects for monthly bill (single occurrence)", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.MONTHLY,
-        'Monthly Rent',
-        new Date('2025-01-15')
+        "Monthly Rent",
+        new Date("2025-01-15")
       );
       (outflow as any).averageAmount = 1500.00;
 
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);
 
       expect(result.occurrences).toHaveLength(1);
       expect(result.occurrences[0]).toMatchObject({
-        id: '2025-M01_occ_0',
+        id: "2025-M01_occ_0",
         isPaid: false,
         amountDue: 1500.00,
         amountPaid: 0,
       });
     });
 
-    it('should create unique IDs for each occurrence', () => {
+    it("should create unique IDs for each occurrence", () => {
       const outflow = createTestOutflow(
         PlaidRecurringFrequency.WEEKLY,
-        'Weekly Test',
-        new Date('2025-01-01')
+        "Weekly Test",
+        new Date("2025-01-01")
       );
       const period = createTestPeriod(
-        '2025-M01',
-        new Date('2025-01-01'),
-        new Date('2025-01-31')
+        "2025-M01",
+        new Date("2025-01-01"),
+        new Date("2025-01-31")
       );
 
       const result = calculateAllOccurrencesInPeriod(outflow, period);

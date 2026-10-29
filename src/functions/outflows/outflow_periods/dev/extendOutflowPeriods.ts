@@ -13,14 +13,14 @@
  * }
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { RecurringOutflow } from '../../../../types';
-import { createOutflowPeriodsFromSource } from '../crud/createOutflowPeriods';
+import { onRequest } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { RecurringOutflow } from "../../../../types";
+import { createOutflowPeriodsFromSource } from "../crud/createOutflowPeriods";
 
 export const extendOutflowPeriods = onRequest({
-  region: 'us-central1',
-  memory: '512MiB',
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 540,
 }, async (req, res) => {
   try {
@@ -29,7 +29,7 @@ export const extendOutflowPeriods = onRequest({
     if (!outflowId && !userId) {
       res.status(400).json({
         success: false,
-        message: 'Either outflowId or userId must be provided'
+        message: "Either outflowId or userId must be provided"
       });
       return;
     }
@@ -39,7 +39,7 @@ export const extendOutflowPeriods = onRequest({
 
     // Get outflows to extend
     if (outflowId) {
-      const outflowDoc = await db.collection('outflows').doc(outflowId).get();
+      const outflowDoc = await db.collection("outflows").doc(outflowId).get();
       if (!outflowDoc.exists) {
         res.status(404).json({
           success: false,
@@ -52,9 +52,9 @@ export const extendOutflowPeriods = onRequest({
         data: outflowDoc.data() as RecurringOutflow
       });
     } else if (userId) {
-      const outflowsSnapshot = await db.collection('outflows')
-        .where('userId', '==', userId)
-        .where('isActive', '==', true)
+      const outflowsSnapshot = await db.collection("outflows")
+        .where("userId", "==", userId)
+        .where("isActive", "==", true)
         .get();
 
       outflowsToExtend = outflowsSnapshot.docs.map(doc => ({
@@ -75,9 +75,9 @@ export const extendOutflowPeriods = onRequest({
     for (const outflow of outflowsToExtend) {
       try {
         // Find the latest existing period for this outflow
-        const existingPeriodsSnapshot = await db.collection('outflow_periods')
-          .where('outflowId', '==', outflow.id)
-          .orderBy('periodEndDate', 'desc')
+        const existingPeriodsSnapshot = await db.collection("outflow_periods")
+          .where("outflowId", "==", outflow.id)
+          .orderBy("periodEndDate", "desc")
           .limit(1)
           .get();
 
@@ -123,7 +123,7 @@ export const extendOutflowPeriods = onRequest({
         console.log(`[extendOutflowPeriods] Created ${result.periodsCreated} periods for outflow ${outflow.id}`);
 
       } catch (error) {
-        const errorMsg = `Failed to extend outflow ${outflow.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to extend outflow ${outflow.id}: ${error instanceof Error ? error.message : "Unknown error"}`;
         results.errors.push(errorMsg);
         console.error(`[extendOutflowPeriods] ${errorMsg}`);
       }
@@ -138,10 +138,10 @@ export const extendOutflowPeriods = onRequest({
     });
 
   } catch (error) {
-    console.error('[extendOutflowPeriods] Error:', error);
+    console.error("[extendOutflowPeriods] Error:", error);
     res.status(500).json({
       success: false,
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : "Unknown error"
     });
   }
 });

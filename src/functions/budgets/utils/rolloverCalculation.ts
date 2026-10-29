@@ -12,13 +12,13 @@
  */
 
 import { period_allocation } from "../../domain/budgets/period_override.service";
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 import {
   Budget,
   BudgetPeriodDocument,
   RolloverStrategy,
   FinancialSettings,
-} from '../../../types';
+} from "../../../types";
 
 /**
  * Rollover settings resolved from budget or user preferences
@@ -58,7 +58,7 @@ export function getEffectiveRolloverSettings(
   // Default values if nothing is set
   const defaults: ResolvedRolloverSettings = {
     enabled: true,
-    strategy: 'spread',
+    strategy: "spread",
     spreadPeriods: 3,
   };
 
@@ -132,7 +132,7 @@ export function calculateRolloverForPeriod(
     // OVERSPEND: Handle based on strategy
     const deficit = Math.abs(surplusDeficit);
 
-    if (rolloverSettings.strategy === 'immediate') {
+    if (rolloverSettings.strategy === "immediate") {
       // Immediate: Take full hit in next period
       rolledOverAmount = -deficit;
     } else {

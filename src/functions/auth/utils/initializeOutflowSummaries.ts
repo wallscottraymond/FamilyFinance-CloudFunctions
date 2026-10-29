@@ -1,5 +1,5 @@
-import * as admin from 'firebase-admin';
-import { PeriodType } from '../../../types';
+import * as admin from "firebase-admin";
+import { PeriodType } from "../../../types";
 
 const db = admin.firestore();
 const Timestamp = admin.firestore.Timestamp;
@@ -23,7 +23,7 @@ export async function initializeOutflowSummaries(userId: string): Promise<void> 
 
   for (const periodType of periodTypes) {
     const docId = `${userId}_outflowsummary_${periodType.toLowerCase()}`;
-    const docRef = db.collection('outflowSummaries').doc(docId);
+    const docRef = db.collection("outflowSummaries").doc(docId);
 
     // Check if document already exists
     const existingDoc = await docRef.get();
@@ -34,9 +34,9 @@ export async function initializeOutflowSummaries(userId: string): Promise<void> 
 
     const summary = {
       ownerId: userId,
-      ownerType: 'user',
+      ownerType: "user",
       periodType,
-      resourceType: 'outflow',
+      resourceType: "outflow",
       windowStart: Timestamp.fromDate(windowStart),
       windowEnd: Timestamp.fromDate(windowEnd),
       periods: [], // Empty initially
@@ -73,7 +73,7 @@ export async function initializeGroupOutflowSummaries(groupId: string): Promise<
 
   for (const periodType of periodTypes) {
     const docId = `${groupId}_outflowsummary_${periodType.toLowerCase()}`;
-    const docRef = db.collection('groupOutflowSummaries').doc(docId);
+    const docRef = db.collection("groupOutflowSummaries").doc(docId);
 
     // Check if document already exists
     const existingDoc = await docRef.get();
@@ -84,9 +84,9 @@ export async function initializeGroupOutflowSummaries(groupId: string): Promise<
 
     const summary = {
       ownerId: groupId,
-      ownerType: 'group',
+      ownerType: "group",
       periodType,
-      resourceType: 'outflow',
+      resourceType: "outflow",
       windowStart: Timestamp.fromDate(windowStart),
       windowEnd: Timestamp.fromDate(windowEnd),
       periods: [], // Empty initially

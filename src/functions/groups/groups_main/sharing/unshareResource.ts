@@ -11,11 +11,11 @@ import {
 
 // Map resource types to collection names
 const RESOURCE_COLLECTIONS: Record<string, string> = {
-  budget: 'budgets',
-  transaction: 'transactions',
-  outflow: 'outflows',
-  inflow: 'inflows',
-  rule: 'rules',
+  budget: "budgets",
+  transaction: "transactions",
+  outflow: "outflows",
+  inflow: "inflows",
+  rule: "rules",
 };
 
 /**
@@ -29,12 +29,12 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
   memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
-  console.log('[unshareResource] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[unshareResource] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
@@ -42,19 +42,19 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
 
     // Validate request data
     if (!resourceType || !RESOURCE_COLLECTIONS[resourceType]) {
-      throw new HttpsError('invalid-argument', 'Valid resourceType is required');
+      throw new HttpsError("invalid-argument", "Valid resourceType is required");
     }
 
-    if (!resourceId || typeof resourceId !== 'string') {
-      throw new HttpsError('invalid-argument', 'resourceId is required');
+    if (!resourceId || typeof resourceId !== "string") {
+      throw new HttpsError("invalid-argument", "resourceId is required");
     }
 
-    if (!targetType || (targetType !== 'group' && targetType !== 'user')) {
-      throw new HttpsError('invalid-argument', 'Valid targetType (group or user) is required');
+    if (!targetType || (targetType !== "group" && targetType !== "user")) {
+      throw new HttpsError("invalid-argument", "Valid targetType (group or user) is required");
     }
 
-    if (!targetId || typeof targetId !== 'string') {
-      throw new HttpsError('invalid-argument', 'targetId is required');
+    if (!targetId || typeof targetId !== "string") {
+      throw new HttpsError("invalid-argument", "targetId is required");
     }
 
     const collectionName = RESOURCE_COLLECTIONS[resourceType];
@@ -62,13 +62,13 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
     // Get the resource
     const resource = await getDocument<any>(collectionName, resourceId);
     if (!resource) {
-      throw new HttpsError('not-found', `${resourceType} not found`);
+      throw new HttpsError("not-found", `${resourceType} not found`);
     }
 
     // Check if caller is the owner
     const ownerId = resource.ownerId || resource.userId || resource.createdBy;
     if (ownerId !== callerUserId) {
-      throw new HttpsError('permission-denied', 'Only the resource owner can unshare resources');
+      throw new HttpsError("permission-denied", "Only the resource owner can unshare resources");
     }
 
     // Get current sharing configuration
@@ -84,7 +84,7 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
     );
 
     if (shareIndex === -1) {
-      throw new HttpsError('not-found', 'Share not found');
+      throw new HttpsError("not-found", "Share not found");
     }
 
     currentSharing.sharedWith.splice(shareIndex, 1);
@@ -96,7 +96,7 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
     };
 
     // If unsharing from a group, also remove from groupIds array
-    if (targetType === 'group') {
+    if (targetType === "group") {
       const currentGroupIds: string[] = resource.groupIds || [];
       updateData.groupIds = currentGroupIds.filter(id => id !== targetId);
     }
@@ -104,7 +104,7 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
     // Update the resource
     await updateDocument(collectionName, resourceId, updateData);
 
-    console.log('[unshareResource] Resource unshared successfully');
+    console.log("[unshareResource] Resource unshared successfully");
 
     return {
       success: true,
@@ -112,12 +112,12 @@ export const unshareResource = onCall<UnshareResourceRequest, Promise<UnshareRes
     };
 
   } catch (error: any) {
-    console.error('[unshareResource] Error:', error);
+    console.error("[unshareResource] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to unshare resource');
+    throw new HttpsError("internal", "Failed to unshare resource");
   }
 });

@@ -9,15 +9,15 @@
  * - Call without inflowId to regenerate for all user's inflows
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   InflowPeriod,
   SourcePeriod,
   PlaidRecurringFrequency
-} from '../../../../types';
-import { calculateAllOccurrencesInPeriod } from '../utils/calculateAllOccurrencesInPeriod';
+} from "../../../../types";
+import { calculateAllOccurrencesInPeriod } from "../utils/calculateAllOccurrencesInPeriod";
 
 interface RegenerateRequest {
   inflowId?: string;  // Optional - if omitted, regenerates all user's inflows
@@ -32,14 +32,14 @@ interface RegenerateResult {
 
 export const regenerateInflowPeriods = onCall(
   {
-    region: 'us-central1',
-    memory: '512MiB',
+    region: "us-central1",
+    memory: "512MiB",
     timeoutSeconds: 120,
   },
   async (request): Promise<RegenerateResult> => {
     // Verify authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const userId = request.auth.uid;
@@ -53,24 +53,24 @@ export const regenerateInflowPeriods = onCall(
       errors: []
     };
 
-    console.log(`[regenerateInflowPeriods] Starting for user: ${userId}, inflowId: ${inflowId || 'ALL'}`);
+    console.log(`[regenerateInflowPeriods] Starting for user: ${userId}, inflowId: ${inflowId || "ALL"}`);
 
     try {
       // Get inflows to process
-      let inflowsQuery = db.collection('inflows')
-        .where('ownerId', '==', userId)
-        .where('isActive', '==', true);
+      let inflowsQuery = db.collection("inflows")
+        .where("ownerId", "==", userId)
+        .where("isActive", "==", true);
 
       if (inflowId) {
         // Fetch specific inflow
-        const inflowDoc = await db.collection('inflows').doc(inflowId).get();
+        const inflowDoc = await db.collection("inflows").doc(inflowId).get();
         if (!inflowDoc.exists) {
-          throw new HttpsError('not-found', `Inflow ${inflowId} not found`);
+          throw new HttpsError("not-found", `Inflow ${inflowId} not found`);
         }
 
         const inflowData = inflowDoc.data();
         if (inflowData?.ownerId !== userId) {
-          throw new HttpsError('permission-denied', 'You can only regenerate your own inflows');
+          throw new HttpsError("permission-denied", "You can only regenerate your own inflows");
         }
 
         await processInflow(db, inflowDoc.id, inflowData, result);
@@ -84,15 +84,15 @@ export const regenerateInflowPeriods = onCall(
         }
       }
 
-      console.log(`[regenerateInflowPeriods] Complete:`, result);
+      console.log("[regenerateInflowPeriods] Complete:", result);
       return result;
 
     } catch (error: any) {
-      console.error('[regenerateInflowPeriods] Error:', error);
+      console.error("[regenerateInflowPeriods] Error:", error);
       if (error instanceof HttpsError) {
         throw error;
       }
-      throw new HttpsError('internal', error.message || 'Failed to regenerate inflow periods');
+      throw new HttpsError("internal", error.message || "Failed to regenerate inflow periods");
     }
   }
 );
@@ -120,9 +120,9 @@ async function processInflow(
     console.log(`[regenerateInflowPeriods] Date range: ${startDate.toISOString()} (inflow firstDate) to ${endDate.toISOString()} (12 months forward)`);
 
     // Get source periods in range
-    const sourcePeriodsQuery = db.collection('source_periods')
-      .where('startDate', '>=', Timestamp.fromDate(startDate))
-      .where('startDate', '<=', Timestamp.fromDate(endDate));
+    const sourcePeriodsQuery = db.collection("source_periods")
+      .where("startDate", ">=", Timestamp.fromDate(startDate))
+      .where("startDate", "<=", Timestamp.fromDate(endDate));
 
     const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
@@ -145,7 +145,7 @@ async function processInflow(
       const periodId = `${inflowId}_${sourcePeriod.id}`;
 
       // Check if period already exists
-      const existingPeriodDoc = await db.collection('inflow_periods').doc(periodId).get();
+      const existingPeriodDoc = await db.collection("inflow_periods").doc(periodId).get();
 
       // Calculate period amounts
       const periodCalc = calculatePeriodAmounts(sourcePeriod, cycleInfo, inflowData);
@@ -177,7 +177,7 @@ async function processInflow(
         createdAt: existingPeriodDoc.exists ? existingPeriodDoc.data()?.createdAt : now,
         updatedAt: now,
         lastCalculated: now,
-        currency: inflowData.currency || 'USD',
+        currency: inflowData.currency || "USD",
         cycleDays: cycleInfo.cycleDays,
         cycleStartDate: cycleInfo.cycleStartDate,
         cycleEndDate: cycleInfo.cycleEndDate,
@@ -190,8 +190,8 @@ async function processInflow(
         isReceiptPeriod: occurrences.numberOfOccurrences > 0,
         internalDetailedCategory: inflowData.internalDetailedCategory || null,
         internalPrimaryCategory: inflowData.internalPrimaryCategory || null,
-        plaidPrimaryCategory: inflowData.plaidPrimaryCategory || 'INCOME',
-        plaidDetailedCategory: inflowData.plaidDetailedCategory || '',
+        plaidPrimaryCategory: inflowData.plaidPrimaryCategory || "INCOME",
+        plaidDetailedCategory: inflowData.plaidDetailedCategory || "",
         isActive: true,
         isHidden: false,
         merchant: inflowData.merchantName,
@@ -202,10 +202,10 @@ async function processInflow(
         predictedNextDate: inflowData.predictedNextDate || null,
         rules: [],
         tags: inflowData.tags || [],
-        type: inflowData.type || 'income',
+        type: inflowData.type || "income",
         note: null,
         userCustomName: inflowData.userCustomName || null,
-        source: inflowData.source || 'plaid',
+        source: inflowData.source || "plaid",
         transactionIds: [],
         numberOfOccurrencesInPeriod: occurrences.numberOfOccurrences,
         numberOfOccurrencesPaid: 0,
@@ -220,7 +220,7 @@ async function processInflow(
         nextUnpaidDueDate: occurrences.numberOfOccurrences > 0 ? occurrences.occurrenceDueDates[0] : null
       };
 
-      const docRef = db.collection('inflow_periods').doc(periodId);
+      const docRef = db.collection("inflow_periods").doc(periodId);
 
       if (existingPeriodDoc.exists) {
         batch.update(docRef, inflowPeriodDoc as any);
@@ -254,30 +254,30 @@ async function processInflow(
 
 function calculatePaymentCycle(inflow: any) {
   const incomeAmount = Math.abs(
-    typeof inflow.averageAmount === 'number'
+    typeof inflow.averageAmount === "number"
       ? inflow.averageAmount
       : inflow.averageAmount?.amount || 0
   );
 
   let cycleDays: number;
   switch (inflow.frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      cycleDays = 7;
-      break;
-    case PlaidRecurringFrequency.BIWEEKLY:
-      cycleDays = 14;
-      break;
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      cycleDays = 15;
-      break;
-    case PlaidRecurringFrequency.MONTHLY:
-      cycleDays = 30;
-      break;
-    case PlaidRecurringFrequency.ANNUALLY:
-      cycleDays = 365;
-      break;
-    default:
-      cycleDays = 30;
+  case PlaidRecurringFrequency.WEEKLY:
+    cycleDays = 7;
+    break;
+  case PlaidRecurringFrequency.BIWEEKLY:
+    cycleDays = 14;
+    break;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+    cycleDays = 15;
+    break;
+  case PlaidRecurringFrequency.MONTHLY:
+    cycleDays = 30;
+    break;
+  case PlaidRecurringFrequency.ANNUALLY:
+    cycleDays = 365;
+    break;
+  default:
+    cycleDays = 30;
   }
 
   const dailyRate = incomeAmount / cycleDays;

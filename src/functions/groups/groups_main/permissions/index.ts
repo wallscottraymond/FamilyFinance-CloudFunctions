@@ -6,7 +6,7 @@
  */
 
 // Check if a user has access to a specific resource
-export { checkUserResourceAccess } from './checkUserResourceAccess';
+export { checkUserResourceAccess } from "./checkUserResourceAccess";
 
 // Get all resources a user can access
-export { getUserAccessibleResources } from './getUserAccessibleResources';
+export { getUserAccessibleResources } from "./getUserAccessibleResources";

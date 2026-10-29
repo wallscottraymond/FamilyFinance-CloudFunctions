@@ -9,8 +9,8 @@
  * - Amount allocation for each period type
  */
 
-import { BudgetPeriod, PeriodType } from '../../../types';
-import { calculatePeriodAllocatedAmount } from '../utils/calculatePeriodAllocatedAmount';
+import { BudgetPeriod, PeriodType } from "../../../types";
+import { calculatePeriodAllocatedAmount } from "../utils/calculatePeriodAllocatedAmount";
 import {
   roundToCents,
   createTimestamp,
@@ -19,26 +19,26 @@ import {
   createMonthlySourcePeriods,
   createBiMonthlySourcePeriods,
   createWeeklySourcePeriods,
-} from './helpers/budgetTestHelpers';
+} from "./helpers/budgetTestHelpers";
 
-describe('Budget Period Generation', () => {
+describe("Budget Period Generation", () => {
   // ============================================================================
   // PERIOD COUNT VALIDATION
   // ============================================================================
 
-  describe('Period Count Validation', () => {
-    describe('Single Month Budget', () => {
-      it('should generate 1 monthly period for single month budget', () => {
+  describe("Period Count Validation", () => {
+    describe("Single Month Budget", () => {
+      it("should generate 1 monthly period for single month budget", () => {
         const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 1);
         expect(monthlyPeriods).toHaveLength(1);
       });
 
-      it('should generate 2 bi-monthly periods for single month budget', () => {
+      it("should generate 2 bi-monthly periods for single month budget", () => {
         const biMonthlyPeriods = createBiMonthlySourcePeriods(2025, 1, 2025, 1);
         expect(biMonthlyPeriods).toHaveLength(2);
       });
 
-      it('should generate 4-5 weekly periods for single month budget', () => {
+      it("should generate 4-5 weekly periods for single month budget", () => {
         // January 2025 spans ~5 weeks
         const weeklyPeriods = createWeeklySourcePeriods(
           new Date(2025, 0, 1),
@@ -51,18 +51,18 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Full Year Budget', () => {
-      it('should generate 12 monthly periods for full year budget', () => {
+    describe("Full Year Budget", () => {
+      it("should generate 12 monthly periods for full year budget", () => {
         const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 12);
         expect(monthlyPeriods).toHaveLength(12);
       });
 
-      it('should generate 24 bi-monthly periods for full year budget', () => {
+      it("should generate 24 bi-monthly periods for full year budget", () => {
         const biMonthlyPeriods = createBiMonthlySourcePeriods(2025, 1, 2025, 12);
         expect(biMonthlyPeriods).toHaveLength(24);
       });
 
-      it('should generate approximately 52 weekly periods for full year budget', () => {
+      it("should generate approximately 52 weekly periods for full year budget", () => {
         const weeklyPeriods = createWeeklySourcePeriods(
           new Date(2025, 0, 1),
           new Date(2025, 11, 31)
@@ -74,18 +74,18 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Quarter Budget', () => {
-      it('should generate 3 monthly periods for Q1 budget', () => {
+    describe("Quarter Budget", () => {
+      it("should generate 3 monthly periods for Q1 budget", () => {
         const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 3);
         expect(monthlyPeriods).toHaveLength(3);
       });
 
-      it('should generate 6 bi-monthly periods for Q1 budget', () => {
+      it("should generate 6 bi-monthly periods for Q1 budget", () => {
         const biMonthlyPeriods = createBiMonthlySourcePeriods(2025, 1, 2025, 3);
         expect(biMonthlyPeriods).toHaveLength(6);
       });
 
-      it('should generate approximately 13 weekly periods for Q1 budget', () => {
+      it("should generate approximately 13 weekly periods for Q1 budget", () => {
         const weeklyPeriods = createWeeklySourcePeriods(
           new Date(2025, 0, 1),
           new Date(2025, 2, 31)
@@ -97,8 +97,8 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Partial Month Budget', () => {
-      it('should generate periods for Feb 1 - March 19', () => {
+    describe("Partial Month Budget", () => {
+      it("should generate periods for Feb 1 - March 19", () => {
         // Monthly: 2 (Feb full, March partial)
         const monthlyPeriods = [
           createMockSourcePeriod({
@@ -170,12 +170,12 @@ describe('Budget Period Generation', () => {
   // PERIOD GENERATION FOR DIFFERENT BUDGET TYPES
   // ============================================================================
 
-  describe('Period Generation by Budget Type', () => {
-    describe('Weekly Budget', () => {
-      it('should create all period types for weekly budget', () => {
+  describe("Period Generation by Budget Type", () => {
+    describe("Weekly Budget", () => {
+      it("should create all period types for weekly budget", () => {
         // Budget definition - periods are generated for all types regardless of budget period
         const budget = createMockBudget({
-          name: 'Weekly Groceries',
+          name: "Weekly Groceries",
           amount: 150,
           period: BudgetPeriod.WEEKLY,
           startDate: createTimestamp(2025, 1, 1),
@@ -197,11 +197,11 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Monthly Budget', () => {
-      it('should create all period types for monthly budget', () => {
+    describe("Monthly Budget", () => {
+      it("should create all period types for monthly budget", () => {
         // Budget definition - periods are generated for all types regardless of budget period
         const budget = createMockBudget({
-          name: 'Monthly Entertainment',
+          name: "Monthly Entertainment",
           amount: 200,
           period: BudgetPeriod.MONTHLY,
           startDate: createTimestamp(2025, 1, 1),
@@ -223,11 +223,11 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Custom (Bi-Monthly) Budget', () => {
-      it('should create all period types for bi-monthly budget', () => {
+    describe("Custom (Bi-Monthly) Budget", () => {
+      it("should create all period types for bi-monthly budget", () => {
         // Budget definition - periods are generated for all types regardless of budget period
         const budget = createMockBudget({
-          name: 'Bi-Monthly Transportation',
+          name: "Bi-Monthly Transportation",
           amount: 250,
           period: BudgetPeriod.CUSTOM,
           startDate: createTimestamp(2025, 1, 1),
@@ -254,9 +254,9 @@ describe('Budget Period Generation', () => {
   // PERIOD AMOUNT ALLOCATION
   // ============================================================================
 
-  describe('Period Amount Allocation', () => {
-    describe('Monthly Budget Amount Allocation', () => {
-      it('should allocate full amount to monthly periods', () => {
+  describe("Period Amount Allocation", () => {
+    describe("Monthly Budget Amount Allocation", () => {
+      it("should allocate full amount to monthly periods", () => {
         const budgetAmount = 500;
         const monthlyPeriod = createMockSourcePeriod({
           type: PeriodType.MONTHLY,
@@ -275,7 +275,7 @@ describe('Budget Period Generation', () => {
         expect(allocated).toBe(500);
       });
 
-      it('should allocate proportional amount to bi-monthly periods', () => {
+      it("should allocate proportional amount to bi-monthly periods", () => {
         const budgetAmount = 500;
 
         const firstHalf = createMockSourcePeriod({
@@ -311,7 +311,7 @@ describe('Budget Period Generation', () => {
         expect(Math.abs(firstAllocated + secondAllocated - budgetAmount)).toBeLessThan(0.01);
       });
 
-      it('should allocate proportional amount to weekly periods', () => {
+      it("should allocate proportional amount to weekly periods", () => {
         const budgetAmount = 100;
         const weeklyPeriod = createMockSourcePeriod({
           type: PeriodType.WEEKLY,
@@ -335,8 +335,8 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Bi-Monthly Budget Amount Allocation', () => {
-      it('should allocate full amount to bi-monthly periods of same half', () => {
+    describe("Bi-Monthly Budget Amount Allocation", () => {
+      it("should allocate full amount to bi-monthly periods of same half", () => {
         const budgetAmount = 100;
         const biMonthlyPeriod = createMockSourcePeriod({
           type: PeriodType.BI_MONTHLY,
@@ -357,8 +357,8 @@ describe('Budget Period Generation', () => {
       });
     });
 
-    describe('Weekly Budget Amount Allocation', () => {
-      it('should allocate full amount to weekly periods', () => {
+    describe("Weekly Budget Amount Allocation", () => {
+      it("should allocate full amount to weekly periods", () => {
         const budgetAmount = 150;
         const weeklyPeriod = createMockSourcePeriod({
           type: PeriodType.WEEKLY,
@@ -377,7 +377,7 @@ describe('Budget Period Generation', () => {
         expect(allocated).toBe(150);
       });
 
-      it('should allocate proportional amount to monthly periods', () => {
+      it("should allocate proportional amount to monthly periods", () => {
         const budgetAmount = 100; // Per week
         const monthlyPeriod = createMockSourcePeriod({
           type: PeriodType.MONTHLY,
@@ -406,11 +406,11 @@ describe('Budget Period Generation', () => {
   // PERIOD INHERITANCE
   // ============================================================================
 
-  describe('Period Inheritance from Parent Budget', () => {
-    it('should inherit userId from budget', () => {
-      const userId = 'test_user_001';
+  describe("Period Inheritance from Parent Budget", () => {
+    it("should inherit userId from budget", () => {
+      const userId = "test_user_001";
       const budget = createMockBudget({
-        name: 'Test',
+        name: "Test",
         amount: 100,
         period: BudgetPeriod.MONTHLY,
         startDate: createTimestamp(2025, 1, 1),
@@ -422,10 +422,10 @@ describe('Budget Period Generation', () => {
       expect(budget.ownerId).toBe(userId);
     });
 
-    it('should inherit categoryIds from budget', () => {
-      const categoryIds = ['FOOD_AND_DRINK_GROCERIES', 'FOOD_AND_DRINK_RESTAURANTS'];
+    it("should inherit categoryIds from budget", () => {
+      const categoryIds = ["FOOD_AND_DRINK_GROCERIES", "FOOD_AND_DRINK_RESTAURANTS"];
       const budget = createMockBudget({
-        name: 'Food',
+        name: "Food",
         amount: 500,
         period: BudgetPeriod.MONTHLY,
         startDate: createTimestamp(2025, 1, 1),
@@ -435,16 +435,16 @@ describe('Budget Period Generation', () => {
       expect(budget.categoryIds).toEqual(categoryIds);
     });
 
-    it('should use budget name for period budgetName', () => {
+    it("should use budget name for period budgetName", () => {
       const budget = createMockBudget({
-        name: 'Groceries Budget',
+        name: "Groceries Budget",
         amount: 500,
         period: BudgetPeriod.MONTHLY,
         startDate: createTimestamp(2025, 1, 1),
       });
 
       // Budget periods should have budgetName = budget.name
-      expect(budget.name).toBe('Groceries Budget');
+      expect(budget.name).toBe("Groceries Budget");
     });
   });
 
@@ -452,8 +452,8 @@ describe('Budget Period Generation', () => {
   // DATE RANGE HANDLING
   // ============================================================================
 
-  describe('Date Range Handling', () => {
-    it('should generate periods for exact date range', () => {
+  describe("Date Range Handling", () => {
+    it("should generate periods for exact date range", () => {
       // Budget: Feb 1 - March 31
       const startDate = new Date(2025, 1, 1);
       const endDate = new Date(2025, 2, 31);
@@ -467,7 +467,7 @@ describe('Budget Period Generation', () => {
       expect(weeklyPeriods.length).toBeGreaterThanOrEqual(8);
     });
 
-    it('should handle budget starting mid-month', () => {
+    it("should handle budget starting mid-month", () => {
       // Budget starts Jan 15
       const startDate = new Date(2025, 0, 15);
       const endDate = new Date(2025, 1, 28);
@@ -479,7 +479,7 @@ describe('Budget Period Generation', () => {
       expect(weeklyPeriods.length).toBeGreaterThan(0);
     });
 
-    it('should handle budget ending mid-month', () => {
+    it("should handle budget ending mid-month", () => {
       // Budget ends April 13
       const startDate = new Date(2025, 1, 1);
       const endDate = new Date(2025, 3, 13);
@@ -496,14 +496,14 @@ describe('Budget Period Generation', () => {
   // RECURRING VS LIMITED BUDGET PERIODS
   // ============================================================================
 
-  describe('Recurring vs Limited Budget Periods', () => {
-    it('should generate 12 months of periods for recurring budget', () => {
+  describe("Recurring vs Limited Budget Periods", () => {
+    it("should generate 12 months of periods for recurring budget", () => {
       // Recurring budgets get 1 year of periods
       const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 12);
       expect(monthlyPeriods).toHaveLength(12);
     });
 
-    it('should generate only until end date for limited budget', () => {
+    it("should generate only until end date for limited budget", () => {
       // Limited budget: Jan 1 - March 31 (3 months only)
       const monthlyPeriods = createMonthlySourcePeriods(2025, 1, 2025, 3);
       expect(monthlyPeriods).toHaveLength(3);
@@ -514,23 +514,23 @@ describe('Budget Period Generation', () => {
   // PERIOD ID GENERATION
   // ============================================================================
 
-  describe('Period ID Generation', () => {
-    it('should generate correct monthly period IDs', () => {
+  describe("Period ID Generation", () => {
+    it("should generate correct monthly period IDs", () => {
       const periods = createMonthlySourcePeriods(2025, 1, 2025, 3);
 
-      expect(periods[0].id).toContain('2025-M01');
-      expect(periods[1].id).toContain('2025-M02');
-      expect(periods[2].id).toContain('2025-M03');
+      expect(periods[0].id).toContain("2025-M01");
+      expect(periods[1].id).toContain("2025-M02");
+      expect(periods[2].id).toContain("2025-M03");
     });
 
-    it('should generate correct bi-monthly period IDs', () => {
+    it("should generate correct bi-monthly period IDs", () => {
       const periods = createBiMonthlySourcePeriods(2025, 1, 2025, 1);
 
-      expect(periods[0].id).toContain('2025-BM01-1');
-      expect(periods[1].id).toContain('2025-BM01-2');
+      expect(periods[0].id).toContain("2025-BM01-1");
+      expect(periods[1].id).toContain("2025-BM01-2");
     });
 
-    it('should generate correct weekly period IDs', () => {
+    it("should generate correct weekly period IDs", () => {
       const periods = createWeeklySourcePeriods(
         new Date(2025, 0, 5), // First Sunday of 2025
         new Date(2025, 0, 18)
@@ -539,7 +539,7 @@ describe('Budget Period Generation', () => {
       // Week IDs should be sequential
       expect(periods.length).toBeGreaterThan(0);
       periods.forEach((period, index) => {
-        expect(period.id).toContain('W');
+        expect(period.id).toContain("W");
       });
     });
   });

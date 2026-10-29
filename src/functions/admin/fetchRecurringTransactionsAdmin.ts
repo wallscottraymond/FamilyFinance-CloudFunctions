@@ -8,16 +8,16 @@
  * Remove or secure before production deployment.
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
-import { corsMiddleware } from '../../middleware/cors';
-import { db } from '../../index';
+import { onRequest } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
+import { corsMiddleware } from "../../middleware/cors";
+import { db } from "../../index";
 import { 
   PlaidApi, 
   Configuration, 
   PlaidEnvironments, 
   TransactionsRecurringGetRequest
-} from 'plaid';
+} from "plaid";
 import {
   RecurringIncome,
   RecurringOutflow,
@@ -26,20 +26,20 @@ import {
   PlaidRecurringFrequency,
   PlaidRecurringAmount,
   PlaidItem
-} from '../../types';
-import { Timestamp } from 'firebase-admin/firestore';
-import { getAccessToken } from '../../utils/encryption';
+} from "../../types";
+import { Timestamp } from "firebase-admin/firestore";
+import { getAccessToken } from "../../utils/encryption";
 
 // Define secrets for Plaid configuration
-const plaidClientId = defineSecret('PLAID_CLIENT_ID');
-const plaidSecret = defineSecret('PLAID_SECRET');
+const plaidClientId = defineSecret("PLAID_CLIENT_ID");
+const plaidSecret = defineSecret("PLAID_SECRET");
 
 // Configure Plaid client
 let plaidClient: PlaidApi | null = null;
 
 function getPlaidClient(): PlaidApi {
   if (!plaidClient) {
-    console.log('Creating Plaid client for sandbox environment');
+    console.log("Creating Plaid client for sandbox environment");
     
     const configuration = new Configuration({
       basePath: PlaidEnvironments.sandbox,
@@ -56,7 +56,7 @@ function getPlaidClient(): PlaidApi {
  */
 export const fetchRecurringTransactionsAdmin = onRequest(
   {
-    memory: '1GiB',
+    memory: "1GiB",
     timeoutSeconds: 300,
     cors: true,
     secrets: [plaidClientId, plaidSecret],
@@ -68,21 +68,21 @@ export const fetchRecurringTransactionsAdmin = onRequest(
         corsMiddleware(req, res, async () => {
           try {
             // Only allow POST requests
-            if (req.method !== 'POST') {
+            if (req.method !== "POST") {
               res.status(405).json({
                 success: false,
                 error: {
-                  code: 'METHOD_NOT_ALLOWED',
-                  message: 'Only POST requests are allowed',
+                  code: "METHOD_NOT_ALLOWED",
+                  message: "Only POST requests are allowed",
                 },
               });
               return resolve();
             }
 
-            console.log('Starting admin fetch of recurring transactions for all users');
+            console.log("Starting admin fetch of recurring transactions for all users");
 
             // Get all active Plaid items across all users
-            const allUsersSnapshot = await db.collection('users').get();
+            const allUsersSnapshot = await db.collection("users").get();
             
             let totalUsersProcessed = 0;
             let totalItemsProcessed = 0;
@@ -103,10 +103,10 @@ export const fetchRecurringTransactionsAdmin = onRequest(
               console.log(`Processing user: ${userData.email || userId}`);
               
               // Get user's Plaid items
-              const itemsSnapshot = await db.collection('users')
+              const itemsSnapshot = await db.collection("users")
                 .doc(userId)
-                .collection('plaidItems')
-                .where('isActive', '==', true)
+                .collection("plaidItems")
+                .where("isActive", "==", true)
                 .get();
 
               if (itemsSnapshot.empty) {
@@ -145,7 +145,7 @@ export const fetchRecurringTransactionsAdmin = onRequest(
                 
                 userSummary.push({
                   userId,
-                  email: userData.email || 'No email',
+                  email: userData.email || "No email",
                   outflows: userOutflows,
                   income: userIncome,
                   items: userItems,
@@ -167,7 +167,7 @@ export const fetchRecurringTransactionsAdmin = onRequest(
               message: `Admin fetch completed: Processed ${totalUsersProcessed} users, ${totalItemsProcessed} items`,
             });
 
-            console.log(`Admin recurring transactions fetch completed successfully`, {
+            console.log("Admin recurring transactions fetch completed successfully", {
               totalUsersProcessed,
               totalItemsProcessed,
               totalOutflowsCreated,
@@ -176,14 +176,14 @@ export const fetchRecurringTransactionsAdmin = onRequest(
 
             resolve();
           } catch (error) {
-            console.error('Error in admin fetch recurring transactions:', error);
+            console.error("Error in admin fetch recurring transactions:", error);
             
             // Handle general errors
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
             res.status(500).json({
               success: false,
               error: {
-                code: 'INTERNAL_ERROR',
+                code: "INTERNAL_ERROR",
                 message: errorMessage,
               },
             });
@@ -192,12 +192,12 @@ export const fetchRecurringTransactionsAdmin = onRequest(
           }
         });
       } catch (error) {
-        console.error('Unhandled error in fetchRecurringTransactionsAdmin:', error);
+        console.error("Unhandled error in fetchRecurringTransactionsAdmin:", error);
         res.status(500).json({
           success: false,
           error: {
-            code: 'INTERNAL_ERROR',
-            message: 'An unexpected error occurred',
+            code: "INTERNAL_ERROR",
+            message: "An unexpected error occurred",
           },
         });
         resolve();
@@ -223,9 +223,9 @@ async function processItemRecurringTransactionsAdmin(
     console.log(`    Processing recurring transactions for item: ${itemData.itemId}`);
 
     // Get accounts for this item to pass to Plaid API
-    const accountsSnapshot = await db.collection('accounts')
-      .where('itemId', '==', itemData.itemId)
-      .where('isActive', '==', true)
+    const accountsSnapshot = await db.collection("accounts")
+      .where("itemId", "==", itemData.itemId)
+      .where("isActive", "==", true)
       .get();
 
     const allAccountIds = accountsSnapshot.docs.map(doc => doc.data().plaidAccountId || doc.data().accountId);
@@ -243,7 +243,7 @@ async function processItemRecurringTransactionsAdmin(
       };
     }
 
-    console.log(`    Using account IDs for Plaid API:`, allAccountIds);
+    console.log("    Using account IDs for Plaid API:", allAccountIds);
 
     // Prepare Plaid API request
     // SECURITY FIX: Properly decrypt access token (handles both encrypted and legacy plaintext)
@@ -256,18 +256,18 @@ async function processItemRecurringTransactionsAdmin(
       account_ids: allAccountIds, // Use specific account IDs instead of empty array
     };
 
-    console.log(`    Calling Plaid transactionsRecurringGet with account IDs:`, request.account_ids);
+    console.log("    Calling Plaid transactionsRecurringGet with account IDs:", request.account_ids);
 
     const client = getPlaidClient();
     const response = await client.transactionsRecurringGet(request);
 
     if (!response.data) {
-      throw new Error('No data returned from Plaid recurring transactions API');
+      throw new Error("No data returned from Plaid recurring transactions API");
     }
 
     const { inflow_streams, outflow_streams } = response.data;
     
-    console.log(`    Retrieved recurring transactions from Plaid`, {
+    console.log("    Retrieved recurring transactions from Plaid", {
       itemId: itemData.itemId,
       inflowStreams: inflow_streams?.length || 0,
       outflowStreams: outflow_streams?.length || 0,
@@ -332,7 +332,7 @@ async function processRecurringStreamsAdmin(
   let modified = 0;
 
   // Determine target collection based on stream type
-  const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? 'inflow' : 'outflows';
+  const targetCollection = streamType === PlaidRecurringTransactionStreamType.INFLOW ? "inflow" : "outflows";
   
   console.log(`    Processing ${streams.length} ${streamType} streams to '${targetCollection}' collection`);
 
@@ -340,8 +340,8 @@ async function processRecurringStreamsAdmin(
     try {
       // Check if stream already exists in the target collection
       const existingStreamQuery = await db.collection(targetCollection)
-        .where('streamId', '==', stream.stream_id)
-        .where('itemId', '==', itemData.itemId)
+        .where("streamId", "==", stream.stream_id)
+        .where("itemId", "==", itemData.itemId)
         .limit(1)
         .get();
 
@@ -362,20 +362,20 @@ async function processRecurringStreamsAdmin(
           ownerId: itemData.userId,
           createdBy: itemData.userId,
           sharedWith: [],
-          visibility: 'private' as const,
+          visibility: "private" as const,
           permissions: {}
         },
 
         // === NESTED CATEGORIES ===
         categories: {
-          primary: stream.category?.[0] || 'other',
+          primary: stream.category?.[0] || "other",
           secondary: stream.category?.[1],
           tags: []
         },
 
         // === NESTED METADATA ===
         metadata: {
-          source: 'plaid' as const,
+          source: "plaid" as const,
           createdBy: itemData.userId,
           updatedBy: itemData.userId,
           updatedAt: Timestamp.now(),
@@ -392,13 +392,13 @@ async function processRecurringStreamsAdmin(
         // === NESTED RELATIONSHIPS ===
         relationships: {
           parentId: itemData.itemId,
-          parentType: 'plaid_item' as const,
+          parentType: "plaid_item" as const,
           linkedIds: [],
           relatedDocs: []
         },
 
         // === RECURRING TRANSACTION FIELDS ===
-        description: stream.description || stream.merchant_name || 'Unknown',
+        description: stream.description || stream.merchant_name || "Unknown",
         merchantName: stream.merchant_name || null,
         averageAmount: mapPlaidAmount(stream.average_amount),
         lastAmount: mapPlaidAmount(stream.last_amount),
@@ -419,7 +419,7 @@ async function processRecurringStreamsAdmin(
           isRegularSalary: isLikelySalary(stream.description, stream.merchant_name),
           employerName: stream.merchant_name || undefined,
           taxable: true, // Default to taxable, user can modify
-        } as Omit<RecurringIncome, 'id' | 'createdAt' | 'updatedAt'>;
+        } as Omit<RecurringIncome, "id" | "createdAt" | "updatedAt">;
       } else {
         // Add outflow-specific fields
         documentData = {
@@ -429,7 +429,7 @@ async function processRecurringStreamsAdmin(
           merchantCategory: stream.personal_finance_category?.primary || undefined,
           isCancellable: isCancellableExpense(stream.category, stream.description),
           reminderDays: getDefaultReminderDays(stream.category),
-        } as Omit<RecurringOutflow, 'id' | 'createdAt' | 'updatedAt'>;
+        } as Omit<RecurringOutflow, "id" | "createdAt" | "updatedAt">;
       }
 
       if (existingStreamQuery.empty) {
@@ -453,15 +453,15 @@ async function processRecurringStreamsAdmin(
           description: documentData.description,
           merchantName: documentData.merchantName,
           categories: documentData.categories,
-          'metadata.plaidPersonalFinanceCategory': documentData.metadata.plaidPersonalFinanceCategory,
+          "metadata.plaidPersonalFinanceCategory": documentData.metadata.plaidPersonalFinanceCategory,
           averageAmount: documentData.averageAmount,
           lastAmount: documentData.lastAmount,
           frequency: documentData.frequency,
           firstDate: documentData.firstDate,
           lastDate: documentData.lastDate,
-          'metadata.lastSyncedAt': documentData.metadata.lastSyncedAt,
-          'metadata.syncVersion': (existingData.metadata?.syncVersion || 0) + 1,
-          'metadata.updatedAt': Timestamp.now(),
+          "metadata.lastSyncedAt": documentData.metadata.lastSyncedAt,
+          "metadata.syncVersion": (existingData.metadata?.syncVersion || 0) + 1,
+          "metadata.updatedAt": Timestamp.now(),
           updatedAt: Timestamp.now(),
         };
 
@@ -482,29 +482,29 @@ async function processRecurringStreamsAdmin(
 // Utility functions (copied from original file)
 function mapPlaidRecurringStatus(status: string): PlaidRecurringTransactionStatus {
   switch (status?.toUpperCase()) {
-    case 'MATURE':
-      return PlaidRecurringTransactionStatus.MATURE;
-    case 'EARLY_DETECTION':
-      return PlaidRecurringTransactionStatus.EARLY_DETECTION;
-    default:
-      return PlaidRecurringTransactionStatus.EARLY_DETECTION;
+  case "MATURE":
+    return PlaidRecurringTransactionStatus.MATURE;
+  case "EARLY_DETECTION":
+    return PlaidRecurringTransactionStatus.EARLY_DETECTION;
+  default:
+    return PlaidRecurringTransactionStatus.EARLY_DETECTION;
   }
 }
 
 function mapPlaidFrequency(frequency: string): PlaidRecurringFrequency {
   switch (frequency?.toUpperCase()) {
-    case 'WEEKLY':
-      return PlaidRecurringFrequency.WEEKLY;
-    case 'BIWEEKLY':
-      return PlaidRecurringFrequency.BIWEEKLY;
-    case 'SEMI_MONTHLY':
-      return PlaidRecurringFrequency.SEMI_MONTHLY;
-    case 'MONTHLY':
-      return PlaidRecurringFrequency.MONTHLY;
-    case 'ANNUALLY':
-      return PlaidRecurringFrequency.ANNUALLY;
-    default:
-      return PlaidRecurringFrequency.UNKNOWN;
+  case "WEEKLY":
+    return PlaidRecurringFrequency.WEEKLY;
+  case "BIWEEKLY":
+    return PlaidRecurringFrequency.BIWEEKLY;
+  case "SEMI_MONTHLY":
+    return PlaidRecurringFrequency.SEMI_MONTHLY;
+  case "MONTHLY":
+    return PlaidRecurringFrequency.MONTHLY;
+  case "ANNUALLY":
+    return PlaidRecurringFrequency.ANNUALLY;
+  default:
+    return PlaidRecurringFrequency.UNKNOWN;
   }
 }
 
@@ -516,70 +516,70 @@ function mapPlaidAmount(amount: any): PlaidRecurringAmount {
   };
 }
 
-function categorizeIncomeType(category: string[], description: string): 'salary' | 'dividend' | 'interest' | 'rental' | 'freelance' | 'bonus' | 'other' {
-  const categoryStr = category.join(' ').toLowerCase();
+function categorizeIncomeType(category: string[], description: string): "salary" | "dividend" | "interest" | "rental" | "freelance" | "bonus" | "other" {
+  const categoryStr = category.join(" ").toLowerCase();
   const descStr = description.toLowerCase();
   
-  if (categoryStr.includes('payroll') || descStr.includes('salary') || descStr.includes('payroll')) {
-    return 'salary';
+  if (categoryStr.includes("payroll") || descStr.includes("salary") || descStr.includes("payroll")) {
+    return "salary";
   }
-  if (categoryStr.includes('dividend') || descStr.includes('dividend')) {
-    return 'dividend';
+  if (categoryStr.includes("dividend") || descStr.includes("dividend")) {
+    return "dividend";
   }
-  if (categoryStr.includes('interest') || descStr.includes('interest')) {
-    return 'interest';
+  if (categoryStr.includes("interest") || descStr.includes("interest")) {
+    return "interest";
   }
-  if (categoryStr.includes('rental') || descStr.includes('rent')) {
-    return 'rental';
+  if (categoryStr.includes("rental") || descStr.includes("rent")) {
+    return "rental";
   }
-  if (descStr.includes('freelance') || descStr.includes('contractor')) {
-    return 'freelance';
+  if (descStr.includes("freelance") || descStr.includes("contractor")) {
+    return "freelance";
   }
-  if (descStr.includes('bonus')) {
-    return 'bonus';
+  if (descStr.includes("bonus")) {
+    return "bonus";
   }
-  return 'other';
+  return "other";
 }
 
 function isLikelySalary(description: string, merchantName?: string): boolean {
-  const text = `${description} ${merchantName || ''}`.toLowerCase();
-  return text.includes('payroll') || text.includes('salary') || text.includes('direct deposit');
+  const text = `${description} ${merchantName || ""}`.toLowerCase();
+  return text.includes("payroll") || text.includes("salary") || text.includes("direct deposit");
 }
 
-function categorizeExpenseType(category: string[], description: string): 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other' {
-  const categoryStr = category.join(' ').toLowerCase();
+function categorizeExpenseType(category: string[], description: string): "subscription" | "utility" | "loan" | "rent" | "insurance" | "tax" | "other" {
+  const categoryStr = category.join(" ").toLowerCase();
   const descStr = description.toLowerCase();
   
-  if (categoryStr.includes('subscription') || descStr.includes('subscription') || descStr.includes('monthly')) {
-    return 'subscription';
+  if (categoryStr.includes("subscription") || descStr.includes("subscription") || descStr.includes("monthly")) {
+    return "subscription";
   }
-  if (categoryStr.includes('utilities') || descStr.includes('electric') || descStr.includes('gas') || descStr.includes('water')) {
-    return 'utility';
+  if (categoryStr.includes("utilities") || descStr.includes("electric") || descStr.includes("gas") || descStr.includes("water")) {
+    return "utility";
   }
-  if (categoryStr.includes('loan') || descStr.includes('loan') || descStr.includes('mortgage')) {
-    return 'loan';
+  if (categoryStr.includes("loan") || descStr.includes("loan") || descStr.includes("mortgage")) {
+    return "loan";
   }
-  if (descStr.includes('rent') || categoryStr.includes('rent')) {
-    return 'rent';
+  if (descStr.includes("rent") || categoryStr.includes("rent")) {
+    return "rent";
   }
-  if (categoryStr.includes('insurance') || descStr.includes('insurance')) {
-    return 'insurance';
+  if (categoryStr.includes("insurance") || descStr.includes("insurance")) {
+    return "insurance";
   }
-  if (categoryStr.includes('tax') || descStr.includes('tax')) {
-    return 'tax';
+  if (categoryStr.includes("tax") || descStr.includes("tax")) {
+    return "tax";
   }
-  return 'other';
+  return "other";
 }
 
 function isEssentialExpense(category: string[], description: string): boolean {
-  const essentialCategories = ['rent', 'mortgage', 'utilities', 'insurance', 'loan', 'food'];
-  const categoryStr = category.join(' ').toLowerCase();
+  const essentialCategories = ["rent", "mortgage", "utilities", "insurance", "loan", "food"];
+  const categoryStr = category.join(" ").toLowerCase();
   return essentialCategories.some(essential => categoryStr.includes(essential));
 }
 
 function isCancellableExpense(category: string[], description: string): boolean {
-  const cancellableCategories = ['subscription', 'entertainment', 'streaming'];
-  const categoryStr = category.join(' ').toLowerCase();
+  const cancellableCategories = ["subscription", "entertainment", "streaming"];
+  const categoryStr = category.join(" ").toLowerCase();
   const descStr = description.toLowerCase();
   return cancellableCategories.some(cancellable => 
     categoryStr.includes(cancellable) || descStr.includes(cancellable)
@@ -587,11 +587,11 @@ function isCancellableExpense(category: string[], description: string): boolean 
 }
 
 function getDefaultReminderDays(category: string[]): number {
-  const categoryStr = category.join(' ').toLowerCase();
-  if (categoryStr.includes('loan') || categoryStr.includes('mortgage') || categoryStr.includes('rent')) {
+  const categoryStr = category.join(" ").toLowerCase();
+  if (categoryStr.includes("loan") || categoryStr.includes("mortgage") || categoryStr.includes("rent")) {
     return 7; // One week for important payments
   }
-  if (categoryStr.includes('utilities') || categoryStr.includes('insurance')) {
+  if (categoryStr.includes("utilities") || categoryStr.includes("insurance")) {
     return 5; // 5 days for utilities/insurance
   }
   return 3; // 3 days default

@@ -10,27 +10,27 @@
  * Usage: GET /debugTransactionMatching?outflowId=OUTFLOW_ID
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
+import { onRequest } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
 
 export const debugTransactionMatching = onRequest(
   {
-    memory: '256MiB',
+    memory: "256MiB",
     timeoutSeconds: 60,
   },
   async (req, res) => {
     try {
       const { outflowId } = req.query;
 
-      if (!outflowId || typeof outflowId !== 'string') {
-        res.status(400).json({ error: 'outflowId query parameter is required' });
+      if (!outflowId || typeof outflowId !== "string") {
+        res.status(400).json({ error: "outflowId query parameter is required" });
         return;
       }
 
       const db = admin.firestore();
 
       // Get the outflow document
-      const outflowDoc = await db.collection('outflows').doc(outflowId).get();
+      const outflowDoc = await db.collection("outflows").doc(outflowId).get();
 
       if (!outflowDoc.exists) {
         res.status(404).json({ error: `Outflow ${outflowId} not found` });
@@ -48,7 +48,7 @@ export const debugTransactionMatching = onRequest(
         console.log(`[debugTransactionMatching] Checking transaction ID: ${txnId}`);
 
         // Try to fetch transaction directly by ID
-        const txnDoc = await db.collection('transactions').doc(txnId).get();
+        const txnDoc = await db.collection("transactions").doc(txnId).get();
 
         if (txnDoc.exists) {
           const txnData = txnDoc.data();
@@ -68,9 +68,9 @@ export const debugTransactionMatching = onRequest(
           });
         } else {
           // Try to find by metadata.plaidTransactionId
-          const querySnapshot = await db.collection('transactions')
-            .where('metadata.plaidTransactionId', '==', txnId)
-            .where('userId', '==', outflowData?.userId)
+          const querySnapshot = await db.collection("transactions")
+            .where("metadata.plaidTransactionId", "==", txnId)
+            .where("userId", "==", outflowData?.userId)
             .limit(1)
             .get();
 
@@ -91,14 +91,14 @@ export const debugTransactionMatching = onRequest(
                 plaidTransactionId: foundData.metadata?.plaidTransactionId,
                 source: foundData.metadata?.source
               },
-              issue: 'Transaction ID in outflow.transactionIds does not match document ID'
+              issue: "Transaction ID in outflow.transactionIds does not match document ID"
             });
           } else {
             results.push({
               plaidTransactionId: txnId,
               documentExists: false,
               foundViaQuery: false,
-              issue: 'Transaction not found in database at all'
+              issue: "Transaction not found in database at all"
             });
           }
         }
@@ -119,16 +119,16 @@ export const debugTransactionMatching = onRequest(
         summary,
         transactionDetails: results,
         diagnosis: summary.foundViaQuery > 0
-          ? '⚠️ ISSUE FOUND: Transaction IDs in outflow.transactionIds do not match document IDs. Old transactions may have been created with auto-generated IDs instead of Plaid transaction IDs.'
+          ? "⚠️ ISSUE FOUND: Transaction IDs in outflow.transactionIds do not match document IDs. Old transactions may have been created with auto-generated IDs instead of Plaid transaction IDs."
           : summary.foundAsDocumentId === summary.totalTransactionIds
-            ? '✅ ALL GOOD: All transaction IDs match document IDs correctly'
-            : '❌ MISSING TRANSACTIONS: Some transactions do not exist in database'
+            ? "✅ ALL GOOD: All transaction IDs match document IDs correctly"
+            : "❌ MISSING TRANSACTIONS: Some transactions do not exist in database"
       });
 
     } catch (error: any) {
-      console.error('[debugTransactionMatching] Error:', error);
+      console.error("[debugTransactionMatching] Error:", error);
       res.status(500).json({
-        error: error.message || 'Failed to debug transaction matching',
+        error: error.message || "Failed to debug transaction matching",
         stack: error.stack
       });
     }

@@ -15,7 +15,7 @@ import {
   Query,
   Transaction,
   WriteBatch,
-} from '@google-cloud/firestore';
+} from "@google-cloud/firestore";
 
 export interface Counts {
   reads: number;
@@ -28,19 +28,19 @@ const active = new Set<Counts>();
 let patched = false;
 
 const coll_of_ref = (ref: unknown): string => {
-  const p = (ref as { path?: string })?.path ?? '';
-  const parts = p.split('/');
-  return parts.length >= 2 ? parts[parts.length - 2] : parts[0] || '?';
+  const p = (ref as { path?: string })?.path ?? "";
+  const parts = p.split("/");
+  return parts.length >= 2 ? parts[parts.length - 2] : parts[0] || "?";
 };
 const coll_of_query = (q: unknown): string => {
   const o = (q as { _queryOptions?: { collectionId?: string } })?._queryOptions;
-  return o?.collectionId ?? '?';
+  return o?.collectionId ?? "?";
 };
 
-function add(kind: 'reads' | 'writes', coll: string, n: number): void {
+function add(kind: "reads" | "writes", coll: string, n: number): void {
   for (const c of active) {
     c[kind] += n;
-    const by = kind === 'reads' ? c.reads_by : c.writes_by;
+    const by = kind === "reads" ? c.reads_by : c.writes_by;
     by[coll] = (by[coll] ?? 0) + n;
   }
 }
@@ -54,29 +54,29 @@ function patch(): void {
   const orig_get_all = fs.getAll;
   fs.getAll = function (...refs: unknown[]) {
     const docs = refs.filter((r) => r instanceof DocumentReference);
-    for (const r of docs) add('reads', coll_of_ref(r), 1);
+    for (const r of docs) add("reads", coll_of_ref(r), 1);
     return orig_get_all.apply(this, refs);
   };
   const q = Query.prototype as any;
   const orig_q_get = q.get;
   q.get = async function (...a: unknown[]) {
     const snap = await orig_q_get.apply(this, a);
-    add('reads', coll_of_query(this), Math.max(1, snap.size));
+    add("reads", coll_of_query(this), Math.max(1, snap.size));
     return snap;
   };
   const tx = Transaction.prototype as any;
   const orig_tx_get = tx.get;
   tx.get = async function (target: unknown, ...a: unknown[]) {
     const res = await orig_tx_get.call(this, target, ...a);
-    if (target instanceof DocumentReference) add('reads', coll_of_ref(target), 1);
-    else add('reads', coll_of_query(target), Math.max(1, (res as { size?: number })?.size ?? 1));
+    if (target instanceof DocumentReference) add("reads", coll_of_ref(target), 1);
+    else add("reads", coll_of_query(target), Math.max(1, (res as { size?: number })?.size ?? 1));
     return res;
   };
   const wb = WriteBatch.prototype as any;
-  for (const m of ['set', 'update', 'delete', 'create']) {
+  for (const m of ["set", "update", "delete", "create"]) {
     const orig = wb[m];
     wb[m] = function (ref: unknown, ...a: unknown[]) {
-      add('writes', coll_of_ref(ref), 1);
+      add("writes", coll_of_ref(ref), 1);
       return orig.call(this, ref, ...a);
     };
   }

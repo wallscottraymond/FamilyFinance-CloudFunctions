@@ -7,10 +7,10 @@
  * @module transactions/utils/batch_create_transactions
  */
 
-import { Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { db } from '../../../index';
-import { Transaction as FamilyTransaction } from '../../../types';
-import { OutflowPeriodUpdate } from './match_transaction_splits_to_outflows';
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import { db } from "../../../index";
+import { Transaction as FamilyTransaction } from "../../../types";
+import { OutflowPeriodUpdate } from "./match_transaction_splits_to_outflows";
 
 /**
  * Batch create transactions and update outflow periods atomically
@@ -29,7 +29,7 @@ export async function batch_create_transactions(
   console.log(`📦 [batch_create_transactions] Batch creating ${transactions.length} transactions and ${outflow_updates.length} outflow updates`);
 
   if (transactions.length === 0) {
-    console.log(`⏭️ [batch_create_transactions] No transactions to create`);
+    console.log("⏭️ [batch_create_transactions] No transactions to create");
     return 0;
   }
 
@@ -50,7 +50,7 @@ export async function batch_create_transactions(
       for (const transaction of batch_transactions) {
         // Use transactionId field as Firestore document ID
         const transaction_id = transaction.transactionId;
-        const doc_ref = db.collection('transactions').doc(transaction_id);
+        const doc_ref = db.collection("transactions").doc(transaction_id);
 
         // Add createdAt and updatedAt timestamps
         const transaction_data = {
@@ -67,7 +67,7 @@ export async function batch_create_transactions(
             monthly_period_id: transaction_data.splits[0].monthlyPeriodId,
             weekly_period_id: transaction_data.splits[0].weeklyPeriodId,
             bi_weekly_period_id: transaction_data.splits[0].biWeeklyPeriodId,
-          } : 'NO SPLITS'
+          } : "NO SPLITS"
         });
 
         batch.set(doc_ref, transaction_data);
@@ -79,7 +79,7 @@ export async function batch_create_transactions(
         const updates_for_batch = outflow_updates.slice(0, Math.min(outflow_updates.length, BATCH_SIZE - batch_transactions.length));
 
         for (const update of updates_for_batch) {
-          const period_ref = db.collection('outflow_periods').doc(update.period_id);
+          const period_ref = db.collection("outflow_periods").doc(update.period_id);
 
           // Add transaction split reference to the outflow period (convert to camelCase for Firestore)
           batch.update(period_ref, {
@@ -89,7 +89,7 @@ export async function batch_create_transactions(
               amount: update.transaction_split_ref.amount,
               paymentDate: update.transaction_split_ref.payment_date,
             }),
-            status: 'paid', // Mark as paid when transaction is matched
+            status: "paid", // Mark as paid when transaction is matched
             updatedAt: Timestamp.now()
           });
         }
@@ -114,7 +114,7 @@ export async function batch_create_transactions(
         const batch_updates = remaining_updates.slice(i, i + BATCH_SIZE);
 
         for (const update of batch_updates) {
-          const period_ref = db.collection('outflow_periods').doc(update.period_id);
+          const period_ref = db.collection("outflow_periods").doc(update.period_id);
 
           batch.update(period_ref, {
             transactionSplits: FieldValue.arrayUnion({
@@ -123,7 +123,7 @@ export async function batch_create_transactions(
               amount: update.transaction_split_ref.amount,
               paymentDate: update.transaction_split_ref.payment_date,
             }),
-            status: 'paid',
+            status: "paid",
             updatedAt: Timestamp.now()
           });
         }
@@ -138,7 +138,7 @@ export async function batch_create_transactions(
     return total_created;
 
   } catch (error) {
-    console.error('[batch_create_transactions] Error in batch creation:', error);
+    console.error("[batch_create_transactions] Error in batch creation:", error);
     throw error; // Throw to indicate failure
   }
 }

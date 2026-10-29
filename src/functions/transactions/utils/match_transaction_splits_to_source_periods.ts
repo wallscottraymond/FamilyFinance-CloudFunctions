@@ -10,11 +10,11 @@
  * @module transactions/utils/match_transaction_splits_to_source_periods
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { db } from '../../../index';
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../../../index";
 // No source period is longer than this (31d) — bounds the candidate startDate range.
-import { SOURCE_PERIOD_OVERLAP_BUFFER_MS } from '../../repositories/source_period.repo';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { SOURCE_PERIOD_OVERLAP_BUFFER_MS } from "../../repositories/source_period.repo";
+import { Transaction as FamilyTransaction } from "../../../types";
 
 /**
  * Match transaction splits to source periods (batch in-memory processing)
@@ -37,11 +37,11 @@ import { Transaction as FamilyTransaction } from '../../../types';
 export async function match_transaction_splits_to_source_periods(
   transactions: FamilyTransaction[]
 ): Promise<FamilyTransaction[]> {
-  console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] === STARTING PERIOD MATCHING ===`);
+  console.log("🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] === STARTING PERIOD MATCHING ===");
   console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Processing ${transactions.length} transactions`);
 
   if (transactions.length === 0) {
-    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] No transactions to process, returning empty array`);
+    console.log("🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] No transactions to process, returning empty array");
     return transactions;
   }
 
@@ -62,16 +62,16 @@ export async function match_transaction_splits_to_source_periods(
     const date_list = Array.from(unique_dates);
     const min_date = Math.min(...date_list);
     const max_date = Math.max(...date_list);
-    const periods_snapshot = await db.collection('source_periods')
-      .where('startDate', '>=', Timestamp.fromMillis(min_date - SOURCE_PERIOD_OVERLAP_BUFFER_MS))
-      .where('startDate', '<=', Timestamp.fromMillis(max_date))
-      .orderBy('startDate', 'asc')
+    const periods_snapshot = await db.collection("source_periods")
+      .where("startDate", ">=", Timestamp.fromMillis(min_date - SOURCE_PERIOD_OVERLAP_BUFFER_MS))
+      .where("startDate", "<=", Timestamp.fromMillis(max_date))
+      .orderBy("startDate", "asc")
       .get();
 
     console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] ✅ FOUND ${periods_snapshot.size} candidate SOURCE PERIODS for the transaction dates`);
 
     if (periods_snapshot.size === 0) {
-      console.error(`❌❌❌ [match_transaction_splits_to_source_periods] NO SOURCE PERIODS FOUND! Cannot match transactions to periods. Please run generateSourcePeriods.`);
+      console.error("❌❌❌ [match_transaction_splits_to_source_periods] NO SOURCE PERIODS FOUND! Cannot match transactions to periods. Please run generateSourcePeriods.");
       return transactions;
     }
 
@@ -83,8 +83,8 @@ export async function match_transaction_splits_to_source_periods(
       end_date: (doc.data().endDate as Timestamp).toMillis()
     }));
 
-    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Period types found: ${periods.slice(0, 5).map(p => p.type).join(', ')}`);
-    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Sample period date ranges: ${periods.slice(0, 3).map(p => `${p.type}: ${new Date(p.start_date).toISOString()} to ${new Date(p.end_date).toISOString()}`).join(' | ')}`);
+    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Period types found: ${periods.slice(0, 5).map(p => p.type).join(", ")}`);
+    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] Sample period date ranges: ${periods.slice(0, 3).map(p => `${p.type}: ${new Date(p.start_date).toISOString()} to ${new Date(p.end_date).toISOString()}`).join(" | ")}`);
 
     // Process each transaction
     let matched_count = 0;
@@ -99,15 +99,15 @@ export async function match_transaction_splits_to_source_periods(
       );
 
       if (matching_periods.length > 0) {
-        console.log(`  ✅✅✅ Transaction date ${new Date(txn_date).toISOString()} matched ${matching_periods.length} periods: ${matching_periods.map(p => `${p.type}(${p.id})`).join(', ')}`);
+        console.log(`  ✅✅✅ Transaction date ${new Date(txn_date).toISOString()} matched ${matching_periods.length} periods: ${matching_periods.map(p => `${p.type}(${p.id})`).join(", ")}`);
       } else {
         console.log(`  ❌❌❌ Transaction date ${new Date(txn_date).toISOString()} matched NO periods`);
       }
 
       // Extract period IDs by type
-      const monthly_period = matching_periods.find(p => p.type === 'monthly');
-      const weekly_period = matching_periods.find(p => p.type === 'weekly');
-      const bi_weekly_period = matching_periods.find(p => p.type === 'bi_monthly'); // Fixed: was 'bi_weekly', should be 'bi_monthly'
+      const monthly_period = matching_periods.find(p => p.type === "monthly");
+      const weekly_period = matching_periods.find(p => p.type === "weekly");
+      const bi_weekly_period = matching_periods.find(p => p.type === "bi_monthly"); // Fixed: was 'bi_weekly', should be 'bi_monthly'
 
       // Update all splits in the transaction with period IDs
       const updated_splits = transaction.splits.map(split => ({
@@ -127,13 +127,13 @@ export async function match_transaction_splits_to_source_periods(
       }
     });
 
-    console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] === PERIOD MATCHING COMPLETE ===`);
+    console.log("🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] === PERIOD MATCHING COMPLETE ===");
     console.log(`🗓️🗓️🗓️ [match_transaction_splits_to_source_periods] ✅ Successfully matched ${matched_count} of ${transactions.length} transactions to source periods`);
 
     return transactions;
 
   } catch (error) {
-    console.error('[match_transaction_splits_to_source_periods] Error matching transaction splits to source periods:', error);
+    console.error("[match_transaction_splits_to_source_periods] Error matching transaction splits to source periods:", error);
     return transactions; // Return original array on error
   }
 }

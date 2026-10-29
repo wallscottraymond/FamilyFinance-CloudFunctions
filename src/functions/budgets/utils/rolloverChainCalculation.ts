@@ -12,20 +12,20 @@
  */
 
 import { period_allocation } from "../../domain/budgets/period_override.service";
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import {
   Budget,
   BudgetPeriodDocument,
   PeriodType,
   FinancialSettings,
-} from '../../../types';
+} from "../../../types";
 import {
   getEffectiveRolloverSettings,
   calculateRolloverForPeriod,
   RolloverCalculationResult,
-} from './rolloverCalculation';
-import { bump_derive_version } from '../../repositories/derive_version.repo';
+} from "./rolloverCalculation";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 export interface RolloverChainResult {
   success: boolean;
@@ -62,16 +62,16 @@ export async function recalculateRolloverChain(
     errors: [],
   };
 
-  console.log('[recalculateRolloverChain] ════════════════════════════════════════════');
-  console.log('[recalculateRolloverChain] STARTING ROLLOVER CHAIN CALCULATION');
-  console.log('[recalculateRolloverChain] ════════════════════════════════════════════');
+  console.log("[recalculateRolloverChain] ════════════════════════════════════════════");
+  console.log("[recalculateRolloverChain] STARTING ROLLOVER CHAIN CALCULATION");
+  console.log("[recalculateRolloverChain] ════════════════════════════════════════════");
   console.log(`[recalculateRolloverChain] Budget ID: ${budgetId}`);
-  console.log(`[recalculateRolloverChain] Start from period: ${startFromPeriodId || 'beginning'}`);
-  console.log(`[recalculateRolloverChain] Period types: ${periodTypes?.join(', ') || 'all'}`);
+  console.log(`[recalculateRolloverChain] Start from period: ${startFromPeriodId || "beginning"}`);
+  console.log(`[recalculateRolloverChain] Period types: ${periodTypes?.join(", ") || "all"}`);
 
   try {
     // 1. Fetch the budget to get rollover settings
-    const budgetDoc = await db.collection('budgets').doc(budgetId).get();
+    const budgetDoc = await db.collection("budgets").doc(budgetId).get();
     if (!budgetDoc.exists) {
       result.success = false;
       result.errors.push(`Budget ${budgetId} not found`);
@@ -85,12 +85,12 @@ export async function recalculateRolloverChain(
     let userFinancialSettings: Partial<FinancialSettings> | undefined;
 
     if (!userId) {
-      console.warn('[recalculateRolloverChain] No userId found on budget, using default settings');
+      console.warn("[recalculateRolloverChain] No userId found on budget, using default settings");
     }
 
     try {
       if (userId) {
-        const userDoc = await db.collection('users').doc(userId).get();
+        const userDoc = await db.collection("users").doc(userId).get();
         if (userDoc.exists) {
           const userData = userDoc.data();
           // The app saves the rollover defaults under `preferences.financial` (Budget Settings);
@@ -103,13 +103,13 @@ export async function recalculateRolloverChain(
         }
       }
     } catch (e) {
-      console.warn('[recalculateRolloverChain] Could not fetch user settings, using defaults');
+      console.warn("[recalculateRolloverChain] Could not fetch user settings, using defaults");
     }
 
     // 3. Get effective rollover settings
     const rolloverSettings = getEffectiveRolloverSettings(budget, userFinancialSettings);
 
-    console.log(`[recalculateRolloverChain] Rollover settings:`, {
+    console.log("[recalculateRolloverChain] Rollover settings:", {
       enabled: rolloverSettings.enabled,
       strategy: rolloverSettings.strategy,
       spreadPeriods: rolloverSettings.spreadPeriods,
@@ -117,7 +117,7 @@ export async function recalculateRolloverChain(
 
     // If rollover is disabled, clear rollover amounts
     if (!rolloverSettings.enabled) {
-      console.log('[recalculateRolloverChain] Rollover disabled, clearing rollover amounts');
+      console.log("[recalculateRolloverChain] Rollover disabled, clearing rollover amounts");
       const clearedIds = await clearRolloverAmounts(db, budgetId, periodTypes);
       result.updatedPeriodIds = clearedIds;
       result.periodsUpdated = clearedIds.length;
@@ -127,14 +127,14 @@ export async function recalculateRolloverChain(
     }
 
     // 4. Fetch all periods for this budget
-    let periodsQuery = db.collection('budget_periods')
-      .where('budgetId', '==', budgetId)
-      .where('isActive', '==', true);
+    let periodsQuery = db.collection("budget_periods")
+      .where("budgetId", "==", budgetId)
+      .where("isActive", "==", true);
 
     const periodsSnapshot = await periodsQuery.get();
 
     if (periodsSnapshot.empty) {
-      console.log('[recalculateRolloverChain] No periods found for budget');
+      console.log("[recalculateRolloverChain] No periods found for budget");
       return result;
     }
 
@@ -206,7 +206,7 @@ export async function recalculateRolloverChain(
           const spent = currentPeriod.spent ?? 0;
           const newRemaining = Math.round((allocated + rolloverResult.rolledOverAmount - spent) * 100) / 100;
 
-          const periodRef = db.collection('budget_periods').doc(currentPeriod.id!);
+          const periodRef = db.collection("budget_periods").doc(currentPeriod.id!);
           batch.update(periodRef, {
             rolledOverAmount: rolloverResult.rolledOverAmount,
             rolledOverFromPeriodId: rolloverResult.rolledOverFromPeriodId,
@@ -250,16 +250,16 @@ export async function recalculateRolloverChain(
       await bump_derive_version(userId).catch(() => {});
     }
 
-    console.log('[recalculateRolloverChain] ════════════════════════════════════════════');
-    console.log('[recalculateRolloverChain] ROLLOVER CHAIN CALCULATION COMPLETE');
-    console.log('[recalculateRolloverChain] ════════════════════════════════════════════');
+    console.log("[recalculateRolloverChain] ════════════════════════════════════════════");
+    console.log("[recalculateRolloverChain] ROLLOVER CHAIN CALCULATION COMPLETE");
+    console.log("[recalculateRolloverChain] ════════════════════════════════════════════");
     console.log(`[recalculateRolloverChain] Total periods updated: ${result.periodsUpdated}`);
-    console.log(`[recalculateRolloverChain] By type:`, result.periodsByType);
+    console.log("[recalculateRolloverChain] By type:", result.periodsByType);
 
     return result;
 
   } catch (error) {
-    console.error('[recalculateRolloverChain] ❌ Error:', error);
+    console.error("[recalculateRolloverChain] ❌ Error:", error);
     result.success = false;
     result.errors.push(error instanceof Error ? error.message : String(error));
     return result;
@@ -274,9 +274,9 @@ async function clearRolloverAmounts(
   budgetId: string,
   periodTypes?: PeriodType[]
 ): Promise<string[]> {
-  let query = db.collection('budget_periods')
-    .where('budgetId', '==', budgetId)
-    .where('isActive', '==', true);
+  let query = db.collection("budget_periods")
+    .where("budgetId", "==", budgetId)
+    .where("isActive", "==", true);
 
   const snapshot = await query.get();
   if (snapshot.empty) return [];
@@ -368,21 +368,21 @@ export async function recalculateRolloverForCurrentPeriods(
     errors: [] as string[],
   };
 
-  console.log('[recalculateRolloverForCurrentPeriods] Starting daily rollover check...');
+  console.log("[recalculateRolloverForCurrentPeriods] Starting daily rollover check...");
 
   const now = Timestamp.now();
 
   try {
     // Find budget periods where today falls within the period range
     // and rollover hasn't been calculated recently
-    const periodsSnapshot = await db.collection('budget_periods')
-      .where('isActive', '==', true)
-      .where('periodStart', '<=', now)
-      .where('periodEnd', '>=', now)
+    const periodsSnapshot = await db.collection("budget_periods")
+      .where("isActive", "==", true)
+      .where("periodStart", "<=", now)
+      .where("periodEnd", ">=", now)
       .get();
 
     if (periodsSnapshot.empty) {
-      console.log('[recalculateRolloverForCurrentPeriods] No current periods found');
+      console.log("[recalculateRolloverForCurrentPeriods] No current periods found");
       return result;
     }
 
@@ -409,16 +409,16 @@ export async function recalculateRolloverForCurrentPeriods(
         }
       } catch (error) {
         const errorMsg = `Failed to recalculate rollover for budget ${budgetId}: ${error}`;
-        console.error('[recalculateRolloverForCurrentPeriods]', errorMsg);
+        console.error("[recalculateRolloverForCurrentPeriods]", errorMsg);
         result.errors.push(errorMsg);
       }
     }
 
-    console.log(`[recalculateRolloverForCurrentPeriods] Complete:`, result);
+    console.log("[recalculateRolloverForCurrentPeriods] Complete:", result);
     return result;
 
   } catch (error) {
-    console.error('[recalculateRolloverForCurrentPeriods] ❌ Error:', error);
+    console.error("[recalculateRolloverForCurrentPeriods] ❌ Error:", error);
     result.errors.push(error instanceof Error ? error.message : String(error));
     return result;
   }

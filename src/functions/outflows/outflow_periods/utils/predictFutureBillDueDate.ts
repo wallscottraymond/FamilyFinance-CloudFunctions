@@ -11,8 +11,8 @@
  * - Week of Feb 1-7: Shows Feb 15
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from "../../../../types";
 
 /**
  * Result of predicting future bill due date
@@ -33,29 +33,29 @@ function addFrequencyInterval(date: Date, frequency: PlaidRecurringFrequency): D
   const newDate = new Date(date);
 
   switch (frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-      newDate.setDate(newDate.getDate() + 7);
-      break;
+  case PlaidRecurringFrequency.WEEKLY:
+    newDate.setDate(newDate.getDate() + 7);
+    break;
 
-    case PlaidRecurringFrequency.BIWEEKLY:
-      newDate.setDate(newDate.getDate() + 14);
-      break;
+  case PlaidRecurringFrequency.BIWEEKLY:
+    newDate.setDate(newDate.getDate() + 14);
+    break;
 
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-      newDate.setDate(newDate.getDate() + 15);
-      break;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+    newDate.setDate(newDate.getDate() + 15);
+    break;
 
-    case PlaidRecurringFrequency.MONTHLY:
-      newDate.setMonth(newDate.getMonth() + 1);
-      break;
+  case PlaidRecurringFrequency.MONTHLY:
+    newDate.setMonth(newDate.getMonth() + 1);
+    break;
 
-    case PlaidRecurringFrequency.ANNUALLY:
-      newDate.setFullYear(newDate.getFullYear() + 1);
-      break;
+  case PlaidRecurringFrequency.ANNUALLY:
+    newDate.setFullYear(newDate.getFullYear() + 1);
+    break;
 
-    default:
-      console.warn(`[addFrequencyInterval] Unknown frequency: ${frequency}, defaulting to monthly`);
-      newDate.setMonth(newDate.getMonth() + 1);
+  default:
+    console.warn(`[addFrequencyInterval] Unknown frequency: ${frequency}, defaulting to monthly`);
+    newDate.setMonth(newDate.getMonth() + 1);
   }
 
   return newDate;
@@ -115,10 +115,10 @@ export function predictFutureBillDueDate(
   let nextDueDate: Date;
   if (outflow.predictedNextDate) {
     nextDueDate = outflow.predictedNextDate.toDate();
-    console.log(`[predictFutureBillDueDate] Using Plaid predictedNextDate: ${nextDueDate.toISOString().split('T')[0]}`);
+    console.log(`[predictFutureBillDueDate] Using Plaid predictedNextDate: ${nextDueDate.toISOString().split("T")[0]}`);
   } else {
     nextDueDate = outflow.lastDate.toDate();
-    console.log(`[predictFutureBillDueDate] No predictedNextDate, using lastDate: ${nextDueDate.toISOString().split('T')[0]}`);
+    console.log(`[predictFutureBillDueDate] No predictedNextDate, using lastDate: ${nextDueDate.toISOString().split("T")[0]}`);
   }
 
   const periodStart = sourcePeriod.startDate.toDate();
@@ -134,8 +134,8 @@ export function predictFutureBillDueDate(
 
   console.log(
     `[predictFutureBillDueDate] ${outflow.description} - Period: ${sourcePeriod.id}, ` +
-    `Expected Due: ${nextDueDate.toISOString().split('T')[0]}, ` +
-    `Expected Draw: ${expectedDrawDate.toISOString().split('T')[0]}`
+    `Expected Due: ${nextDueDate.toISOString().split("T")[0]}, ` +
+    `Expected Draw: ${expectedDrawDate.toISOString().split("T")[0]}`
   );
 
   return {

@@ -34,9 +34,9 @@ describe("N8 deploy set", () => {
   it("the checker catches an export that only a barrel it isn't in would provide", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "n8-"));
     fs.mkdirSync(path.join(dir, "src", "functions", "entry"), { recursive: true });
-    fs.writeFileSync(path.join(dir, "src", "index.ts"), 'export * from "./functions/entry";\n');
+    fs.writeFileSync(path.join(dir, "src", "index.ts"), "export * from \"./functions/entry\";\n");
     fs.writeFileSync(path.join(dir, "src", "functions", "entry", "index.ts"),
-      'export { derive_period } from "./a";\n// export { process_job_queue } from "./b";\n');
+      "export { derive_period } from \"./a\";\n// export { process_job_queue } from \"./b\";\n");
     const r = checker.check_deploy_set(dir);
     expect(r.ok).toBe(false);
     expect(r.missing).toContain("process_job_queue"); // a commented-out export doesn't count

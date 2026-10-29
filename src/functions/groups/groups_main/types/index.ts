@@ -52,10 +52,10 @@ export interface GroupSettings {
  * Group Member Roles
  */
 export enum GroupMemberRole {
-  OWNER = 'owner',      // Full control
-  ADMIN = 'admin',      // Can manage members and settings
-  EDITOR = 'editor',    // Can edit shared resources
-  VIEWER = 'viewer'     // Read-only access
+  OWNER = "owner",      // Full control
+  ADMIN = "admin",      // Can manage members and settings
+  EDITOR = "editor",    // Can edit shared resources
+  VIEWER = "viewer"     // Read-only access
 }
 
 /**
@@ -103,9 +103,9 @@ export interface GroupInvitation {
  * Invitation Status
  */
 export enum InvitationStatus {
-  PENDING = 'pending',
-  ACCEPTED = 'accepted',
-  DECLINED = 'declined',
-  EXPIRED = 'expired',
-  CANCELLED = 'cancelled'
+  PENDING = "pending",
+  ACCEPTED = "accepted",
+  DECLINED = "declined",
+  EXPIRED = "expired",
+  CANCELLED = "cancelled"
 }

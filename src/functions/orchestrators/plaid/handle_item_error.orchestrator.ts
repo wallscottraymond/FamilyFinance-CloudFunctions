@@ -82,37 +82,37 @@ export async function handle_item_error_orchestrator(
     const now = Timestamp.now();
 
     switch (ctx.input.webhook_code) {
-      // PENDING_DISCONNECT: the institution will drop the connection soon (e.g. a
-      // non-OAuth → OAuth migration); same user action as an expiring consent.
-      case "PENDING_EXPIRATION":
-      case "PENDING_DISCONNECT":
-        status_update = compute_pending_expiration_update(
-          now,
-          ctx.input.consent_expiration_time
-        );
-        break;
+    // PENDING_DISCONNECT: the institution will drop the connection soon (e.g. a
+    // non-OAuth → OAuth migration); same user action as an expiring consent.
+    case "PENDING_EXPIRATION":
+    case "PENDING_DISCONNECT":
+      status_update = compute_pending_expiration_update(
+        now,
+        ctx.input.consent_expiration_time
+      );
+      break;
 
-      case "ERROR":
-        status_update = compute_error_update(
-          now,
-          ctx.input.error?.error_code || "UNKNOWN_ERROR",
-          ctx.input.error?.error_message
-        );
-        break;
+    case "ERROR":
+      status_update = compute_error_update(
+        now,
+        ctx.input.error?.error_code || "UNKNOWN_ERROR",
+        ctx.input.error?.error_message
+      );
+      break;
 
-      case "USER_PERMISSION_REVOKED":
-        status_update = compute_permission_revoked_update(now);
-        break;
+    case "USER_PERMISSION_REVOKED":
+      status_update = compute_permission_revoked_update(now);
+      break;
 
-      default:
-        console.warn(
-          `[${ctx.trace_id}] Unhandled webhook code: ${ctx.input.webhook_code}`
-        );
-        return {
-          success: false,
-          skipped: true,
-          skip_reason: `Unhandled webhook code: ${ctx.input.webhook_code}`,
-        };
+    default:
+      console.warn(
+        `[${ctx.trace_id}] Unhandled webhook code: ${ctx.input.webhook_code}`
+      );
+      return {
+        success: false,
+        skipped: true,
+        skip_reason: `Unhandled webhook code: ${ctx.input.webhook_code}`,
+      };
     }
 
     // =========================================================================

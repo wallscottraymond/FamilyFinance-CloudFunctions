@@ -8,7 +8,7 @@
  * For now, it returns a default "pending" status for all newly created periods.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 
 /**
  * Update the bill status for an outflow period
@@ -48,5 +48,5 @@ export function updateBillStatus(
   // - Upcoming due dates for reminder status
   // - Scheduled payments from user
 
-  return 'pending';
+  return "pending";
 }

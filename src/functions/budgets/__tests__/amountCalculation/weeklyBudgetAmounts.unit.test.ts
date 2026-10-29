@@ -12,8 +12,8 @@
  * - Partial weeks at budget boundaries handled correctly
  */
 
-import { PeriodType } from '../../../../types';
-import { calculatePeriodAllocatedAmount } from '../../utils/calculatePeriodAllocatedAmount';
+import { PeriodType } from "../../../../types";
+import { calculatePeriodAllocatedAmount } from "../../utils/calculatePeriodAllocatedAmount";
 import {
   roundToCents,
   amountsEqual,
@@ -24,15 +24,15 @@ import {
   createWeeklySourcePeriods,
   calculatePeriodTypeTotals,
   validatePeriodTotalsMatch,
-} from '../helpers/budgetTestHelpers';
+} from "../helpers/budgetTestHelpers";
 
-describe('Weekly Budget Amount Calculations', () => {
+describe("Weekly Budget Amount Calculations", () => {
   // ============================================================================
   // BASIC WEEKLY → WEEKLY (SAME TYPE)
   // ============================================================================
 
-  describe('Weekly to Weekly (same type)', () => {
-    it('should return the same amount when budget and target are both weekly', () => {
+  describe("Weekly to Weekly (same type)", () => {
+    it("should return the same amount when budget and target are both weekly", () => {
       // Arrange
       const budgetAmount = 150;
       const targetPeriod = createMockSourcePeriod({
@@ -50,7 +50,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(result).toBe(150);
     });
 
-    it('should return same amount for any full week', () => {
+    it("should return same amount for any full week", () => {
       // Arrange
       const budgetAmount = 100;
 
@@ -80,7 +80,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(result25).toBe(100);
     });
 
-    it('should handle partial week at budget end', () => {
+    it("should handle partial week at budget end", () => {
       // Arrange: Budget ends mid-week, only 4 days
       const budgetAmount = 100;
       const partialWeek = createMockSourcePeriod({
@@ -103,8 +103,8 @@ describe('Weekly Budget Amount Calculations', () => {
   // WEEKLY → MONTHLY CONVERSION
   // ============================================================================
 
-  describe('Weekly to Monthly conversion', () => {
-    it('should calculate monthly amount based on days in month', () => {
+  describe("Weekly to Monthly conversion", () => {
+    it("should calculate monthly amount based on days in month", () => {
       // Arrange: $100/week → Monthly for January (31 days)
       // Daily rate = $100 / 7 = $14.29
       // Monthly = 31 * $14.29 = $443.03
@@ -126,7 +126,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should calculate February monthly correctly', () => {
+    it("should calculate February monthly correctly", () => {
       // Arrange: $100/week → Monthly for February 2025 (28 days)
       // Daily rate = $100 / 7 = $14.29
       // Monthly = 28 * $14.29 = $400.12
@@ -148,7 +148,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should have different amounts for months with different days', () => {
+    it("should have different amounts for months with different days", () => {
       // Arrange: $100/week for various months
       const budgetAmount = 100;
 
@@ -194,8 +194,8 @@ describe('Weekly Budget Amount Calculations', () => {
   // WEEKLY → BI-MONTHLY CONVERSION
   // ============================================================================
 
-  describe('Weekly to Bi-Monthly conversion', () => {
-    it('should calculate bi-monthly first half correctly', () => {
+  describe("Weekly to Bi-Monthly conversion", () => {
+    it("should calculate bi-monthly first half correctly", () => {
       // Arrange: $100/week → Bi-monthly first half (15 days)
       // Daily rate = $100 / 7 = $14.29
       // Bi-monthly = 15 * $14.29 = $214.35
@@ -218,7 +218,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should calculate bi-monthly second half with varying days correctly', () => {
+    it("should calculate bi-monthly second half with varying days correctly", () => {
       // Arrange: $100/week → Bi-monthly second halves
       const budgetAmount = 100;
       const dailyRate = 100 / 7;
@@ -252,7 +252,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(febResult, roundToCents(13 * dailyRate), 0.02)).toBe(true);
     });
 
-    it('should have bi-monthly halves sum to monthly total', () => {
+    it("should have bi-monthly halves sum to monthly total", () => {
       // Arrange: $100/week for January
       const budgetAmount = 100;
 
@@ -296,8 +296,8 @@ describe('Weekly Budget Amount Calculations', () => {
   // DAILY RATE CONSISTENCY
   // ============================================================================
 
-  describe('Daily Rate Consistency', () => {
-    it('should use consistent $$/day = budget/7 for all conversions', () => {
+  describe("Daily Rate Consistency", () => {
+    it("should use consistent $$/day = budget/7 for all conversions", () => {
       const budgetAmount = 70; // Easy divisible by 7
       const expectedDailyRate = 10; // $70/7 = $10/day
 
@@ -325,7 +325,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(biMonthlyResult, 15 * expectedDailyRate, 0.01)).toBe(true);
     });
 
-    it('should produce consistent totals across period types for a full year', () => {
+    it("should produce consistent totals across period types for a full year", () => {
       const budgetAmount = 100;
 
       // Create all monthly periods for 2025
@@ -356,7 +356,7 @@ describe('Weekly Budget Amount Calculations', () => {
       const validation = validatePeriodTotalsMatch(summaries, 0.05);
 
       // Log for debugging
-      console.log('Weekly budget full year validation:', validation.details);
+      console.log("Weekly budget full year validation:", validation.details);
 
       // For weekly source budget, the weekly total is the "source of truth"
       // Other period types should be within 2% of the weekly total
@@ -369,8 +369,8 @@ describe('Weekly Budget Amount Calculations', () => {
   // PARTIAL PERIODS
   // ============================================================================
 
-  describe('Partial Periods at Budget Boundaries', () => {
-    it('should handle partial month at budget start', () => {
+  describe("Partial Periods at Budget Boundaries", () => {
+    it("should handle partial month at budget start", () => {
       // Budget starts mid-month (Jan 15-31 = 17 days)
       const budgetAmount = 100;
       const partialMonth = createMockSourcePeriod({
@@ -388,7 +388,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should handle partial month at budget end', () => {
+    it("should handle partial month at budget end", () => {
       // Budget ends mid-month (March 1-19 = 19 days)
       const budgetAmount = 100;
       const partialMonth = createMockSourcePeriod({
@@ -406,7 +406,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(result, expectedAmount, 0.02)).toBe(true);
     });
 
-    it('should handle partial bi-monthly period', () => {
+    it("should handle partial bi-monthly period", () => {
       // Partial bi-monthly (April 1-13 = 13 days of first half)
       const budgetAmount = 100;
       const partialBiMonthly = createMockSourcePeriod({
@@ -430,8 +430,8 @@ describe('Weekly Budget Amount Calculations', () => {
   // EDGE CASES
   // ============================================================================
 
-  describe('Edge Cases', () => {
-    it('should handle single day period', () => {
+  describe("Edge Cases", () => {
+    it("should handle single day period", () => {
       const budgetAmount = 70;
       const singleDay = createMockSourcePeriod({
         type: PeriodType.MONTHLY, // Using monthly for single day
@@ -447,7 +447,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(result, 10, 0.01)).toBe(true);
     });
 
-    it('should handle zero budget amount', () => {
+    it("should handle zero budget amount", () => {
       const budgetAmount = 0;
       const period = createMockSourcePeriod({
         type: PeriodType.MONTHLY,
@@ -461,7 +461,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(result).toBe(0);
     });
 
-    it('should handle leap year February conversion', () => {
+    it("should handle leap year February conversion", () => {
       // February 2024 (leap year): 29 days
       const budgetAmount = 100;
       const febLeap = createMockSourcePeriod({
@@ -497,8 +497,8 @@ describe('Weekly Budget Amount Calculations', () => {
   // WEEKLY PERIOD SPANNING MONTHS
   // ============================================================================
 
-  describe('Weekly Periods Spanning Month Boundaries', () => {
-    it('should calculate week spanning Jan-Feb correctly', () => {
+  describe("Weekly Periods Spanning Month Boundaries", () => {
+    it("should calculate week spanning Jan-Feb correctly", () => {
       // Week from Jan 26 - Feb 1 (7 days)
       // For weekly budget, daily rate is constant (budget/7)
       const budgetAmount = 100;
@@ -516,7 +516,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(result).toBe(100);
     });
 
-    it('should calculate monthly cross-type conversion correctly for Jan-Feb', () => {
+    it("should calculate monthly cross-type conversion correctly for Jan-Feb", () => {
       // For a weekly budget, converting to monthly periods uses day-based calculation
       const budgetAmount = 100;
 
@@ -549,7 +549,7 @@ describe('Weekly Budget Amount Calculations', () => {
       expect(amountsEqual(monthlyTotal, expectedTotal, 1)).toBe(true);
     });
 
-    it('should return full amount for same-type weekly periods', () => {
+    it("should return full amount for same-type weekly periods", () => {
       // For a weekly budget, weekly periods (same type) return full amount
       const budgetAmount = 100;
 

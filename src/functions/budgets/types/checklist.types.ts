@@ -7,4 +7,4 @@
 
 export type {
   ChecklistItem,
-} from '../../../types';
+} from "../../../types";

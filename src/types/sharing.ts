@@ -21,7 +21,7 @@ export interface ResourcePermissions {
 
 // Share information for a single target (user or group)
 export interface ResourceShare {
-  type: 'group' | 'user';
+  type: "group" | "user";
   targetId: string;              // Group ID or User ID
   role: ResourceRole;
   sharedBy: string;              // User ID who shared it
@@ -48,10 +48,10 @@ export interface SharedResource {
 // =======================
 
 export interface ShareResourceRequest {
-  resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   resourceId: string;
   shareWith: {
-    type: 'group' | 'user';
+    type: "group" | "user";
     targetId: string;
     role: ResourceRole;
     permissions?: ResourcePermissions;
@@ -64,9 +64,9 @@ export interface ShareResourceResponse {
 }
 
 export interface UnshareResourceRequest {
-  resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   resourceId: string;
-  targetType: 'group' | 'user';
+  targetType: "group" | "user";
   targetId: string;
 }
 
@@ -76,9 +76,9 @@ export interface UnshareResourceResponse {
 }
 
 export interface UpdateSharePermissionsRequest {
-  resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   resourceId: string;
-  targetType: 'group' | 'user';
+  targetType: "group" | "user";
   targetId: string;
   newRole?: ResourceRole;
   newPermissions?: ResourcePermissions;
@@ -90,7 +90,7 @@ export interface UpdateSharePermissionsResponse {
 }
 
 export interface GetUserSharedResourcesRequest {
-  resourceType?: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType?: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   includeOwned?: boolean;
 }
 
@@ -112,9 +112,9 @@ export interface GetUserSharedResourcesResponse {
 
 export interface CheckResourceAccessRequest {
   userId: string;
-  resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+  resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
   resourceId: string;
-  requiredPermission: 'read' | 'edit' | 'delete' | 'share';
+  requiredPermission: "read" | "edit" | "delete" | "share";
 }
 
 export interface CheckResourceAccessResponse {

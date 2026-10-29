@@ -313,7 +313,7 @@ export async function authenticateRequest(
   let authHeader: string | undefined;
   
   // Handle different request types
-  if (request.get && typeof request.get === 'function') {
+  if (request.get && typeof request.get === "function") {
     // HTTP request (Express-style)
     authHeader = request.get("Authorization");
   } else if (request.headers && request.headers.authorization) {

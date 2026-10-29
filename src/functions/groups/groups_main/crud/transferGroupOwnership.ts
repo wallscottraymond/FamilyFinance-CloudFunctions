@@ -23,55 +23,55 @@ export const transferGroupOwnership = onCall<TransferGroupOwnershipRequest, Prom
   memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
-  console.log('[transferGroupOwnership] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[transferGroupOwnership] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
     const { groupId, newOwnerId } = request.data;
 
     // Validate request data
-    if (!groupId || typeof groupId !== 'string') {
-      throw new HttpsError('invalid-argument', 'groupId is required');
+    if (!groupId || typeof groupId !== "string") {
+      throw new HttpsError("invalid-argument", "groupId is required");
     }
 
-    if (!newOwnerId || typeof newOwnerId !== 'string') {
-      throw new HttpsError('invalid-argument', 'newOwnerId is required');
+    if (!newOwnerId || typeof newOwnerId !== "string") {
+      throw new HttpsError("invalid-argument", "newOwnerId is required");
     }
 
     // Cannot transfer to self
     if (newOwnerId === callerUserId) {
-      throw new HttpsError('invalid-argument', 'Cannot transfer ownership to yourself');
+      throw new HttpsError("invalid-argument", "Cannot transfer ownership to yourself");
     }
 
     // Get the group
-    const group = await getDocument<Group>('groups', groupId);
+    const group = await getDocument<Group>("groups", groupId);
     if (!group) {
-      throw new HttpsError('not-found', 'Group not found');
+      throw new HttpsError("not-found", "Group not found");
     }
 
     if (!group.isActive) {
-      throw new HttpsError('failed-precondition', 'Group is not active');
+      throw new HttpsError("failed-precondition", "Group is not active");
     }
 
     // Verify caller is the current owner
     const callerMember = group.members.find(m => m.userId === callerUserId);
     if (!callerMember) {
-      throw new HttpsError('permission-denied', 'You are not a member of this group');
+      throw new HttpsError("permission-denied", "You are not a member of this group");
     }
 
     if (callerMember.role !== GroupRole.OWNER) {
-      throw new HttpsError('permission-denied', 'Only the group owner can transfer ownership');
+      throw new HttpsError("permission-denied", "Only the group owner can transfer ownership");
     }
 
     // Verify new owner is a member
     const newOwnerMemberIndex = group.members.findIndex(m => m.userId === newOwnerId);
     if (newOwnerMemberIndex === -1) {
-      throw new HttpsError('not-found', 'New owner must be an existing member of the group');
+      throw new HttpsError("not-found", "New owner must be an existing member of the group");
     }
 
     const callerMemberIndex = group.members.findIndex(m => m.userId === callerUserId);
@@ -92,15 +92,15 @@ export const transferGroupOwnership = onCall<TransferGroupOwnershipRequest, Prom
     };
 
     // Update the group document
-    await updateDocument<Group>('groups', groupId, {
+    await updateDocument<Group>("groups", groupId, {
       ownerId: newOwnerId,
       members: updatedMembers,
     });
 
-    console.log('[transferGroupOwnership] Group ownership transferred');
+    console.log("[transferGroupOwnership] Group ownership transferred");
 
     // Update the previous owner's groupMemberships
-    const previousOwnerUser = await getDocument<User>('users', callerUserId);
+    const previousOwnerUser = await getDocument<User>("users", callerUserId);
     if (previousOwnerUser && previousOwnerUser.groupMemberships) {
       const updatedMemberships = previousOwnerUser.groupMemberships.map(m => {
         if (m.groupId === groupId) {
@@ -112,15 +112,15 @@ export const transferGroupOwnership = onCall<TransferGroupOwnershipRequest, Prom
         return m;
       });
 
-      await updateDocument<User>('users', callerUserId, {
+      await updateDocument<User>("users", callerUserId, {
         groupMemberships: updatedMemberships,
       });
 
-      console.log('[transferGroupOwnership] Previous owner groupMemberships updated');
+      console.log("[transferGroupOwnership] Previous owner groupMemberships updated");
     }
 
     // Update the new owner's groupMemberships
-    const newOwnerUser = await getDocument<User>('users', newOwnerId);
+    const newOwnerUser = await getDocument<User>("users", newOwnerId);
     if (newOwnerUser && newOwnerUser.groupMemberships) {
       const updatedMemberships = newOwnerUser.groupMemberships.map(m => {
         if (m.groupId === groupId) {
@@ -132,27 +132,27 @@ export const transferGroupOwnership = onCall<TransferGroupOwnershipRequest, Prom
         return m;
       });
 
-      await updateDocument<User>('users', newOwnerId, {
+      await updateDocument<User>("users", newOwnerId, {
         groupMemberships: updatedMemberships,
       });
 
-      console.log('[transferGroupOwnership] New owner groupMemberships updated');
+      console.log("[transferGroupOwnership] New owner groupMemberships updated");
     }
 
     return {
       success: true,
-      message: 'Group ownership transferred successfully',
+      message: "Group ownership transferred successfully",
       previousOwnerId: callerUserId,
       newOwnerId: newOwnerId,
     };
 
   } catch (error: any) {
-    console.error('[transferGroupOwnership] Error:', error);
+    console.error("[transferGroupOwnership] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to transfer group ownership');
+    throw new HttpsError("internal", "Failed to transfer group ownership");
   }
 });

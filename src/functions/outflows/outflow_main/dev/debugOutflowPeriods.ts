@@ -3,9 +3,9 @@
  * Query outflow_periods collection to see what data exists
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { onRequest } from "firebase-functions/v2/https";
+import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp, getApps } from "firebase-admin/app";
 
 // Initialize Firebase Admin if not already initialized
 if (getApps().length === 0) {
@@ -16,14 +16,14 @@ const db = getFirestore();
 
 export const debugOutflowPeriods = onRequest({
   cors: true,
-  memory: '512MiB',
+  memory: "512MiB",
   timeoutSeconds: 60,
 }, async (req, res) => {
   try {
-    console.log('🔍 Debugging outflow_periods collection...');
+    console.log("🔍 Debugging outflow_periods collection...");
 
     // Query all outflow periods (limit 30 to show more results)
-    const outflowPeriodsSnapshot = await db.collection('outflow_periods')
+    const outflowPeriodsSnapshot = await db.collection("outflow_periods")
       .limit(30)
       .get();
 
@@ -74,12 +74,12 @@ export const debugOutflowPeriods = onRequest({
 
     console.log(`Found ${results.total} outflow periods for ${results.users.size} users`);
     console.log(`Current periods: ${results.currentPeriods.length}`);
-    console.log('Users:', Array.from(results.users));
+    console.log("Users:", Array.from(results.users));
 
     // Also query specifically for the current user  
-    const currentUserId = 'IKzBkwEZb6MdJkdDVnVyTFAFj5i1';
-    const currentUserSnapshot = await db.collection('outflow_periods')
-      .where('userId', '==', currentUserId)
+    const currentUserId = "IKzBkwEZb6MdJkdDVnVyTFAFj5i1";
+    const currentUserSnapshot = await db.collection("outflow_periods")
+      .where("userId", "==", currentUserId)
       .get();
     
     console.log(`Found ${currentUserSnapshot.size} outflow periods for current user: ${currentUserId}`);
@@ -98,7 +98,7 @@ export const debugOutflowPeriods = onRequest({
         sourcePeriodId: data.sourcePeriodId,
         billAmount: data.billAmount,
         outflowId: data.outflowId,
-        description: data.outflowDescription || 'N/A'
+        description: data.outflowDescription || "N/A"
       });
     });
 
@@ -111,10 +111,10 @@ export const debugOutflowPeriods = onRequest({
       }
     });
   } catch (error) {
-    console.error('Error debugging outflow periods:', error);
+    console.error("Error debugging outflow periods:", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : "Unknown error"
     });
   }
 });

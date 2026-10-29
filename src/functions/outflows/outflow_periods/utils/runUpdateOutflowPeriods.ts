@@ -10,11 +10,11 @@
  * 3. transactionIds - Re-runs auto-matching
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { Outflow, OutflowPeriod } from '../../../../types';
-import { autoMatchSinglePeriod } from './autoMatchSinglePeriod';
-import { matchAllTransactionsToOccurrences } from './matchAllTransactionsToOccurrences';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { Outflow, OutflowPeriod } from "../../../../types";
+import { autoMatchSinglePeriod } from "./autoMatchSinglePeriod";
+import { matchAllTransactionsToOccurrences } from "./matchAllTransactionsToOccurrences";
 
 export interface OutflowUpdateResult {
   success: boolean;
@@ -100,17 +100,17 @@ export async function runUpdateOutflowPeriods(
     const effectiveAmount = outflowAfter.expectedAmountOverride ?? outflowAfter.averageAmount;
 
     if (effectiveAmountBefore !== effectiveAmount) {
-      changedFields.push('averageAmount');
-      console.log(`[runUpdateOutflowPeriods] effective expected amount changed: ${effectiveAmountBefore} → ${effectiveAmount} (override=${outflowAfter.expectedAmountOverride ?? 'none'})`);
+      changedFields.push("averageAmount");
+      console.log(`[runUpdateOutflowPeriods] effective expected amount changed: ${effectiveAmountBefore} → ${effectiveAmount} (override=${outflowAfter.expectedAmountOverride ?? "none"})`);
     }
 
     if (outflowBefore.userCustomName !== outflowAfter.userCustomName) {
-      changedFields.push('userCustomName');
+      changedFields.push("userCustomName");
       console.log(`[runUpdateOutflowPeriods] userCustomName changed: "${outflowBefore.userCustomName}" → "${outflowAfter.userCustomName}"`);
     }
 
     if (hasTransactionIdsChanged(outflowBefore, outflowAfter)) {
-      changedFields.push('transactionIds');
+      changedFields.push("transactionIds");
       const beforeCount = (outflowBefore.transactionIds || []).length;
       const afterCount = (outflowAfter.transactionIds || []).length;
       console.log(`[runUpdateOutflowPeriods] transactionIds changed: ${beforeCount} → ${afterCount} transactions`);
@@ -118,54 +118,54 @@ export async function runUpdateOutflowPeriods(
 
     // Check for description changes (separate from userCustomName)
     if (outflowBefore.description !== outflowAfter.description) {
-      changedFields.push('description');
+      changedFields.push("description");
       console.log(`[runUpdateOutflowPeriods] description changed: "${outflowBefore.description}" → "${outflowAfter.description}"`);
     }
 
     // Check for merchantName changes
     if (outflowBefore.merchantName !== outflowAfter.merchantName) {
-      changedFields.push('merchantName');
+      changedFields.push("merchantName");
       console.log(`[runUpdateOutflowPeriods] merchantName changed: "${outflowBefore.merchantName}" → "${outflowAfter.merchantName}"`);
     }
 
     // Check for expenseType changes
     if (outflowBefore.expenseType !== outflowAfter.expenseType) {
-      changedFields.push('expenseType');
+      changedFields.push("expenseType");
       console.log(`[runUpdateOutflowPeriods] expenseType changed: "${outflowBefore.expenseType}" → "${outflowAfter.expenseType}"`);
     }
 
     // Check for isEssential changes
     if (outflowBefore.isEssential !== outflowAfter.isEssential) {
-      changedFields.push('isEssential');
+      changedFields.push("isEssential");
       console.log(`[runUpdateOutflowPeriods] isEssential changed: ${outflowBefore.isEssential} → ${outflowAfter.isEssential}`);
     }
 
     // Check for frequency changes
     if (outflowBefore.frequency !== outflowAfter.frequency) {
-      changedFields.push('frequency');
+      changedFields.push("frequency");
       console.log(`[runUpdateOutflowPeriods] frequency changed: "${outflowBefore.frequency}" → "${outflowAfter.frequency}"`);
     }
 
     // Check for isActive changes
     if (outflowBefore.isActive !== outflowAfter.isActive) {
-      changedFields.push('isActive');
+      changedFields.push("isActive");
       console.log(`[runUpdateOutflowPeriods] isActive changed: ${outflowBefore.isActive} → ${outflowAfter.isActive}`);
     }
 
     if (changedFields.length === 0) {
-      console.log(`[runUpdateOutflowPeriods] No relevant changes detected, skipping update`);
+      console.log("[runUpdateOutflowPeriods] No relevant changes detected, skipping update");
       result.success = true;
       result.fieldsUpdated = [];
       return result;
     }
 
     result.fieldsUpdated = changedFields;
-    console.log(`[runUpdateOutflowPeriods] Fields to update: ${changedFields.join(', ')}`);
+    console.log(`[runUpdateOutflowPeriods] Fields to update: ${changedFields.join(", ")}`);
 
     // Step 2: Query all periods for this outflow
     console.log(`[runUpdateOutflowPeriods] Querying periods for outflow: ${outflowId}`);
-    const periodsSnapshot = await db.collection('outflow_periods')
-      .where('outflowId', '==', outflowId)
+    const periodsSnapshot = await db.collection("outflow_periods")
+      .where("outflowId", "==", outflowId)
       .get();
 
     result.periodsQueried = periodsSnapshot.size;
@@ -215,7 +215,7 @@ export async function runUpdateOutflowPeriods(
     console.log(`[runUpdateOutflowPeriods] Periods to update: ${periodsToUpdate.length} (all; ${paidCount} paid get EXPECTED-only updates, actual paid amounts preserved)`);
 
     if (periodsToUpdate.length === 0) {
-      console.log(`[runUpdateOutflowPeriods] No periods need updating`);
+      console.log("[runUpdateOutflowPeriods] No periods need updating");
       result.success = true;
       return result;
     }
@@ -233,7 +233,7 @@ export async function runUpdateOutflowPeriods(
         const updates: any = {};
 
         // Handle averageAmount change (uses the EFFECTIVE amount: override ?? average)
-        if (changedFields.includes('averageAmount')) {
+        if (changedFields.includes("averageAmount")) {
           const dailyRate = effectiveAmount / period.cycleDays;
           const daysInPeriod = calculateDaysInPeriod(period);
 
@@ -263,37 +263,37 @@ export async function runUpdateOutflowPeriods(
         }
 
         // Handle userCustomName change
-        if (changedFields.includes('userCustomName')) {
+        if (changedFields.includes("userCustomName")) {
           // Update userCustomName field on the period (this is what the frontend reads)
-          updates.userCustomName = outflowAfter.userCustomName || '';
+          updates.userCustomName = outflowAfter.userCustomName || "";
           // Also update description for backwards compatibility
           updates.description = outflowAfter.userCustomName || outflowAfter.description;
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating userCustomName to "${updates.userCustomName}"`);
         }
 
         // Handle description change (when not overridden by userCustomName)
-        if (changedFields.includes('description') && !changedFields.includes('userCustomName')) {
+        if (changedFields.includes("description") && !changedFields.includes("userCustomName")) {
           // Only update description if userCustomName is not set
           if (!outflowAfter.userCustomName) {
-            updates.description = outflowAfter.description || '';
+            updates.description = outflowAfter.description || "";
             console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating description to "${updates.description}"`);
           }
         }
 
         // Handle merchantName change
-        if (changedFields.includes('merchantName')) {
+        if (changedFields.includes("merchantName")) {
           updates.merchantName = outflowAfter.merchantName || null;
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating merchantName to "${updates.merchantName}"`);
         }
 
         // Handle expenseType change
-        if (changedFields.includes('expenseType')) {
+        if (changedFields.includes("expenseType")) {
           updates.expenseType = outflowAfter.expenseType;
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating expenseType to "${updates.expenseType}"`);
         }
 
         // Handle isEssential change
-        if (changedFields.includes('isEssential')) {
+        if (changedFields.includes("isEssential")) {
           updates.isEssential = outflowAfter.isEssential ?? false;
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating isEssential to ${updates.isEssential}`);
         }
@@ -301,7 +301,7 @@ export async function runUpdateOutflowPeriods(
         // Handle isActive change - only affects unpaid periods
         // Check if this is a paid period (skip isActive update for paid periods)
         const isPaid = period.isPaid || period.isFullyPaid || period.isPartiallyPaid;
-        if (changedFields.includes('isActive') && !isPaid) {
+        if (changedFields.includes("isActive") && !isPaid) {
           updates.isActive = outflowAfter.isActive ?? true;
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating isActive to ${updates.isActive}`);
         }
@@ -309,7 +309,7 @@ export async function runUpdateOutflowPeriods(
         // Handle transactionIds change - call autoMatchSinglePeriod.
         // Gated to UNPAID periods (now that we iterate ALL periods for expected-amount updates):
         // re-matching an already-paid period could double-assign, and its payment facts are settled.
-        if (changedFields.includes('transactionIds') && !isPaid) {
+        if (changedFields.includes("transactionIds") && !isPaid) {
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: running auto-match`);
           try {
             const matchResult = await autoMatchSinglePeriod(
@@ -325,7 +325,7 @@ export async function runUpdateOutflowPeriods(
               console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: running occurrence matching for ${period.occurrenceDueDates.length} occurrences...`);
               try {
                 // Re-fetch period to get updated transactionSplits from auto-matching
-                const updatedPeriodSnap = await db.collection('outflow_periods').doc(periodDoc.id).get();
+                const updatedPeriodSnap = await db.collection("outflow_periods").doc(periodDoc.id).get();
                 if (updatedPeriodSnap.exists) {
                   const updatedPeriodData = { id: updatedPeriodSnap.id, ...updatedPeriodSnap.data() } as OutflowPeriod;
                   await matchAllTransactionsToOccurrences(db, periodDoc.id, updatedPeriodData);
@@ -365,8 +365,8 @@ export async function runUpdateOutflowPeriods(
     console.log(`[runUpdateOutflowPeriods] ✓ Update complete: ${updatedCount} periods updated`);
 
   } catch (error: any) {
-    console.error(`[runUpdateOutflowPeriods] Error:`, error);
-    result.errors.push(error.message || 'Unknown error');
+    console.error("[runUpdateOutflowPeriods] Error:", error);
+    result.errors.push(error.message || "Unknown error");
   }
 
   return result;

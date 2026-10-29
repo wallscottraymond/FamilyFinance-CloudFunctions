@@ -8,8 +8,8 @@
  *
  * Prereqs: firebase emulators:exec --only firestore "npx jest --selectProjects emulator --testPathPattern streamSplitDetach"
  */
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
 const rid = (p: string) => `${p}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 
@@ -17,60 +17,60 @@ let db: FirebaseFirestore.Firestore;
 let reconcile: (ctx: unknown, input: unknown) => Promise<unknown>;
 beforeAll(() => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
-    throw new Error('Refusing to run: FIRESTORE_EMULATOR_HOST not set (dev==prod safety).');
+    throw new Error("Refusing to run: FIRESTORE_EMULATOR_HOST not set (dev==prod safety).");
   }
-  if (!admin.apps.length) admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  if (!admin.apps.length) admin.initializeApp({ projectId: "family-budget-app-cb59b" });
   db = admin.firestore();
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   ({ reconcile_recurring_periods_orchestrator: reconcile } = require(
-    '../src/functions/orchestrators/recurring/reconcile_recurring_periods.orchestrator'
+    "../src/functions/orchestrators/recurring/reconcile_recurring_periods.orchestrator"
   ));
 });
 
 /* eslint-disable @typescript-eslint/naming-convention */
 async function seed(second_split: Record<string, unknown>, txn_extra: Record<string, unknown> = {}) {
-  const userId = rid('u');
-  const outflowId = rid('outflow');
-  const plaidId = rid('ptx');
-  await db.collection('outflows').doc(outflowId).set({
+  const userId = rid("u");
+  const outflowId = rid("outflow");
+  const plaidId = rid("ptx");
+  await db.collection("outflows").doc(outflowId).set({
     id: outflowId, ownerId: userId, userId, averageAmount: 150, isActive: true,
-    frequency: 'monthly', name: 'Comcast', transactionIds: [plaidId],
+    frequency: "monthly", name: "Comcast", transactionIds: [plaidId],
   });
   const due = Timestamp.fromMillis(Date.UTC(2026, 7, 15));
-  await db.collection('outflow_periods').doc(`${outflowId}_2026M08`).set({
-    id: `${outflowId}_2026M08`, outflowId, ownerId: userId, userId, sourcePeriodId: '2026M08',
-    periodType: 'monthly', periodStartDate: Timestamp.fromMillis(Date.UTC(2026, 7, 1)),
+  await db.collection("outflow_periods").doc(`${outflowId}_2026M08`).set({
+    id: `${outflowId}_2026M08`, outflowId, ownerId: userId, userId, sourcePeriodId: "2026M08",
+    periodType: "monthly", periodStartDate: Timestamp.fromMillis(Date.UTC(2026, 7, 1)),
     periodEndDate: Timestamp.fromMillis(Date.UTC(2026, 8, 0, 23, 59, 59)),
     amountPerOccurrence: 150, totalAmountDue: 150, totalAmountPaid: 0,
     occurrenceDueDates: [due], firstDueDateInPeriod: due, isActive: true,
   });
-  await db.collection('transactions').doc(`plaid_${plaidId}`).set({
+  await db.collection("transactions").doc(`plaid_${plaidId}`).set({
     transactionId: plaidId, userId, ownerId: userId, isActive: true, isPending: false,
-    transactionDate: Timestamp.fromMillis(Date.UTC(2026, 7, 14)), amount: 150, type: 'expense',
+    transactionDate: Timestamp.fromMillis(Date.UTC(2026, 7, 14)), amount: 150, type: "expense",
     ...txn_extra,
     splits: [
-      { splitId: 'a', amount: 100, isDefault: true },
-      { splitId: 'b', amount: 50, ...second_split },
+      { splitId: "a", amount: 100, isDefault: true },
+      { splitId: "b", amount: 50, ...second_split },
     ],
   });
-  await reconcile({ trace_id: rid('t'), span_id: rid('s') }, { recurring_id: outflowId, recurring_type: 'outflow' });
-  return ((await db.collection('outflow_periods').doc(`${outflowId}_2026M08`).get()).data()?.totalAmountPaid) ?? 0;
+  await reconcile({ trace_id: rid("t"), span_id: rid("s") }, { recurring_id: outflowId, recurring_type: "outflow" });
+  return ((await db.collection("outflow_periods").doc(`${outflowId}_2026M08`).get()).data()?.totalAmountPaid) ?? 0;
 }
 
-describe('per-split stream detach (emulator)', () => {
-  it('a budget pin on ONE split leaves the other split paying the bill ($100)', async () => {
-    expect(await seed({ budgetAssignmentSource: 'manual', budgetId: 'ent' })).toBe(100);
+describe("per-split stream detach (emulator)", () => {
+  it("a budget pin on ONE split leaves the other split paying the bill ($100)", async () => {
+    expect(await seed({ budgetAssignmentSource: "manual", budgetId: "ent" })).toBe(100);
   });
 
-  it('a "remove from bill" on ONE split leaves the other split paying the bill ($100)', async () => {
-    expect(await seed({ outflowAssignmentSource: 'manual', outflowId: null })).toBe(100);
+  it("a \"remove from bill\" on ONE split leaves the other split paying the bill ($100)", async () => {
+    expect(await seed({ outflowAssignmentSource: "manual", outflowId: null })).toBe(100);
   });
 
-  it('edge money (a transfer crossing the view) in the stream pays nothing — as the period page', async () => {
-    expect(await seed({}, { transferRole: 'edge_out' })).toBe(0);
+  it("edge money (a transfer crossing the view) in the stream pays nothing — as the period page", async () => {
+    expect(await seed({}, { transferRole: "edge_out" })).toBe(0);
   });
 
-  it('CONTROL: neither split taken off → the whole payment ($150)', async () => {
+  it("CONTROL: neither split taken off → the whole payment ($150)", async () => {
     expect(await seed({})).toBe(150);
   });
 });

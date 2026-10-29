@@ -111,13 +111,13 @@ export async function resolve_budget_view_deps(
   const splits =
     match_mode === "on_read"
       ? await resolve_on_read_spend_splits(
-          ctx,
-          user_id,
-          budget_id,
-          target_is_ee,
-          span_start_ms,
-          span_end_ms
-        )
+        ctx,
+        user_id,
+        budget_id,
+        target_is_ee,
+        span_start_ms,
+        span_end_ms
+      )
       : await resolve_spend_splits(ctx, user_id, budget_id, span_start_ms, span_end_ms, "monthly");
 
   return { buckets, monthly_periods, splits };

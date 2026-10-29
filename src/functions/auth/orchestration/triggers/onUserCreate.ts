@@ -1,14 +1,14 @@
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import { initializeOutflowSummaries, initializeGroupOutflowSummaries } from '../../utils/initializeOutflowSummaries';
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { initializeOutflowSummaries, initializeGroupOutflowSummaries } from "../../utils/initializeOutflowSummaries";
 
 /**
  * Trigger when a user document is created
  * Initializes outflow summary collections for the new user
  */
 export const onUserCreated = onDocumentCreated({
-  document: 'users/{userId}',
-  region: 'us-central1',
-  memory: '256MiB',
+  document: "users/{userId}",
+  region: "us-central1",
+  memory: "256MiB",
   timeoutSeconds: 30,
 }, async (event) => {
   const userId = event.params.userId;

@@ -283,44 +283,44 @@ export const RULE_PRIORITY = {
  * Rule evaluation result codes
  */
 export const RULE_RESULT = {
-  MATCH: 'match',
-  NO_MATCH: 'no_match',
-  ERROR: 'error',
-  TIMEOUT: 'timeout',
-  SKIPPED: 'skipped',
+  MATCH: "match",
+  NO_MATCH: "no_match",
+  ERROR: "error",
+  TIMEOUT: "timeout",
+  SKIPPED: "skipped",
 } as const;
 
 /**
  * Rule application status
  */
 export const RULE_STATUS = {
-  PENDING: 'pending',
-  PROCESSING: 'processing',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-  PARTIAL: 'partial',
+  PENDING: "pending",
+  PROCESSING: "processing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  PARTIAL: "partial",
 } as const;
 
 /**
  * Conflict types
  */
 export const CONFLICT_TYPE = {
-  CATEGORY: 'category',      // Multiple rules setting category
-  TAG: 'tag',                // Conflicting tag operations
-  BUDGET: 'budget',          // Multiple rules setting budget
-  PRIORITY: 'priority',      // Same priority rules with conflicts
-  CONDITION: 'condition',    // Overlapping/contradictory conditions
+  CATEGORY: "category",      // Multiple rules setting category
+  TAG: "tag",                // Conflicting tag operations
+  BUDGET: "budget",          // Multiple rules setting budget
+  PRIORITY: "priority",      // Same priority rules with conflicts
+  CONDITION: "condition",    // Overlapping/contradictory conditions
 } as const;
 
 /**
  * Rule source types
  */
 export const RULE_SOURCE = {
-  USER: 'user',              // User-created rule
-  TEMPLATE: 'template',      // From template/preset
-  ML: 'ml',                  // ML-suggested rule
-  FAMILY: 'family',          // Family-shared rule
-  SYSTEM: 'system',          // System-generated rule
+  USER: "user",              // User-created rule
+  TEMPLATE: "template",      // From template/preset
+  ML: "ml",                  // ML-suggested rule
+  FAMILY: "family",          // Family-shared rule
+  SYSTEM: "system",          // System-generated rule
 } as const;
 
 // Type exports for type safety

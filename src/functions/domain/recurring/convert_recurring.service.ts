@@ -125,12 +125,12 @@ export function parse_iso_date(s: string): number | null {
 /** Roughly one cadence in ms (for bounds and guesses only — never for placing occurrences). */
 export function cadence_ms(frequency: string): number {
   switch (normalize_frequency(frequency)) {
-    case "WEEKLY": return 7 * DAY_MS;
-    case "BIWEEKLY": return 14 * DAY_MS;
-    case "SEMIMONTHLY": return 15 * DAY_MS;
-    case "MONTHLY": return 30 * DAY_MS;
-    case "QUARTERLY": return 91 * DAY_MS;
-    default: return 365 * DAY_MS;
+  case "WEEKLY": return 7 * DAY_MS;
+  case "BIWEEKLY": return 14 * DAY_MS;
+  case "SEMIMONTHLY": return 15 * DAY_MS;
+  case "MONTHLY": return 30 * DAY_MS;
+  case "QUARTERLY": return 91 * DAY_MS;
+  default: return 365 * DAY_MS;
   }
 }
 
@@ -147,24 +147,24 @@ function add_months(ms: number, n: number): number {
 /** The due date `n` cadences after (n > 0) or before (n < 0) `anchor_ms`, on the anchor's day. */
 export function step_cadence(anchor_ms: number, frequency: string, n: number): number {
   switch (normalize_frequency(frequency)) {
-    case "WEEKLY": return anchor_ms + n * 7 * DAY_MS;
-    case "BIWEEKLY": return anchor_ms + n * 14 * DAY_MS;
-    case "SEMIMONTHLY": {
-      // Two fixed days a month (the anchor's and the one 15 days away); n counts payments.
-      const d = new Date(anchor_ms).getUTCDate();
-      const [d1, d2] = d <= 15 ? [d, d + 15] : [d - 15, d];
-      const is_second = d === d2 && d !== d1;
-      const slot = (is_second ? 1 : 0) + n;
-      const months = Math.floor(slot / 2);
-      const which = ((slot % 2) + 2) % 2;
-      const base = add_months(Date.UTC(new Date(anchor_ms).getUTCFullYear(), new Date(anchor_ms).getUTCMonth(), 1), months);
-      const bd = new Date(base);
-      const last = new Date(Date.UTC(bd.getUTCFullYear(), bd.getUTCMonth() + 1, 0)).getUTCDate();
-      return Date.UTC(bd.getUTCFullYear(), bd.getUTCMonth(), Math.min(which === 0 ? d1 : d2, last));
-    }
-    case "MONTHLY": return add_months(anchor_ms, n);
-    case "QUARTERLY": return add_months(anchor_ms, 3 * n);
-    default: return add_months(anchor_ms, 12 * n);
+  case "WEEKLY": return anchor_ms + n * 7 * DAY_MS;
+  case "BIWEEKLY": return anchor_ms + n * 14 * DAY_MS;
+  case "SEMIMONTHLY": {
+    // Two fixed days a month (the anchor's and the one 15 days away); n counts payments.
+    const d = new Date(anchor_ms).getUTCDate();
+    const [d1, d2] = d <= 15 ? [d, d + 15] : [d - 15, d];
+    const is_second = d === d2 && d !== d1;
+    const slot = (is_second ? 1 : 0) + n;
+    const months = Math.floor(slot / 2);
+    const which = ((slot % 2) + 2) % 2;
+    const base = add_months(Date.UTC(new Date(anchor_ms).getUTCFullYear(), new Date(anchor_ms).getUTCMonth(), 1), months);
+    const bd = new Date(base);
+    const last = new Date(Date.UTC(bd.getUTCFullYear(), bd.getUTCMonth() + 1, 0)).getUTCDate();
+    return Date.UTC(bd.getUTCFullYear(), bd.getUTCMonth(), Math.min(which === 0 ? d1 : d2, last));
+  }
+  case "MONTHLY": return add_months(anchor_ms, n);
+  case "QUARTERLY": return add_months(anchor_ms, 3 * n);
+  default: return add_months(anchor_ms, 12 * n);
   }
 }
 

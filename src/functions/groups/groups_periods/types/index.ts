@@ -14,7 +14,7 @@ export interface GroupPeriod {
   // Identity
   groupId: string;
   periodId: string;            // e.g., '2025M12', '2025W50'
-  periodType: 'weekly' | 'bi_monthly' | 'monthly' | 'annual';
+  periodType: "weekly" | "bi_monthly" | "monthly" | "annual";
 
   // Period boundaries
   periodStartDate: FirebaseFirestore.Timestamp;

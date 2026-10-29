@@ -18,18 +18,18 @@ export const makeUserAdmin = onCall({
   timeoutSeconds: 30,
   cors: true
 }, async (request) => {
-  console.log('🔧 makeUserAdmin called');
+  console.log("🔧 makeUserAdmin called");
 
   if (!request.auth) {
-    console.error('❌ makeUserAdmin: Not authenticated');
-    throw new HttpsError('unauthenticated', 'Must be authenticated to make user admin');
+    console.error("❌ makeUserAdmin: Not authenticated");
+    throw new HttpsError("unauthenticated", "Must be authenticated to make user admin");
   }
 
   // Only an existing admin may grant admin (prevents self-escalation)
-  const callerIsAdmin = request.auth.token?.role === 'admin';
+  const callerIsAdmin = request.auth.token?.role === "admin";
   if (!callerIsAdmin) {
     console.error(`❌ makeUserAdmin: Non-admin caller attempted escalation: ${request.auth.uid}`);
-    throw new HttpsError('permission-denied', 'Only an existing admin can grant admin access');
+    throw new HttpsError("permission-denied", "Only an existing admin can grant admin access");
   }
 
   const userId = (request.data?.targetUserId as string | undefined) || request.auth.uid;
@@ -69,6 +69,6 @@ export const makeUserAdmin = onCall({
     };
   } catch (error: any) {
     console.error("❌ Error making user admin:", error);
-    throw new HttpsError('internal', `Failed to make user admin: ${error.message}`);
+    throw new HttpsError("internal", `Failed to make user admin: ${error.message}`);
   }
 });

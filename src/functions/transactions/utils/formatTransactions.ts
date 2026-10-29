@@ -11,11 +11,11 @@
  * - Building transaction arrays for batch processing (no DB writes)
  */
 
-import { PlaidAccount } from '../../../types';
-import { queryDocuments } from '../../../utils/firestore';
-import { Transaction as PlaidTransaction } from 'plaid';
-import { buildTransactionData } from './buildTransactionData';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { PlaidAccount } from "../../../types";
+import { queryDocuments } from "../../../utils/firestore";
+import { Transaction as PlaidTransaction } from "plaid";
+import { buildTransactionData } from "./buildTransactionData";
+import { Transaction as FamilyTransaction } from "../../../types";
 
 /**
  * Format transactions from Plaid sync data (pure mapping, no DB writes)
@@ -51,10 +51,10 @@ export async function formatTransactions(
     const accountIds = [...new Set(addedTransactions.map(t => t.account_id))];
     console.log(`Looking for ${accountIds.length} unique accounts`);
 
-    const accountQuery = await queryDocuments('accounts', {
+    const accountQuery = await queryDocuments("accounts", {
       where: [
-        { field: 'accountId', operator: 'in', value: accountIds },
-        { field: 'userId', operator: '==', value: userId }
+        { field: "accountId", operator: "in", value: accountIds },
+        { field: "userId", operator: "==", value: userId }
       ]
     });
 
@@ -98,11 +98,11 @@ export async function formatTransactions(
     return formattedTransactions;
 
   } catch (error) {
-    console.error('Error formatting transactions:', error);
+    console.error("Error formatting transactions:", error);
     return formattedTransactions; // Return partial results
   }
 }
 
 // Re-export utilities for backward compatibility
-export { matchCategoriesToTransactions } from './matchCategoriesToTransactions';
-export { matchTransactionToBudget } from './matchTransactionToBudget';
+export { matchCategoriesToTransactions } from "./matchCategoriesToTransactions";
+export { matchTransactionToBudget } from "./matchTransactionToBudget";

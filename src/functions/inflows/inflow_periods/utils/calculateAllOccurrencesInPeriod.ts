@@ -13,34 +13,34 @@
  * We store and return all amounts as POSITIVE values.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { Inflow, SourcePeriod, PlaidRecurringFrequency } from '../../../../types';
-import { occurrence_dates_in_window } from '../../../domain/outflows/outflow_period.service';
+import { Timestamp } from "firebase-admin/firestore";
+import { Inflow, SourcePeriod, PlaidRecurringFrequency } from "../../../../types";
+import { occurrence_dates_in_window } from "../../../domain/outflows/outflow_period.service";
 
 /**
  * Get approximate cycle days for a frequency
  */
 function getCycleDays(frequency: PlaidRecurringFrequency | string): number {
   switch (frequency) {
-    case PlaidRecurringFrequency.WEEKLY:
-    case 'WEEKLY':
-      return 7;
-    case PlaidRecurringFrequency.BIWEEKLY:
-    case 'BIWEEKLY':
-      return 14;
-    case PlaidRecurringFrequency.SEMI_MONTHLY:
-    case 'SEMI_MONTHLY':
-      return 15; // Approximate
-    case PlaidRecurringFrequency.MONTHLY:
-    case 'MONTHLY':
-      return 30; // Approximate
-    case 'QUARTERLY':
-      return 91; // Approximate (365/4)
-    case PlaidRecurringFrequency.ANNUALLY:
-    case 'ANNUALLY':
-      return 365;
-    default:
-      return 30; // Default to monthly
+  case PlaidRecurringFrequency.WEEKLY:
+  case "WEEKLY":
+    return 7;
+  case PlaidRecurringFrequency.BIWEEKLY:
+  case "BIWEEKLY":
+    return 14;
+  case PlaidRecurringFrequency.SEMI_MONTHLY:
+  case "SEMI_MONTHLY":
+    return 15; // Approximate
+  case PlaidRecurringFrequency.MONTHLY:
+  case "MONTHLY":
+    return 30; // Approximate
+  case "QUARTERLY":
+    return 91; // Approximate (365/4)
+  case PlaidRecurringFrequency.ANNUALLY:
+  case "ANNUALLY":
+    return 365;
+  default:
+    return 30; // Default to monthly
   }
 }
 
@@ -112,7 +112,7 @@ export function calculateAllOccurrencesInPeriod(
   const periodEnd = sourcePeriod.endDate?.toDate();
 
   if (!periodStart || !periodEnd) {
-    console.warn('[calculateAllOccurrencesInPeriod] Missing period dates');
+    console.warn("[calculateAllOccurrencesInPeriod] Missing period dates");
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
@@ -126,7 +126,7 @@ export function calculateAllOccurrencesInPeriod(
   // Get frequency from inflow
   const frequency = inflow.frequency as PlaidRecurringFrequency | string;
   if (!frequency) {
-    console.warn('[calculateAllOccurrencesInPeriod] Missing frequency');
+    console.warn("[calculateAllOccurrencesInPeriod] Missing frequency");
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
@@ -149,7 +149,7 @@ export function calculateAllOccurrencesInPeriod(
   } else if (inflow.firstDate) {
     referenceDate = inflow.firstDate.toDate();
   } else {
-    console.warn('[calculateAllOccurrencesInPeriod] No reference date available');
+    console.warn("[calculateAllOccurrencesInPeriod] No reference date available");
     return {
       numberOfOccurrences: 0,
       occurrenceDueDates: [],
@@ -185,7 +185,7 @@ export function calculateAllOccurrencesInPeriod(
     `[calculateAllOccurrencesInPeriod] Inflow: ${inflow.description || inflow.id}, ` +
     `Frequency: ${frequency}, Period: ${sourcePeriod.periodId || sourcePeriod.id}, ` +
     `Occurrences: ${numberOfOccurrences}, Total: $${totalExpectedAmount.toFixed(2)}, ` +
-    `Allocated: $${amountAllocated.toFixed(2)}, NextExpected: ${nextExpectedDate.toDate().toISOString().split('T')[0]}`
+    `Allocated: $${amountAllocated.toFixed(2)}, NextExpected: ${nextExpectedDate.toDate().toISOString().split("T")[0]}`
   );
 
   return {

@@ -11,9 +11,9 @@
  *   - Add to running total
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod, PrimePeriodContribution } from '../../../types';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod, PrimePeriodContribution } from "../../../types";
 
 /**
  * Calculate the number of days in a period (inclusive)
@@ -82,7 +82,7 @@ export function calculatePrimeContributions(
   overlappingPrimes: BudgetPeriodDocument[]
 ): { totalAmount: number; breakdown: PrimePeriodContribution[] } {
   if (overlappingPrimes.length === 0) {
-    console.warn('[calculatePrimeContributions] No overlapping prime periods found');
+    console.warn("[calculatePrimeContributions] No overlapping prime periods found");
     return { totalAmount: 0, breakdown: [] };
   }
 
@@ -109,7 +109,7 @@ export function calculatePrimeContributions(
       (currentYear === endYear && currentMonth < endMonth) ||
       (currentYear === endYear && currentMonth === endMonth && currentDay <= endDay)
     ) {
-      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`;
       primesByDate.set(dateKey, prime);
 
       // Move to next day using UTC
@@ -145,7 +145,7 @@ export function calculatePrimeContributions(
     (currentYear === endYear && currentMonth < endMonth) ||
     (currentYear === endYear && currentMonth === endMonth && currentDay <= endDay)
   ) {
-    const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`;
     const prime = primesByDate.get(dateKey);
 
     if (prime) {
@@ -203,8 +203,8 @@ export function calculatePrimeContributions(
   // Calculate total days for verification
   const totalDaysCounted = breakdown.reduce((sum, b) => sum + b.daysContributed, 0);
 
-  console.log('[calculatePrimeContributions] Calculation summary:', {
-    targetRange: `${targetStart.toISOString().split('T')[0]} to ${targetEnd.toISOString().split('T')[0]}`,
+  console.log("[calculatePrimeContributions] Calculation summary:", {
+    targetRange: `${targetStart.toISOString().split("T")[0]} to ${targetEnd.toISOString().split("T")[0]}`,
     overlappingPrimes: overlappingPrimes.length,
     totalDaysCounted,
     totalAmount: totalAmount.toFixed(2),
@@ -255,7 +255,7 @@ export async function generateNonPrimeBudgetPeriods(
   console.log(`[nonPrimePeriodGeneration] Using ${primePeriods.length} prime periods as reference`);
 
   if (primePeriods.length === 0) {
-    console.warn('[nonPrimePeriodGeneration] No prime periods provided - cannot generate non-prime periods');
+    console.warn("[nonPrimePeriodGeneration] No prime periods provided - cannot generate non-prime periods");
     return [];
   }
 
@@ -265,10 +265,10 @@ export async function generateNonPrimeBudgetPeriods(
   );
 
   // Query source_periods that match the target period type and overlap with budget date range
-  const sourcePeriodsQuery = db.collection('source_periods')
-    .where('type', '==', targetPeriodType)
-    .where('endDate', '>=', Timestamp.fromDate(startDate))
-    .where('startDate', '<=', Timestamp.fromDate(endDate));
+  const sourcePeriodsQuery = db.collection("source_periods")
+    .where("type", "==", targetPeriodType)
+    .where("endDate", ">=", Timestamp.fromDate(startDate))
+    .where("startDate", "<=", Timestamp.fromDate(endDate));
 
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
@@ -331,7 +331,7 @@ export async function generateNonPrimeBudgetPeriods(
       accessibleBy: budget.accessibleBy,
 
       // === LEGACY FIELDS (Backward compatibility) ===
-      familyId: String(budget.familyId || ''),
+      familyId: String(budget.familyId || ""),
       userId: budget.access?.createdBy || budget.createdBy,
 
       // Period context

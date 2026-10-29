@@ -8,8 +8,8 @@ const db = admin.firestore();
  * Validates collection name
  */
 function validateCollectionName(collection: string): void {
-  if (!collection || typeof collection !== 'string' || collection.trim().length === 0) {
-    throw new Error('Invalid collection name: must be a non-empty string');
+  if (!collection || typeof collection !== "string" || collection.trim().length === 0) {
+    throw new Error("Invalid collection name: must be a non-empty string");
   }
 }
 
@@ -17,8 +17,8 @@ function validateCollectionName(collection: string): void {
  * Validates document ID
  */
 function validateDocumentId(id: string): void {
-  if (!id || typeof id !== 'string' || id.trim().length === 0) {
-    throw new Error('Invalid document ID: must be a non-empty string');
+  if (!id || typeof id !== "string" || id.trim().length === 0) {
+    throw new Error("Invalid document ID: must be a non-empty string");
   }
 }
 
@@ -61,7 +61,7 @@ export async function createDocument<T extends BaseDocument>(
   } catch (error) {
     console.error(`[createDocument] Error creating document in ${collection}:`, error);
     throw new Error(
-      `Failed to create document in ${collection}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to create document in ${collection}: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -91,7 +91,7 @@ export async function getDocument<T extends BaseDocument>(
   } catch (error) {
     console.error(`[getDocument] Error getting document ${id} from ${collection}:`, error);
     throw new Error(
-      `Failed to get document ${id} from ${collection}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to get document ${id} from ${collection}: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -109,7 +109,7 @@ export async function updateDocument<T extends BaseDocument>(
     validateDocumentId(id);
 
     if (!data || Object.keys(data).length === 0) {
-      throw new Error('Update data cannot be empty');
+      throw new Error("Update data cannot be empty");
     }
 
     const docRef = db.collection(collection).doc(id);
@@ -138,7 +138,7 @@ export async function updateDocument<T extends BaseDocument>(
   } catch (error) {
     console.error(`[updateDocument] Error updating document ${id} in ${collection}:`, error);
     throw new Error(
-      `Failed to update document ${id} in ${collection}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to update document ${id} in ${collection}: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -169,7 +169,7 @@ export async function deleteDocument(
   } catch (error) {
     console.error(`[deleteDocument] Error deleting document ${id} from ${collection}:`, error);
     throw new Error(
-      `Failed to delete document ${id} from ${collection}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to delete document ${id} from ${collection}: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -190,7 +190,7 @@ export async function queryDocuments<T extends BaseDocument>(
     if (options.where) {
       options.where.forEach((whereClause: WhereClause) => {
         if (!whereClause.field || whereClause.value === undefined) {
-          throw new Error('Invalid where clause: field and value are required');
+          throw new Error("Invalid where clause: field and value are required");
         }
         query = query.where(whereClause.field, whereClause.operator, whereClause.value);
       });
@@ -220,7 +220,7 @@ export async function queryDocuments<T extends BaseDocument>(
   } catch (error) {
     console.error(`[queryDocuments] Error querying ${collection}:`, error);
     throw new Error(
-      `Failed to query ${collection}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to query ${collection}: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -234,9 +234,9 @@ export async function executeTransaction<T>(
   try {
     return await db.runTransaction(callback);
   } catch (error) {
-    console.error('[executeTransaction] Transaction failed:', error);
+    console.error("[executeTransaction] Transaction failed:", error);
     throw new Error(
-      `Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Transaction failed: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -254,12 +254,12 @@ export async function executeBatch(
 ): Promise<void> {
   try {
     if (!operations || operations.length === 0) {
-      console.warn('[executeBatch] No operations provided, skipping batch');
+      console.warn("[executeBatch] No operations provided, skipping batch");
       return;
     }
 
     if (operations.length > 500) {
-      throw new Error('Batch operations cannot exceed 500 documents');
+      throw new Error("Batch operations cannot exceed 500 documents");
     }
 
     const batch = db.batch();
@@ -316,9 +316,9 @@ export async function executeBatch(
 
     console.log(`[executeBatch] Successfully executed ${operations.length} batch operations`);
   } catch (error) {
-    console.error('[executeBatch] Batch operation failed:', error);
+    console.error("[executeBatch] Batch operation failed:", error);
     throw new Error(
-      `Batch operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Batch operation failed: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -336,7 +336,7 @@ export async function getDocumentWithSubcollections<T extends BaseDocument>(
     validateDocumentId(id);
 
     if (!subcollections || subcollections.length === 0) {
-      throw new Error('At least one subcollection name is required');
+      throw new Error("At least one subcollection name is required");
     }
 
     const doc = await getDocument<T>(collection, id);
@@ -345,8 +345,8 @@ export async function getDocumentWithSubcollections<T extends BaseDocument>(
     const subcollectionData: Record<string, any[]> = {};
 
     for (const subcollection of subcollections) {
-      if (!subcollection || typeof subcollection !== 'string') {
-        console.warn(`[getDocumentWithSubcollections] Invalid subcollection name, skipping`);
+      if (!subcollection || typeof subcollection !== "string") {
+        console.warn("[getDocumentWithSubcollections] Invalid subcollection name, skipping");
         continue;
       }
       const subDocs = await queryDocuments(`${collection}/${id}/${subcollection}`);
@@ -360,7 +360,7 @@ export async function getDocumentWithSubcollections<T extends BaseDocument>(
   } catch (error) {
     console.error(`[getDocumentWithSubcollections] Error getting document ${id} with subcollections:`, error);
     throw new Error(
-      `Failed to get document with subcollections: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to get document with subcollections: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -404,7 +404,7 @@ export function listenToDocument<T extends BaseDocument>(
   } catch (error) {
     console.error(`[listenToDocument] Error setting up listener for ${collection}/${id}:`, error);
     throw new Error(
-      `Failed to set up document listener: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to set up document listener: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -461,7 +461,7 @@ export function listenToCollection<T extends BaseDocument>(
   } catch (error) {
     console.error(`[listenToCollection] Error setting up listener for ${collection}:`, error);
     throw new Error(
-      `Failed to set up collection listener: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to set up collection listener: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -482,7 +482,7 @@ export async function documentExists(
   } catch (error) {
     console.error(`[documentExists] Error checking if document ${id} exists in ${collection}:`, error);
     throw new Error(
-      `Failed to check document existence: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to check document existence: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -511,7 +511,7 @@ export async function getDocumentCount(
   } catch (error) {
     console.error(`[getDocumentCount] Error counting documents in ${collection}:`, error);
     throw new Error(
-      `Failed to count documents in ${collection}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to count documents in ${collection}: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }

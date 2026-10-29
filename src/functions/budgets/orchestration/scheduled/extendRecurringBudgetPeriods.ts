@@ -16,18 +16,18 @@
  * Runs on the 1st of each month at 2:00 AM UTC. Memory: 512MiB, Timeout: 300s.
  */
 
-import { onSchedule } from 'firebase-functions/v2/scheduler';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { v4 as uuid } from 'uuid';
-import { Budget } from '../../../../types';
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { v4 as uuid } from "uuid";
+import { Budget } from "../../../../types";
 import {
   compute_budget_periods,
   budget_cadence_to_instance,
   SourcePeriodForGeneration,
-} from '../../../domain/budgets';
-import { source_period_repo } from '../../../repositories/source_period.repo';
-import { budget_period_repo } from '../../../repositories/budget_period.repo';
+} from "../../../domain/budgets";
+import { source_period_repo } from "../../../repositories/source_period.repo";
+import { budget_period_repo } from "../../../repositories/budget_period.repo";
 
 /** How far BEHIND today to fetch source periods, so the current prime is present
  *  for accurate non-prime derivation at the near boundary (days). */
@@ -36,10 +36,10 @@ const WINDOW_LOOKBACK_DAYS = 45;
 const WINDOW_HORIZON_MONTHS = 12;
 
 export const extendRecurringBudgetPeriods = onSchedule({
-  schedule: '0 2 1 * *',
-  timeZone: 'UTC',
-  region: 'us-central1',
-  memory: '512MiB',
+  schedule: "0 2 1 * *",
+  timeZone: "UTC",
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 300,
 }, async () => {
   await run_recurring_budget_period_extension(admin.firestore(), Timestamp.now());
@@ -56,22 +56,22 @@ export async function run_recurring_budget_period_extension(
   // ids and the run never touches (or races) other suites' budgets. Production omits it.
   opts: { budget_ids?: string[] } = {}
 ): Promise<{ budgetsProcessed: number; totalPeriodsCreated: number }> {
-  console.log('🚀 Starting scheduled budget period extension (v2 generator)...');
+  console.log("🚀 Starting scheduled budget period extension (v2 generator)...");
   const ctx = { trace_id: uuid(), span_id: uuid() };
 
   try {
     let budgetsQuery = db
-      .collection('budgets')
-      .where('budgetType', '==', 'recurring')
-      .where('isOngoing', '==', true)
-      .where('isActive', '==', true);
+      .collection("budgets")
+      .where("budgetType", "==", "recurring")
+      .where("isOngoing", "==", true)
+      .where("isActive", "==", true);
     if (opts.budget_ids && opts.budget_ids.length > 0) {
-      budgetsQuery = budgetsQuery.where(admin.firestore.FieldPath.documentId(), 'in', opts.budget_ids.slice(0, 30));
+      budgetsQuery = budgetsQuery.where(admin.firestore.FieldPath.documentId(), "in", opts.budget_ids.slice(0, 30));
     }
     const recurringBudgetsSnapshot = await budgetsQuery.get();
 
     if (recurringBudgetsSnapshot.empty) {
-      console.log('✅ No recurring budgets found to maintain');
+      console.log("✅ No recurring budgets found to maintain");
       return { budgetsProcessed: 0, totalPeriodsCreated: 0 };
     }
     console.log(`📊 Found ${recurringBudgetsSnapshot.size} recurring budgets to maintain`);
@@ -93,7 +93,7 @@ export async function run_recurring_budget_period_extension(
       Timestamp.fromDate(windowEnd)
     );
     if (sourceEntities.length === 0) {
-      console.warn('⚠️ No source periods in window — source-period generation may be needed');
+      console.warn("⚠️ No source periods in window — source-period generation may be needed");
       return { budgetsProcessed: 0, totalPeriodsCreated: 0 };
     }
     const source_periods: SourcePeriodForGeneration[] = sourceEntities.map((p) => ({
@@ -114,8 +114,8 @@ export async function run_recurring_budget_period_extension(
         // Existing periods for this budget — anything already present is NOT
         // rewritten (guards `spent`/rollover).
         const existingSnap = await db
-          .collection('budget_periods')
-          .where('budgetId', '==', budget.id)
+          .collection("budget_periods")
+          .where("budgetId", "==", budget.id)
           .get();
         const existingIds = new Set(existingSnap.docs.map((d) => d.id));
 
@@ -139,7 +139,7 @@ export async function run_recurring_budget_period_extension(
           now,
         });
         if (computed.validation_errors) {
-          console.warn(`  ⚠️ Skipping ${budget.id}: ${computed.validation_errors.join('; ')}`);
+          console.warn(`  ⚠️ Skipping ${budget.id}: ${computed.validation_errors.join("; ")}`);
           continue;
         }
 
@@ -153,7 +153,7 @@ export async function run_recurring_budget_period_extension(
 
         await budget_period_repo.save_batch(ctx, newEntities, budget.name);
 
-        await db.collection('budgets').doc(budget.id!).update({ lastExtended: now });
+        await db.collection("budgets").doc(budget.id!).update({ lastExtended: now });
         console.log(`  ✅ Extended ${budget.id} with ${newEntities.length} new periods`);
 
         // (user_summaries build retired)
@@ -169,7 +169,7 @@ export async function run_recurring_budget_period_extension(
     console.log(`🎯 Maintenance complete: ${budgetsProcessed} budgets, ${totalPeriodsCreated} periods created`);
     return { budgetsProcessed, totalPeriodsCreated };
   } catch (error) {
-    console.error('❌ Fatal error in scheduled budget period extension:', error);
+    console.error("❌ Fatal error in scheduled budget period extension:", error);
     throw error;
   }
 }

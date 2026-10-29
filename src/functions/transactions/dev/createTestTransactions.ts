@@ -22,14 +22,14 @@
  * Memory: 512MiB, Timeout: 120s
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { Transaction } from 'plaid';
-import { db } from '../../../index';
-import { formatTransactions } from '../utils/formatTransactions';
-import { matchCategoriesToTransactions } from '../utils/matchCategoriesToTransactions';
-import { matchTransactionSplitsToSourcePeriods } from '../utils/matchTransactionSplitsToSourcePeriods';
-import { matchTransactionSplitsToOutflows } from '../utils/matchTransactionSplitsToOutflows';
-import { batchCreateTransactions } from '../utils/batchCreateTransactions';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Transaction } from "plaid";
+import { db } from "../../../index";
+import { formatTransactions } from "../utils/formatTransactions";
+import { matchCategoriesToTransactions } from "../utils/matchCategoriesToTransactions";
+import { matchTransactionSplitsToSourcePeriods } from "../utils/matchTransactionSplitsToSourcePeriods";
+import { matchTransactionSplitsToOutflows } from "../utils/matchTransactionSplitsToOutflows";
+import { batchCreateTransactions } from "../utils/batchCreateTransactions";
 
 /**
  * Simulated Plaid /transactions/sync response
@@ -320,21 +320,21 @@ const SIMULATED_PLAID_RESPONSE = {
  * Firebase Callable Function to create test transactions in local Firestore
  */
 export const createTestTransactions = onCall({
-  region: 'us-central1',
-  memory: '512MiB',
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 120,
 }, async (request) => {
   // Verify user is authenticated
   if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated to create test transactions');
+    throw new HttpsError("unauthenticated", "User must be authenticated to create test transactions");
   }
 
   try {
-    console.log('');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('🧪 DEV: Creating Test Transactions');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('');
+    console.log("");
+    console.log("═══════════════════════════════════════════════════════════");
+    console.log("🧪 DEV: Creating Test Transactions");
+    console.log("═══════════════════════════════════════════════════════════");
+    console.log("");
 
     // Get authenticated user ID
     const targetUserId = request.auth.uid;
@@ -342,39 +342,39 @@ export const createTestTransactions = onCall({
 
     // Verify user exists in Firestore
     console.log(`🔍 Verifying user exists: ${targetUserId}`);
-    const userDoc = await db.collection('users').doc(targetUserId).get();
+    const userDoc = await db.collection("users").doc(targetUserId).get();
 
     if (!userDoc.exists) {
       console.error(`❌ User not found: ${targetUserId}`);
-      throw new HttpsError('not-found', `User not found: ${targetUserId}`,
-        'Make sure the user exists in your Firestore database');
+      throw new HttpsError("not-found", `User not found: ${targetUserId}`,
+        "Make sure the user exists in your Firestore database");
     }
 
-    console.log(`✅ User verified: ${userDoc.data()?.email || 'No email'}`);
-    console.log('');
+    console.log(`✅ User verified: ${userDoc.data()?.email || "No email"}`);
+    console.log("");
 
     // Test configuration
-    const testItemId = 'test_plaid_item_' + Date.now();
+    const testItemId = "test_plaid_item_" + Date.now();
     const testAccountId = SIMULATED_PLAID_RESPONSE.accounts[0].account_id;
-    const currency = 'USD';
+    const currency = "USD";
 
-    console.log('📋 Test Configuration:');
+    console.log("📋 Test Configuration:");
     console.log(`  - User ID: ${targetUserId}`);
     console.log(`  - Item ID: ${testItemId}`);
     console.log(`  - Account ID: ${testAccountId}`);
     console.log(`  - Currency: ${currency}`);
     console.log(`  - Transactions to add: ${SIMULATED_PLAID_RESPONSE.added.length}`);
-    console.log('');
+    console.log("");
 
     // === CREATE TEST ACCOUNT ===
-    console.log('🏦 Creating test account in Firestore...');
+    console.log("🏦 Creating test account in Firestore...");
     const testAccount = {
       accountId: testAccountId,
       plaidAccountId: testAccountId,
       userId: targetUserId,
       itemId: testItemId,
-      institutionId: 'ins_test',
-      institutionName: 'Test Bank',
+      institutionId: "ins_test",
+      institutionName: "Test Bank",
       accountName: SIMULATED_PLAID_RESPONSE.accounts[0].name,
       accountType: SIMULATED_PLAID_RESPONSE.accounts[0].type,
       accountSubtype: SIMULATED_PLAID_RESPONSE.accounts[0].subtype,
@@ -391,9 +391,9 @@ export const createTestTransactions = onCall({
       lastBalanceUpdate: new Date()
     };
 
-    await db.collection('accounts').doc(testAccountId).set(testAccount);
+    await db.collection("accounts").doc(testAccountId).set(testAccount);
     console.log(`✅ Test account created: ${testAccountId}`);
-    console.log('');
+    console.log("");
 
     const result = {
       transactionsAdded: 0,
@@ -405,17 +405,17 @@ export const createTestTransactions = onCall({
 
     // === PROCESS ADDED TRANSACTIONS ===
     if (SIMULATED_PLAID_RESPONSE.added.length > 0) {
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('💳 PROCESSING ADDED TRANSACTIONS (6-Step Pipeline)');
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('');
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("💳 PROCESSING ADDED TRANSACTIONS (6-Step Pipeline)");
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("");
 
       try {
         console.log(`🔄 Processing ${SIMULATED_PLAID_RESPONSE.added.length} added transactions`);
-        console.log('');
+        console.log("");
 
         // Step 1: Format transactions (Plaid → Internal structure)
-        console.log('⚙️  Step 1/6: Formatting transactions...');
+        console.log("⚙️  Step 1/6: Formatting transactions...");
         const transactions = await formatTransactions(
           SIMULATED_PLAID_RESPONSE.added as Transaction[],
           testItemId,
@@ -424,30 +424,30 @@ export const createTestTransactions = onCall({
           currency
         );
         console.log(`   ✅ Formatted ${transactions.length} transactions`);
-        console.log(`   📊 First transaction: ${transactions[0]?.description || 'N/A'}`);
-        console.log('');
+        console.log(`   📊 First transaction: ${transactions[0]?.description || "N/A"}`);
+        console.log("");
 
         // Step 2: Match categories
-        console.log('⚙️  Step 2/6: Matching categories...');
+        console.log("⚙️  Step 2/6: Matching categories...");
         const withCategories = await matchCategoriesToTransactions(transactions, targetUserId);
         console.log(`   ✅ Matched categories for ${withCategories.length} transaction splits`);
         if (withCategories[0]?.splits?.[0]) {
-          console.log(`   📊 First split category: ${withCategories[0].splits[0].internalPrimaryCategory || 'No category'}`);
+          console.log(`   📊 First split category: ${withCategories[0].splits[0].internalPrimaryCategory || "No category"}`);
         }
-        console.log('');
+        console.log("");
 
         // Step 3: Match source periods
-        console.log('⚙️  Step 3/6: Matching source periods...');
+        console.log("⚙️  Step 3/6: Matching source periods...");
         const withPeriods = await matchTransactionSplitsToSourcePeriods(withCategories);
         console.log(`   ✅ Matched ${withPeriods.length} transaction splits to source periods`);
         if (withPeriods[0]?.splits?.[0]) {
-          console.log(`   📊 First split periods:`, {
-            monthly: withPeriods[0].splits[0].monthlyPeriodId || 'null',
-            weekly: withPeriods[0].splits[0].weeklyPeriodId || 'null',
-            biWeekly: withPeriods[0].splits[0].biWeeklyPeriodId || 'null',
+          console.log("   📊 First split periods:", {
+            monthly: withPeriods[0].splits[0].monthlyPeriodId || "null",
+            weekly: withPeriods[0].splits[0].weeklyPeriodId || "null",
+            biWeekly: withPeriods[0].splits[0].biWeeklyPeriodId || "null",
           });
         }
-        console.log('');
+        console.log("");
 
         // Step 4: (budget matching removed 2026-07-27) — the Transaction Assignment
         // Engine assigns budgets via on_transaction_written after these docs are
@@ -455,15 +455,15 @@ export const createTestTransactions = onCall({
         // production. Splits are written unassigned; the engine assigns them.
 
         // Step 5: Match outflows
-        console.log('⚙️  Step 5/6: Matching outflows...');
+        console.log("⚙️  Step 5/6: Matching outflows...");
         const { transactions: final, outflowUpdates } = await matchTransactionSplitsToOutflows(withPeriods, targetUserId);
         console.log(`   ✅ Matched outflow IDs for ${final.length} transaction splits`);
         console.log(`   ✅ Generated ${outflowUpdates.length} outflow updates`);
-        console.log('');
+        console.log("");
 
         // Step 6: Batch create transactions
-        console.log('⚙️  Step 6/6: Batch creating transactions in Firestore...');
-        console.log(`   🔍 Database instance: ${db ? 'Connected' : 'NOT CONNECTED'}`);
+        console.log("⚙️  Step 6/6: Batch creating transactions in Firestore...");
+        console.log(`   🔍 Database instance: ${db ? "Connected" : "NOT CONNECTED"}`);
         console.log(`   🔍 Transactions to create: ${final.length}`);
 
         // Log what we're about to write
@@ -474,16 +474,16 @@ export const createTestTransactions = onCall({
 
         const count = await batchCreateTransactions(final, outflowUpdates);
         console.log(`   ✅ Created ${count} transactions in Firebase`);
-        console.log('');
+        console.log("");
 
         // Store created transaction IDs for verification
-        result.createdTransactionIds = final.map(t => t.transactionId || 'unknown');
+        result.createdTransactionIds = final.map(t => t.transactionId || "unknown");
         result.transactionsAdded = count;
 
         // Verify transactions were actually created
-        console.log('🔍 Verifying transactions in Firestore...');
+        console.log("🔍 Verifying transactions in Firestore...");
         for (const txnId of result.createdTransactionIds) {
-          const txnDoc = await db.collection('transactions').doc(txnId).get();
+          const txnDoc = await db.collection("transactions").doc(txnId).get();
           if (txnDoc.exists) {
             const data = txnDoc.data();
             const totalAmount = data?.splits?.reduce((sum: number, split: any) => sum + (split.amount || 0), 0) || 0;
@@ -493,64 +493,64 @@ export const createTestTransactions = onCall({
             result.errors.push(`Transaction ${txnId} was not found in Firestore after creation`);
           }
         }
-        console.log('');
+        console.log("");
 
       } catch (error: any) {
-        console.error('❌ Error processing added transactions:', error);
-        console.error('Stack trace:', error.stack);
+        console.error("❌ Error processing added transactions:", error);
+        console.error("Stack trace:", error.stack);
         result.errors.push(`Added transactions error: ${error.message}`);
       }
     }
 
     // === PROCESS MODIFIED TRANSACTIONS ===
     if (SIMULATED_PLAID_RESPONSE.modified.length > 0) {
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('⚠️  MODIFIED TRANSACTIONS (Simulated)');
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('');
-      console.log(`   ℹ️  In production, these would be updated`);
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("⚠️  MODIFIED TRANSACTIONS (Simulated)");
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("");
+      console.log("   ℹ️  In production, these would be updated");
       console.log(`   📊 Count: ${SIMULATED_PLAID_RESPONSE.modified.length} transactions`);
-      console.log('');
+      console.log("");
 
       result.transactionsModified = SIMULATED_PLAID_RESPONSE.modified.length;
     }
 
     // === PROCESS REMOVED TRANSACTIONS ===
     if (SIMULATED_PLAID_RESPONSE.removed.length > 0) {
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('🗑️  REMOVED TRANSACTIONS (Simulated)');
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('');
-      console.log(`   ℹ️  In production, these would be soft-deleted`);
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("🗑️  REMOVED TRANSACTIONS (Simulated)");
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("");
+      console.log("   ℹ️  In production, these would be soft-deleted");
       console.log(`   📊 Count: ${SIMULATED_PLAID_RESPONSE.removed.length} transactions`);
-      console.log('');
+      console.log("");
 
       result.transactionsRemoved = SIMULATED_PLAID_RESPONSE.removed.length;
     }
 
     // === FINAL SUMMARY ===
-    console.log('');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('🎉 TEST TRANSACTION CREATION COMPLETE!');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('');
-    console.log('📈 Results:');
+    console.log("");
+    console.log("═══════════════════════════════════════════════════════════");
+    console.log("🎉 TEST TRANSACTION CREATION COMPLETE!");
+    console.log("═══════════════════════════════════════════════════════════");
+    console.log("");
+    console.log("📈 Results:");
     console.log(`   💳 Transactions Added: ${result.transactionsAdded}`);
     console.log(`   💳 Transactions Modified: ${result.transactionsModified} (simulated)`);
     console.log(`   💳 Transactions Removed: ${result.transactionsRemoved} (simulated)`);
     console.log(`   ⚠️  Errors: ${result.errors.length}`);
-    console.log('');
+    console.log("");
 
     if (result.createdTransactionIds.length > 0) {
-      console.log('📋 Created Transaction IDs:');
+      console.log("📋 Created Transaction IDs:");
       result.createdTransactionIds.forEach(id => console.log(`   - ${id}`));
-      console.log('');
+      console.log("");
     }
 
     if (result.errors.length > 0) {
-      console.log('❌ Errors encountered:');
+      console.log("❌ Errors encountered:");
       result.errors.forEach(err => console.log(`   - ${err}`));
-      console.log('');
+      console.log("");
     }
 
     // Return detailed response
@@ -576,20 +576,20 @@ export const createTestTransactions = onCall({
         }
       },
       hint: result.errors.length === 0
-        ? 'Check your Firestore emulator UI to see the created transactions'
-        : 'Check the errors array and Cloud Functions logs for details'
+        ? "Check your Firestore emulator UI to see the created transactions"
+        : "Check the errors array and Cloud Functions logs for details"
     };
 
   } catch (error) {
-    console.error('');
-    console.error('═══════════════════════════════════════════════════════════');
-    console.error('❌ FATAL ERROR in createTestTransactions');
-    console.error('═══════════════════════════════════════════════════════════');
+    console.error("");
+    console.error("═══════════════════════════════════════════════════════════");
+    console.error("❌ FATAL ERROR in createTestTransactions");
+    console.error("═══════════════════════════════════════════════════════════");
     console.error(error);
-    console.error('');
+    console.error("");
 
-    throw new HttpsError('internal',
-      error instanceof Error ? error.message : 'Unknown error occurred',
+    throw new HttpsError("internal",
+      error instanceof Error ? error.message : "Unknown error occurred",
       error instanceof Error ? error.stack : undefined
     );
   }

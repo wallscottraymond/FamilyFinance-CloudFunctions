@@ -23,19 +23,19 @@
  * Prereqs: firebase emulators:exec --only firestore "npm run test:emulator"
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
-process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
+process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || "localhost:8080";
 if (!admin.apps.length) {
-  admin.initializeApp({ projectId: 'family-budget-app-cb59b' });
+  admin.initializeApp({ projectId: "family-budget-app-cb59b" });
 }
 const db = admin.firestore();
 
 import {
   recalculateRolloverChain,
   recalculateRolloverForCurrentPeriods,
-} from '../src/functions/budgets/utils/rolloverChainCalculation';
+} from "../src/functions/budgets/utils/rolloverChainCalculation";
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -50,15 +50,15 @@ interface SeedPeriod {
 
 async function seedBudget(
   id: string,
-  cfg: { enabled: boolean; strategy?: 'immediate' | 'spread'; spread?: number }
+  cfg: { enabled: boolean; strategy?: "immediate" | "spread"; spread?: number }
 ) {
-  await db.collection('budgets').doc(id).set({
+  await db.collection("budgets").doc(id).set({
     id,
     userId: `u_${id}`,
     createdBy: `u_${id}`,
     name: `rollover-test-${id}`,
     amount: 100,
-    period: 'monthly',
+    period: "monthly",
     isActive: true,
     rolloverEnabled: cfg.enabled,
     ...(cfg.strategy ? { rolloverStrategy: cfg.strategy } : {}),
@@ -71,11 +71,11 @@ async function seedBudget(
 /** Seeds a period the way the spend pipeline would leave it: remaining = allocated - spent. */
 async function seedPeriod(id: string, budgetId: string, p: SeedPeriod) {
   const rolledOver = p.rolledOver ?? 0;
-  await db.collection('budget_periods').doc(id).set({
+  await db.collection("budget_periods").doc(id).set({
     id,
     budgetId,
     periodId: id,
-    periodType: 'monthly',
+    periodType: "monthly",
     periodStart: ts(p.startIso),
     periodEnd: ts(p.endIso),
     allocatedAmount: p.allocated,
@@ -89,20 +89,20 @@ async function seedPeriod(id: string, budgetId: string, p: SeedPeriod) {
 }
 
 async function getPeriod(id: string) {
-  const doc = await db.collection('budget_periods').doc(id).get();
+  const doc = await db.collection("budget_periods").doc(id).get();
   return doc.data() as any;
 }
 
-describe('budget rollover chain (emulator)', () => {
-  it('IMMEDIATE: underspend surplus carries forward through the chain', async () => {
-    const b = 'immUnder';
-    await seedBudget(b, { enabled: true, strategy: 'immediate' });
+describe("budget rollover chain (emulator)", () => {
+  it("IMMEDIATE: underspend surplus carries forward through the chain", async () => {
+    const b = "immUnder";
+    await seedBudget(b, { enabled: true, strategy: "immediate" });
     // P1 allocated 100 spent 60 -> surplus 40 (no prev, rollover 0)
-    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 60, startIso: '2026-01-01T00:00:00Z', endIso: '2026-01-31T23:59:59Z' });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 60, startIso: "2026-01-01T00:00:00Z", endIso: "2026-01-31T23:59:59Z" });
     // P2 allocated 100 spent 130 -> receives +40 from P1
-    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 130, startIso: '2026-02-01T00:00:00Z', endIso: '2026-02-28T23:59:59Z' });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 130, startIso: "2026-02-01T00:00:00Z", endIso: "2026-02-28T23:59:59Z" });
     // P3 allocated 100 spent 0 -> P2 effective 140, spent 130, surplus 10 -> +10
-    await seedPeriod(`${b}_3`, b, { allocated: 100, spent: 0, startIso: '2026-03-01T00:00:00Z', endIso: '2026-03-31T23:59:59Z' });
+    await seedPeriod(`${b}_3`, b, { allocated: 100, spent: 0, startIso: "2026-03-01T00:00:00Z", endIso: "2026-03-31T23:59:59Z" });
 
     const res = await recalculateRolloverChain(db, b);
     expect(res.success).toBe(true);
@@ -122,15 +122,15 @@ describe('budget rollover chain (emulator)', () => {
     expect(p3.remaining).toBe(110); // 100 + 10 - 0
   });
 
-  it('IMMEDIATE: overspend produces a negative rollover and negative remaining', async () => {
-    const b = 'immOver';
-    await seedBudget(b, { enabled: true, strategy: 'immediate' });
+  it("IMMEDIATE: overspend produces a negative rollover and negative remaining", async () => {
+    const b = "immOver";
+    await seedBudget(b, { enabled: true, strategy: "immediate" });
     // P1 spent exactly to allocation -> surplus 0
-    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 100, startIso: '2026-01-01T00:00:00Z', endIso: '2026-01-31T23:59:59Z' });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 100, startIso: "2026-01-01T00:00:00Z", endIso: "2026-01-31T23:59:59Z" });
     // P2 heavy overspend (250). P1 surplus 0 -> P2 rollover 0, remaining -150
-    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 250, startIso: '2026-02-01T00:00:00Z', endIso: '2026-02-28T23:59:59Z' });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 250, startIso: "2026-02-01T00:00:00Z", endIso: "2026-02-28T23:59:59Z" });
     // P3: P2 effective 100, spent 250, deficit -150 (immediate) -> P3 rollover -150, remaining -50
-    await seedPeriod(`${b}_3`, b, { allocated: 100, spent: 0, startIso: '2026-03-01T00:00:00Z', endIso: '2026-03-31T23:59:59Z' });
+    await seedPeriod(`${b}_3`, b, { allocated: 100, spent: 0, startIso: "2026-03-01T00:00:00Z", endIso: "2026-03-31T23:59:59Z" });
 
     const res = await recalculateRolloverChain(db, b);
     expect(res.success).toBe(true);
@@ -145,13 +145,13 @@ describe('budget rollover chain (emulator)', () => {
     expect(p3.remaining).toBe(-50); // 100 - 150 - 0  (negative remaining supported)
   });
 
-  it('SPREAD: overspend distributes deficit/spreadPeriods and records the pending remainder', async () => {
-    const b = 'spread';
-    await seedBudget(b, { enabled: true, strategy: 'spread', spread: 3 });
+  it("SPREAD: overspend distributes deficit/spreadPeriods and records the pending remainder", async () => {
+    const b = "spread";
+    await seedBudget(b, { enabled: true, strategy: "spread", spread: 3 });
     // P1 overspends by 90 (no prev -> rollover 0, remaining -90)
-    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 190, startIso: '2026-01-01T00:00:00Z', endIso: '2026-01-31T23:59:59Z' });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 190, startIso: "2026-01-01T00:00:00Z", endIso: "2026-01-31T23:59:59Z" });
     // P2 (spent 0): P1 deficit 90, spread/3 -> first deduction 30, pending 60 over 2
-    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 0, startIso: '2026-02-01T00:00:00Z', endIso: '2026-02-28T23:59:59Z' });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 0, startIso: "2026-02-01T00:00:00Z", endIso: "2026-02-28T23:59:59Z" });
 
     const res = await recalculateRolloverChain(db, b);
     expect(res.success).toBe(true);
@@ -163,12 +163,12 @@ describe('budget rollover chain (emulator)', () => {
     expect(p2.remaining).toBe(70); // 100 - 30 - 0
   });
 
-  it('DISABLED: a stale rolledOverAmount is cleared and remaining reverts to allocated - spent', async () => {
-    const b = 'disabled';
+  it("DISABLED: a stale rolledOverAmount is cleared and remaining reverts to allocated - spent", async () => {
+    const b = "disabled";
     await seedBudget(b, { enabled: false });
-    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 20, startIso: '2026-01-01T00:00:00Z', endIso: '2026-01-31T23:59:59Z' });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 20, startIso: "2026-01-01T00:00:00Z", endIso: "2026-01-31T23:59:59Z" });
     // P2 carries a STALE rollover of 99 that must be cleared
-    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 40, rolledOver: 99, startIso: '2026-02-01T00:00:00Z', endIso: '2026-02-28T23:59:59Z' });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 40, rolledOver: 99, startIso: "2026-02-01T00:00:00Z", endIso: "2026-02-28T23:59:59Z" });
 
     const res = await recalculateRolloverChain(db, b);
     expect(res.success).toBe(true);
@@ -178,18 +178,18 @@ describe('budget rollover chain (emulator)', () => {
     expect(p2.remaining).toBe(60); // 100 - 40 (rollover stripped)
   });
 
-  it('USER SETTING: rollover turned off in Budget Settings (preferences.financial) is honoured', async () => {
-    const b = 'usersetting';
+  it("USER SETTING: rollover turned off in Budget Settings (preferences.financial) is honoured", async () => {
+    const b = "usersetting";
     // No per-budget rolloverEnabled — the user's default decides. The app saves it under
     // preferences.financial; an older financialSettings copy saying "on" must not win.
     await seedBudget(b, { enabled: true });
-    await db.collection('budgets').doc(b).update({ rolloverEnabled: admin.firestore.FieldValue.delete() });
-    await db.collection('users').doc(`u_${b}`).set({
+    await db.collection("budgets").doc(b).update({ rolloverEnabled: admin.firestore.FieldValue.delete() });
+    await db.collection("users").doc(`u_${b}`).set({
       preferences: { financial: { budgetRolloverEnabled: false } },
       financialSettings: { budgetRolloverEnabled: true },
     });
-    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 20, startIso: '2026-01-01T00:00:00Z', endIso: '2026-01-31T23:59:59Z' });
-    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 40, rolledOver: 80, startIso: '2026-02-01T00:00:00Z', endIso: '2026-02-28T23:59:59Z' });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 20, startIso: "2026-01-01T00:00:00Z", endIso: "2026-01-31T23:59:59Z" });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 40, rolledOver: 80, startIso: "2026-02-01T00:00:00Z", endIso: "2026-02-28T23:59:59Z" });
 
     const res = await recalculateRolloverChain(db, b);
     expect(res.success).toBe(true);
@@ -199,15 +199,15 @@ describe('budget rollover chain (emulator)', () => {
     expect(p2.remaining).toBe(60);
   });
 
-  it('DAILY ENTRY: recalculateRolloverForCurrentPeriods finds the current period and computes its chain', async () => {
+  it("DAILY ENTRY: recalculateRolloverForCurrentPeriods finds the current period and computes its chain", async () => {
     // The daily entry scans EVERY current period in the (shared) emulator: assert only on this
     // budget — other suites' budgets may be mid-write and report their own errors (review round 3).
     const b = `daily_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-    await seedBudget(b, { enabled: true, strategy: 'immediate' });
+    await seedBudget(b, { enabled: true, strategy: "immediate" });
     // Past period: underspend by 25 -> should roll +25 into the current period
-    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 75, startIso: '2020-01-01T00:00:00Z', endIso: '2020-01-31T23:59:59Z' });
+    await seedPeriod(`${b}_1`, b, { allocated: 100, spent: 75, startIso: "2020-01-01T00:00:00Z", endIso: "2020-01-31T23:59:59Z" });
     // "Current" period: window straddles now (wide range) so the daily query matches it
-    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 10, startIso: '2020-02-01T00:00:00Z', endIso: '2999-12-31T23:59:59Z' });
+    await seedPeriod(`${b}_2`, b, { allocated: 100, spent: 10, startIso: "2020-02-01T00:00:00Z", endIso: "2999-12-31T23:59:59Z" });
 
     const res = await recalculateRolloverForCurrentPeriods(db);
     expect(res.errors.filter((e) => e.includes(b))).toEqual([]);

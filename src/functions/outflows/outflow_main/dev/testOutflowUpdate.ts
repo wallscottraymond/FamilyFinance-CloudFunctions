@@ -5,9 +5,9 @@
  * Updates an outflow's averageAmount and/or userCustomName to trigger the onOutflowUpdated function.
  */
 
-import { onRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { onRequest } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
 interface TestOutflowUpdateParams {
   outflowId: string;
@@ -16,34 +16,34 @@ interface TestOutflowUpdateParams {
 }
 
 export const testOutflowUpdate = onRequest({
-  region: 'us-central1',
-  memory: '256MiB',
+  region: "us-central1",
+  memory: "256MiB",
   timeoutSeconds: 60,
 }, async (req, res) => {
-  console.log('');
-  console.log('════════════════════════════════════════════════════');
-  console.log('🧪 TEST OUTFLOW UPDATE');
-  console.log('════════════════════════════════════════════════════');
-  console.log('');
+  console.log("");
+  console.log("════════════════════════════════════════════════════");
+  console.log("🧪 TEST OUTFLOW UPDATE");
+  console.log("════════════════════════════════════════════════════");
+  console.log("");
 
   try {
     const params: TestOutflowUpdateParams = {
-      outflowId: req.query.outflowId as string || '',
+      outflowId: req.query.outflowId as string || "",
       newAmount: req.query.newAmount ? parseFloat(req.query.newAmount as string) : undefined,
       newCustomName: req.query.newCustomName as string || undefined,
     };
 
-    console.log('📋 Test Parameters:');
+    console.log("📋 Test Parameters:");
     console.log(`   - Outflow ID: ${params.outflowId}`);
-    console.log(`   - New Amount: ${params.newAmount || 'Not changing'}`);
-    console.log(`   - New Custom Name: ${params.newCustomName || 'Not changing'}`);
-    console.log('');
+    console.log(`   - New Amount: ${params.newAmount || "Not changing"}`);
+    console.log(`   - New Custom Name: ${params.newCustomName || "Not changing"}`);
+    console.log("");
 
     if (!params.outflowId) {
       res.status(400).json({
         success: false,
-        error: 'Missing required parameter: outflowId',
-        usage: '/testOutflowUpdate?outflowId=xxx&newAmount=99.99&newCustomName=MyBill'
+        error: "Missing required parameter: outflowId",
+        usage: "/testOutflowUpdate?outflowId=xxx&newAmount=99.99&newCustomName=MyBill"
       });
       return;
     }
@@ -51,8 +51,8 @@ export const testOutflowUpdate = onRequest({
     const db = admin.firestore();
 
     // Step 1: Fetch the outflow
-    console.log('Step 1: Fetching outflow...');
-    const outflowRef = db.collection('outflows').doc(params.outflowId);
+    console.log("Step 1: Fetching outflow...");
+    const outflowRef = db.collection("outflows").doc(params.outflowId);
     const outflowSnap = await outflowRef.get();
 
     if (!outflowSnap.exists) {
@@ -66,8 +66,8 @@ export const testOutflowUpdate = onRequest({
     const outflowData = outflowSnap.data()!;
     console.log(`   ✓ Found outflow: ${outflowData.description}`);
     console.log(`   ✓ Current amount: $${outflowData.averageAmount}`);
-    console.log(`   ✓ Current custom name: ${outflowData.userCustomName || '(none)'}`);
-    console.log('');
+    console.log(`   ✓ Current custom name: ${outflowData.userCustomName || "(none)"}`);
+    console.log("");
 
     // Step 2: Build updates
     const updates: any = {
@@ -81,23 +81,23 @@ export const testOutflowUpdate = onRequest({
 
     if (params.newCustomName !== undefined) {
       updates.userCustomName = params.newCustomName;
-      console.log(`   → Will update userCustomName: "${outflowData.userCustomName || '(none)'}" → "${params.newCustomName}"`);
+      console.log(`   → Will update userCustomName: "${outflowData.userCustomName || "(none)"}" → "${params.newCustomName}"`);
     }
 
     if (Object.keys(updates).length === 1) {
       res.status(400).json({
         success: false,
-        error: 'No updates specified. Provide newAmount and/or newCustomName',
-        usage: '/testOutflowUpdate?outflowId=xxx&newAmount=99.99&newCustomName=MyBill'
+        error: "No updates specified. Provide newAmount and/or newCustomName",
+        usage: "/testOutflowUpdate?outflowId=xxx&newAmount=99.99&newCustomName=MyBill"
       });
       return;
     }
 
     // Step 3: Get outflow periods before update
-    console.log('');
-    console.log('Step 2: Fetching outflow periods before update...');
-    const periodsBeforeSnapshot = await db.collection('outflow_periods')
-      .where('outflowId', '==', params.outflowId)
+    console.log("");
+    console.log("Step 2: Fetching outflow periods before update...");
+    const periodsBeforeSnapshot = await db.collection("outflow_periods")
+      .where("outflowId", "==", params.outflowId)
       .get();
 
     const periodsBefore = periodsBeforeSnapshot.docs.map(doc => ({
@@ -112,28 +112,28 @@ export const testOutflowUpdate = onRequest({
 
     console.log(`   ✓ Found ${periodsBefore.length} periods`);
     periodsBefore.slice(0, 3).forEach(p => {
-      console.log(`     - ${p.id}: $${p.expectedAmount} (${p.isPaid ? 'PAID' : p.isPartiallyPaid ? 'PARTIAL' : 'UNPAID'})`);
+      console.log(`     - ${p.id}: $${p.expectedAmount} (${p.isPaid ? "PAID" : p.isPartiallyPaid ? "PARTIAL" : "UNPAID"})`);
     });
     if (periodsBefore.length > 3) {
       console.log(`     ... and ${periodsBefore.length - 3} more`);
     }
 
     // Step 4: Update the outflow (this triggers onOutflowUpdated)
-    console.log('');
-    console.log('Step 3: Updating outflow (this triggers onOutflowUpdated)...');
+    console.log("");
+    console.log("Step 3: Updating outflow (this triggers onOutflowUpdated)...");
     await outflowRef.update(updates);
-    console.log('   ✓ Outflow updated!');
+    console.log("   ✓ Outflow updated!");
 
     // Step 5: Wait for trigger to complete
-    console.log('');
-    console.log('Step 4: Waiting 3 seconds for trigger to complete...');
+    console.log("");
+    console.log("Step 4: Waiting 3 seconds for trigger to complete...");
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Step 6: Get outflow periods after update
-    console.log('');
-    console.log('Step 5: Fetching outflow periods after update...');
-    const periodsAfterSnapshot = await db.collection('outflow_periods')
-      .where('outflowId', '==', params.outflowId)
+    console.log("");
+    console.log("Step 5: Fetching outflow periods after update...");
+    const periodsAfterSnapshot = await db.collection("outflow_periods")
+      .where("outflowId", "==", params.outflowId)
       .get();
 
     const periodsAfter = periodsAfterSnapshot.docs.map(doc => ({
@@ -149,9 +149,9 @@ export const testOutflowUpdate = onRequest({
     console.log(`   ✓ Found ${periodsAfter.length} periods`);
 
     // Step 7: Compare before/after
-    console.log('');
-    console.log('Step 6: Comparing before/after...');
-    console.log('');
+    console.log("");
+    console.log("Step 6: Comparing before/after...");
+    console.log("");
 
     let changedCount = 0;
     let unchangedCount = 0;
@@ -177,14 +177,14 @@ export const testOutflowUpdate = onRequest({
       }
     }
 
-    console.log('');
-    console.log('════════════════════════════════════════════════════');
-    console.log('📊 RESULTS');
-    console.log('════════════════════════════════════════════════════');
+    console.log("");
+    console.log("════════════════════════════════════════════════════");
+    console.log("📊 RESULTS");
+    console.log("════════════════════════════════════════════════════");
     console.log(`   ✓ Periods changed: ${changedCount}`);
     console.log(`   ✓ Periods unchanged: ${unchangedCount}`);
     console.log(`   ✓ Total periods: ${periodsAfter.length}`);
-    console.log('');
+    console.log("");
 
     res.json({
       success: true,
@@ -202,9 +202,9 @@ export const testOutflowUpdate = onRequest({
     });
 
   } catch (error: any) {
-    console.error('');
-    console.error('❌ ERROR:', error);
-    console.error('');
+    console.error("");
+    console.error("❌ ERROR:", error);
+    console.error("");
     res.status(500).json({
       success: false,
       error: error.message

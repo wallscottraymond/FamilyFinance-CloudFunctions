@@ -11,11 +11,11 @@ import {
 
 // Map resource types to collection names
 const RESOURCE_COLLECTIONS: Record<string, string> = {
-  budget: 'budgets',
-  transaction: 'transactions',
-  outflow: 'outflows',
-  inflow: 'inflows',
-  rule: 'rules',
+  budget: "budgets",
+  transaction: "transactions",
+  outflow: "outflows",
+  inflow: "inflows",
+  rule: "rules",
 };
 
 /**
@@ -29,12 +29,12 @@ export const updateSharePermissions = onCall<UpdateSharePermissionsRequest, Prom
   memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
-  console.log('[updateSharePermissions] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[updateSharePermissions] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
@@ -42,23 +42,23 @@ export const updateSharePermissions = onCall<UpdateSharePermissionsRequest, Prom
 
     // Validate request data
     if (!resourceType || !RESOURCE_COLLECTIONS[resourceType]) {
-      throw new HttpsError('invalid-argument', 'Valid resourceType is required');
+      throw new HttpsError("invalid-argument", "Valid resourceType is required");
     }
 
-    if (!resourceId || typeof resourceId !== 'string') {
-      throw new HttpsError('invalid-argument', 'resourceId is required');
+    if (!resourceId || typeof resourceId !== "string") {
+      throw new HttpsError("invalid-argument", "resourceId is required");
     }
 
-    if (!targetType || (targetType !== 'group' && targetType !== 'user')) {
-      throw new HttpsError('invalid-argument', 'Valid targetType (group or user) is required');
+    if (!targetType || (targetType !== "group" && targetType !== "user")) {
+      throw new HttpsError("invalid-argument", "Valid targetType (group or user) is required");
     }
 
-    if (!targetId || typeof targetId !== 'string') {
-      throw new HttpsError('invalid-argument', 'targetId is required');
+    if (!targetId || typeof targetId !== "string") {
+      throw new HttpsError("invalid-argument", "targetId is required");
     }
 
     if (!newRole && !newPermissions) {
-      throw new HttpsError('invalid-argument', 'Either newRole or newPermissions must be provided');
+      throw new HttpsError("invalid-argument", "Either newRole or newPermissions must be provided");
     }
 
     const collectionName = RESOURCE_COLLECTIONS[resourceType];
@@ -66,13 +66,13 @@ export const updateSharePermissions = onCall<UpdateSharePermissionsRequest, Prom
     // Get the resource
     const resource = await getDocument<any>(collectionName, resourceId);
     if (!resource) {
-      throw new HttpsError('not-found', `${resourceType} not found`);
+      throw new HttpsError("not-found", `${resourceType} not found`);
     }
 
     // Check if caller is the owner
     const ownerId = resource.ownerId || resource.userId || resource.createdBy;
     if (ownerId !== callerUserId) {
-      throw new HttpsError('permission-denied', 'Only the resource owner can update share permissions');
+      throw new HttpsError("permission-denied", "Only the resource owner can update share permissions");
     }
 
     // Get current sharing configuration
@@ -88,7 +88,7 @@ export const updateSharePermissions = onCall<UpdateSharePermissionsRequest, Prom
     );
 
     if (shareIndex === -1) {
-      throw new HttpsError('not-found', 'Share not found');
+      throw new HttpsError("not-found", "Share not found");
     }
 
     // Update the share entry
@@ -105,20 +105,20 @@ export const updateSharePermissions = onCall<UpdateSharePermissionsRequest, Prom
       sharing: currentSharing,
     });
 
-    console.log('[updateSharePermissions] Share permissions updated successfully');
+    console.log("[updateSharePermissions] Share permissions updated successfully");
 
     return {
       success: true,
-      message: 'Share permissions updated successfully',
+      message: "Share permissions updated successfully",
     };
 
   } catch (error: any) {
-    console.error('[updateSharePermissions] Error:', error);
+    console.error("[updateSharePermissions] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to update share permissions');
+    throw new HttpsError("internal", "Failed to update share permissions");
   }
 });

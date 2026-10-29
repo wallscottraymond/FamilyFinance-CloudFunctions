@@ -10,14 +10,14 @@ import { getDocument } from "../../../../utils/firestore";
 
 // Map resource types to collection names
 const RESOURCE_COLLECTIONS: Record<string, string> = {
-  budget: 'budgets',
-  transaction: 'transactions',
-  outflow: 'outflows',
-  inflow: 'inflows',
-  rule: 'rules',
+  budget: "budgets",
+  transaction: "transactions",
+  outflow: "outflows",
+  inflow: "inflows",
+  rule: "rules",
 };
 
-const ALL_RESOURCE_TYPES = ['budget', 'transaction', 'outflow', 'inflow', 'rule'];
+const ALL_RESOURCE_TYPES = ["budget", "transaction", "outflow", "inflow", "rule"];
 
 /**
  * Get all resources shared with the current user
@@ -32,19 +32,19 @@ export const getUserSharedResources = onCall<GetUserSharedResourcesRequest, Prom
   memory: "512MiB",
   timeoutSeconds: 60,
 }, async (request) => {
-  console.log('[getUserSharedResources] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[getUserSharedResources] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
     const { resourceType, includeOwned = false } = request.data || {};
 
     // Get the user's group memberships
-    const user = await getDocument<User>('users', callerUserId);
+    const user = await getDocument<User>("users", callerUserId);
     const userGroupIds: string[] = user?.groupIds || [];
 
     // Determine which resource types to query
@@ -66,8 +66,8 @@ export const getUserSharedResources = onCall<GetUserSharedResourcesRequest, Prom
 
       // Query for resources shared with user directly
       const directShareQuery = db.collection(collectionName)
-        .where('sharing.isShared', '==', true)
-        .where('isActive', '==', true);
+        .where("sharing.isShared", "==", true)
+        .where("isActive", "==", true);
 
       const directShareSnapshot = await directShareQuery.get();
 
@@ -79,7 +79,7 @@ export const getUserSharedResources = onCall<GetUserSharedResourcesRequest, Prom
 
         // Check if shared directly with user
         const userShare = sharing.sharedWith.find(
-          (s: any) => s.type === 'user' && s.targetId === callerUserId
+          (s: any) => s.type === "user" && s.targetId === callerUserId
         );
 
         if (userShare) {
@@ -95,7 +95,7 @@ export const getUserSharedResources = onCall<GetUserSharedResourcesRequest, Prom
 
         // Check if shared with any of user's groups
         const groupShare = sharing.sharedWith.find(
-          (s: any) => s.type === 'group' && userGroupIds.includes(s.targetId)
+          (s: any) => s.type === "group" && userGroupIds.includes(s.targetId)
         );
 
         if (groupShare) {
@@ -112,8 +112,8 @@ export const getUserSharedResources = onCall<GetUserSharedResourcesRequest, Prom
       // Optionally include owned resources
       if (includeOwned) {
         const ownedQuery = db.collection(collectionName)
-          .where('userId', '==', callerUserId)
-          .where('isActive', '==', true);
+          .where("userId", "==", callerUserId)
+          .where("isActive", "==", true);
 
         const ownedSnapshot = await ownedQuery.get();
 
@@ -141,12 +141,12 @@ export const getUserSharedResources = onCall<GetUserSharedResourcesRequest, Prom
     };
 
   } catch (error: any) {
-    console.error('[getUserSharedResources] Error:', error);
+    console.error("[getUserSharedResources] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to get shared resources');
+    throw new HttpsError("internal", "Failed to get shared resources");
   }
 });

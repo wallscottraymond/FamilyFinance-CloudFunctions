@@ -25,14 +25,14 @@ import { calculateEnhancedOutflowPeriodStatus } from "../../outflow_periods/util
  */
 export async function recalculatePeriodGroup(params: {
   ownerId: string;
-  ownerType: 'user' | 'group';
+  ownerType: "user" | "group";
   periodType: PeriodType;
   sourcePeriodId: string;
 }): Promise<OutflowPeriodEntry[]> {
   const { ownerId, ownerType, periodType, sourcePeriodId } = params;
   const db = admin.firestore();
 
-  console.log(`🔄 Recalculating outflow period group:`, {
+  console.log("🔄 Recalculating outflow period group:", {
     ownerId,
     ownerType,
     periodType,
@@ -41,11 +41,11 @@ export async function recalculatePeriodGroup(params: {
 
   try {
     // Step 1: Query all outflow_periods for this sourcePeriodId
-    const periodsQuery = await db.collection('outflow_periods')
-      .where('ownerId', '==', ownerId)
-      .where('sourcePeriodId', '==', sourcePeriodId)
-      .where('periodType', '==', periodType)
-      .where('isActive', '==', true)
+    const periodsQuery = await db.collection("outflow_periods")
+      .where("ownerId", "==", ownerId)
+      .where("sourcePeriodId", "==", sourcePeriodId)
+      .where("periodType", "==", periodType)
+      .where("isActive", "==", true)
       .get();
 
     if (periodsQuery.empty) {
@@ -63,7 +63,7 @@ export async function recalculatePeriodGroup(params: {
         const period = { id: periodDoc.id, ...periodDoc.data() } as OutflowPeriod;
 
         // Fetch parent outflow for merchant/userCustomName
-        const outflowDoc = await db.collection('outflows').doc(period.outflowId).get();
+        const outflowDoc = await db.collection("outflows").doc(period.outflowId).get();
 
         if (!outflowDoc.exists) {
           console.warn(`⚠️ Outflow ${period.outflowId} not found, skipping period ${period.id}`);
@@ -119,22 +119,22 @@ function buildPeriodEntry(
     period.transactionSplits || [],
     period.numberOfOccurrencesInPeriod || 0,
     period.numberOfOccurrencesPaid || 0,
-    period.frequency || 'MONTHLY'
+    period.frequency || "MONTHLY"
   );
 
   // Determine status counts from period status
   const statusCounts: OutflowStatusCounts = {};
   const status = period.status || OutflowPeriodStatus.PENDING;
-  const statusKey = status.toUpperCase().replace('_', '_') as keyof OutflowStatusCounts;
+  const statusKey = status.toUpperCase().replace("_", "_") as keyof OutflowStatusCounts;
   statusCounts[statusKey] = 1; // This entry represents ONE period
 
   return {
     // Period Identity
     periodId: period.id,
     outflowId: outflow.id,
-    groupId: period.groupId || '',
-    merchant: outflow.merchantName || outflow.description || 'Unknown',
-    userCustomName: outflow.userCustomName || outflow.merchantName || outflow.description || 'Unknown',
+    groupId: period.groupId || "",
+    merchant: outflow.merchantName || outflow.description || "Unknown",
+    userCustomName: outflow.userCustomName || outflow.merchantName || outflow.description || "Unknown",
 
     // Amount Totals (directly from the ONE period)
     totalAmountDue: period.totalAmountDue || 0,

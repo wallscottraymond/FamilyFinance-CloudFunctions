@@ -14,15 +14,15 @@
  * @module budgets/utils/createEverythingElseBudget
  */
 
-import { Firestore, Timestamp } from 'firebase-admin/firestore';
-import { Budget } from '../../../types';
-import { buildAccessControl } from '../../../utils/documentStructure';
-import { create_job } from '../../infrastructure/job_queue';
-import { generate_id } from '../../observability';
+import { Firestore, Timestamp } from "firebase-admin/firestore";
+import { Budget } from "../../../types";
+import { buildAccessControl } from "../../../utils/documentStructure";
+import { create_job } from "../../infrastructure/job_queue";
+import { generate_id } from "../../observability";
 import {
   build_self_provision_budget_created_payload,
   compute_ee_coverage_start,
-} from '../../domain/budgets';
+} from "../../domain/budgets";
 
 /**
  * Creates the "everything else" system budget for a user
@@ -52,32 +52,32 @@ import {
  * ```
  */
 /** The three period lenses that each get their own Everything Else budget. */
-const EE_PERIOD_TYPES: Array<'monthly' | 'weekly' | 'bi_monthly'> = [
-  'monthly',
-  'weekly',
-  'bi_monthly',
+const EE_PERIOD_TYPES: Array<"monthly" | "weekly" | "bi_monthly"> = [
+  "monthly",
+  "weekly",
+  "bi_monthly",
 ];
 
 /** Display name per lens (so the three EE budgets are distinguishable in the UI). */
-const EE_NAME_BY_PERIOD: Record<'monthly' | 'weekly' | 'bi_monthly', string> = {
-  monthly: 'Everything Else',
-  weekly: 'Everything Else (Weekly)',
-  bi_monthly: 'Everything Else (Bi-Monthly)',
+const EE_NAME_BY_PERIOD: Record<"monthly" | "weekly" | "bi_monthly", string> = {
+  monthly: "Everything Else",
+  weekly: "Everything Else (Weekly)",
+  bi_monthly: "Everything Else (Bi-Monthly)",
 };
 
 export async function createEverythingElseBudget(
   db: Firestore,
   userId: string,
-  userCurrency: string = 'USD'
+  userCurrency: string = "USD"
 ): Promise<string> {
   // === INPUT VALIDATION ===
 
-  if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-    throw new Error('userId is required and must be a non-empty string');
+  if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
+    throw new Error("userId is required and must be a non-empty string");
   }
 
   if (!userCurrency || userCurrency.length !== 3) {
-    throw new Error('currency must be a valid 3-letter code (e.g., USD, EUR, GBP)');
+    throw new Error("currency must be a valid 3-letter code (e.g., USD, EUR, GBP)");
   }
 
   // === IDEMPOTENCY: map existing EE budgets by their period lens ===
@@ -87,19 +87,19 @@ export async function createEverythingElseBudget(
   const existingByPeriod = new Map<string, string>();
   try {
     const existingSnap = await db
-      .collection('budgets')
-      .where('userId', '==', userId)
-      .where('isSystemEverythingElse', '==', true)
+      .collection("budgets")
+      .where("userId", "==", userId)
+      .where("isSystemEverythingElse", "==", true)
       .get();
     for (const doc of existingSnap.docs) {
       const d = doc.data();
-      const lens = (d.everythingElsePeriodType as string) || (d.period as string) || 'monthly';
+      const lens = (d.everythingElsePeriodType as string) || (d.period as string) || "monthly";
       if (!existingByPeriod.has(lens)) {
         existingByPeriod.set(lens, doc.id);
       }
     }
   } catch (error) {
-    console.error(`❌ Error checking for existing "everything else" budgets:`, error);
+    console.error("❌ Error checking for existing \"everything else\" budgets:", error);
     throw error;
   }
 
@@ -120,7 +120,7 @@ export async function createEverythingElseBudget(
     idByPeriod[period] = await createOneEEBudget(db, userId, userCurrency, period, allCategoryIds);
   }
 
-  return idByPeriod['monthly'];
+  return idByPeriod["monthly"];
 }
 
 /**
@@ -131,7 +131,7 @@ async function createOneEEBudget(
   db: Firestore,
   userId: string,
   userCurrency: string,
-  period: 'monthly' | 'weekly' | 'bi_monthly',
+  period: "monthly" | "weekly" | "bi_monthly",
   allCategoryIds: string[]
 ): Promise<string> {
   const now = Timestamp.now();
@@ -172,13 +172,13 @@ async function createOneEEBudget(
     alertThreshold: 80, // Standard threshold
 
     // === BUDGET TYPE CONFIGURATION ===
-    budgetType: 'recurring',
+    budgetType: "recurring",
     isOngoing: true, // Never ends
     // budgetEndDate intentionally undefined - ongoing budget
   };
 
   try {
-    const budgetRef = await db.collection('budgets').add(budgetData);
+    const budgetRef = await db.collection("budgets").add(budgetData);
     console.log(`✅ Created "${name}" budget for user ${userId}: ${budgetRef.id}`);
 
     // Generate the budget's periods + summaries via the v2 cascade. Without
@@ -201,7 +201,7 @@ async function createOneEEBudget(
         // period and contribute to spend.
         coverage_start: compute_ee_coverage_start(now.toDate()),
       });
-      await create_job('process_budget_created', cascade_payload, {
+      await create_job("process_budget_created", cascade_payload, {
         trace_id: generate_id(),
       });
     } catch (cascadeError) {

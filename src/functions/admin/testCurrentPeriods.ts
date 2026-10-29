@@ -31,8 +31,8 @@ export const testCurrentPeriods = onRequest({
       console.log(`Server time check: ${todayDate.toISOString()}`);
 
       // Get all current periods
-      const currentPeriodsQuery = await db.collection('source_periods')
-        .where('isCurrent', '==', true)
+      const currentPeriodsQuery = await db.collection("source_periods")
+        .where("isCurrent", "==", true)
         .get();
 
       const currentPeriods = currentPeriodsQuery.docs.map(doc => {
@@ -53,7 +53,7 @@ export const testCurrentPeriods = onRequest({
       });
 
       // Check what should be current based on today's date
-      const allPeriodsQuery = await db.collection('source_periods')
+      const allPeriodsQuery = await db.collection("source_periods")
         .get();
       
       const shouldBeCurrentPeriods: Array<{

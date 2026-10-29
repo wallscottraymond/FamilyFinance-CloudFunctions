@@ -16,20 +16,20 @@
  * NOTE: This test file is created BEFORE implementation (Test-First Development)
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 import {
   Inflow,
   PlaidRecurringFrequency
-} from '../../../../types';
+} from "../../../../types";
 
 // Import the actual implementation
 import {
   predictNextPayment,
   predictPaymentsInPeriod,
   PaymentPrediction
-} from '../utils/predictNextPayment';
+} from "../utils/predictNextPayment";
 
-describe('predictNextPayment', () => {
+describe("predictNextPayment", () => {
   // Helper to create a timezone-safe date at noon UTC
   const createUTCDate = (year: number, month: number, day: number): Date => {
     return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
@@ -51,23 +51,23 @@ describe('predictNextPayment', () => {
     } = {}
   ): Partial<Inflow> => {
     // Compute incomeType first so isRegularSalary can reference the resolved value
-    const incomeType = options.incomeType || 'salary';
+    const incomeType = options.incomeType || "salary";
     return {
-      id: 'test_inflow',
-      description: 'Test Income',
+      id: "test_inflow",
+      description: "Test Income",
       frequency,
       firstDate: Timestamp.fromDate(createUTCDate(2024, 1, 1)),
       lastDate: Timestamp.fromDate(lastDate),
       predictedNextDate: predictedNextDate ? Timestamp.fromDate(predictedNextDate) : null,
       averageAmount,
       incomeType,
-      isRegularSalary: incomeType === 'salary',
+      isRegularSalary: incomeType === "salary",
       isVariable: options.isVariable || false,
       variableConfig: options.variableConfig,
       bonusConfig: options.bonusConfig,
       commissionConfig: options.commissionConfig,
       isActive: options.isActive !== false, // Default true unless explicitly false
-      source: 'plaid'
+      source: "plaid"
     } as Partial<Inflow>;
   };
 
@@ -75,8 +75,8 @@ describe('predictNextPayment', () => {
   // REGULAR SALARY PREDICTION TESTS
   // ============================================================================
 
-  describe('Regular salary prediction', () => {
-    it('should predict next weekly payment correctly', () => {
+  describe("Regular salary prediction", () => {
+    it("should predict next weekly payment correctly", () => {
       const lastPayday = createUTCDate(2025, 1, 3); // Friday
       const inflow = createTestInflow(
         PlaidRecurringFrequency.WEEKLY,
@@ -91,10 +91,10 @@ describe('predictNextPayment', () => {
       expect(result).not.toBeNull();
       expect(result!.expectedDate.toDate().getUTCDate()).toBe(10);
       expect(result!.expectedAmount).toBe(800.00);
-      expect(result!.confidenceLevel).toBe('high');
+      expect(result!.confidenceLevel).toBe("high");
     });
 
-    it('should predict next biweekly payment correctly', () => {
+    it("should predict next biweekly payment correctly", () => {
       const lastPayday = createUTCDate(2025, 1, 3); // Friday
       const inflow = createTestInflow(
         PlaidRecurringFrequency.BIWEEKLY,
@@ -112,7 +112,7 @@ describe('predictNextPayment', () => {
       expect(result!.expectedAmount).toBe(2000.00);
     });
 
-    it('should predict next semi-monthly payment correctly', () => {
+    it("should predict next semi-monthly payment correctly", () => {
       const lastPayday = createUTCDate(2025, 1, 1); // 1st of month
       const inflow = createTestInflow(
         PlaidRecurringFrequency.SEMI_MONTHLY,
@@ -131,7 +131,7 @@ describe('predictNextPayment', () => {
       expect(result!.expectedAmount).toBe(2500.00);
     });
 
-    it('should predict next monthly payment correctly', () => {
+    it("should predict next monthly payment correctly", () => {
       const lastPayday = createUTCDate(2025, 1, 15);
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
@@ -150,7 +150,7 @@ describe('predictNextPayment', () => {
       expect(result!.expectedAmount).toBe(5000.00);
     });
 
-    it('should use Plaid predictedNextDate when available', () => {
+    it("should use Plaid predictedNextDate when available", () => {
       const lastPayday = createUTCDate(2025, 1, 3);
       const plaidPrediction = createUTCDate(2025, 1, 17);
       const inflow = createTestInflow(
@@ -166,11 +166,11 @@ describe('predictNextPayment', () => {
       // Should use Plaid's prediction
       expect(result).not.toBeNull();
       expect(result!.expectedDate.toDate().getUTCDate()).toBe(17);
-      expect(result!.predictionMethod).toBe('plaid');
-      expect(result!.confidenceLevel).toBe('high');
+      expect(result!.predictionMethod).toBe("plaid");
+      expect(result!.confidenceLevel).toBe("high");
     });
 
-    it('should fall back to frequency calculation when Plaid prediction unavailable', () => {
+    it("should fall back to frequency calculation when Plaid prediction unavailable", () => {
       const lastPayday = createUTCDate(2025, 1, 3);
       const inflow = createTestInflow(
         PlaidRecurringFrequency.BIWEEKLY,
@@ -186,7 +186,7 @@ describe('predictNextPayment', () => {
       expect(result).not.toBeNull();
       const predictedDate = result!.expectedDate.toDate();
       expect(predictedDate.getUTCDate()).toBe(17); // Jan 3 + 14 days
-      expect(result!.predictionMethod).toBe('frequency');
+      expect(result!.predictionMethod).toBe("frequency");
     });
   });
 
@@ -194,15 +194,15 @@ describe('predictNextPayment', () => {
   // VARIABLE INCOME PREDICTION TESTS
   // ============================================================================
 
-  describe('Variable income prediction', () => {
-    it('should use user override amount when provided', () => {
+  describe("Variable income prediction", () => {
+    it("should use user override amount when provided", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-15'),
+        new Date("2025-01-15"),
         3000.00, // Plaid average
         undefined,
         {
-          incomeType: 'commission',
+          incomeType: "commission",
           isVariable: true,
           variableConfig: {
             useRollingAverage: false,
@@ -216,18 +216,18 @@ describe('predictNextPayment', () => {
 
       expect(result).not.toBeNull();
       expect(result!.expectedAmount).toBe(4000.00);
-      expect(result!.predictionMethod).toBe('user_override');
-      expect(result!.confidenceLevel).toBe('medium'); // Lower confidence for user estimate
+      expect(result!.predictionMethod).toBe("user_override");
+      expect(result!.confidenceLevel).toBe("medium"); // Lower confidence for user estimate
     });
 
-    it('should use rolling average when configured', () => {
+    it("should use rolling average when configured", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-15'),
+        new Date("2025-01-15"),
         3000.00, // This represents the rolling average from Plaid
         undefined,
         {
-          incomeType: 'hourly',
+          incomeType: "hourly",
           isVariable: true,
           variableConfig: {
             useRollingAverage: true,
@@ -241,18 +241,18 @@ describe('predictNextPayment', () => {
 
       expect(result).not.toBeNull();
       expect(result!.expectedAmount).toBe(3000.00);
-      expect(result!.predictionMethod).toBe('rolling_average');
-      expect(result!.confidenceLevel).toBe('medium');
+      expect(result!.predictionMethod).toBe("rolling_average");
+      expect(result!.confidenceLevel).toBe("medium");
     });
 
-    it('should fall back to Plaid average when no config', () => {
+    it("should fall back to Plaid average when no config", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-15'),
+        new Date("2025-01-15"),
         3000.00,
         undefined,
         {
-          incomeType: 'freelance',
+          incomeType: "freelance",
           isVariable: true
         }
       );
@@ -261,17 +261,17 @@ describe('predictNextPayment', () => {
 
       expect(result).not.toBeNull();
       expect(result!.expectedAmount).toBe(3000.00);
-      expect(result!.predictionMethod).toBe('frequency');
+      expect(result!.predictionMethod).toBe("frequency");
     });
 
-    it('should have lower confidence for variable income', () => {
+    it("should have lower confidence for variable income", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-15'),
+        new Date("2025-01-15"),
         3000.00,
         undefined,
         {
-          incomeType: 'hourly',
+          incomeType: "hourly",
           isVariable: true
         }
       );
@@ -279,7 +279,7 @@ describe('predictNextPayment', () => {
       const result = predictNextPayment(inflow);
 
       expect(result).not.toBeNull();
-      expect(['medium', 'low']).toContain(result!.confidenceLevel);
+      expect(["medium", "low"]).toContain(result!.confidenceLevel);
     });
   });
 
@@ -287,17 +287,17 @@ describe('predictNextPayment', () => {
   // COMMISSION PREDICTION TESTS
   // ============================================================================
 
-  describe('Commission prediction', () => {
-    it('should predict monthly commission payment', () => {
+  describe("Commission prediction", () => {
+    it("should predict monthly commission payment", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
         createUTCDate(2025, 1, 20), // Commission paid on 20th
         5000.00,
         undefined,
         {
-          incomeType: 'commission',
+          incomeType: "commission",
           commissionConfig: {
-            schedule: 'monthly',
+            schedule: "monthly",
             expectedPaymentDay: 20,
             basePlusCommission: false
           }
@@ -314,16 +314,16 @@ describe('predictNextPayment', () => {
       expect(predictedDate.getUTCDate()).toBe(20);
     });
 
-    it('should predict quarterly commission payment', () => {
+    it("should predict quarterly commission payment", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.QUARTERLY,
         createUTCDate(2025, 1, 15), // Q4 2024 commission paid in Jan
         15000.00,
         undefined,
         {
-          incomeType: 'commission',
+          incomeType: "commission",
           commissionConfig: {
-            schedule: 'quarterly',
+            schedule: "quarterly",
             expectedPaymentDay: 15,
             basePlusCommission: false
           }
@@ -340,16 +340,16 @@ describe('predictNextPayment', () => {
       expect(predictedDate.getUTCDate()).toBe(15);
     });
 
-    it('should handle base + commission salary', () => {
+    it("should handle base + commission salary", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
         createUTCDate(2025, 1, 15),
         8000.00, // Total: 5000 base + 3000 commission
         undefined,
         {
-          incomeType: 'commission',
+          incomeType: "commission",
           commissionConfig: {
-            schedule: 'monthly',
+            schedule: "monthly",
             expectedPaymentDay: 15,
             basePlusCommission: true,
             baseAmount: 5000
@@ -370,25 +370,25 @@ describe('predictNextPayment', () => {
   // BONUS PREDICTION TESTS
   // ============================================================================
 
-  describe('Bonus prediction', () => {
-    it('should predict annual bonus payment', () => {
+  describe("Bonus prediction", () => {
+    it("should predict annual bonus payment", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.ANNUALLY,
-        new Date('2024-12-15'), // Last year's bonus
+        new Date("2024-12-15"), // Last year's bonus
         20000.00,
         undefined,
         {
-          incomeType: 'bonus',
+          incomeType: "bonus",
           bonusConfig: {
-            schedule: 'annual',
+            schedule: "annual",
             expectedMonth: 12, // December
             lastBonusAmount: 20000.00,
-            lastBonusDate: Timestamp.fromDate(new Date('2024-12-15'))
+            lastBonusDate: Timestamp.fromDate(new Date("2024-12-15"))
           }
         }
       );
 
-      const fromDate = new Date('2025-06-01');
+      const fromDate = new Date("2025-06-01");
       const result = predictNextPayment(inflow, fromDate);
 
       // Next annual bonus should be Dec 2025
@@ -398,22 +398,22 @@ describe('predictNextPayment', () => {
       expect(predictedDate.getFullYear()).toBe(2025);
     });
 
-    it('should predict quarterly bonus payment', () => {
+    it("should predict quarterly bonus payment", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.QUARTERLY,
-        new Date('2025-01-15'), // Q4 2024 bonus
+        new Date("2025-01-15"), // Q4 2024 bonus
         5000.00,
         undefined,
         {
-          incomeType: 'bonus',
+          incomeType: "bonus",
           bonusConfig: {
-            schedule: 'quarterly',
+            schedule: "quarterly",
             expectedQuarter: 1 // Current quarter
           }
         }
       );
 
-      const fromDate = new Date('2025-02-01');
+      const fromDate = new Date("2025-02-01");
       const result = predictNextPayment(inflow, fromDate);
 
       // Next quarterly bonus should be around April
@@ -422,16 +422,16 @@ describe('predictNextPayment', () => {
       expect(predictedDate.getMonth()).toBe(3); // April
     });
 
-    it('should have lower confidence for bonus prediction', () => {
+    it("should have lower confidence for bonus prediction", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.ANNUALLY,
-        new Date('2024-12-15'),
+        new Date("2024-12-15"),
         20000.00,
         undefined,
         {
-          incomeType: 'bonus',
+          incomeType: "bonus",
           bonusConfig: {
-            schedule: 'annual',
+            schedule: "annual",
             expectedMonth: 12
           }
         }
@@ -441,7 +441,7 @@ describe('predictNextPayment', () => {
 
       // Bonuses are less predictable
       expect(result).not.toBeNull();
-      expect(['medium', 'low']).toContain(result!.confidenceLevel);
+      expect(["medium", "low"]).toContain(result!.confidenceLevel);
     });
   });
 
@@ -449,16 +449,16 @@ describe('predictNextPayment', () => {
   // IN-PERIOD PREDICTION TESTS
   // ============================================================================
 
-  describe('predictPaymentsInPeriod', () => {
-    it('should predict all weekly payments in a monthly period', () => {
+  describe("predictPaymentsInPeriod", () => {
+    it("should predict all weekly payments in a monthly period", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.WEEKLY,
-        new Date('2025-01-03'),
+        new Date("2025-01-03"),
         800.00
       );
 
-      const periodStart = new Date('2025-01-01');
-      const periodEnd = new Date('2025-01-31');
+      const periodStart = new Date("2025-01-01");
+      const periodEnd = new Date("2025-01-31");
 
       const result = predictPaymentsInPeriod(inflow, periodStart, periodEnd);
 
@@ -479,15 +479,15 @@ describe('predictNextPayment', () => {
       });
     });
 
-    it('should predict biweekly payments in monthly period', () => {
+    it("should predict biweekly payments in monthly period", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.BIWEEKLY,
-        new Date('2025-01-03'),
+        new Date("2025-01-03"),
         2000.00
       );
 
-      const periodStart = new Date('2025-01-01');
-      const periodEnd = new Date('2025-01-31');
+      const periodStart = new Date("2025-01-01");
+      const periodEnd = new Date("2025-01-31");
 
       const result = predictPaymentsInPeriod(inflow, periodStart, periodEnd);
 
@@ -496,15 +496,15 @@ describe('predictNextPayment', () => {
       expect(result.length).toBeLessThanOrEqual(3);
     });
 
-    it('should predict single monthly payment in monthly period', () => {
+    it("should predict single monthly payment in monthly period", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-15'),
+        new Date("2025-01-15"),
         5000.00
       );
 
-      const periodStart = new Date('2025-02-01');
-      const periodEnd = new Date('2025-02-28');
+      const periodStart = new Date("2025-02-01");
+      const periodEnd = new Date("2025-02-28");
 
       const result = predictPaymentsInPeriod(inflow, periodStart, periodEnd);
 
@@ -513,32 +513,32 @@ describe('predictNextPayment', () => {
       expect(result[0].expectedDate.toDate().getMonth()).toBe(1); // February
     });
 
-    it('should return empty array when no payments expected in period', () => {
+    it("should return empty array when no payments expected in period", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.ANNUALLY,
-        new Date('2024-12-15'), // December bonus
+        new Date("2024-12-15"), // December bonus
         20000.00
       );
 
-      const periodStart = new Date('2025-06-01');
-      const periodEnd = new Date('2025-06-30'); // June, not December
+      const periodStart = new Date("2025-06-01");
+      const periodEnd = new Date("2025-06-30"); // June, not December
 
       const result = predictPaymentsInPeriod(inflow, periodStart, periodEnd);
 
       expect(result.length).toBe(0);
     });
 
-    it('should predict multiple payments types correctly in same period', () => {
+    it("should predict multiple payments types correctly in same period", () => {
       const biweeklySalary = createTestInflow(
         PlaidRecurringFrequency.BIWEEKLY,
-        new Date('2025-01-03'),
+        new Date("2025-01-03"),
         2000.00,
         undefined,
-        { incomeType: 'salary' }
+        { incomeType: "salary" }
       );
 
-      const periodStart = new Date('2025-01-01');
-      const periodEnd = new Date('2025-01-31');
+      const periodStart = new Date("2025-01-01");
+      const periodEnd = new Date("2025-01-31");
 
       const salaryResult = predictPaymentsInPeriod(biweeklySalary, periodStart, periodEnd);
 
@@ -556,8 +556,8 @@ describe('predictNextPayment', () => {
   // EDGE CASES
   // ============================================================================
 
-  describe('Edge cases', () => {
-    it('should handle month-end dates crossing into shorter months', () => {
+  describe("Edge cases", () => {
+    it("should handle month-end dates crossing into shorter months", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
         createUTCDate(2025, 1, 31), // Paid on 31st
@@ -574,10 +574,10 @@ describe('predictNextPayment', () => {
       expect(predictedDate.getUTCDate()).toBeLessThanOrEqual(28);
     });
 
-    it('should handle weekend adjustments (optional)', () => {
+    it("should handle weekend adjustments (optional)", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-11'), // Saturday
+        new Date("2025-01-11"), // Saturday
         5000.00
       );
 
@@ -591,15 +591,15 @@ describe('predictNextPayment', () => {
       expect(dayOfWeek).not.toBe(6);
     });
 
-    it('should calculate correct days until payment', () => {
+    it("should calculate correct days until payment", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.WEEKLY,
-        new Date('2025-01-03'), // Last Friday
+        new Date("2025-01-03"), // Last Friday
         800.00,
-        new Date('2025-01-10') // Next Friday (Plaid prediction)
+        new Date("2025-01-10") // Next Friday (Plaid prediction)
       );
 
-      const fromDate = new Date('2025-01-07'); // Tuesday
+      const fromDate = new Date("2025-01-07"); // Tuesday
       const result = predictNextPayment(inflow, fromDate);
 
       // From Tuesday to Friday = 3 days
@@ -607,16 +607,16 @@ describe('predictNextPayment', () => {
       expect(result!.daysUntilPayment).toBe(3);
     });
 
-    it('should handle payment date in the past (just happened)', () => {
+    it("should handle payment date in the past (just happened)", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.WEEKLY,
-        new Date('2025-01-03'),
+        new Date("2025-01-03"),
         800.00,
-        new Date('2025-01-10')
+        new Date("2025-01-10")
       );
 
       // Query after the predicted date
-      const fromDate = new Date('2025-01-12'); // After Jan 10
+      const fromDate = new Date("2025-01-12"); // After Jan 10
       const result = predictNextPayment(inflow, fromDate);
 
       // Should calculate next occurrence (Jan 17)
@@ -625,7 +625,7 @@ describe('predictNextPayment', () => {
       expect(predictedDate >= fromDate).toBe(true);
     });
 
-    it('should handle inactive income (return null or skip)', () => {
+    it("should handle inactive income (return null or skip)", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
         createUTCDate(2025, 1, 15),
@@ -646,30 +646,30 @@ describe('predictNextPayment', () => {
   // CONFIDENCE LEVEL TESTS
   // ============================================================================
 
-  describe('Confidence levels', () => {
-    it('should return high confidence for regular salary with Plaid prediction', () => {
+  describe("Confidence levels", () => {
+    it("should return high confidence for regular salary with Plaid prediction", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.BIWEEKLY,
-        new Date('2025-01-03'),
+        new Date("2025-01-03"),
         2000.00,
-        new Date('2025-01-17'),
-        { incomeType: 'salary' }
+        new Date("2025-01-17"),
+        { incomeType: "salary" }
       );
 
       const result = predictNextPayment(inflow);
 
       expect(result).not.toBeNull();
-      expect(result!.confidenceLevel).toBe('high');
+      expect(result!.confidenceLevel).toBe("high");
     });
 
-    it('should return medium confidence for variable income', () => {
+    it("should return medium confidence for variable income", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.MONTHLY,
-        new Date('2025-01-15'),
+        new Date("2025-01-15"),
         3000.00,
         undefined,
         {
-          incomeType: 'hourly',
+          incomeType: "hourly",
           isVariable: true
         }
       );
@@ -677,19 +677,19 @@ describe('predictNextPayment', () => {
       const result = predictNextPayment(inflow);
 
       expect(result).not.toBeNull();
-      expect(result!.confidenceLevel).toBe('medium');
+      expect(result!.confidenceLevel).toBe("medium");
     });
 
-    it('should return low confidence for infrequent bonus', () => {
+    it("should return low confidence for infrequent bonus", () => {
       const inflow = createTestInflow(
         PlaidRecurringFrequency.ANNUALLY,
-        new Date('2024-12-15'),
+        new Date("2024-12-15"),
         20000.00,
         undefined,
         {
-          incomeType: 'bonus',
+          incomeType: "bonus",
           bonusConfig: {
-            schedule: 'performance' // Performance-based = unpredictable
+            schedule: "performance" // Performance-based = unpredictable
           }
         }
       );
@@ -697,7 +697,7 @@ describe('predictNextPayment', () => {
       const result = predictNextPayment(inflow);
 
       expect(result).not.toBeNull();
-      expect(result!.confidenceLevel).toBe('low');
+      expect(result!.confidenceLevel).toBe("low");
     });
   });
 });

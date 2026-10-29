@@ -20,15 +20,15 @@
  * import { monthlyEntertainmentBudget, monthlyEntertainmentTransactions } from '../fixtures/budgets/monthlyBudget';
  */
 
-import { BudgetPeriod, PeriodType, TransactionStatus, TransactionType } from '../../../types';
-import { TEST_USER, TEST_BUDGET_ID, DEFAULTS } from '../constants';
-import { CATEGORIES } from '../categories';
+import { BudgetPeriod, PeriodType, TransactionStatus, TransactionType } from "../../../types";
+import { TEST_USER, TEST_BUDGET_ID, DEFAULTS } from "../constants";
+import { CATEGORIES } from "../categories";
 import {
   createTestBudget,
   createTestBudgetPeriod,
   createTestTransaction,
   createTestTransactionSplit,
-} from '../factories';
+} from "../factories";
 import {
   currentMonthStart,
   currentMonthEnd,
@@ -38,7 +38,7 @@ import {
   dayOfMonthsAgo,
   monthsAgoStart,
   monthsAgoEnd,
-} from '../dateHelpers';
+} from "../dateHelpers";
 
 // ============================================================================
 // BUDGET DOCUMENT
@@ -50,7 +50,7 @@ import {
  */
 export const monthlyEntertainmentBudget = createTestBudget({
   id: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
-  name: 'Entertainment',
+  name: "Entertainment",
   amount: 200,
   categoryIds: [
     CATEGORIES.ENTERTAINMENT_TV,
@@ -59,7 +59,7 @@ export const monthlyEntertainmentBudget = createTestBudget({
     CATEGORIES.ENTERTAINMENT_EVENTS,
   ],
   period: BudgetPeriod.MONTHLY,
-  description: 'Monthly budget for streaming, movies, games, and events',
+  description: "Monthly budget for streaming, movies, games, and events",
   startDate: monthsAgoStart(3),
   alertThreshold: DEFAULTS.ALERT_THRESHOLD,
 });
@@ -71,7 +71,7 @@ export const monthlyEntertainmentBudget = createTestBudget({
 /** Current month period */
 export const monthlyPeriodCurrent = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
-  budgetName: 'Entertainment',
+  budgetName: "Entertainment",
   periodType: PeriodType.MONTHLY,
   allocatedAmount: 200,
   periodStart: currentMonthStart(),
@@ -81,7 +81,7 @@ export const monthlyPeriodCurrent = createTestBudgetPeriod({
 /** Last month period (over budget!) */
 export const monthlyPeriodLastMonth = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
-  budgetName: 'Entertainment',
+  budgetName: "Entertainment",
   periodType: PeriodType.MONTHLY,
   allocatedAmount: 200,
   periodStart: monthsAgoStart(1),
@@ -92,7 +92,7 @@ export const monthlyPeriodLastMonth = createTestBudgetPeriod({
 /** Two months ago period */
 export const monthlyPeriodTwoMonthsAgo = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
-  budgetName: 'Entertainment',
+  budgetName: "Entertainment",
   periodType: PeriodType.MONTHLY,
   allocatedAmount: 200,
   periodStart: monthsAgoStart(2),
@@ -107,7 +107,7 @@ export const monthlyPeriodTwoMonthsAgo = createTestBudgetPeriod({
 /** Current week period */
 export const weeklyPeriodCurrent = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
-  budgetName: 'Entertainment',
+  budgetName: "Entertainment",
   periodType: PeriodType.WEEKLY,
   allocatedAmount: 50, // $200/4 weeks
   periodStart: currentWeekStart(),
@@ -121,7 +121,7 @@ export const weeklyPeriodCurrent = createTestBudgetPeriod({
 /** Current bi-monthly period */
 export const biMonthlyPeriodCurrent = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
-  budgetName: 'Entertainment',
+  budgetName: "Entertainment",
   periodType: PeriodType.BI_MONTHLY,
   allocatedAmount: 100, // $200/2
   periodStart: currentMonthStart(),
@@ -146,56 +146,56 @@ export const monthlyEntertainmentBudgetPeriods = [
 
 /** Transaction 1: Netflix subscription - day 1 (recurring) */
 export const txn1_netflixSubscription = createTestTransaction({
-  transactionId: 'txn_monthly_001',
+  transactionId: "txn_monthly_001",
   amount: 15.99,
   transactionDate: dayOfCurrentMonth(1),
-  description: 'Netflix Monthly Subscription',
-  merchantName: 'Netflix',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Netflix Monthly Subscription",
+  merchantName: "Netflix",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_TV,
 });
 
 /** Transaction 2: Spotify subscription - day 1 (recurring) */
 export const txn2_spotifySubscription = createTestTransaction({
-  transactionId: 'txn_monthly_002',
+  transactionId: "txn_monthly_002",
   amount: 10.99,
   transactionDate: dayOfCurrentMonth(1),
-  description: 'Spotify Premium Monthly',
-  merchantName: 'Spotify',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Spotify Premium Monthly",
+  merchantName: "Spotify",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_MUSIC,
 });
 
 /** Transaction 3: Movie theater - day 8 */
 export const txn3_movieTheater = createTestTransaction({
-  transactionId: 'txn_monthly_003',
+  transactionId: "txn_monthly_003",
   amount: 34.50,
   transactionDate: dayOfCurrentMonth(8),
-  description: 'AMC Theatres - Movie Night (2 tickets + popcorn)',
-  merchantName: 'AMC Theatres',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "AMC Theatres - Movie Night (2 tickets + popcorn)",
+  merchantName: "AMC Theatres",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_TV,
 });
 
 /** Transaction 4: Video game purchase - day 12 */
 export const txn4_videoGame = createTestTransaction({
-  transactionId: 'txn_monthly_004',
+  transactionId: "txn_monthly_004",
   amount: 59.99,
   transactionDate: dayOfCurrentMonth(12),
-  description: 'Steam - New Game Purchase',
-  merchantName: 'Steam',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Steam - New Game Purchase",
+  merchantName: "Steam",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_GAMES,
 });
 
 /** Transaction 5: Concert tickets - day 15 */
 export const txn5_concertTickets = createTestTransaction({
-  transactionId: 'txn_monthly_005',
+  transactionId: "txn_monthly_005",
   amount: 85.00,
   transactionDate: dayOfCurrentMonth(15),
-  description: 'Ticketmaster - Concert Tickets',
-  merchantName: 'Ticketmaster',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Ticketmaster - Concert Tickets",
+  merchantName: "Ticketmaster",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_EVENTS,
 });
 
@@ -205,23 +205,23 @@ export const txn5_concertTickets = createTestTransaction({
 
 /** Transaction 6: Last month - streaming services */
 export const txn6_lastMonthStreaming = createTestTransaction({
-  transactionId: 'txn_monthly_006',
+  transactionId: "txn_monthly_006",
   amount: 45.97,
   transactionDate: dayOfMonthsAgo(1, 1),
-  description: 'Netflix + Disney+ + HBO Max',
-  merchantName: 'Various Streaming',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Netflix + Disney+ + HBO Max",
+  merchantName: "Various Streaming",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_TV,
 });
 
 /** Transaction 7: Last month - theme park (caused over-budget) */
 export const txn7_lastMonthThemePark = createTestTransaction({
-  transactionId: 'txn_monthly_007',
+  transactionId: "txn_monthly_007",
   amount: 200.00,
   transactionDate: dayOfMonthsAgo(1, 20),
-  description: 'Universal Studios - Day Pass',
-  merchantName: 'Universal Studios',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Universal Studios - Day Pass",
+  merchantName: "Universal Studios",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_EVENTS,
 });
 
@@ -231,12 +231,12 @@ export const txn7_lastMonthThemePark = createTestTransaction({
 
 /** Transaction 8: Two months ago - end of month boundary */
 export const txn8_boundaryEndOfMonth = createTestTransaction({
-  transactionId: 'txn_monthly_008',
+  transactionId: "txn_monthly_008",
   amount: 29.99,
   transactionDate: monthsAgoEnd(2),
-  description: 'PlayStation Store - End of month purchase (boundary test)',
-  merchantName: 'PlayStation Store',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "PlayStation Store - End of month purchase (boundary test)",
+  merchantName: "PlayStation Store",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_GAMES,
 });
 
@@ -246,27 +246,27 @@ export const txn8_boundaryEndOfMonth = createTestTransaction({
 
 /** Transaction 9: Split across multiple entertainment categories */
 export const txn9_splitTransaction = createTestTransaction({
-  transactionId: 'txn_monthly_009',
+  transactionId: "txn_monthly_009",
   amount: 75.00,
   transactionDate: dayOfCurrentMonth(10),
-  description: 'Entertainment Bundle - Split Purchase',
-  merchantName: 'Best Buy',
-  plaidPrimaryCategory: 'ENTERTAINMENT',
+  description: "Entertainment Bundle - Split Purchase",
+  merchantName: "Best Buy",
+  plaidPrimaryCategory: "ENTERTAINMENT",
   plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_TV,
   splits: [
     createTestTransactionSplit({
-      splitId: 'txn_monthly_009_split_001',
+      splitId: "txn_monthly_009_split_001",
       budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
       amount: 30.00,
-      plaidPrimaryCategory: 'ENTERTAINMENT',
+      plaidPrimaryCategory: "ENTERTAINMENT",
       plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_TV,
       paymentDate: dayOfCurrentMonth(10),
     }),
     createTestTransactionSplit({
-      splitId: 'txn_monthly_009_split_002',
+      splitId: "txn_monthly_009_split_002",
       budgetId: TEST_BUDGET_ID.MONTHLY_ENTERTAINMENT,
       amount: 45.00,
-      plaidPrimaryCategory: 'ENTERTAINMENT',
+      plaidPrimaryCategory: "ENTERTAINMENT",
       plaidDetailedCategory: CATEGORIES.ENTERTAINMENT_GAMES,
       paymentDate: dayOfCurrentMonth(10),
     }),

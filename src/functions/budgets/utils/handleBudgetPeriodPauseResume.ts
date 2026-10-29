@@ -13,13 +13,13 @@
  * This only affects the specific budget period being toggled.
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { BudgetPeriodDocument } from '../../../types';
+import * as admin from "firebase-admin";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import { BudgetPeriodDocument } from "../../../types";
 
 export interface PauseResumeResult {
   success: boolean;
-  action: 'paused' | 'resumed' | 'skipped';
+  action: "paused" | "resumed" | "skipped";
   message: string;
   splitsReassigned: number;
   amountRedistributed: number;
@@ -33,9 +33,9 @@ async function findEverythingElseBudget(
   db: admin.firestore.Firestore,
   userId: string
 ): Promise<admin.firestore.DocumentSnapshot | null> {
-  const query = await db.collection('budgets')
-    .where('userId', '==', userId)
-    .where('isSystemEverythingElse', '==', true)
+  const query = await db.collection("budgets")
+    .where("userId", "==", userId)
+    .where("isSystemEverythingElse", "==", true)
     .limit(1)
     .get();
 
@@ -50,9 +50,9 @@ async function findCorrespondingEverythingElsePeriod(
   everythingElseBudgetId: string,
   sourcePeriodId: string
 ): Promise<admin.firestore.QueryDocumentSnapshot | null> {
-  const query = await db.collection('budget_periods')
-    .where('budgetId', '==', everythingElseBudgetId)
-    .where('sourcePeriodId', '==', sourcePeriodId)
+  const query = await db.collection("budget_periods")
+    .where("budgetId", "==", everythingElseBudgetId)
+    .where("sourcePeriodId", "==", sourcePeriodId)
     .limit(1)
     .get();
 
@@ -70,10 +70,10 @@ async function findTransactionsForBudgetPeriod(
   userId: string
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
   // Query transactions by user and date range
-  const query = await db.collection('transactions')
-    .where('userId', '==', userId)
-    .where('date', '>=', Timestamp.fromDate(periodStart))
-    .where('date', '<=', Timestamp.fromDate(periodEnd))
+  const query = await db.collection("transactions")
+    .where("userId", "==", userId)
+    .where("date", ">=", Timestamp.fromDate(periodStart))
+    .where("date", "<=", Timestamp.fromDate(periodEnd))
     .get();
 
   // Filter to only those with splits assigned to this budget
@@ -95,10 +95,10 @@ async function findPausedTransactionsForBudgetPeriod(
   userId: string
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
   // Query transactions by user and date range
-  const query = await db.collection('transactions')
-    .where('userId', '==', userId)
-    .where('date', '>=', Timestamp.fromDate(periodStart))
-    .where('date', '<=', Timestamp.fromDate(periodEnd))
+  const query = await db.collection("transactions")
+    .where("userId", "==", userId)
+    .where("date", ">=", Timestamp.fromDate(periodStart))
+    .where("date", "<=", Timestamp.fromDate(periodEnd))
     .get();
 
   // Filter to only those with splits that have pausedFromBudgetId matching this budget
@@ -120,8 +120,8 @@ export async function handleBudgetPeriodPauseResume(
 ): Promise<PauseResumeResult> {
   const result: PauseResumeResult = {
     success: false,
-    action: 'skipped',
-    message: '',
+    action: "skipped",
+    message: "",
     splitsReassigned: 0,
     amountRedistributed: 0,
     error: null
@@ -134,14 +134,14 @@ export async function handleBudgetPeriodPauseResume(
     const periodEnd = periodData.periodEnd.toDate();
     const allocatedAmount = periodData.allocatedAmount || 0;
 
-    console.log(`[handleBudgetPeriodPauseResume] ${isPausing ? 'Pausing' : 'Resuming'} period ${periodId}`);
+    console.log(`[handleBudgetPeriodPauseResume] ${isPausing ? "Pausing" : "Resuming"} period ${periodId}`);
     console.log(`[handleBudgetPeriodPauseResume] Budget: ${budgetId}, User: ${userId}`);
     console.log(`[handleBudgetPeriodPauseResume] Period: ${periodStart.toISOString()} to ${periodEnd.toISOString()}`);
 
     // Find Everything Else budget
     const everythingElseBudget = await findEverythingElseBudget(db, userId);
     if (!everythingElseBudget) {
-      result.error = 'Everything Else budget not found';
+      result.error = "Everything Else budget not found";
       console.error(`[handleBudgetPeriodPauseResume] ${result.error}`);
       return result;
     }
@@ -157,7 +157,7 @@ export async function handleBudgetPeriodPauseResume(
     );
 
     if (!everythingElsePeriod) {
-      result.error = 'Corresponding Everything Else period not found';
+      result.error = "Corresponding Everything Else period not found";
       console.error(`[handleBudgetPeriodPauseResume] ${result.error}`);
       return result;
     }
@@ -170,14 +170,14 @@ export async function handleBudgetPeriodPauseResume(
     const alreadyPaused = (periodData as any).pausedAllocatedAmount != null;
     if (isPausing && alreadyPaused) {
       result.success = true;
-      result.action = 'paused';
-      result.message = 'Budget period already paused (idempotent no-op)';
+      result.action = "paused";
+      result.message = "Budget period already paused (idempotent no-op)";
       return result;
     }
     if (!isPausing && !alreadyPaused) {
       result.success = true;
-      result.action = 'resumed';
-      result.message = 'Budget period already resumed (idempotent no-op)';
+      result.action = "resumed";
+      result.message = "Budget period already resumed (idempotent no-op)";
       return result;
     }
 
@@ -228,7 +228,7 @@ export async function handleBudgetPeriodPauseResume(
       }
 
       // Update budget periods - store paused amounts for restore
-      const periodRef = db.collection('budget_periods').doc(periodId);
+      const periodRef = db.collection("budget_periods").doc(periodId);
       batch.update(periodRef, {
         pausedSpent: periodData.spent || 0,
         pausedAllocatedAmount: allocatedAmount,
@@ -249,7 +249,7 @@ export async function handleBudgetPeriodPauseResume(
       await batch.commit();
 
       result.success = true;
-      result.action = 'paused';
+      result.action = "paused";
       result.splitsReassigned = splitsCount;
       result.amountRedistributed = totalAmountReassigned;
       result.message = `Reassigned ${splitsCount} splits ($${totalAmountReassigned.toFixed(2)}) to Everything Else`;
@@ -300,7 +300,7 @@ export async function handleBudgetPeriodPauseResume(
       }
 
       // Get paused amounts from period (stored when paused)
-      const periodRef = db.collection('budget_periods').doc(periodId);
+      const periodRef = db.collection("budget_periods").doc(periodId);
       const pausedAllocated = (periodData as any).pausedAllocatedAmount || allocatedAmount;
 
       // Clear paused fields from budget period
@@ -323,7 +323,7 @@ export async function handleBudgetPeriodPauseResume(
       await batch.commit();
 
       result.success = true;
-      result.action = 'resumed';
+      result.action = "resumed";
       result.splitsReassigned = splitsCount;
       result.amountRedistributed = totalAmountReclaimed;
       result.message = `Reclaimed ${splitsCount} splits ($${totalAmountReclaimed.toFixed(2)}) from Everything Else`;
@@ -332,8 +332,8 @@ export async function handleBudgetPeriodPauseResume(
     console.log(`[handleBudgetPeriodPauseResume] ✓ ${result.message}`);
 
   } catch (error: any) {
-    console.error('[handleBudgetPeriodPauseResume] Error:', error);
-    result.error = error.message || 'Unknown error';
+    console.error("[handleBudgetPeriodPauseResume] Error:", error);
+    result.error = error.message || "Unknown error";
   }
 
   return result;

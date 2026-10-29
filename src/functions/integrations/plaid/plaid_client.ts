@@ -366,30 +366,30 @@ export async function create_link_token(
 
   const account_filters: LinkTokenAccountFilters = is_liability
     ? {
-        credit: { account_subtypes: [CreditAccountSubtype.CreditCard] },
-        // ALL loan subtypes (mortgage/student/auto/home equity/LOC/…). Only
-        // credit/mortgage/student get Liabilities detail; the rest link balance-only.
-        loan: { account_subtypes: [LoanAccountSubtype.All] },
-      }
+      credit: { account_subtypes: [CreditAccountSubtype.CreditCard] },
+      // ALL loan subtypes (mortgage/student/auto/home equity/LOC/…). Only
+      // credit/mortgage/student get Liabilities detail; the rest link balance-only.
+      loan: { account_subtypes: [LoanAccountSubtype.All] },
+    }
     : {
-        depository: {
-          account_subtypes: [
-            DepositoryAccountSubtype.Checking,
-            DepositoryAccountSubtype.Savings,
-            DepositoryAccountSubtype.MoneyMarket,
-            DepositoryAccountSubtype.Cd,
-          ],
-        },
-        investment: {
-          account_subtypes: [
-            InvestmentAccountSubtype._401k,
-            InvestmentAccountSubtype._403B,
-            InvestmentAccountSubtype.Ira,
-            InvestmentAccountSubtype.Roth,
-            InvestmentAccountSubtype.Brokerage,
-          ],
-        },
-      };
+      depository: {
+        account_subtypes: [
+          DepositoryAccountSubtype.Checking,
+          DepositoryAccountSubtype.Savings,
+          DepositoryAccountSubtype.MoneyMarket,
+          DepositoryAccountSubtype.Cd,
+        ],
+      },
+      investment: {
+        account_subtypes: [
+          InvestmentAccountSubtype._401k,
+          InvestmentAccountSubtype._403B,
+          InvestmentAccountSubtype.Ira,
+          InvestmentAccountSubtype.Roth,
+          InvestmentAccountSubtype.Brokerage,
+        ],
+      },
+    };
 
   const request: LinkTokenCreateRequest = {
     client_name: "Family Finance",

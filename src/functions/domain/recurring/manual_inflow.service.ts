@@ -16,13 +16,13 @@ import { normalize_frequency } from "./frequency";
 /** The form's frequency spelling (Plaid-style or lowercase) → a supported schedule; null = unknown. */
 export function to_convert_frequency(raw: string | null | undefined): ConvertFrequency | null {
   switch (normalize_frequency(raw)) {
-    case "WEEKLY": return "weekly";
-    case "BIWEEKLY": return "biweekly";
-    case "SEMIMONTHLY": return "semimonthly";
-    case "MONTHLY": return "monthly";
-    case "QUARTERLY": return "quarterly";
-    case "ANNUALLY": return "yearly";
-    default: return null;
+  case "WEEKLY": return "weekly";
+  case "BIWEEKLY": return "biweekly";
+  case "SEMIMONTHLY": return "semimonthly";
+  case "MONTHLY": return "monthly";
+  case "QUARTERLY": return "quarterly";
+  case "ANNUALLY": return "yearly";
+  default: return null;
   }
 }
 

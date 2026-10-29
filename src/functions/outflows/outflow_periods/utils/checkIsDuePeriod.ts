@@ -8,7 +8,7 @@
  * This utility is called during outflow period creation to set the isDuePeriod flag.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 
 /**
  * Check if the expected due date falls within the period boundaries

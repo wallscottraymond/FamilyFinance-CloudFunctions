@@ -14,8 +14,8 @@
  * Memory: 1GiB (may need to update many resources), Timeout: 540s (9 minutes)
  */
 
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import * as admin from "firebase-admin";
 
 /**
  * Helper to extract user IDs from group members array
@@ -25,7 +25,7 @@ function extractMemberIds(members: any[]): string[] {
 
   return members
     .map((member: any) => {
-      if (typeof member === 'string') return member;
+      if (typeof member === "string") return member;
       if (member && member.userId) return member.userId;
       return null;
     })
@@ -45,7 +45,7 @@ async function updateResourceCollection(
 
   // Find all resources belonging to this group
   const resourcesSnapshot = await db.collection(collectionName)
-    .where('groupId', '==', groupId)
+    .where("groupId", "==", groupId)
     .get();
 
   if (resourcesSnapshot.empty) {
@@ -109,9 +109,9 @@ async function updateChildPeriods(
   console.log(`[updateChildPeriods] Updating ${collectionName} for group ${groupId}`);
 
   // Find all parent resources belonging to this group to get their IDs
-  const parentsSnapshot = await db.collection(parentIdField === 'budgetId' ? 'budgets' :
-                                              parentIdField === 'outflowId' ? 'outflows' : 'inflows')
-    .where('groupId', '==', groupId)
+  const parentsSnapshot = await db.collection(parentIdField === "budgetId" ? "budgets" :
+    parentIdField === "outflowId" ? "outflows" : "inflows")
+    .where("groupId", "==", groupId)
     .select() // Only get document IDs for performance
     .get();
 
@@ -132,7 +132,7 @@ async function updateChildPeriods(
     const batchParentIds = parentIds.slice(i, i + IN_QUERY_LIMIT);
 
     const periodsSnapshot = await db.collection(collectionName)
-      .where(parentIdField, 'in', batchParentIds)
+      .where(parentIdField, "in", batchParentIds)
       .get();
 
     if (periodsSnapshot.empty) continue;
@@ -214,23 +214,23 @@ async function handleMembershipUpdate(
     }
 
     console.log(`[${label}] Group ${groupId} membership changed:`);
-    console.log(`  Before: ${beforeMembers.length} members - ${beforeMembers.join(', ')}`);
-    console.log(`  After: ${afterMembers.length} members - ${afterMembers.join(', ')}`);
+    console.log(`  Before: ${beforeMembers.length} members - ${beforeMembers.join(", ")}`);
+    console.log(`  After: ${afterMembers.length} members - ${afterMembers.join(", ")}`);
 
     const db = admin.firestore();
 
     // Update all resource types in parallel
     const updatePromises = [
       // Primary resources
-      updateResourceCollection(db, 'budgets', groupId, afterMembers),
-      updateResourceCollection(db, 'transactions', groupId, afterMembers),
-      updateResourceCollection(db, 'outflows', groupId, afterMembers),
-      updateResourceCollection(db, 'inflows', groupId, afterMembers),
+      updateResourceCollection(db, "budgets", groupId, afterMembers),
+      updateResourceCollection(db, "transactions", groupId, afterMembers),
+      updateResourceCollection(db, "outflows", groupId, afterMembers),
+      updateResourceCollection(db, "inflows", groupId, afterMembers),
 
       // Child period resources
-      updateChildPeriods(db, 'budget_periods', 'budgetId', groupId, afterMembers),
-      updateChildPeriods(db, 'outflow_periods', 'outflowId', groupId, afterMembers),
-      updateChildPeriods(db, 'inflow_periods', 'inflowId', groupId, afterMembers),
+      updateChildPeriods(db, "budget_periods", "budgetId", groupId, afterMembers),
+      updateChildPeriods(db, "outflow_periods", "outflowId", groupId, afterMembers),
+      updateChildPeriods(db, "inflow_periods", "inflowId", groupId, afterMembers),
     ];
 
     const results = await Promise.all(updatePromises);
@@ -250,13 +250,13 @@ async function handleMembershipUpdate(
  * Scoped to the `groups` collection so it does NOT fire on unrelated writes.
  */
 export const onGroupMembershipUpdate = onDocumentUpdated({
-  document: 'groups/{groupId}',
-  region: 'us-central1',
-  memory: '1GiB',
+  document: "groups/{groupId}",
+  region: "us-central1",
+  memory: "1GiB",
   timeoutSeconds: 540, // 9 minutes for large groups
 }, async (event) => {
   await handleMembershipUpdate(
-    'onGroupMembershipUpdate',
+    "onGroupMembershipUpdate",
     event.params.groupId as string,
     event.data?.before?.data(),
     event.data?.after?.data()

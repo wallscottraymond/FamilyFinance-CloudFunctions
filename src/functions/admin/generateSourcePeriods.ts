@@ -60,13 +60,13 @@ export const generateSourcePeriods = onRequest({
           const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // Last day of month
           
           const monthlyPeriod: Omit<SourcePeriod, "createdAt" | "updatedAt"> = {
-            id: `${year}M${month.toString().padStart(2, '0')}`,
-            periodId: `${year}M${month.toString().padStart(2, '0')}`,
+            id: `${year}M${month.toString().padStart(2, "0")}`,
+            periodId: `${year}M${month.toString().padStart(2, "0")}`,
             type: PeriodType.MONTHLY,
             startDate: Timestamp.fromDate(startDate),
             endDate: Timestamp.fromDate(endDate),
             year,
-            index: parseInt(`${year}${month.toString().padStart(2, '0')}`),
+            index: parseInt(`${year}${month.toString().padStart(2, "0")}`),
             isCurrent: isCurrentPeriod(startDate, endDate, today, PeriodType.MONTHLY),
             metadata: {
               month,
@@ -81,13 +81,13 @@ export const generateSourcePeriods = onRequest({
           const secondHalfStart = new Date(Date.UTC(year, month - 1, 16, 0, 0, 0, 0));
 
           const biMonthlyFirstHalf: Omit<SourcePeriod, "createdAt" | "updatedAt"> = {
-            id: `${year}BM${month.toString().padStart(2, '0')}A`,
-            periodId: `${year}BM${month.toString().padStart(2, '0')}A`,
+            id: `${year}BM${month.toString().padStart(2, "0")}A`,
+            periodId: `${year}BM${month.toString().padStart(2, "0")}A`,
             type: PeriodType.BI_MONTHLY,
             startDate: Timestamp.fromDate(startDate),
             endDate: Timestamp.fromDate(firstHalfEnd),
             year,
-            index: parseInt(`${year}${month.toString().padStart(2, '0')}1`),
+            index: parseInt(`${year}${month.toString().padStart(2, "0")}1`),
             isCurrent: isCurrentPeriod(startDate, firstHalfEnd, today, PeriodType.BI_MONTHLY),
             metadata: {
               month,
@@ -97,13 +97,13 @@ export const generateSourcePeriods = onRequest({
           };
 
           const biMonthlySecondHalf: Omit<SourcePeriod, "createdAt" | "updatedAt"> = {
-            id: `${year}BM${month.toString().padStart(2, '0')}B`,
-            periodId: `${year}BM${month.toString().padStart(2, '0')}B`,
+            id: `${year}BM${month.toString().padStart(2, "0")}B`,
+            periodId: `${year}BM${month.toString().padStart(2, "0")}B`,
             type: PeriodType.BI_MONTHLY,
             startDate: Timestamp.fromDate(secondHalfStart),
             endDate: Timestamp.fromDate(endDate),
             year,
-            index: parseInt(`${year}${month.toString().padStart(2, '0')}2`),
+            index: parseInt(`${year}${month.toString().padStart(2, "0")}2`),
             isCurrent: isCurrentPeriod(secondHalfStart, endDate, today, PeriodType.BI_MONTHLY),
             metadata: {
               month,
@@ -137,13 +137,13 @@ export const generateSourcePeriods = onRequest({
             const isoWeekNumber = getISOWeekNumber(currentWeekStart);
             
             const weeklyPeriod: Omit<SourcePeriod, "createdAt" | "updatedAt"> = {
-              id: `${year}W${weekNumber.toString().padStart(2, '0')}`,
-              periodId: `${year}W${weekNumber.toString().padStart(2, '0')}`,
+              id: `${year}W${weekNumber.toString().padStart(2, "0")}`,
+              periodId: `${year}W${weekNumber.toString().padStart(2, "0")}`,
               type: PeriodType.WEEKLY,
               startDate: Timestamp.fromDate(currentWeekStart),
               endDate: Timestamp.fromDate(weekEnd),
               year,
-              index: parseInt(`${year}${weekNumber.toString().padStart(2, '0')}`),
+              index: parseInt(`${year}${weekNumber.toString().padStart(2, "0")}`),
               isCurrent: isCurrentPeriod(currentWeekStart, weekEnd, today, PeriodType.WEEKLY),
               metadata: {
                 weekNumber: isoWeekNumber,

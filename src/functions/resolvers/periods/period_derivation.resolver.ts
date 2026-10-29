@@ -283,34 +283,34 @@ export async function load_period_derivation_raw(
     goals_raw,
     category_catalog,
   ] = await Promise.all([
-      source_period_repo.get_overlapping(
-        ctx,
-        Timestamp.fromMillis(range_start_ms),
-        Timestamp.fromMillis(range_end_ms)
-      ),
-      budget_repo.get_by_user_id(ctx, scope.budget_owner_key),
-      budget_period_repo.get_by_user_and_type_starting_between(
-        ctx,
-        scope.budget_owner_key,
-        "monthly",
-        ...monthly_period_load_bounds(range_start_ms, range_end_ms)
-      ),
-      // Per member: bills + income, then — chained, only if the member is flag-on or has a v2
-      // record — their review state (the fuzzy hold-out). X11: no extra read otherwise.
-      per_member(scope, async (m) => {
-        const flag_on = feature_flag_repo.is_convert_to_recurring_enabled(m);
-        const [outs, ins, pins] = await Promise.all([
-          outflow_repo.get_by_user_id(ctx, m),
-          inflow_repo.get_by_user_id(ctx, m),
-          // Bills with a hand-pinned period (one read; usually no docs).
-          outflow_pinned_period_repo.get_by_owner(ctx, m),
-        ]);
-        const st = await load_review_state_if_relevant(ctx, m, [...outs, ...ins], flag_on);
-        return [{ member_id: m, outs, ins, st, pins }];
-      }),
-      per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
-      load_category_catalog(ctx),
-    ]);
+    source_period_repo.get_overlapping(
+      ctx,
+      Timestamp.fromMillis(range_start_ms),
+      Timestamp.fromMillis(range_end_ms)
+    ),
+    budget_repo.get_by_user_id(ctx, scope.budget_owner_key),
+    budget_period_repo.get_by_user_and_type_starting_between(
+      ctx,
+      scope.budget_owner_key,
+      "monthly",
+      ...monthly_period_load_bounds(range_start_ms, range_end_ms)
+    ),
+    // Per member: bills + income, then — chained, only if the member is flag-on or has a v2
+    // record — their review state (the fuzzy hold-out). X11: no extra read otherwise.
+    per_member(scope, async (m) => {
+      const flag_on = feature_flag_repo.is_convert_to_recurring_enabled(m);
+      const [outs, ins, pins] = await Promise.all([
+        outflow_repo.get_by_user_id(ctx, m),
+        inflow_repo.get_by_user_id(ctx, m),
+        // Bills with a hand-pinned period (one read; usually no docs).
+        outflow_pinned_period_repo.get_by_owner(ctx, m),
+      ]);
+      const st = await load_review_state_if_relevant(ctx, m, [...outs, ...ins], flag_on);
+      return [{ member_id: m, outs, ins, st, pins }];
+    }),
+    per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
+    load_category_catalog(ctx),
+  ]);
   const all_outflows = member_recurring.flatMap((r) => r.outs);
   const all_inflows = member_recurring.flatMap((r) => r.ins);
   const review_states = member_recurring.flatMap((r) => (r.st ? [r.st] : []));

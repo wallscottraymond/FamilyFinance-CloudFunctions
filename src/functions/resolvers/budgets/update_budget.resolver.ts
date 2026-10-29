@@ -65,10 +65,10 @@ export async function resolve_update_budget_dependencies(
   const everything_else =
     removed_category_ids.length > 0
       ? await budget_repo.find_everything_else(
-          ctx,
-          existing.user_id, // the budget's view (PD6), not the caller
-          budget_cadence_to_instance(existing.period) // this budget's lens
-        )
+        ctx,
+        existing.user_id, // the budget's view (PD6), not the caller
+        budget_cadence_to_instance(existing.period) // this budget's lens
+      )
       : null;
 
   const amount_changed =

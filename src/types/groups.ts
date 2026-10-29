@@ -19,7 +19,7 @@ export interface GroupMember {
   role: GroupRole;
   joinedAt: Timestamp;
   invitedBy: string;
-  status: 'active' | 'invited' | 'suspended';
+  status: "active" | "invited" | "suspended";
 }
 
 // Group membership tracking (embedded in User document)
@@ -28,7 +28,7 @@ export interface GroupMembership {
   role: GroupRole;
   joinedAt: Timestamp;
   invitedBy: string;
-  status: 'active' | 'invited' | 'suspended';
+  status: "active" | "invited" | "suspended";
 }
 
 // Group settings

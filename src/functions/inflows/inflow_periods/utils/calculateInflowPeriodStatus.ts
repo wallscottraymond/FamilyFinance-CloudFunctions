@@ -14,18 +14,18 @@
  * 5. PENDING - Expecting income, not yet received
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { InflowPeriod } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { InflowPeriod } from "../../../../types";
 
 /**
  * Inflow period status enum
  */
 export enum InflowPeriodStatus {
-  RECEIVED = 'received',           // All occurrences received
-  PARTIAL = 'partial',             // Some occurrences received
-  PENDING = 'pending',             // Expecting income, not yet received
-  OVERDUE = 'overdue',             // Expected date passed, not received
-  NOT_EXPECTED = 'not_expected'    // No income expected this period
+  RECEIVED = "received",           // All occurrences received
+  PARTIAL = "partial",             // Some occurrences received
+  PENDING = "pending",             // Expecting income, not yet received
+  OVERDUE = "overdue",             // Expected date passed, not received
+  NOT_EXPECTED = "not_expected"    // No income expected this period
 }
 
 /**
@@ -147,47 +147,47 @@ export function getStatusDisplayProperties(status: InflowPeriodStatus): {
   icon: string;
 } {
   switch (status) {
-    case InflowPeriodStatus.RECEIVED:
-      return {
-        label: 'Received',
-        color: 'green',
-        icon: 'check-circle'
-      };
+  case InflowPeriodStatus.RECEIVED:
+    return {
+      label: "Received",
+      color: "green",
+      icon: "check-circle"
+    };
 
-    case InflowPeriodStatus.PARTIAL:
-      return {
-        label: 'Partial',
-        color: 'yellow',
-        icon: 'clock'
-      };
+  case InflowPeriodStatus.PARTIAL:
+    return {
+      label: "Partial",
+      color: "yellow",
+      icon: "clock"
+    };
 
-    case InflowPeriodStatus.PENDING:
-      return {
-        label: 'Pending',
-        color: 'blue',
-        icon: 'clock'
-      };
+  case InflowPeriodStatus.PENDING:
+    return {
+      label: "Pending",
+      color: "blue",
+      icon: "clock"
+    };
 
-    case InflowPeriodStatus.OVERDUE:
-      return {
-        label: 'Overdue',
-        color: 'red',
-        icon: 'alert-circle'
-      };
+  case InflowPeriodStatus.OVERDUE:
+    return {
+      label: "Overdue",
+      color: "red",
+      icon: "alert-circle"
+    };
 
-    case InflowPeriodStatus.NOT_EXPECTED:
-      return {
-        label: 'Not Expected',
-        color: 'gray',
-        icon: 'minus-circle'
-      };
+  case InflowPeriodStatus.NOT_EXPECTED:
+    return {
+      label: "Not Expected",
+      color: "gray",
+      icon: "minus-circle"
+    };
 
-    default:
-      return {
-        label: 'Unknown',
-        color: 'gray',
-        icon: 'help-circle'
-      };
+  default:
+    return {
+      label: "Unknown",
+      color: "gray",
+      icon: "help-circle"
+    };
   }
 }
 

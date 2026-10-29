@@ -9,8 +9,8 @@
  * - Sum tolerance checking
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
-import { PeriodType, SourcePeriod, Budget, BudgetPeriod } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { PeriodType, SourcePeriod, Budget, BudgetPeriod } from "../../../../types";
 
 // ============================================================================
 // ROUNDING UTILITIES
@@ -84,11 +84,11 @@ export function createMockSourcePeriod(options: CreateMockSourcePeriodOptions): 
 
   let periodId: string;
   if (type === PeriodType.MONTHLY) {
-    periodId = options.id || `${year}-M${String(month).padStart(2, '0')}`;
+    periodId = options.id || `${year}-M${String(month).padStart(2, "0")}`;
   } else if (type === PeriodType.BI_MONTHLY) {
-    periodId = options.id || `${year}-BM${String(month).padStart(2, '0')}-${biMonthlyHalf}`;
+    periodId = options.id || `${year}-BM${String(month).padStart(2, "0")}-${biMonthlyHalf}`;
   } else {
-    periodId = options.id || `${year}-W${String(weekNumber).padStart(2, '0')}`;
+    periodId = options.id || `${year}-W${String(weekNumber).padStart(2, "0")}`;
   }
 
   return {
@@ -453,17 +453,17 @@ export interface CreateMockBudgetOptions {
  */
 export function createMockBudget(options: CreateMockBudgetOptions): Budget {
   const now = Timestamp.now();
-  const userId = options.userId || 'test_user_001';
+  const userId = options.userId || "test_user_001";
 
   return {
     id: options.id || `budget_${Date.now()}`,
-    name: options.name || 'Test Budget',
-    description: 'Test budget for unit tests',
+    name: options.name || "Test Budget",
+    description: "Test budget for unit tests",
     amount: options.amount,
-    currency: 'USD',
-    categoryIds: options.categoryIds || ['test_category'],
+    currency: "USD",
+    categoryIds: options.categoryIds || ["test_category"],
     period: options.period,
-    budgetType: 'recurring',
+    budgetType: "recurring",
     isOngoing: true,
     startDate: options.startDate,
     endDate: options.endDate || options.startDate,
@@ -506,13 +506,13 @@ export function createExample1Scenario() {
     febDailyRate: roundToCents(100 / 28), // $3.57
     marchDailyRate: roundToCents(100 / 31), // $3.23
     expectedWeeklyPeriods: [
-      { dates: 'Feb 1-7', days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
-      { dates: 'Feb 8-14', days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
-      { dates: 'Feb 15-21', days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
-      { dates: 'Feb 22-28', days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
-      { dates: 'Mar 1-7', days: 7, expectedAmount: roundToCents(7 * (100 / 31)) }, // $22.58
-      { dates: 'Mar 8-14', days: 7, expectedAmount: roundToCents(7 * (100 / 31)) }, // $22.58
-      { dates: 'Mar 15-19', days: 5, expectedAmount: roundToCents(5 * (100 / 31)) }, // $16.13
+      { dates: "Feb 1-7", days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
+      { dates: "Feb 8-14", days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
+      { dates: "Feb 15-21", days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
+      { dates: "Feb 22-28", days: 7, expectedAmount: roundToCents(7 * (100 / 28)) }, // $24.99
+      { dates: "Mar 1-7", days: 7, expectedAmount: roundToCents(7 * (100 / 31)) }, // $22.58
+      { dates: "Mar 8-14", days: 7, expectedAmount: roundToCents(7 * (100 / 31)) }, // $22.58
+      { dates: "Mar 15-19", days: 5, expectedAmount: roundToCents(5 * (100 / 31)) }, // $16.13
     ],
     // Total: $100 (Feb) + $61.29 (19 days in March) = $161.29
     expectedTotal: roundToCents(100 + 19 * (100 / 31)),
@@ -538,16 +538,16 @@ export function createExample2Scenario() {
     startDate,
     endDate,
     expectedBiMonthlyPeriods: [
-      { dates: 'Feb 1-15', days: 15, expectedAmount: 100 },
-      { dates: 'Feb 16-28', days: 13, expectedAmount: 100 },
-      { dates: 'Mar 1-15', days: 15, expectedAmount: 100 },
-      { dates: 'Mar 16-31', days: 16, expectedAmount: 100 },
-      { dates: 'Apr 1-13', days: 13, expectedAmount: aprilPartialAmount }, // $86.67
+      { dates: "Feb 1-15", days: 15, expectedAmount: 100 },
+      { dates: "Feb 16-28", days: 13, expectedAmount: 100 },
+      { dates: "Mar 1-15", days: 15, expectedAmount: 100 },
+      { dates: "Mar 16-31", days: 16, expectedAmount: 100 },
+      { dates: "Apr 1-13", days: 13, expectedAmount: aprilPartialAmount }, // $86.67
     ],
     expectedMonthlyPeriods: [
-      { dates: 'Feb', days: 28, expectedAmount: 200 },
-      { dates: 'Mar', days: 31, expectedAmount: 200 },
-      { dates: 'Apr 1-13', days: 13, expectedAmount: aprilPartialAmount },
+      { dates: "Feb", days: 28, expectedAmount: 200 },
+      { dates: "Mar", days: 31, expectedAmount: 200 },
+      { dates: "Apr 1-13", days: 13, expectedAmount: aprilPartialAmount },
     ],
     expectedTotal: roundToCents(400 + aprilPartialAmount), // $486.67
   };

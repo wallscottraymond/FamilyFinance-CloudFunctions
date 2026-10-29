@@ -15,11 +15,11 @@ import {
 
 // Map resource types to collection names
 const RESOURCE_COLLECTIONS: Record<string, string> = {
-  budget: 'budgets',
-  transaction: 'transactions',
-  outflow: 'outflows',
-  inflow: 'inflows',
-  rule: 'rules',
+  budget: "budgets",
+  transaction: "transactions",
+  outflow: "outflows",
+  inflow: "inflows",
+  rule: "rules",
 };
 
 /**
@@ -33,12 +33,12 @@ export const shareResource = onCall<ShareResourceRequest, Promise<ShareResourceR
   memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
-  console.log('[shareResource] Function called with data:', JSON.stringify(request.data, null, 2));
+  console.log("[shareResource] Function called with data:", JSON.stringify(request.data, null, 2));
 
   try {
     // Check authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     const callerUserId = request.auth.uid;
@@ -46,15 +46,15 @@ export const shareResource = onCall<ShareResourceRequest, Promise<ShareResourceR
 
     // Validate request data
     if (!resourceType || !RESOURCE_COLLECTIONS[resourceType]) {
-      throw new HttpsError('invalid-argument', 'Valid resourceType is required');
+      throw new HttpsError("invalid-argument", "Valid resourceType is required");
     }
 
-    if (!resourceId || typeof resourceId !== 'string') {
-      throw new HttpsError('invalid-argument', 'resourceId is required');
+    if (!resourceId || typeof resourceId !== "string") {
+      throw new HttpsError("invalid-argument", "resourceId is required");
     }
 
     if (!shareWith || !shareWith.type || !shareWith.targetId || !shareWith.role) {
-      throw new HttpsError('invalid-argument', 'shareWith with type, targetId, and role is required');
+      throw new HttpsError("invalid-argument", "shareWith with type, targetId, and role is required");
     }
 
     const collectionName = RESOURCE_COLLECTIONS[resourceType];
@@ -62,35 +62,35 @@ export const shareResource = onCall<ShareResourceRequest, Promise<ShareResourceR
     // Get the resource
     const resource = await getDocument<any>(collectionName, resourceId);
     if (!resource) {
-      throw new HttpsError('not-found', `${resourceType} not found`);
+      throw new HttpsError("not-found", `${resourceType} not found`);
     }
 
     // Check if caller is the owner
     const ownerId = resource.ownerId || resource.userId || resource.createdBy;
     if (ownerId !== callerUserId) {
-      throw new HttpsError('permission-denied', 'Only the resource owner can share resources');
+      throw new HttpsError("permission-denied", "Only the resource owner can share resources");
     }
 
     // If sharing with a group, verify the group exists and caller is a member
-    if (shareWith.type === 'group') {
-      const group = await getDocument<Group>('groups', shareWith.targetId);
+    if (shareWith.type === "group") {
+      const group = await getDocument<Group>("groups", shareWith.targetId);
       if (!group) {
-        throw new HttpsError('not-found', 'Group not found');
+        throw new HttpsError("not-found", "Group not found");
       }
 
       if (!group.isActive) {
-        throw new HttpsError('failed-precondition', 'Group is not active');
+        throw new HttpsError("failed-precondition", "Group is not active");
       }
 
       // Verify caller is a member of the group
       const callerMember = group.members.find(m => m.userId === callerUserId);
       if (!callerMember) {
-        throw new HttpsError('permission-denied', 'You must be a member of the group to share with it');
+        throw new HttpsError("permission-denied", "You must be a member of the group to share with it");
       }
 
       // Only owners and admins can share with groups
       if (callerMember.role !== GroupRole.OWNER && callerMember.role !== GroupRole.ADMIN) {
-        throw new HttpsError('permission-denied', 'Only group owners and admins can share resources with the group');
+        throw new HttpsError("permission-denied", "Only group owners and admins can share resources with the group");
       }
     }
 
@@ -132,7 +132,7 @@ export const shareResource = onCall<ShareResourceRequest, Promise<ShareResourceR
     };
 
     // If sharing with a group, also add to groupIds array
-    if (shareWith.type === 'group') {
+    if (shareWith.type === "group") {
       const currentGroupIds: string[] = resource.groupIds || [];
       if (!currentGroupIds.includes(shareWith.targetId)) {
         updateData.groupIds = [...currentGroupIds, shareWith.targetId];
@@ -142,7 +142,7 @@ export const shareResource = onCall<ShareResourceRequest, Promise<ShareResourceR
     // Update the resource
     await updateDocument(collectionName, resourceId, updateData);
 
-    console.log('[shareResource] Resource shared successfully');
+    console.log("[shareResource] Resource shared successfully");
 
     return {
       success: true,
@@ -150,12 +150,12 @@ export const shareResource = onCall<ShareResourceRequest, Promise<ShareResourceR
     };
 
   } catch (error: any) {
-    console.error('[shareResource] Error:', error);
+    console.error("[shareResource] Error:", error);
 
     if (error.code && error.message) {
       throw error;
     }
 
-    throw new HttpsError('internal', 'Failed to share resource');
+    throw new HttpsError("internal", "Failed to share resource");
   }
 });

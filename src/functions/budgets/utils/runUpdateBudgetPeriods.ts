@@ -17,10 +17,10 @@
  * - Follows the same pattern as runUpdateInflowPeriods/runUpdateOutflowPeriods
  */
 
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
-import { Budget, BudgetPeriodDocument, PeriodType } from '../../../types';
-import { calculatePeriodAllocatedAmount } from './calculatePeriodAllocatedAmount';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
+import { Budget, BudgetPeriodDocument, PeriodType } from "../../../types";
+import { calculatePeriodAllocatedAmount } from "./calculatePeriodAllocatedAmount";
 
 export interface BudgetUpdateResult {
   success: boolean;
@@ -61,7 +61,7 @@ async function getSourcePeriod(
     return cache.get(sourcePeriodId)!;
   }
 
-  const doc = await db.collection('source_periods').doc(sourcePeriodId).get();
+  const doc = await db.collection("source_periods").doc(sourcePeriodId).get();
   if (doc.exists) {
     const data = { id: doc.id, ...doc.data() };
     cache.set(sourcePeriodId, data);
@@ -101,22 +101,22 @@ export async function runUpdateBudgetPeriods(
     const changedFields: string[] = [];
 
     if (budgetBefore.name !== budgetAfter.name) {
-      changedFields.push('name');
+      changedFields.push("name");
       console.log(`[runUpdateBudgetPeriods] name changed: "${budgetBefore.name}" → "${budgetAfter.name}"`);
     }
 
     if (budgetBefore.description !== budgetAfter.description) {
-      changedFields.push('description');
+      changedFields.push("description");
       console.log(`[runUpdateBudgetPeriods] description changed: "${budgetBefore.description}" → "${budgetAfter.description}"`);
     }
 
     if (budgetBefore.amount !== budgetAfter.amount) {
-      changedFields.push('amount');
+      changedFields.push("amount");
       console.log(`[runUpdateBudgetPeriods] amount changed: $${budgetBefore.amount} → $${budgetAfter.amount}`);
     }
 
     if (budgetBefore.alertThreshold !== budgetAfter.alertThreshold) {
-      changedFields.push('alertThreshold');
+      changedFields.push("alertThreshold");
       console.log(`[runUpdateBudgetPeriods] alertThreshold changed: ${budgetBefore.alertThreshold}% → ${budgetAfter.alertThreshold}%`);
     }
 
@@ -124,19 +124,19 @@ export async function runUpdateBudgetPeriods(
     // We skip it here to avoid duplicate processing
 
     if (changedFields.length === 0) {
-      console.log(`[runUpdateBudgetPeriods] No relevant changes detected, skipping update`);
+      console.log("[runUpdateBudgetPeriods] No relevant changes detected, skipping update");
       result.success = true;
       result.fieldsUpdated = [];
       return result;
     }
 
     result.fieldsUpdated = changedFields;
-    console.log(`[runUpdateBudgetPeriods] Fields to update: ${changedFields.join(', ')}`);
+    console.log(`[runUpdateBudgetPeriods] Fields to update: ${changedFields.join(", ")}`);
 
     // Step 2: Query all periods for this budget
     console.log(`[runUpdateBudgetPeriods] Querying periods for budget: ${budgetId}`);
-    const periodsSnapshot = await db.collection('budget_periods')
-      .where('budgetId', '==', budgetId)
+    const periodsSnapshot = await db.collection("budget_periods")
+      .where("budgetId", "==", budgetId)
       .get();
 
     result.periodsQueried = periodsSnapshot.size;
@@ -167,7 +167,7 @@ export async function runUpdateBudgetPeriods(
     console.log(`[runUpdateBudgetPeriods] Historical periods (skipped): ${historicalCount}`);
 
     if (currentAndFuturePeriods.length === 0) {
-      console.log(`[runUpdateBudgetPeriods] No current/future periods to update`);
+      console.log("[runUpdateBudgetPeriods] No current/future periods to update");
       result.success = true;
       return result;
     }
@@ -179,9 +179,9 @@ export async function runUpdateBudgetPeriods(
 
     // Get budget period type for amount calculation. bi_monthly is a first-class
     // prime cadence (Per-Period-EE Phase 0) — not clamped to monthly.
-    const budgetPeriodType = budgetAfter.period === 'weekly' ? PeriodType.WEEKLY :
-                             budgetAfter.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
-                             PeriodType.MONTHLY;
+    const budgetPeriodType = budgetAfter.period === "weekly" ? PeriodType.WEEKLY :
+      budgetAfter.period === "bi_monthly" ? PeriodType.BI_MONTHLY :
+        PeriodType.MONTHLY;
 
     for (let i = 0; i < currentAndFuturePeriods.length; i += batchSize) {
       const batch = db.batch();
@@ -192,13 +192,13 @@ export async function runUpdateBudgetPeriods(
         const updates: Record<string, any> = {};
 
         // Handle name change
-        if (changedFields.includes('name')) {
+        if (changedFields.includes("name")) {
           updates.budgetName = budgetAfter.name;
           console.log(`[runUpdateBudgetPeriods] Period ${periodDoc.id}: updating budgetName to "${budgetAfter.name}"`);
         }
 
         // Handle amount change - recalculate allocatedAmount
-        if (changedFields.includes('amount')) {
+        if (changedFields.includes("amount")) {
           // Get source period to calculate allocated amount
           const sourcePeriod = await getSourcePeriod(db, period.sourcePeriodId, sourcePeriodCache);
 
@@ -247,8 +247,8 @@ export async function runUpdateBudgetPeriods(
     console.log(`[runUpdateBudgetPeriods] ✓ Update complete: ${updatedCount} periods updated`);
 
   } catch (error: any) {
-    console.error(`[runUpdateBudgetPeriods] Error:`, error);
-    result.errors.push(error.message || 'Unknown error');
+    console.error("[runUpdateBudgetPeriods] Error:", error);
+    result.errors.push(error.message || "Unknown error");
   }
 
   return result;

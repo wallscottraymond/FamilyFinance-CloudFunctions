@@ -354,12 +354,12 @@ function determine_merge_action(
   confidence: "high" | "medium" | "low"
 ): "merge" | "review" | "keep_separate" {
   switch (confidence) {
-    case "high":
-      return "merge";
-    case "medium":
-      return "review";
-    case "low":
-      return "keep_separate";
+  case "high":
+    return "merge";
+  case "medium":
+    return "review";
+  case "low":
+    return "keep_separate";
   }
 }
 
@@ -560,18 +560,18 @@ export function compute_monthly_outflow_total(
  */
 function normalize_to_monthly(amount: number, frequency: AppFrequency): number {
   switch (frequency) {
-    case "weekly":
-      return amount * 4.33; // Average weeks per month
-    case "biweekly":
-      return amount * 2.17;
-    case "semimonthly":
-      return amount * 2;
-    case "monthly":
-      return amount;
-    case "yearly":
-      return amount / 12;
-    case "unknown":
-    default:
-      return amount; // Assume monthly
+  case "weekly":
+    return amount * 4.33; // Average weeks per month
+  case "biweekly":
+    return amount * 2.17;
+  case "semimonthly":
+    return amount * 2;
+  case "monthly":
+    return amount;
+  case "yearly":
+    return amount / 12;
+  case "unknown":
+  default:
+    return amount; // Assume monthly
   }
 }

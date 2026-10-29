@@ -7,10 +7,10 @@
  * Memory: 256MiB, Timeout: 30s
  */
 
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
-import { OutflowPeriod } from '../../../../types';
-import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactionsToOccurrences';
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import * as admin from "firebase-admin";
+import { OutflowPeriod } from "../../../../types";
+import { matchAllTransactionsToOccurrences } from "../utils/matchAllTransactionsToOccurrences";
 // NOTE: updateOutflowPeriodSummary removed - summary updates handled by centralized trigger
 // in /summaries/triggers/outflowPeriodSummaryTriggers.ts to avoid duplicate writes
 
@@ -19,9 +19,9 @@ import { matchAllTransactionsToOccurrences } from '../utils/matchAllTransactions
  * Updates summaries to reflect changes
  */
 export const onOutflowPeriodUpdate = onDocumentUpdated({
-  document: 'outflow_periods/{outflowPeriodId}',
-  region: 'us-central1',
-  memory: '256MiB',
+  document: "outflow_periods/{outflowPeriodId}",
+  region: "us-central1",
+  memory: "256MiB",
   timeoutSeconds: 30,
 }, async (event) => {
   try {
@@ -30,17 +30,17 @@ export const onOutflowPeriodUpdate = onDocumentUpdated({
     const afterData = event.data?.after.data() as OutflowPeriod;
 
     if (!afterData) {
-      console.error('[onOutflowPeriodUpdate] No after data found');
+      console.error("[onOutflowPeriodUpdate] No after data found");
       return;
     }
 
-    console.log('');
-    console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
-    console.log('[onOutflowPeriodUpdate] OUTFLOW PERIOD UPDATED');
-    console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
+    console.log("");
+    console.log("[onOutflowPeriodUpdate] ════════════════════════════════════════════");
+    console.log("[onOutflowPeriodUpdate] OUTFLOW PERIOD UPDATED");
+    console.log("[onOutflowPeriodUpdate] ════════════════════════════════════════════");
     console.log(`[onOutflowPeriodUpdate] Period ID: ${outflowPeriodId}`);
     console.log(`[onOutflowPeriodUpdate] Source Period: ${afterData.sourcePeriodId}`);
-    console.log('');
+    console.log("");
 
     const db = admin.firestore();
 
@@ -49,7 +49,7 @@ export const onOutflowPeriodUpdate = onDocumentUpdated({
     const onlyOccurrenceFieldsChanged = detectOnlyOccurrenceFieldsChanged(beforeData, afterData);
 
     if (onlyOccurrenceFieldsChanged) {
-      console.log('[onOutflowPeriodUpdate] Only occurrence tracking fields changed (likely from our own update), skipping occurrence matching to prevent loop');
+      console.log("[onOutflowPeriodUpdate] Only occurrence tracking fields changed (likely from our own update), skipping occurrence matching to prevent loop");
       // Still update summaries, but skip occurrence matching
       await updateSummaryOnly(afterData);
       return;
@@ -62,7 +62,7 @@ export const onOutflowPeriodUpdate = onDocumentUpdated({
     const transactionSplitsChanged = JSON.stringify(beforeSplits) !== JSON.stringify(afterSplits);
 
     if (transactionSplitsChanged) {
-      console.log('[onOutflowPeriodUpdate] Step 1: Transaction splits changed, re-matching to occurrences...');
+      console.log("[onOutflowPeriodUpdate] Step 1: Transaction splits changed, re-matching to occurrences...");
       console.log(`[onOutflowPeriodUpdate] Before: ${beforeSplits.length} splits, After: ${afterSplits.length} splits`);
 
       // Only run occurrence matching if this period has occurrences to track
@@ -70,18 +70,18 @@ export const onOutflowPeriodUpdate = onDocumentUpdated({
         try {
           console.log(`[onOutflowPeriodUpdate] Period has ${afterData.occurrenceDueDates.length} occurrences, running occurrence matching...`);
           await matchAllTransactionsToOccurrences(db, outflowPeriodId, afterData);
-          console.log('[onOutflowPeriodUpdate] ✓ Occurrence matching complete');
+          console.log("[onOutflowPeriodUpdate] ✓ Occurrence matching complete");
         } catch (occurrenceError) {
-          console.error('[onOutflowPeriodUpdate] ⚠️  Occurrence matching failed:', occurrenceError);
+          console.error("[onOutflowPeriodUpdate] ⚠️  Occurrence matching failed:", occurrenceError);
           // Don't throw - occurrence matching failures shouldn't break the update
         }
       } else {
-        console.log('[onOutflowPeriodUpdate] Period has no occurrences to track, skipping occurrence matching');
+        console.log("[onOutflowPeriodUpdate] Period has no occurrences to track, skipping occurrence matching");
       }
-      console.log('');
+      console.log("");
     } else {
-      console.log('[onOutflowPeriodUpdate] Transaction splits unchanged, skipping occurrence matching');
-      console.log('');
+      console.log("[onOutflowPeriodUpdate] Transaction splits unchanged, skipping occurrence matching");
+      console.log("");
     }
 
     // NOTE: Summary updates are handled by the centralized trigger in
@@ -90,14 +90,14 @@ export const onOutflowPeriodUpdate = onDocumentUpdated({
     // We don't duplicate the summary update here to avoid race conditions
     // and redundant writes to user_summaries.
 
-    console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
-    console.log('[onOutflowPeriodUpdate] Note: Summary update handled by centralized trigger');
-    console.log('');
+    console.log("[onOutflowPeriodUpdate] ════════════════════════════════════════════");
+    console.log("[onOutflowPeriodUpdate] Note: Summary update handled by centralized trigger");
+    console.log("");
 
   } catch (error) {
-    console.error('');
-    console.error('[onOutflowPeriodUpdate] ❌ ERROR:', error);
-    console.error('');
+    console.error("");
+    console.error("[onOutflowPeriodUpdate] ❌ ERROR:", error);
+    console.error("");
     // Don't throw - we don't want to break period updates
   }
 });
@@ -111,11 +111,11 @@ function detectOnlyOccurrenceFieldsChanged(before: OutflowPeriod | undefined, af
 
   // Fields that our occurrence matching system updates
   const occurrenceFields = [
-    'occurrencePaidFlags',
-    'occurrenceTransactionIds',
-    'numberOfOccurrencesPaid',
-    'numberOfOccurrencesUnpaid',
-    'updatedAt'
+    "occurrencePaidFlags",
+    "occurrenceTransactionIds",
+    "numberOfOccurrencesPaid",
+    "numberOfOccurrencesUnpaid",
+    "updatedAt"
   ];
 
   // Check if any non-occurrence fields changed
@@ -150,7 +150,7 @@ async function updateSummaryOnly(afterData: OutflowPeriod): Promise<void> {
   // NOTE: Summary updates are handled by the centralized trigger in
   // /summaries/triggers/outflowPeriodSummaryTriggers.ts (onOutflowPeriodUpdatedSummary)
   // We don't duplicate the summary update here to avoid race conditions.
-  console.log('[onOutflowPeriodUpdate] Summary update handled by centralized trigger');
-  console.log('[onOutflowPeriodUpdate] ════════════════════════════════════════════');
-  console.log('');
+  console.log("[onOutflowPeriodUpdate] Summary update handled by centralized trigger");
+  console.log("[onOutflowPeriodUpdate] ════════════════════════════════════════════");
+  console.log("");
 }

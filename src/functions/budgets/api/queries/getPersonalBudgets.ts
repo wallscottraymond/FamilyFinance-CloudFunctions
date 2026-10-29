@@ -65,7 +65,7 @@ export const getPersonalBudgets = onCall({
       whereConditions.push({
         field: "isActive",
         operator: "==",
-        value: isActive === true || isActive === 'true'
+        value: isActive === true || isActive === "true"
       });
     }
 

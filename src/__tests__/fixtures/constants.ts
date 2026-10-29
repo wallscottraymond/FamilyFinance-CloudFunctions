@@ -17,15 +17,15 @@
 
 export const TEST_USER = {
   /** Primary test user - owns most test resources */
-  PRIMARY: 'test_user_001',
+  PRIMARY: "test_user_001",
   /** Secondary test user - for sharing/permission tests */
-  SECONDARY: 'test_user_002',
+  SECONDARY: "test_user_002",
   /** User with ADMIN role */
-  ADMIN: 'test_admin_001',
+  ADMIN: "test_admin_001",
   /** User with VIEWER role (read-only) */
-  VIEWER: 'test_viewer_001',
+  VIEWER: "test_viewer_001",
   /** User in a different group (for access denial tests) */
-  OTHER_GROUP: 'test_other_group_user_001',
+  OTHER_GROUP: "test_other_group_user_001",
 } as const;
 
 // ============================================================================
@@ -34,11 +34,11 @@ export const TEST_USER = {
 
 export const TEST_GROUP = {
   /** Primary test group - family/household */
-  PRIMARY: 'test_group_001',
+  PRIMARY: "test_group_001",
   /** Secondary group for multi-group tests */
-  SECONDARY: 'test_group_002',
+  SECONDARY: "test_group_002",
   /** Separate group for access denial tests */
-  OTHER: 'test_other_group_001',
+  OTHER: "test_other_group_001",
 } as const;
 
 // ============================================================================
@@ -47,17 +47,17 @@ export const TEST_GROUP = {
 
 export const TEST_ACCOUNT = {
   /** Primary checking account */
-  CHECKING: 'test_account_checking_001',
+  CHECKING: "test_account_checking_001",
   /** Primary savings account */
-  SAVINGS: 'test_account_savings_001',
+  SAVINGS: "test_account_savings_001",
   /** Primary credit card */
-  CREDIT_CARD: 'test_account_credit_001',
+  CREDIT_CARD: "test_account_credit_001",
   /** Plaid item ID */
-  PLAID_ITEM: 'test_plaid_item_001',
+  PLAID_ITEM: "test_plaid_item_001",
   /** Institution name */
-  INSTITUTION_NAME: 'Test Bank',
+  INSTITUTION_NAME: "Test Bank",
   /** Institution ID */
-  INSTITUTION_ID: 'ins_test_001',
+  INSTITUTION_ID: "ins_test_001",
 } as const;
 
 // ============================================================================
@@ -66,13 +66,13 @@ export const TEST_ACCOUNT = {
 
 export const TEST_BUDGET_ID = {
   /** Weekly groceries budget */
-  WEEKLY_GROCERIES: 'budget_weekly_groceries_001',
+  WEEKLY_GROCERIES: "budget_weekly_groceries_001",
   /** Monthly entertainment budget */
-  MONTHLY_ENTERTAINMENT: 'budget_monthly_entertainment_001',
+  MONTHLY_ENTERTAINMENT: "budget_monthly_entertainment_001",
   /** Bi-weekly transportation budget */
-  BIWEEKLY_TRANSPORTATION: 'budget_biweekly_transportation_001',
+  BIWEEKLY_TRANSPORTATION: "budget_biweekly_transportation_001",
   /** System "Everything Else" budget */
-  EVERYTHING_ELSE: 'budget_everything_else_001',
+  EVERYTHING_ELSE: "budget_everything_else_001",
 } as const;
 
 // ============================================================================
@@ -81,11 +81,11 @@ export const TEST_BUDGET_ID = {
 
 export const DEFAULTS = {
   /** Default currency */
-  CURRENCY: 'USD',
+  CURRENCY: "USD",
   /** Default alert threshold (percentage) */
   ALERT_THRESHOLD: 80,
   /** Default timezone */
-  TIMEZONE: 'America/Denver',
+  TIMEZONE: "America/Denver",
 } as const;
 
 // ============================================================================
@@ -94,12 +94,12 @@ export const DEFAULTS = {
 
 /** Generates a unique transaction ID with prefix */
 export const generateTxnId = (prefix: string, index: number): string => {
-  return `${prefix}_${String(index).padStart(3, '0')}`;
+  return `${prefix}_${String(index).padStart(3, "0")}`;
 };
 
 /** Transaction ID prefixes by budget type */
 export const TXN_PREFIX = {
-  WEEKLY: 'txn_weekly',
-  MONTHLY: 'txn_monthly',
-  BIWEEKLY: 'txn_biweekly',
+  WEEKLY: "txn_weekly",
+  MONTHLY: "txn_monthly",
+  BIWEEKLY: "txn_biweekly",
 } as const;

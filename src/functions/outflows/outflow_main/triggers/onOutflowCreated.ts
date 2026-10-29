@@ -7,29 +7,29 @@
  * Memory: 512MiB, Timeout: 60s
  */
 
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
-import { RecurringOutflow } from '../../../../types';
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import * as admin from "firebase-admin";
+import { RecurringOutflow } from "../../../../types";
 import {
   createOutflowPeriodsFromSource,
   calculatePeriodGenerationRange
-} from '../../outflow_periods/crud/createOutflowPeriods';
+} from "../../outflow_periods/crud/createOutflowPeriods";
 
 /**
  * Triggered when an outflow is created
  * Automatically generates outflow_periods for all active source periods
  */
 export const onOutflowCreated = onDocumentCreated({
-  document: 'outflows/{outflowId}',
-  region: 'us-central1',
-  memory: '512MiB',
+  document: "outflows/{outflowId}",
+  region: "us-central1",
+  memory: "512MiB",
   timeoutSeconds: 60,
 }, async (event) => {
-  console.log('');
-  console.log('🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥');
-  console.log('🔥 TRIGGER FIRED: onOutflowCreated');
-  console.log('🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥');
-  console.log('');
+  console.log("");
+  console.log("🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥");
+  console.log("🔥 TRIGGER FIRED: onOutflowCreated");
+  console.log("🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥");
+  console.log("");
 
   try {
     const outflowId = event.params.outflowId;
@@ -38,15 +38,15 @@ export const onOutflowCreated = onDocumentCreated({
     const outflowData = event.data?.data() as RecurringOutflow;
 
     if (!outflowData) {
-      console.error('');
-      console.error('❌ ERROR: No outflow data found in event');
-      console.error(`   Event params:`, event.params);
+      console.error("");
+      console.error("❌ ERROR: No outflow data found in event");
+      console.error("   Event params:", event.params);
       console.error(`   Event data exists: ${!!event.data}`);
       return;
     }
 
-    console.log(`[onOutflowCreated] ✓ Outflow data extracted successfully`);
-    console.log(`[onOutflowCreated] Outflow Details:`);
+    console.log("[onOutflowCreated] ✓ Outflow data extracted successfully");
+    console.log("[onOutflowCreated] Outflow Details:");
     console.log(`  - ID: ${outflowId}`);
     console.log(`  - Description: ${outflowData.description}`);
     console.log(`  - Amount: $${outflowData.averageAmount}`);
@@ -57,28 +57,28 @@ export const onOutflowCreated = onDocumentCreated({
 
     // Skip inactive outflows
     if (!outflowData.isActive) {
-      console.log('');
-      console.log('⏭️  SKIPPING: Outflow is inactive');
+      console.log("");
+      console.log("⏭️  SKIPPING: Outflow is inactive");
       console.log(`   Outflow ID: ${outflowId}`);
       return;
     }
 
-    console.log('');
-    console.log('[onOutflowCreated] ✓ Outflow is ACTIVE - proceeding with period generation');
+    console.log("");
+    console.log("[onOutflowCreated] ✓ Outflow is ACTIVE - proceeding with period generation");
 
     const db = admin.firestore();
 
     // Calculate time range for period generation using utility function
-    console.log('');
-    console.log('[onOutflowCreated] STEP 1: Calculate period generation range');
+    console.log("");
+    console.log("[onOutflowCreated] STEP 1: Calculate period generation range");
     const { startDate, endDate } = calculatePeriodGenerationRange(outflowData, 15);
     console.log(`  - Start Date: ${startDate.toISOString()} (from outflow.firstDate)`);
     console.log(`  - End Date: ${endDate.toISOString()} (15 months forward from now)`);
     console.log(`  - Total span: ${Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))} days`);
 
     // Create outflow periods using utility function
-    console.log('');
-    console.log('[onOutflowCreated] STEP 2: Calling createOutflowPeriodsFromSource...');
+    console.log("");
+    console.log("[onOutflowCreated] STEP 2: Calling createOutflowPeriodsFromSource...");
     console.log(`  - Outflow ID: ${outflowId}`);
     console.log(`  - Outflow Description: ${outflowData.description}`);
     console.log(`  - Date Range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
@@ -91,28 +91,28 @@ export const onOutflowCreated = onDocumentCreated({
       endDate
     );
 
-    console.log('');
-    console.log('[onOutflowCreated] STEP 3: Period creation completed');
+    console.log("");
+    console.log("[onOutflowCreated] STEP 3: Period creation completed");
     console.log(`  ✓ Periods Created: ${result.periodsCreated}`);
-    console.log(`  ✓ Period IDs: ${result.periodIds.join(', ')}`);
+    console.log(`  ✓ Period IDs: ${result.periodIds.join(", ")}`);
 
     // (user_summaries build retired)
 
-    console.log('');
-    console.log('[onOutflowCreated] ℹ️  Auto-matching will happen per-period via onOutflowPeriodCreate triggers');
-    console.log('[onOutflowCreated] Each period will independently match its transactions when created');
+    console.log("");
+    console.log("[onOutflowCreated] ℹ️  Auto-matching will happen per-period via onOutflowPeriodCreate triggers");
+    console.log("[onOutflowCreated] Each period will independently match its transactions when created");
 
   } catch (error) {
-    console.error('');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ TRIGGER ERROR in onOutflowCreated');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('[onOutflowCreated] Error details:', error);
+    console.error("");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("❌ TRIGGER ERROR in onOutflowCreated");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("[onOutflowCreated] Error details:", error);
     if (error instanceof Error) {
       console.error(`  - Message: ${error.message}`);
       console.error(`  - Stack: ${error.stack}`);
     }
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     // Don't throw - we don't want to break outflow creation if period generation fails
   }
 });

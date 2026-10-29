@@ -47,13 +47,13 @@ export async function derive_goals_view_orchestrator(
   const views = own_goals
     ? await resolve_own_goal_measurements(ctx, user_id, period_id, period.start_date, period.end_date)
     : await resolve_goal_measurements(
-        ctx,
-        user_id,
-        period_id,
-        period.start_date,
-        period.end_date,
-        scope
-      );
+      ctx,
+      user_id,
+      period_id,
+      period.start_date,
+      period.end_date,
+      scope
+    );
 
   const result = build_goals_view(period_id, views, scope?.kind === "group");
 

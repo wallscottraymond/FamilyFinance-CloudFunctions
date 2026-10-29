@@ -12,7 +12,7 @@
 // Public API functions from module-specific locations
 // createManualOutflow (camelCase) was retired with D43: Add Bill is `create_manual_outflow`.
 // The deploy must delete the orphan: `firebase functions:delete createManualOutflow` (never --force).
-export * from './outflow_periods/api';
+export * from "./outflow_periods/api";
 
 // =============================================================================
 // LEGACY TRIGGERS - ALL DISABLED
@@ -48,13 +48,13 @@ export * from './outflow_periods/api';
 // export * from './outflow_periods/triggers/onOutflowPeriodUpdate';  // DISABLED - causes race conditions
 
 // Type definitions from module-specific locations
-export * from './outflow_main/types';
-export * from './outflow_periods/types';
+export * from "./outflow_main/types";
+export * from "./outflow_periods/types";
 
 // Scheduled (cron) maintenance — keeps a rolling forward window of outflow periods.
-export * from './outflow_periods/scheduled';
+export * from "./outflow_periods/scheduled";
 
 // Dev testing functions (emulator + production)
-export * from './outflow_main/dev';
-export * from './outflow_periods/dev';
-export * from './outflow_summaries/dev';
+export * from "./outflow_main/dev";
+export * from "./outflow_periods/dev";
+export * from "./outflow_summaries/dev";

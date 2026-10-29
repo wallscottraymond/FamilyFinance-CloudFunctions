@@ -191,7 +191,7 @@ export function buildMetadata(
     plaidMerchantName: options.plaidMerchantName,
     plaidName: options.plaidName,
     requiresApproval: options.requiresApproval,
-    lastSyncedAt: options.source === 'plaid' ? Timestamp.now() : undefined
+    lastSyncedAt: options.source === "plaid" ? Timestamp.now() : undefined
   };
 }
 
@@ -315,7 +315,7 @@ export function buildTransactionDocument(
       plaidDetailed: transactionData.plaidData?.detailedCategory,
       plaidCategories: transactionData.plaidData?.category ? [transactionData.plaidData.category] : undefined
     }),
-    metadata: buildMetadata(userId, transactionData.plaidData ? 'plaid' : 'user', {
+    metadata: buildMetadata(userId, transactionData.plaidData ? "plaid" : "user", {
       plaidTransactionId: transactionData.plaidData?.transactionId,
       plaidAccountId: transactionData.accountId,
       plaidMerchantName: transactionData.plaidData?.merchantName
@@ -393,7 +393,7 @@ export function buildOutflowPeriodDocument(
     }),
     relationships: buildRelationships({
       parentId: parentOutflow.id,
-      parentType: 'outflow'
+      parentType: "outflow"
     }),
 
     // Period-specific fields
@@ -463,7 +463,7 @@ export function buildInflowPeriodDocument(
     }),
     relationships: buildRelationships({
       parentId: parentInflow.id,
-      parentType: 'inflow'
+      parentType: "inflow"
     }),
 
     // Period-specific fields
@@ -501,20 +501,20 @@ export function buildPlaidTransactionUpdate(
     updatedAt: Timestamp.now(),
 
     // Update nested metadata fields (using dot notation for Firestore)
-    'metadata.updatedAt': Timestamp.now(),
-    'metadata.plaidPending': plaidTransaction.pending,
-    'metadata.plaidMerchantName': plaidTransaction.merchant_name,
-    'metadata.plaidName': plaidTransaction.name,
+    "metadata.updatedAt": Timestamp.now(),
+    "metadata.plaidPending": plaidTransaction.pending,
+    "metadata.plaidMerchantName": plaidTransaction.merchant_name,
+    "metadata.plaidName": plaidTransaction.name,
   };
 
   // Update description at root
   if (plaidTransaction.merchant_name || plaidTransaction.name) {
-    updates.description = plaidTransaction.merchant_name || plaidTransaction.name || 'Bank Transaction';
+    updates.description = plaidTransaction.merchant_name || plaidTransaction.name || "Bank Transaction";
   }
 
   // Update nested metadata location if present
   if (plaidTransaction.location) {
-    updates['metadata.location'] = {
+    updates["metadata.location"] = {
       name: plaidTransaction.location.address || undefined,
       address: plaidTransaction.location.address || undefined,
       latitude: plaidTransaction.location.lat || undefined,
@@ -524,22 +524,22 @@ export function buildPlaidTransactionUpdate(
 
   // Update nested categories plaidCategories array
   if (plaidTransaction.category) {
-    updates['categories.plaidCategories'] = plaidTransaction.category;
+    updates["categories.plaidCategories"] = plaidTransaction.category;
   }
 
   // Update nested metadata.plaidData if it exists in the document
   if (existingTransaction?.metadata?.plaidData) {
-    updates['metadata.plaidData.amount'] = plaidTransaction.amount;
-    updates['metadata.plaidData.merchantName'] = plaidTransaction.merchant_name;
-    updates['metadata.plaidData.description'] = plaidTransaction.name;
-    updates['metadata.plaidData.pending'] = plaidTransaction.pending;
-    updates['metadata.plaidData.date'] = plaidTransaction.date
+    updates["metadata.plaidData.amount"] = plaidTransaction.amount;
+    updates["metadata.plaidData.merchantName"] = plaidTransaction.merchant_name;
+    updates["metadata.plaidData.description"] = plaidTransaction.name;
+    updates["metadata.plaidData.pending"] = plaidTransaction.pending;
+    updates["metadata.plaidData.date"] = plaidTransaction.date
       ? Timestamp.fromDate(new Date(plaidTransaction.date))
       : Timestamp.now();
 
     // Update personal finance category if available
     if (plaidTransaction.personal_finance_category) {
-      updates['metadata.plaidData.personalFinanceCategory'] = {
+      updates["metadata.plaidData.personalFinanceCategory"] = {
         primary: plaidTransaction.personal_finance_category.primary,
         detailed: plaidTransaction.personal_finance_category.detailed,
         confidenceLevel: plaidTransaction.personal_finance_category.confidence_level
@@ -557,17 +557,17 @@ export function buildPlaidTransactionUpdate(
  * @param reason - Reason for deletion
  * @returns Firestore update object
  */
-export function buildTransactionDeletionUpdate(reason: string = 'Transaction removed by institution'): Record<string, any> {
+export function buildTransactionDeletionUpdate(reason: string = "Transaction removed by institution"): Record<string, any> {
   return {
     // Update root status field
-    status: 'DELETED',
+    status: "DELETED",
     isActive: false,
     updatedAt: Timestamp.now(),
 
     // Update nested metadata
-    'metadata.updatedAt': Timestamp.now(),
-    'metadata.deletedAt': Timestamp.now(),
-    'metadata.deletedByPlaid': true,
-    'metadata.plaidRemovalReason': reason,
+    "metadata.updatedAt": Timestamp.now(),
+    "metadata.deletedAt": Timestamp.now(),
+    "metadata.deletedByPlaid": true,
+    "metadata.plaidRemovalReason": reason,
   };
 }

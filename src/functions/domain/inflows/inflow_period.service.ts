@@ -85,21 +85,21 @@ interface CycleInfo {
  */
 function get_cycle_days(frequency: string): number {
   switch (normalize_frequency(frequency)) {
-    case "WEEKLY":
-      return 7;
-    case "BIWEEKLY":
-      return 14;
-    case "SEMIMONTHLY":
-      return 15;
-    case "MONTHLY":
-      return 30;
-    case "QUARTERLY":
-      return 91;
-    case "ANNUALLY":
-      return 365;
-    default:
-      // UNKNOWN — treat as annual so it never fans out as monthly (see frequency.ts).
-      return 365;
+  case "WEEKLY":
+    return 7;
+  case "BIWEEKLY":
+    return 14;
+  case "SEMIMONTHLY":
+    return 15;
+  case "MONTHLY":
+    return 30;
+  case "QUARTERLY":
+    return 91;
+  case "ANNUALLY":
+    return 365;
+  default:
+    // UNKNOWN — treat as annual so it never fans out as monthly (see frequency.ts).
+    return 365;
   }
 }
 

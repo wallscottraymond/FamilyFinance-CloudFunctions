@@ -221,7 +221,7 @@ export interface AccessibilitySettings {
 }
 
 // Rollover strategy for budget surplus/deficit handling
-export type RolloverStrategy = 'immediate' | 'spread';
+export type RolloverStrategy = "immediate" | "spread";
 
 export interface FinancialSettings {
   defaultTransactionCategory: TransactionCategory;
@@ -289,10 +289,10 @@ export interface FamilySettings {
 // Transaction related types
 // Payment Type enum for transaction splits
 export enum PaymentType {
-  REGULAR = 'regular',                    // Normal payment for the period
-  CATCH_UP = 'catch_up',                  // Payment covering past-due periods
-  ADVANCE = 'advance',                    // Payment for future periods
-  EXTRA_PRINCIPAL = 'extra_principal'     // Additional payment beyond required amount
+  REGULAR = "regular",                    // Normal payment for the period
+  CATCH_UP = "catch_up",                  // Payment covering past-due periods
+  ADVANCE = "advance",                    // Payment for future periods
+  EXTRA_PRINCIPAL = "extra_principal"     // Additional payment beyond required amount
 }
 
 /**
@@ -302,7 +302,7 @@ export enum PaymentType {
  * - `refund`  — STILL counted in `spent`, but |amount| also accrues into the
  *   budget's parallel `returnAmount` (expected returns, planned before completed).
  */
-export type SpendStatus = 'counted' | 'ignored' | 'refund';
+export type SpendStatus = "counted" | "ignored" | "refund";
 
 // Transaction Split interface for splitting transactions across budgets AND outflows
 // UPDATED: Flat structure with renamed fields for consistency
@@ -322,9 +322,9 @@ export interface TransactionSplit {
   monthlyBudgetName?: string | null;     // Denormalized name for the monthly lens budget
   weeklyBudgetName?: string | null;      // Denormalized name for the weekly lens budget
   biWeeklyBudgetName?: string | null;    // Denormalized name for the bi-weekly lens budget
-  monthlyBudgetSource?: 'category' | 'manual';   // How the monthly lens was assigned
-  weeklyBudgetSource?: 'category' | 'manual';    // How the weekly lens was assigned
-  biWeeklyBudgetSource?: 'category' | 'manual';  // How the bi-weekly lens was assigned
+  monthlyBudgetSource?: "category" | "manual";   // How the monthly lens was assigned
+  weeklyBudgetSource?: "category" | "manual";    // How the weekly lens was assigned
+  biWeeklyBudgetSource?: "category" | "manual";  // How the bi-weekly lens was assigned
 
   // Source period IDs based on transaction date (always populated)
   monthlyPeriodId: string | null;        // Monthly source period ID containing transaction date
@@ -348,7 +348,7 @@ export interface TransactionSplit {
   overallCategoryId?: string | null;     // Broad app-category slug (legacy level)
   firstCategoryId?: string | null;       // PRIMARY app-category slug (first_category)
   secondCategoryId?: string | null;      // SECONDARY = chosen category doc id (= Plaid detailed); set only on a user override
-  categorySource?: 'plaid' | 'user';     // 'plaid' = auto-derived; 'user' = preserved manual override
+  categorySource?: "plaid" | "user";     // 'plaid' = auto-derived; 'user' = preserved manual override
 
   amount: number;                 // Amount allocated to this split
   description?: string | null;           // Optional override description for this split
@@ -412,7 +412,7 @@ export interface Transaction extends BaseDocument {
 
   // === PLAID METADATA (flattened from nested metadata object) ===
   plaidItemId: string;            // Plaid item ID
-  source: 'plaid' | 'manual' | 'import'; // Transaction source
+  source: "plaid" | "manual" | "import"; // Transaction source
   transactionStatus: TransactionStatus;  // Transaction status (renamed from 'status')
 
   // === TYPE AND IDENTIFIERS ===
@@ -436,7 +436,7 @@ export interface Transaction extends BaseDocument {
     plaidName: string;
     plaidTransactionId: string;
     plaidPending: boolean;
-    source: 'plaid';
+    source: "plaid";
   };
 }
 
@@ -485,7 +485,7 @@ export interface Category extends BaseDocument {
   primary_plaid_category: string;
   detailed_plaid_category: string;
   description: string;
-  type: 'Income' | 'Outflow';
+  type: "Income" | "Outflow";
   second_category: string;
   first_category: string;
   overall_category: string;
@@ -534,7 +534,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
   isActive: boolean;
 
   // New fields for budget periods integration
-  budgetType: 'recurring' | 'limited';
+  budgetType: "recurring" | "limited";
   endPeriod?: string; // For limited budgets - final period ID
   totalPeriods?: number; // For limited budgets - how many periods
   selectedStartPeriod?: string; // Period ID where user wants budget to start
@@ -550,7 +550,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
 
   // System budget flag
   isSystemEverythingElse?: boolean; // Flag for "everything else" catch-all budget
-  everythingElsePeriodType?: 'monthly' | 'weekly' | 'bi_monthly'; // Which period lens this EE budget owns (Per-Period-EE project). Absent on the legacy single monthly EE.
+  everythingElsePeriodType?: "monthly" | "weekly" | "bi_monthly"; // Which period lens this EE budget owns (Per-Period-EE project). Absent on the legacy single monthly EE.
 
   // Soft deletion / trash functionality
   flaggedForDeletion?: boolean;     // True if budget is in "trash" awaiting permanent deletion
@@ -757,7 +757,7 @@ export interface CreateBudgetRequest {
   amount: number;
   categoryIds: string[]; // Changed from categories to categoryIds - references to categories collection
   period: BudgetPeriod;
-  budgetType?: 'recurring' | 'limited'; // Budget type
+  budgetType?: "recurring" | "limited"; // Budget type
   startDate: string; // ISO date string
   endDate?: string; // ISO date string - Legacy field for backward compatibility
   alertThreshold?: number;
@@ -1567,22 +1567,22 @@ export interface BaseRecurringTransaction extends BaseDocument, ResourceOwnershi
 // Recurring Income - stored in root 'inflow' collection
 export interface RecurringIncome extends BaseRecurringTransaction {
   // Income-specific fields can be added here
-  incomeType?: 'salary' | 'dividend' | 'interest' | 'rental' | 'freelance' | 'bonus' | 'other';
+  incomeType?: "salary" | "dividend" | "interest" | "rental" | "freelance" | "bonus" | "other";
   isRegularSalary?: boolean; // True for primary salary income
   employerName?: string; // Employer or payer name
   taxable?: boolean; // Whether this income is taxable
-  inflowSource?: 'user' | 'plaid'; // Source of this inflow
+  inflowSource?: "user" | "plaid"; // Source of this inflow
 }
 
 // Recurring Outflows - stored in root 'outflows' collection
 export interface RecurringOutflow extends BaseRecurringTransaction {
   // Outflow-specific fields can be added here
-  expenseType?: 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other';
+  expenseType?: "subscription" | "utility" | "loan" | "rent" | "insurance" | "tax" | "other";
   isEssential?: boolean; // True for essential expenses (rent, utilities)
   merchantCategory?: string; // Standardized merchant category
   isCancellable?: boolean; // Whether this can be easily cancelled
   reminderDays?: number; // Days before due date to remind
-  outflowSource?: 'user' | 'plaid'; // Source of this outflow
+  outflowSource?: "user" | "plaid"; // Source of this outflow
 }
 
 // Legacy interface for backward compatibility - maps to both collections
@@ -1717,12 +1717,12 @@ export interface PlaidRecurringTransactionStreamResponse {
 
 // Outflow Period Status enum
 export enum OutflowPeriodStatus {
-  PENDING = 'pending',           // Not yet due, no payments
-  DUE_SOON = 'due_soon',        // Due within 3 days
-  PARTIAL = 'partial',           // Partially paid
-  PAID = 'paid',                 // Fully paid
-  PAID_EARLY = 'paid_early',    // Paid before due date
-  OVERDUE = 'overdue'           // Past due, unpaid
+  PENDING = "pending",           // Not yet due, no payments
+  DUE_SOON = "due_soon",        // Due within 3 days
+  PARTIAL = "partial",           // Partially paid
+  PAID = "paid",                 // Fully paid
+  PAID_EARLY = "paid_early",    // Paid before due date
+  OVERDUE = "overdue"           // Past due, unpaid
 }
 
 // =======================
@@ -1840,7 +1840,7 @@ export interface OutflowOccurrence {
   paymentDate: Timestamp | null;       // When payment was made
   amountDue: number;                   // Expected amount for this occurrence
   amountPaid: number;                  // Actual amount paid (0 if unpaid)
-  paymentType: 'regular' | 'catch_up' | 'advance' | 'extra_principal' | null; // Payment classification
+  paymentType: "regular" | "catch_up" | "advance" | "extra_principal" | null; // Payment classification
   isAutoMatched: boolean;              // Was this automatically matched by system?
   matchedAt: Timestamp | null;         // When the payment was matched
   matchedBy: string | null;            // Who matched it ('system' or userId)
@@ -1993,7 +1993,7 @@ export interface PeriodManagementConfig {
   maxPreloadExpansion: number;
   batchExtensionSize: number;
   maxBatchExtensionLimit: number;
-  preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
+  preloadStrategy: "conservative" | "balanced" | "aggressive";
 }
 
 // =======================
@@ -2005,17 +2005,17 @@ export interface PeriodManagementConfig {
  * Determines prediction strategy and UI configuration
  */
 export enum IncomeType {
-  SALARY = 'salary',                     // Fixed regular salary
-  HOURLY = 'hourly',                     // Variable hours-based
-  BASE_PLUS_COMMISSION = 'base_plus_commission', // Fixed base + variable commission
-  COMMISSION_ONLY = 'commission_only',   // Entirely variable commission
-  BONUS = 'bonus',                       // Periodic performance bonuses
-  FREELANCE = 'freelance',               // Contract/gig work
-  INVESTMENT = 'investment',             // Dividends, interest
-  RENTAL = 'rental',                     // Property income
-  PENSION = 'pension',                   // Retirement income
-  GOVERNMENT = 'government',             // Benefits, tax refunds
-  OTHER = 'other'
+  SALARY = "salary",                     // Fixed regular salary
+  HOURLY = "hourly",                     // Variable hours-based
+  BASE_PLUS_COMMISSION = "base_plus_commission", // Fixed base + variable commission
+  COMMISSION_ONLY = "commission_only",   // Entirely variable commission
+  BONUS = "bonus",                       // Periodic performance bonuses
+  FREELANCE = "freelance",               // Contract/gig work
+  INVESTMENT = "investment",             // Dividends, interest
+  RENTAL = "rental",                     // Property income
+  PENSION = "pension",                   // Retirement income
+  GOVERNMENT = "government",             // Benefits, tax refunds
+  OTHER = "other"
 }
 
 /**
@@ -2023,10 +2023,10 @@ export enum IncomeType {
  * Affects prediction confidence
  */
 export enum IncomeVariability {
-  FIXED = 'fixed',       // Always same amount (salary, pension)
-  LOW = 'low',           // Minor variations (rental, government)
-  MEDIUM = 'medium',     // Moderate variations (hourly, base+commission)
-  HIGH = 'high'          // Highly variable (commission-only, bonus, freelance)
+  FIXED = "fixed",       // Always same amount (salary, pension)
+  LOW = "low",           // Minor variations (rental, government)
+  MEDIUM = "medium",     // Moderate variations (hourly, base+commission)
+  HIGH = "high"          // Highly variable (commission-only, bonus, freelance)
 }
 
 /**
@@ -2047,7 +2047,7 @@ export interface CommissionIncomeConfig {
   basePlusCommission: boolean;          // True if base salary + commission
   baseAmount?: number;                  // Base salary portion (for withholding)
   targetCommission?: number;            // Target commission amount
-  schedule: 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
+  schedule: "monthly" | "quarterly" | "semi_annually" | "annually";
   expectedPaymentDay?: number;          // Day of month when paid (1-28)
 }
 
@@ -2055,7 +2055,7 @@ export interface CommissionIncomeConfig {
  * Bonus Income Configuration
  */
 export interface BonusIncomeConfig {
-  schedule: 'annual' | 'quarterly' | 'monthly' | 'performance' | 'custom';
+  schedule: "annual" | "quarterly" | "monthly" | "performance" | "custom";
   expectedMonth?: number;               // 1-12 for annual bonuses
   expectedQuarter?: number;             // 1-4 for quarterly bonuses
   lastBonusAmount?: number;
@@ -2227,7 +2227,7 @@ export interface InflowPeriod extends BaseDocument {
   description: string;                        // Income description
   frequency: string;                          // "WEEKLY" | "BIWEEKLY" | "MONTHLY" | etc.
   incomeType?: IncomeType | string;           // Denormalized from parent Inflow
-  predictionConfidence?: 'high' | 'medium' | 'low'; // Confidence level based on income type
+  predictionConfidence?: "high" | "medium" | "low"; // Confidence level based on income type
 
   // === PAYMENT STATUS ===
   isPaid: boolean;                            // Legacy: same as isFullyPaid
@@ -2308,5 +2308,5 @@ export interface PeriodManagementConfig {
   maxPreloadExpansion: number;
   batchExtensionSize: number;
   maxBatchExtensionLimit: number;
-  preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
+  preloadStrategy: "conservative" | "balanced" | "aggressive";
 }

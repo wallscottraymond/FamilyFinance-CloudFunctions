@@ -6,15 +6,15 @@
  * Memory: 256MiB, Timeout: 30s
  */
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-import { ChecklistItem } from '../../../../types';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import { ChecklistItem } from "../../../../types";
 
 // Request/Response interfaces
 interface UpdateChecklistItemRequest {
   budgetPeriodId: string;
   checklistItemId: string;
-  updates: Partial<Omit<ChecklistItem, 'id'>>;
+  updates: Partial<Omit<ChecklistItem, "id">>;
 }
 
 interface ChecklistItemResponse {
@@ -27,37 +27,37 @@ interface ChecklistItemResponse {
  * Update an existing checklist item in a budget period
  */
 export const updateChecklistItem = onCall({
-  region: 'us-central1',
-  memory: '256MiB',
+  region: "us-central1",
+  memory: "256MiB",
   timeoutSeconds: 30,
 }, async (request) => {
   try {
     // Validate authentication
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be authenticated');
+      throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     const user = request.auth;
     const { budgetPeriodId, checklistItemId, updates } = request.data as UpdateChecklistItemRequest;
 
     if (!budgetPeriodId || !checklistItemId || !updates) {
-      throw new HttpsError('invalid-argument', 'budgetPeriodId, checklistItemId, and updates are required');
+      throw new HttpsError("invalid-argument", "budgetPeriodId, checklistItemId, and updates are required");
     }
 
     const db = admin.firestore();
 
     // Get budget period to verify ownership
-    const budgetPeriodRef = db.collection('budget_periods').doc(budgetPeriodId);
+    const budgetPeriodRef = db.collection("budget_periods").doc(budgetPeriodId);
     const budgetPeriodDoc = await budgetPeriodRef.get();
 
     if (!budgetPeriodDoc.exists) {
-      throw new HttpsError('not-found', 'Budget period not found');
+      throw new HttpsError("not-found", "Budget period not found");
     }
 
     const budgetPeriodData = budgetPeriodDoc.data()!;
 
     // Check if user owns this budget period
     if (budgetPeriodData.userId !== user.uid) {
-      throw new HttpsError('permission-denied', 'You can only modify your own budget periods');
+      throw new HttpsError("permission-denied", "You can only modify your own budget periods");
     }
 
     // Get current checklist items
@@ -65,7 +65,7 @@ export const updateChecklistItem = onCall({
     const itemIndex = currentChecklistItems.findIndex(item => item.id === checklistItemId);
 
     if (itemIndex === -1) {
-      throw new HttpsError('not-found', 'Checklist item not found');
+      throw new HttpsError("not-found", "Checklist item not found");
     }
 
     // Update the specific checklist item
@@ -87,14 +87,14 @@ export const updateChecklistItem = onCall({
     return {
       success: true,
       checklistItem: updatedChecklistItems[itemIndex],
-      message: 'Checklist item updated successfully',
+      message: "Checklist item updated successfully",
     } as ChecklistItemResponse;
 
   } catch (error) {
-    console.error('Error updating checklist item:', error);
+    console.error("Error updating checklist item:", error);
     if (error instanceof HttpsError) {
       throw error;
     }
-    throw new HttpsError('internal', 'Failed to update checklist item');
+    throw new HttpsError("internal", "Failed to update checklist item");
   }
 });

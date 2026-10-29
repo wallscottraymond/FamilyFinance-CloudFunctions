@@ -5,9 +5,9 @@
  * Handles the creation of budget_periods from source_periods with proper amount allocation.
  */
 
-import * as admin from 'firebase-admin';
-import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from '../types';
-import { calculatePeriodAllocatedAmount } from '../functions/budgets/utils/calculatePeriodAllocatedAmount';
+import * as admin from "firebase-admin";
+import { Budget, BudgetPeriodDocument, PeriodType, SourcePeriod } from "../types";
+import { calculatePeriodAllocatedAmount } from "../functions/budgets/utils/calculatePeriodAllocatedAmount";
 
 /**
  * Result of budget period creation
@@ -42,9 +42,9 @@ export async function createBudgetPeriodsFromSource(
   console.log(`[budgetPeriods] Creating budget periods for budget ${budgetId} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
   // Query source_periods
-  const sourcePeriodsQuery = db.collection('source_periods')
-    .where('startDate', '>=', admin.firestore.Timestamp.fromDate(startDate))
-    .where('startDate', '<=', admin.firestore.Timestamp.fromDate(endDate));
+  const sourcePeriodsQuery = db.collection("source_periods")
+    .where("startDate", ">=", admin.firestore.Timestamp.fromDate(startDate))
+    .where("startDate", "<=", admin.firestore.Timestamp.fromDate(endDate));
 
   const sourcePeriodsSnapshot = await sourcePeriodsQuery.get();
 
@@ -70,9 +70,9 @@ export async function createBudgetPeriodsFromSource(
     // Calculate allocated amount based on actual days in period.
     // bi_monthly is a first-class prime cadence (Per-Period-EE Phase 0) — not
     // clamped to monthly. quarterly/yearly/custom allocate on the monthly grid.
-    const budgetPeriodType = budget.period === 'weekly' ? PeriodType.WEEKLY :
-                              budget.period === 'bi_monthly' ? PeriodType.BI_MONTHLY :
-                              PeriodType.MONTHLY;
+    const budgetPeriodType = budget.period === "weekly" ? PeriodType.WEEKLY :
+      budget.period === "bi_monthly" ? PeriodType.BI_MONTHLY :
+        PeriodType.MONTHLY;
     const allocatedAmount = calculatePeriodAllocatedAmount(budget.amount, budgetPeriodType, sourcePeriod);
 
     const budgetPeriod: BudgetPeriodDocument = {
@@ -80,7 +80,7 @@ export async function createBudgetPeriodsFromSource(
       budgetId: budgetId,
       periodId: sourcePeriod.periodId,
       sourcePeriodId: sourcePeriod.periodId,
-      familyId: String(budget.familyId || ''),
+      familyId: String(budget.familyId || ""),
       userId: budget.createdBy,
       createdBy: budget.createdBy,
       periodType: sourcePeriod.type,
@@ -150,7 +150,7 @@ export async function batchCreateBudgetPeriods(
     const batchPeriods = budgetPeriods.slice(i, i + BATCH_SIZE);
 
     batchPeriods.forEach((budgetPeriod) => {
-      const docRef = db.collection('budget_periods').doc(budgetPeriod.id!);
+      const docRef = db.collection("budget_periods").doc(budgetPeriod.id!);
       batch.set(docRef, budgetPeriod);
     });
 
@@ -190,7 +190,7 @@ export async function updateBudgetPeriodRange(
     updateData.needsScheduledExtension = true; // Flag for scheduled function
   }
 
-  await db.collection('budgets').doc(budgetId).update(updateData);
+  await db.collection("budgets").doc(budgetId).update(updateData);
 
   console.log(`[budgetPeriods] Updated budget ${budgetId} with period range:`, {
     startPeriod: firstPeriodId,

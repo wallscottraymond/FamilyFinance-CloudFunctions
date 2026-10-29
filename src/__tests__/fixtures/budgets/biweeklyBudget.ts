@@ -20,15 +20,15 @@
  * import { biweeklyTransportationBudget, biweeklyTransportationTransactions } from '../fixtures/budgets/biweeklyBudget';
  */
 
-import { BudgetPeriod, PeriodType, TransactionStatus, TransactionType } from '../../../types';
-import { TEST_USER, TEST_GROUP, TEST_ACCOUNT, TEST_BUDGET_ID, DEFAULTS } from '../constants';
-import { CATEGORIES } from '../categories';
+import { BudgetPeriod, PeriodType, TransactionStatus, TransactionType } from "../../../types";
+import { TEST_USER, TEST_GROUP, TEST_ACCOUNT, TEST_BUDGET_ID, DEFAULTS } from "../constants";
+import { CATEGORIES } from "../categories";
 import {
   createTestBudget,
   createTestBudgetPeriod,
   createTestTransaction,
   createTestTransactionSplit,
-} from '../factories';
+} from "../factories";
 import {
   currentMonthStart,
   currentMonthEnd,
@@ -38,7 +38,7 @@ import {
   dayOfMonthsAgo,
   monthsAgoStart,
   monthsAgoEnd,
-} from '../dateHelpers';
+} from "../dateHelpers";
 
 // ============================================================================
 // BUDGET DOCUMENT
@@ -51,7 +51,7 @@ import {
  */
 export const biweeklyTransportationBudget = createTestBudget({
   id: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  name: 'Transportation',
+  name: "Transportation",
   amount: 250,
   categoryIds: [
     CATEGORIES.TRANSPORT_GAS,
@@ -60,7 +60,7 @@ export const biweeklyTransportationBudget = createTestBudget({
     CATEGORIES.TRANSPORT_TOLLS,
   ],
   period: BudgetPeriod.CUSTOM, // Bi-weekly is treated as CUSTOM
-  description: 'Bi-weekly budget for gas, parking, and commuting',
+  description: "Bi-weekly budget for gas, parking, and commuting",
   startDate: monthsAgoStart(3),
   alertThreshold: 75, // Lower threshold for earlier warnings
   groupIds: [TEST_GROUP.PRIMARY], // SHARED!
@@ -73,7 +73,7 @@ export const biweeklyTransportationBudget = createTestBudget({
 /** Current bi-monthly period (first half of month) */
 export const biMonthlyPeriodCurrentFirst = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  budgetName: 'Transportation',
+  budgetName: "Transportation",
   periodType: PeriodType.BI_MONTHLY,
   allocatedAmount: 250,
   periodStart: currentMonthStart(),
@@ -84,7 +84,7 @@ export const biMonthlyPeriodCurrentFirst = createTestBudgetPeriod({
 /** Current bi-monthly period (second half of month) */
 export const biMonthlyPeriodCurrentSecond = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  budgetName: 'Transportation',
+  budgetName: "Transportation",
   periodType: PeriodType.BI_MONTHLY,
   allocatedAmount: 250,
   periodStart: dayOfCurrentMonth(16),
@@ -95,7 +95,7 @@ export const biMonthlyPeriodCurrentSecond = createTestBudgetPeriod({
 /** Last month - first half */
 export const biMonthlyPeriodLastMonthFirst = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  budgetName: 'Transportation',
+  budgetName: "Transportation",
   periodType: PeriodType.BI_MONTHLY,
   allocatedAmount: 250,
   periodStart: monthsAgoStart(1),
@@ -107,7 +107,7 @@ export const biMonthlyPeriodLastMonthFirst = createTestBudgetPeriod({
 /** Last month - second half */
 export const biMonthlyPeriodLastMonthSecond = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  budgetName: 'Transportation',
+  budgetName: "Transportation",
   periodType: PeriodType.BI_MONTHLY,
   allocatedAmount: 250,
   periodStart: dayOfMonthsAgo(1, 16),
@@ -123,7 +123,7 @@ export const biMonthlyPeriodLastMonthSecond = createTestBudgetPeriod({
 /** Current month period */
 export const monthlyPeriodCurrent = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  budgetName: 'Transportation',
+  budgetName: "Transportation",
   periodType: PeriodType.MONTHLY,
   allocatedAmount: 500, // 2 bi-weekly periods
   periodStart: currentMonthStart(),
@@ -138,7 +138,7 @@ export const monthlyPeriodCurrent = createTestBudgetPeriod({
 /** Current week period */
 export const weeklyPeriodCurrent = createTestBudgetPeriod({
   budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
-  budgetName: 'Transportation',
+  budgetName: "Transportation",
   periodType: PeriodType.WEEKLY,
   allocatedAmount: 125, // $250/2
   periodStart: currentWeekStart(),
@@ -165,60 +165,60 @@ export const biweeklyTransportationBudgetPeriods = [
 
 /** Transaction 1: Gas fill-up - day 2 */
 export const txn1_gasFillup = createTestTransaction({
-  transactionId: 'txn_biweekly_001',
+  transactionId: "txn_biweekly_001",
   amount: 52.47,
   transactionDate: dayOfCurrentMonth(2),
-  description: 'Shell Gas Station',
-  merchantName: 'Shell',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Shell Gas Station",
+  merchantName: "Shell",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
   groupId: TEST_GROUP.PRIMARY,
 });
 
 /** Transaction 2: Parking garage - day 4 */
 export const txn2_parkingGarage = createTestTransaction({
-  transactionId: 'txn_biweekly_002',
+  transactionId: "txn_biweekly_002",
   amount: 25.00,
   transactionDate: dayOfCurrentMonth(4),
-  description: 'City Center Parking',
-  merchantName: 'City Center Parking',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "City Center Parking",
+  merchantName: "City Center Parking",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_PARKING,
   groupId: TEST_GROUP.PRIMARY,
 });
 
 /** Transaction 3: Uber ride - day 6 */
 export const txn3_uberRide = createTestTransaction({
-  transactionId: 'txn_biweekly_003',
+  transactionId: "txn_biweekly_003",
   amount: 18.75,
   transactionDate: dayOfCurrentMonth(6),
-  description: 'Uber',
-  merchantName: 'Uber',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Uber",
+  merchantName: "Uber",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_RIDESHARE,
   groupId: TEST_GROUP.PRIMARY,
 });
 
 /** Transaction 4: Toll - day 8 */
 export const txn4_toll = createTestTransaction({
-  transactionId: 'txn_biweekly_004',
+  transactionId: "txn_biweekly_004",
   amount: 3.50,
   transactionDate: dayOfCurrentMonth(8),
-  description: 'E-ZPass Toll',
-  merchantName: 'E-ZPass',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "E-ZPass Toll",
+  merchantName: "E-ZPass",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_TOLLS,
   groupId: TEST_GROUP.PRIMARY,
 });
 
 /** Transaction 5: PENDING gas authorization - day 10 */
 export const txn5_gasHoldPending = createTestTransaction({
-  transactionId: 'txn_biweekly_005',
+  transactionId: "txn_biweekly_005",
   amount: 1.00, // Authorization hold
   transactionDate: dayOfCurrentMonth(10),
-  description: 'Chevron - Authorization Hold (pending)',
-  merchantName: 'Chevron',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Chevron - Authorization Hold (pending)",
+  merchantName: "Chevron",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
   transactionStatus: TransactionStatus.PENDING,
   groupId: TEST_GROUP.PRIMARY,
@@ -230,12 +230,12 @@ export const txn5_gasHoldPending = createTestTransaction({
 
 /** Transaction 6: Gas (credit card) - day 18 */
 export const txn6_gasCreditCard = createTestTransaction({
-  transactionId: 'txn_biweekly_006',
+  transactionId: "txn_biweekly_006",
   amount: 48.92,
   transactionDate: dayOfCurrentMonth(18),
-  description: 'Costco Gas',
-  merchantName: 'Costco Gas',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Costco Gas",
+  merchantName: "Costco Gas",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
   accountId: TEST_ACCOUNT.CREDIT_CARD, // Different account!
   groupId: TEST_GROUP.PRIMARY,
@@ -243,12 +243,12 @@ export const txn6_gasCreditCard = createTestTransaction({
 
 /** Transaction 7: Monthly parking pass - day 20 */
 export const txn7_monthlyParking = createTestTransaction({
-  transactionId: 'txn_biweekly_007',
+  transactionId: "txn_biweekly_007",
   amount: 150.00,
   transactionDate: dayOfCurrentMonth(20),
-  description: 'Office Building - Monthly Parking Pass',
-  merchantName: 'Office Building Parking',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Office Building - Monthly Parking Pass",
+  merchantName: "Office Building Parking",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_PARKING,
   groupId: TEST_GROUP.PRIMARY,
 });
@@ -259,24 +259,24 @@ export const txn7_monthlyParking = createTestTransaction({
 
 /** Transaction 8: Last month gas - day 5 */
 export const txn8_lastMonthGas = createTestTransaction({
-  transactionId: 'txn_biweekly_008',
+  transactionId: "txn_biweekly_008",
   amount: 55.00,
   transactionDate: dayOfMonthsAgo(1, 5),
-  description: 'BP Gas Station',
-  merchantName: 'BP',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "BP Gas Station",
+  merchantName: "BP",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
   groupId: TEST_GROUP.PRIMARY,
 });
 
 /** Transaction 9: Last month Lyft - day 22 */
 export const txn9_lastMonthLyft = createTestTransaction({
-  transactionId: 'txn_biweekly_009',
+  transactionId: "txn_biweekly_009",
   amount: 32.50,
   transactionDate: dayOfMonthsAgo(1, 22),
-  description: 'Lyft',
-  merchantName: 'Lyft',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Lyft",
+  merchantName: "Lyft",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_RIDESHARE,
   groupId: TEST_GROUP.PRIMARY,
 });
@@ -287,12 +287,12 @@ export const txn9_lastMonthLyft = createTestTransaction({
 
 /** Transaction 10: Bi-weekly boundary test (day 15) */
 export const txn10_boundaryBiweekly = createTestTransaction({
-  transactionId: 'txn_biweekly_010',
+  transactionId: "txn_biweekly_010",
   amount: 45.00,
   transactionDate: dayOfMonthsAgo(2, 15),
-  description: 'Exxon - Bi-weekly boundary test (day 15)',
-  merchantName: 'Exxon',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Exxon - Bi-weekly boundary test (day 15)",
+  merchantName: "Exxon",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
   groupId: TEST_GROUP.PRIMARY,
 });
@@ -303,36 +303,36 @@ export const txn10_boundaryBiweekly = createTestTransaction({
 
 /** Transaction 11: Road trip - split between gas, tolls, parking */
 export const txn11_roadTripSplit = createTestTransaction({
-  transactionId: 'txn_biweekly_011',
+  transactionId: "txn_biweekly_011",
   amount: 125.00,
   transactionDate: dayOfMonthsAgo(1, 10),
-  description: 'Road Trip Expenses - Split',
-  merchantName: 'Various',
-  plaidPrimaryCategory: 'TRANSPORTATION',
+  description: "Road Trip Expenses - Split",
+  merchantName: "Various",
+  plaidPrimaryCategory: "TRANSPORTATION",
   plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
   groupId: TEST_GROUP.PRIMARY,
   splits: [
     createTestTransactionSplit({
-      splitId: 'txn_biweekly_011_split_001',
+      splitId: "txn_biweekly_011_split_001",
       budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
       amount: 85.00,
-      plaidPrimaryCategory: 'TRANSPORTATION',
+      plaidPrimaryCategory: "TRANSPORTATION",
       plaidDetailedCategory: CATEGORIES.TRANSPORT_GAS,
       paymentDate: dayOfMonthsAgo(1, 10),
     }),
     createTestTransactionSplit({
-      splitId: 'txn_biweekly_011_split_002',
+      splitId: "txn_biweekly_011_split_002",
       budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
       amount: 25.00,
-      plaidPrimaryCategory: 'TRANSPORTATION',
+      plaidPrimaryCategory: "TRANSPORTATION",
       plaidDetailedCategory: CATEGORIES.TRANSPORT_TOLLS,
       paymentDate: dayOfMonthsAgo(1, 10),
     }),
     createTestTransactionSplit({
-      splitId: 'txn_biweekly_011_split_003',
+      splitId: "txn_biweekly_011_split_003",
       budgetId: TEST_BUDGET_ID.BIWEEKLY_TRANSPORTATION,
       amount: 15.00,
-      plaidPrimaryCategory: 'TRANSPORTATION',
+      plaidPrimaryCategory: "TRANSPORTATION",
       plaidDetailedCategory: CATEGORIES.TRANSPORT_PARKING,
       paymentDate: dayOfMonthsAgo(1, 10),
     }),
