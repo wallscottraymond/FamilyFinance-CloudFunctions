@@ -16,7 +16,7 @@
     "test": "jest --selectProjects unit",
     "test:guardrail": "jest --selectProjects unit --testPathPattern \"trigger_safety|doc_change\" --no-watchman",
     "test:watch": "jest --selectProjects unit --watch",
-    "test:emulator": "jest --selectProjects emulator",
+    "test:emulator": "jest --selectProjects emulator --maxWorkers=1 --workerIdleMemoryLimit=512MB",
     "test:emulator:watch": "jest --selectProjects emulator --watch",
     "test:all": "jest",
     "dev": "concurrently \"npm run build:watch\" \"firebase emulators:start --import=./emulator-data --export-on-exit\"",

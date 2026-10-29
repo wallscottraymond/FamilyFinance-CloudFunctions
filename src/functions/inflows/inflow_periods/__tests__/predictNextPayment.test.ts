@@ -45,7 +45,7 @@ describe('predictNextPayment', () => {
       incomeType?: string;
       isVariable?: boolean;
       isActive?: boolean;
-      variableIncomeConfig?: any;
+      variableConfig?: any;
       bonusConfig?: any;
       commissionConfig?: any;
     } = {}
@@ -63,7 +63,7 @@ describe('predictNextPayment', () => {
       incomeType,
       isRegularSalary: incomeType === 'salary',
       isVariable: options.isVariable || false,
-      variableIncomeConfig: options.variableIncomeConfig,
+      variableConfig: options.variableConfig,
       bonusConfig: options.bonusConfig,
       commissionConfig: options.commissionConfig,
       isActive: options.isActive !== false, // Default true unless explicitly false
@@ -204,7 +204,7 @@ describe('predictNextPayment', () => {
         {
           incomeType: 'commission',
           isVariable: true,
-          variableIncomeConfig: {
+          variableConfig: {
             useRollingAverage: false,
             rollingAveragePeriods: 3,
             userOverrideAmount: 4000.00 // User's estimate
@@ -229,7 +229,7 @@ describe('predictNextPayment', () => {
         {
           incomeType: 'hourly',
           isVariable: true,
-          variableIncomeConfig: {
+          variableConfig: {
             useRollingAverage: true,
             rollingAveragePeriods: 3,
             userOverrideAmount: null

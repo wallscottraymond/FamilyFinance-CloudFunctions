@@ -34,7 +34,11 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
 const db = admin.firestore();
 const auth = admin.auth();
 
-describe('Everything Else Budget - Emulator E2E Tests', () => {
+// SKIPPED (Code-Health-Review Phase 0, 2026-10-29): full-stack E2E from 2026-01 that needs the
+// Auth + Functions emulators (signup trigger), not the Firestore-only emulator run, and predates
+// per-period Everything Else budgets (one EE per signup → now one per cadence). Finding F6: rewrite
+// the EE lifecycle (create on signup, deletion guard, recreation) as orchestrator-level tests.
+describe.skip('Everything Else Budget - Emulator E2E Tests', () => {
   let testUserId: string;
   let testUserEmail: string;
   let everythingElseBudgetId: string;
@@ -376,7 +380,7 @@ describe('Everything Else Budget - Emulator E2E Tests', () => {
       // Should have created periods for at least current month
       const periods = periodsQuery.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...(doc.data() as { budgetId?: string; allocatedAmount?: number })
       }));
 
       // Verify period properties

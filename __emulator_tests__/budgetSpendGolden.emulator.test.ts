@@ -63,8 +63,12 @@ async function seedTxn(
   await db.collection('transactions').doc(id).set({
     transactionId: id, userId, isActive: true, transactionDate: ts(dateIso),
     type: over.type ?? 'expense', isPending: over.isPending ?? false,
+    // A transfer as stored since 2026-10-12 (5c82e3a): the internal-pair role on the txn + a
+    // transfer category on the split (the flag applies per split).
+    ...(over.type === 'transfer' ? { transferRole: 'internal' } : {}),
     splits: [{
       splitId: `${id}_s1`, budgetId, amount,
+      ...(over.type === 'transfer' ? { plaidDetailedCategory: 'TRANSFER_OUT_ACCOUNT_TRANSFER' } : {}),
       isIgnored: over.isIgnored ?? false,
       outflowId: over.outflowId ?? null, inflowId: over.inflowId ?? null,
     }],
@@ -86,9 +90,11 @@ async function oracleSpent(userId: string, budgetId: string, startMs: number, en
     if (d.isActive === false) continue;
     const dateMs = (d.transactionDate as Timestamp).toMillis();
     if (dateMs < startMs || dateMs > endMs) continue;
-    const isTransfer = d.type === 'transfer';
+    const isInternalTransfer = d.transferRole === 'internal';
     for (const s of (d.splits ?? []) as Array<Record<string, unknown>>) {
       if (s.budgetId !== budgetId) continue;
+      const isTransfer =
+        isInternalTransfer && /^TRANSFER_(IN|OUT)/.test(String(s.plaidDetailedCategory ?? ''));
       const countable =
         !isTransfer && !s.isIgnored && s.outflowId == null && s.inflowId == null;
       if (!countable) continue;

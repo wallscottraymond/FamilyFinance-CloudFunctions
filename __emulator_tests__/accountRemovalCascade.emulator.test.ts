@@ -74,7 +74,9 @@ describe("cascade_hide_transactions", () => {
     }
   });
 
-  it("delete_history also sets excludeFromBudgets:true", async () => {
+  // Decision 2026-10-05 (61144fe): removal_mode is accepted from older builds and ignored;
+  // excludeFromBudgets was never read, so it is no longer written.
+  it("delete_history is ignored: same result as keep_history (no excludeFromBudgets)", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
 
     await cascade_hide_transactions_orchestrator(ctx(), {
@@ -87,7 +89,8 @@ describe("cascade_hide_transactions", () => {
     for (const id of seed.txnIdsByAccountId[seed.target.accountId]) {
       const t = await txnDoc(id);
       expect(t?.isHidden).toBe(true);
-      expect(t?.excludeFromBudgets).toBe(true);
+      expect(t?.hiddenReason).toBe("account_removed");
+      expect(t?.excludeFromBudgets).toBeUndefined();
     }
   });
 
@@ -205,7 +208,7 @@ describe("restore_account_transactions (hide -> restore round-trip)", () => {
     }
   });
 
-  it("delete_history exclusion is preserved across restore (user choice persists)", async () => {
+  it("restore after delete_history fully restores (removal_mode ignored)", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
 
     await cascade_hide_transactions_orchestrator(ctx(), {
@@ -224,8 +227,7 @@ describe("restore_account_transactions (hide -> restore round-trip)", () => {
       const t = await txnDoc(id);
       expect(t?.isActive).toBe(true);
       expect(t?.isHidden).toBe(false);
-      // excludeFromBudgets is intentionally NOT reversed by restore.
-      expect(t?.excludeFromBudgets).toBe(true);
+      expect(t?.excludeFromBudgets).toBeUndefined();
     }
   });
 });

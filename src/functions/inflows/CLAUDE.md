@@ -64,7 +64,6 @@ inflows/
 │
 ├── inflow_periods/             # MODULE 2: Income Instances & Occurrence Tracking
 │   ├── __tests__/              # Unit tests for inflow_periods
-│   │   ├── alignTransactionsToInflowPeriods.test.ts
 │   │   ├── predictNextPayment.test.ts
 │   │   ├── calculateAllOccurrencesInPeriod.test.ts
 │   │   └── calculateInflowPeriodStatus.test.ts
@@ -85,7 +84,6 @@ inflows/
 │   ├── types/                  # Type definitions
 │   │   └── index.ts
 │   └── utils/                  # Period-specific utilities
-│       ├── alignTransactionsToInflowPeriods.ts    # NEW: Core transaction matching
 │       ├── predictNextPayment.ts                   # NEW: Payment prediction
 │       ├── calculateAllOccurrencesInPeriod.ts      # Occurrence calculation
 │       ├── calculateInflowPeriodStatus.ts          # Status determination
@@ -151,7 +149,7 @@ interface Inflow {
   incomeType: IncomeType;              // salary, hourly, commission, bonus, etc.
   isRegularSalary: boolean;            // True for consistent salary payments
   isVariable: boolean;                 // True for variable income (hourly, commission)
-  variableIncomeConfig?: {
+  variableConfig?: {
     useRollingAverage: boolean;        // Use rolling average for prediction
     rollingAveragePeriods: number;     // Number of periods to average (default: 3)
     userOverrideAmount: number | null; // User's manual estimate
@@ -322,55 +320,23 @@ interface InflowPeriod {
 
 ## Core Utility Functions
 
-### 1. AlignTransactionsToInflowPeriods
+### 1. What was received: `reconcile_recurring_period` (the one writer)
 
-**Purpose:** Match Plaid transaction IDs to the correct inflow_period documents
+> **Retired 2026-10-29:** `alignTransactionsToInflowPeriods` is gone. It dated every linked
+> paycheck "now" (it read `date` / `dateTransacted`; transactions store `transactionDate`),
+> double-credited and overwrote occurrences, and overwrote reconcile's received totals.
 
-**Location:** `inflow_periods/utils/alignTransactionsToInflowPeriods.ts`
+Received state on an inflow period (`reconciliation`, `totalAmountPaid`, `isPaid`/`isFullyPaid`/
+`isPartiallyPaid`, `numberOfOccurrencesPaid`, …) is written ONLY by the reconcile job
+(`orchestrators/recurring/reconcile_recurring_periods.orchestrator.ts` →
+`inflow_period_repo.update_reconciliation`), from the transactions' split links.
+- Creation: `onInflowCreated` enqueues `reconcile_recurring_period` once periods exist.
+- Update: `on_recurring_updated` enqueues it when `transactionIds` change.
+- `runUpdateInflowPeriods` updates EXPECTED amounts and names only; it must never write received
+  state (guarded by `__tests__/runUpdateInflowPeriods.received.test.ts`).
 
-```typescript
-/**
- * Auto-Match Transaction to Inflow Periods
- *
- * Matches inflow's historical transactions to appropriate inflow periods.
- * Called by onInflowCreated trigger after periods are generated, and
- * by onInflowUpdated when new transaction IDs are added.
- *
- * Matching logic:
- * 1. Get all transactions referenced in inflow.transactionIds
- * 2. For each transaction, find the matching inflow period based on transaction date
- * 3. Match to ALL THREE period types (monthly, weekly, bi-weekly)
- * 4. Determine which occurrence the transaction satisfies
- * 5. Update occurrence arrays (occurrencePaidFlags, occurrenceTransactionIds, occurrenceAmounts)
- * 6. Recalculate period totals and status
- */
-export async function alignTransactionsToInflowPeriods(
-  db: FirebaseFirestore.Firestore,
-  inflowId: string,
-  inflow: Inflow,
-  createdPeriodIds: string[]
-): Promise<AlignmentResult>;
-
-interface AlignmentResult {
-  transactionsProcessed: number;
-  transactionsMatched: number;
-  periodsUpdated: number;
-  errors: string[];
-}
-```
-
-**Algorithm:**
-1. Fetch all transactions by Plaid transaction IDs from `transactions` collection
-2. For each transaction:
-   - Determine transaction date
-   - Find matching inflow periods (monthly, weekly, bi-weekly) where date falls within period
-   - For each matching period:
-     - Find the appropriate occurrence based on date proximity
-     - Update `occurrencePaidFlags[index] = true`
-     - Update `occurrenceTransactionIds[index] = transactionId`
-     - Update `occurrenceAmounts[index] = Math.abs(transaction.amount)`
-3. Recalculate totals (`totalAmountPaid`, `totalAmountUnpaid`)
-4. Update payment status (`isFullyPaid`, `isPartiallyPaid`)
+The legacy arrays `occurrencePaidFlags` / `occurrenceTransactionIds` / `occurrenceAmounts` are no
+longer written by any matcher and nothing in the app reads them.
 
 ### 2. PredictNextPayment
 
@@ -435,7 +401,7 @@ function addFrequencyInterval(date: Date, frequency: PlaidRecurringFrequency): D
 **Variable Income Prediction:**
 ```typescript
 function predictVariableIncomeAmount(inflow: Inflow): number {
-  const config = inflow.variableIncomeConfig;
+  const config = inflow.variableConfig;
 
   // Priority 1: User override
   if (config?.userOverrideAmount) {
@@ -539,9 +505,9 @@ For each source period:
     ↓
 Batch write to /inflow_periods/
     ↓
-alignTransactionsToInflowPeriods()
+enqueue reconcile_recurring_period
     ↓
-Match historical transactions to occurrences
+Reconcile received state from split links
     ↓
 Update user_summary via triggers
 ```
@@ -641,7 +607,6 @@ Each utility function should have corresponding tests in `__tests__/` directorie
 
 ```
 inflow_periods/__tests__/
-├── alignTransactionsToInflowPeriods.test.ts
 ├── predictNextPayment.test.ts
 ├── calculateAllOccurrencesInPeriod.test.ts
 ├── calculateInflowPeriodStatus.test.ts
@@ -683,7 +648,7 @@ For `predictNextPayment`:
 npm test -- inflows
 
 # Run specific test file
-npm test -- alignTransactionsToInflowPeriods.test.ts
+npm test -- predictNextPayment.test.ts
 
 # Run with coverage
 npm test -- --coverage inflows
@@ -732,6 +697,6 @@ npm test -- --coverage inflows
 
 ### Critical Paths
 
-- Inflow creation: `inflow_main/triggers/onInflowCreated` → `inflow_periods/crud/createInflowPeriods` → `alignTransactionsToInflowPeriods`
-- Income received: Update occurrence arrays → Recalculate totals → Update summary
-- Variable income: Check `variableIncomeConfig` for prediction method
+- Inflow creation: `onInflowCreated` → create periods → enqueue `reconcile_recurring_period`
+- Income received: transaction split linked → `reconcile_recurring_period` → `update_reconciliation` (received totals) → Update summary
+- Variable income: Check `variableConfig` for prediction method

@@ -146,7 +146,9 @@ describe('Budget CRUD Cascades (emulator)', () => {
       });
 
       const periods = await periodsFor(budgetId);
-      expect(periods.length).toBe(3);
+      expect(periods.map((p) => p.sourcePeriodId ?? p.periodId).sort()).toEqual([
+        `${budgetId}_2026M06`, `${budgetId}_2026M07`, `${budgetId}_2026M08`,
+      ]);
       // monthly budget → monthly source period = 1:1 allocation
       periods.forEach((p) => expect(p.allocatedAmount).toBe(300));
 

@@ -26,14 +26,6 @@ export {
   InflowPeriodStatus
 } from './calculateInflowPeriodStatus';
 
-// Transaction alignment
-export {
-  alignTransactionsToInflowPeriods,
-  matchTransactionToInflowPeriod,
-  AlignmentResult,
-  TransactionForMatching
-} from './alignTransactionsToInflowPeriods';
-
 // Period update orchestration
 export {
   runUpdateInflowPeriods,

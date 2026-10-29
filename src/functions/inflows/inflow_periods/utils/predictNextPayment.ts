@@ -134,8 +134,8 @@ function determineConfidenceLevel(
       return 'high';
 
     case IncomeType.HOURLY:
-      // Hourly with config is medium, without is lower
-      return predictionMethod === 'hourly_calc' ? 'medium' : 'low';
+      // Variable hours: medium, as documented above (rate × hours, estimate or average alike).
+      return 'medium';
 
     case IncomeType.BASE_PLUS_COMMISSION:
       return 'medium';
@@ -221,6 +221,15 @@ function calculateExpectedAmountByType(
           total += hourlyRate * overtimeRate * expectedOvertimeHours;
         }
         return { amount: Math.round(total * 100) / 100, method: 'hourly_calc' };
+      }
+      // No hourly setup: variable income, so the user's estimate or a rolling average
+      // (inflows CLAUDE.md: HOURLY → rolling average or user override).
+      if (variableConfig?.userOverrideAmount != null && variableConfig.userOverrideAmount > 0) {
+        return { amount: variableConfig.userOverrideAmount, method: 'user_override' };
+      }
+      if (variableConfig?.useRollingAverage) {
+        const periods = variableConfig.rollingAveragePeriods || 3;
+        return { amount: calculateRollingAverage(inflow, periods), method: 'rolling_average' };
       }
       return { amount: averageAmount };
 

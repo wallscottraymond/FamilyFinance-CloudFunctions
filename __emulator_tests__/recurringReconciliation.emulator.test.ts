@@ -204,16 +204,17 @@ describe("reconcile_recurring_periods — fixed bill", () => {
     expect(jan?.reconciliation?.matchedAmount).toBe(2000);
   });
 
-  it("pending payment does NOT mark paid (tracked separately)", async () => {
+  it("pending payment counts as paid, flagged hasPending (count-pending-as-paid)", async () => {
     const bill = await seedBill({
       expected: 2000,
       payments: [{ m: 0, d: 3, amount: 2000, isPending: true }],
     });
     await reconcile(bill.outflowId, bill.userId);
     const jan = await periodDoc(bill.periodIds[0]);
-    expect(jan?.reconciliation?.status).toBe("none");
+    expect(jan?.reconciliation?.status).toBe("complete");
     expect(jan?.reconciliation?.pendingAmount).toBe(2000);
-    expect(jan?.isPaid).toBe(false);
+    expect(jan?.reconciliation?.hasPending).toBe(true);
+    expect(jan?.isPaid).toBe(true);
   });
 
   it("refund nets down and reverts a paid period", async () => {

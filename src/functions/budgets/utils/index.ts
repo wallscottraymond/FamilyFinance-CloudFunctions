@@ -8,8 +8,6 @@ export * from './budgetPeriods';
 export * from './createEverythingElseBudget';
 export * from './runUpdateBudgetPeriods';
 export * from './calculatePeriodAllocatedAmount';
-export * from './redistributeBudgetAllocation';
-export * from './handleBudgetDateChanges';
 export * from './syncNotesToOverlappingPeriods';
 export * from './handleBudgetPeriodPauseResume';
 export * from './rolloverCalculation';

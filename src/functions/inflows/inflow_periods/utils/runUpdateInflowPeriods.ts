@@ -13,7 +13,6 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { Inflow, InflowPeriod } from '../../../../types';
-import { alignTransactionsToInflowPeriods } from './alignTransactionsToInflowPeriods';
 import { predictNextPayment } from './predictNextPayment';
 
 export interface InflowUpdateResult {
@@ -224,22 +223,10 @@ export async function runUpdateInflowPeriods(
       return result;
     }
 
-    // Step 4: If transactionIds changed, run alignment
-    if (changedFields.includes('transactionIds')) {
-      console.log(`[runUpdateInflowPeriods] Running transaction alignment for all periods`);
-      try {
-        const alignmentResult = await alignTransactionsToInflowPeriods(
-          db,
-          inflowId,
-          inflowAfter,
-          allPeriods.map(doc => doc.id)
-        );
-        console.log(`[runUpdateInflowPeriods] Transaction alignment complete:`, alignmentResult);
-      } catch (alignError) {
-        console.error(`[runUpdateInflowPeriods] Transaction alignment error:`, alignError);
-        result.errors.push(`Transaction alignment error: ${alignError}`);
-      }
-    }
+    // Step 4: received state is NOT written here. When `transactionIds` changes, the caller
+    // (on_recurring_updated) enqueues `reconcile_recurring_period`, the one writer of what was
+    // received, as creation has since 2026-06-13. The legacy alignment pass this replaced dated
+    // every paycheck "now" and overwrote reconcile's totals (retired 2026-10-29).
 
     // Step 5: Calculate updated prediction
     let predictionData: { expectedDate: Timestamp; expectedAmount: number } | null = null;

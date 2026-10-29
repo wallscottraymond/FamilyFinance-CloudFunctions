@@ -48,13 +48,10 @@ export { createManualInflow } from "./inflow_periods/api/createManualInflow";
 
 // ===== Inflow Period Utilities =====
 export {
-  alignTransactionsToInflowPeriods,
-  matchTransactionToInflowPeriod,
   predictNextPayment,
   predictPaymentsInPeriod,
   calculateInflowPeriodStatus,
   runUpdateInflowPeriods,
-  AlignmentResult,
   PaymentPrediction,
   InflowPeriodStatus,
   InflowUpdateResult
