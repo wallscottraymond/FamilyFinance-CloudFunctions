@@ -26,6 +26,22 @@
 
 export const WIDGET_DATA_VERSION = 2;
 
+/**
+ * Per-kind LOGIC revision, folded into the version a widget compares ("have"). A widget skips
+ * re-downloading while the version is unchanged, and the view version only moves when the user's
+ * data does, so a server-side logic fix would otherwise not reach a widget that already cached an
+ * answer. Raise a kind's number whenever its output changes for the same data; the next deploy
+ * then refreshes those widgets. Kinds not listed are 0 (their versions are unchanged).
+ * recent: 2 = Me shows every transaction on your own accounts (was the period page's Me scope).
+ */
+export const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>> = { recent: 2 };
+
+/** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
+export function versioned_for_kind(version: number, kind: string): number {
+  const revision = WIDGET_LOGIC_REVISION[kind] ?? 0;
+  return revision === 0 ? version : (version + revision) % Number.MAX_SAFE_INTEGER;
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_BILL_ITEMS = 6;

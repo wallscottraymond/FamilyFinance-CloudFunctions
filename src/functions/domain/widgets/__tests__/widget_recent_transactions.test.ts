@@ -3,6 +3,8 @@ import {
   is_recent_transfer,
   recent_bill_ids,
   select_recent_transactions,
+  versioned_for_kind,
+  WIDGET_LOGIC_REVISION,
   WidgetRawTxn,
 } from "../widget_snapshot.service";
 
@@ -104,5 +106,19 @@ describe("Recent transactions widget: each row", () => {
       new Map()
     );
     expect(split).toMatchObject({ budget: "Groceries", moreBudgets: 1, amount: 75 });
+  });
+});
+
+describe("widget version per kind (logic revision)", () => {
+  it("kinds without a revision keep the exact view version (no mass refetch on deploy)", () => {
+    for (const kind of ["left", "summary", "bills", "budget_txns"]) {
+      expect(versioned_for_kind(123456, kind)).toBe(123456);
+    }
+  });
+  it("a revised kind gets a different version for the same data, so cached widgets refresh", () => {
+    expect(WIDGET_LOGIC_REVISION.recent).toBeGreaterThan(0);
+    expect(versioned_for_kind(123456, "recent")).not.toBe(123456);
+    expect(versioned_for_kind(123456, "recent")).toBe(versioned_for_kind(123456, "recent"));
+    expect(Number.isSafeInteger(versioned_for_kind(Number.MAX_SAFE_INTEGER, "recent"))).toBe(true);
   });
 });

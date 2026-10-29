@@ -40,6 +40,7 @@ import {
   recent_bill_ids,
   select_recent_transactions,
   short_period_label,
+  versioned_for_kind,
 } from "../../domain/widgets/widget_snapshot.service";
 import { hash_widget_token } from "../../domain/widgets/widget_token.service";
 import { derive_period_orchestrator } from "../periods/derive_period.orchestrator";
@@ -122,10 +123,10 @@ export async function widget_snapshot_orchestrator(
       scope = { kind: "group", group_id: input.group_id };
       group_name = group!.name;
     }
-    const version = widget_view_version(
+    const version = versioned_for_kind(widget_view_version(
       (await resolve_view_version(ctx, user_id, scope)).version,
       input.now_ms
-    );
+    ), input.kind);
     if (input.have_version !== null && input.have_version === version) {
       log_operation_success(span, user_id);
       return { status: "unchanged", version };
