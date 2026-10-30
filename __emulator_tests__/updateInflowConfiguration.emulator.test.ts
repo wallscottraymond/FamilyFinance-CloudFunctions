@@ -97,6 +97,30 @@ describe("updateInflowConfiguration (emulator)", () => {
     expect((await readPeriod(`${id}_P1`)).incomeType).toBe("salary");
   });
 
+  // Batch 5 verify: the app sends the stored configs back on every save, so only a config the
+  // user CHANGED may set the expected amount — saving unchanged must keep a later amount edit.
+  it("an unchanged config never overwrites the expected amount", async () => {
+    const id = `ic_same_${RUN}`;
+    const variableConfig = { useRollingAverage: false, rollingAveragePeriods: 3, userOverrideAmount: 1500 };
+    await seed(id, { incomeType: "freelance", variableConfig, expectedAmountOverride: 1800, hourlyConfig: null });
+    // Sent in a different key order than stored (Firestore returns map keys in its own order).
+    const res = await call({ inflowId: id, incomeType: "freelance",
+      variableConfig: { userOverrideAmount: 1500, rollingAveragePeriods: 3, useRollingAverage: false } });
+    expect((await read(id)).expectedAmountOverride).toBe(1800);
+    expect(res.newPrediction.expectedAmount).toBe(1800);
+  });
+
+  it("a changed config does set it", async () => {
+    const id = `ic_changed_${RUN}`;
+    await seed(id, {
+      incomeType: "freelance", expectedAmountOverride: 1800, hourlyConfig: null,
+      variableConfig: { useRollingAverage: false, rollingAveragePeriods: 3, userOverrideAmount: 1500 },
+    });
+    await call({ inflowId: id, incomeType: "freelance",
+      variableConfig: { useRollingAverage: false, rollingAveragePeriods: 3, userOverrideAmount: 1650 } });
+    expect((await read(id)).expectedAmountOverride).toBe(1650);
+  });
+
   it("refuses another user's income", async () => {
     const id = `ic_other_${RUN}`;
     await seed(id, { ownerId: "someone_else", userId: "someone_else" });

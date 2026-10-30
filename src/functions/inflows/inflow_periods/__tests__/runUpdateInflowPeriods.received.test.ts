@@ -73,4 +73,15 @@ describe("runUpdateInflowPeriods never writes what was received", () => {
     expect(updates[0].amountPerOccurrence).toBe(2100);
     expect(updates[0].occurrenceAmounts).toEqual([2000, 0]);
   });
+
+  it("a period with no paycheck due expects nothing (not one paycheck)", async () => {
+    const { db, updates } = fakeDb([{ id: "inf_1_2026W40", data: {
+      ...period, numberOfOccurrencesInPeriod: 0, occurrencePaidFlags: [], occurrenceAmounts: [], totalAmountPaid: 0,
+    } }]);
+    await runUpdateInflowPeriods(db, "inf_1", { ownerId: "user_1", averageAmount: 2000 } as any,
+      { ownerId: "user_1", averageAmount: 2100 } as any);
+    expect(updates[0].amountPerOccurrence).toBe(2100);
+    expect(updates[0].totalAmountDue).toBe(0);
+    expect(updates[0].totalAmountUnpaid).toBe(0);
+  });
 });

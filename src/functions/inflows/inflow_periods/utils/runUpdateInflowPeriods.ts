@@ -268,8 +268,11 @@ export async function runUpdateInflowPeriods(
 
           updates.averageAmount = incomeAmount;
           updates.amountWithheld = dailyRate * daysInPeriod;
-          updates.expectedAmount = incomeAmount * (period.numberOfOccurrencesInPeriod || 1);
-          updates.totalAmountDue = incomeAmount * (period.numberOfOccurrencesInPeriod || 1);
+          // One amount per paycheck due, as creation does: a period with none due expects 0
+          // (`|| 1` gave it one paycheck). A legacy doc with no count still counts one.
+          const paychecks = period.numberOfOccurrencesInPeriod ?? 1;
+          updates.expectedAmount = incomeAmount * paychecks;
+          updates.totalAmountDue = incomeAmount * paychecks;
           updates.amountPerOccurrence = incomeAmount;
           updates.dailyWithholdingRate = dailyRate;
           // ACTUAL received (totalAmountPaid) preserved; only derived "unpaid" recomputed (clamped ≥0).

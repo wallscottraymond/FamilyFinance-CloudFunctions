@@ -166,6 +166,20 @@ function calculateExpectedAmount(
   }
 }
 
+/**
+ * JSON with sorted object keys, so a stored map equals the same config sent in another key order.
+ */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj).sort()
+      .filter((k) => obj[k] !== undefined)
+      .map((k) => `${JSON.stringify(k)}:${stableJson(obj[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
 export const updateInflowConfiguration = onCall(
   {
     region: "us-central1",
@@ -243,11 +257,15 @@ export const updateInflowConfiguration = onCall(
       }
 
       const type = incomeType as IncomeType;
+      // Only a config block the user CHANGED may set the expected amount: the app sends the stored
+      // blocks back on every save, and an unchanged one must not undo a later amount edit.
+      const changed = <T>(sent: T | undefined, stored: unknown): T | undefined =>
+        sent && stableJson(sent) !== stableJson(stored ?? null) ? sent : undefined;
       const configExpected = calculateExpectedAmount(type, currentExpected, {
-        hourlyConfig,
-        commissionConfig,
-        bonusConfig,
-        variableConfig
+        hourlyConfig: changed(hourlyConfig, inflowData.hourlyConfig),
+        commissionConfig: changed(commissionConfig, inflowData.commissionConfig),
+        bonusConfig: changed(bonusConfig, inflowData.bonusConfig),
+        variableConfig: changed(variableConfig, inflowData.variableConfig),
       });
       const newExpectedAmount = Math.round(configExpected * 100) / 100;
 

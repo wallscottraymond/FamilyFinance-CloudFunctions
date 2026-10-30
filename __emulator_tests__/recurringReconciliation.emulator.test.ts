@@ -580,6 +580,35 @@ describe("on_recurring_updated trigger", () => {
     expect(enqueued).toBe(false);
   });
 
+  // Code-Health-Review batch 5 verify: an expected-amount change recomputes the period amounts,
+  // so paid / received status (judged against the expected amount) must be re-reconciled too —
+  // a paid $100 bill raised to $150 kept isFullyPaid=true beside $50 unpaid.
+  it("enqueues a reconcile when the expected amount changes", async () => {
+    const id = uniq("outflow");
+    await handle_recurring_write(
+      "outflow",
+      id,
+      { transactionIds: ["t1"], averageAmount: 100 },
+      { transactionIds: ["t1"], averageAmount: 100, expectedAmountOverride: 150, userId: uniq("user") },
+      uniq("evt")
+    );
+    const jobs = await db.collection("_jobs").where("job_type", "==", "reconcile_recurring_period").get();
+    expect(jobs.docs.some((d) => (d.data().payload as { recurring_id?: string })?.recurring_id === id)).toBe(true);
+  });
+
+  it("a sync-stamped amount change leaves the reconcile to the sync's follow-up", async () => {
+    const id = uniq("inflow");
+    await handle_recurring_write(
+      "inflow",
+      id,
+      { transactionIds: ["t1"], averageAmount: 100 },
+      { transactionIds: ["t1"], averageAmount: 120, userId: uniq("user"), syncRunId: "run_1" },
+      uniq("evt")
+    );
+    const jobs = await db.collection("_jobs").where("job_type", "==", "reconcile_recurring_period").get();
+    expect(jobs.docs.some((d) => (d.data().payload as { recurring_id?: string })?.recurring_id === id)).toBe(false);
+  });
+
   it("does NOT enqueue on deletion (after = null)", async () => {
     const enqueued = await handle_recurring_write(
       "outflow",

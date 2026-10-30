@@ -76,9 +76,13 @@ export async function handle_recurring_write(
 
   const trace = create_trigger_trace(recurring_id, event_id);
   let did = false;
+  const amount_changed = effective_amount(before) !== effective_amount(after);
 
-  // 1. `transactionIds` changed (Plaid recurring detection) → reconcile paid/received.
-  if (!by_sync && transaction_ids_changed(before, after)) {
+  // 1. `transactionIds` changed (Plaid recurring detection) → reconcile paid/received. So does an
+  //    expected-amount change: paid / received status is judged against the expected amount (a
+  //    paid $100 bill raised to $150 kept isFullyPaid beside $50 unpaid — Code-Health-Review
+  //    batch 5). A sync-stamped write is reconciled by the sync's follow-up.
+  if (!by_sync && (transaction_ids_changed(before, after) || amount_changed)) {
     // Coalesced (Read-Cost-Review-Round-3): a burst of stream updates → one delayed reconcile.
     await enqueue_reconcile_recurring({
       user_id,
@@ -95,7 +99,7 @@ export async function handle_recurring_write(
   //    derive-aware detail screen; the list (summaries) shows the stale average.
   //    Gated to amount changes (rare), so no per-write cascade. runUpdate* recomputes
   //    amounts only here — its auto-match path is gated on transactionIds separately.
-  if (before && effective_amount(before) !== effective_amount(after)) {
+  if (amount_changed) {
     const db = admin.firestore();
     try {
       if (recurring_type === "outflow") {
