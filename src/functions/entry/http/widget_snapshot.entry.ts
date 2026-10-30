@@ -28,9 +28,26 @@ const query_schema = z.object({
   budget: z.string().min(1).max(128).optional(),
   group: z.string().trim().min(1).max(128).optional(),
   cadence: z.enum(["monthly", "weekly", "bi_monthly"]).default("monthly"),
-  lookahead: z.coerce.number().int().refine((n) => [7, 14, 30].includes(n)).default(14),
+  lookahead: z.coerce.number().int().optional(),
   have: z.coerce.number().int().nonnegative().optional(),
 });
+
+const BILLS_LOOKAHEADS = [7, 14, 30];
+
+type WidgetQuery = z.infer<typeof query_schema> & { lookahead: number };
+
+/** The widget's query, or null when invalid. The look-ahead only means something to Bills due
+ *  soon (7 / 14 / 30 days); every other kind ignores it, so it never fails their request
+ *  (Recent transactions sends 0: a strict check rejected every one of its requests). */
+export function parse_widget_query(query: unknown): WidgetQuery | null {
+  const parsed = query_schema.safeParse(query);
+  if (!parsed.success) return null;
+  const q = parsed.data;
+  if (q.kind === "budget_txns" && !q.budget) return null;
+  const lookahead = q.lookahead ?? 14;
+  if (q.kind === "bills" && !BILLS_LOOKAHEADS.includes(lookahead)) return null;
+  return { ...q, lookahead: q.kind === "bills" ? lookahead : 14 };
+}
 
 export const widget_snapshot = onRequest(
   /* eslint-disable-next-line @typescript-eslint/naming-convention */
@@ -46,8 +63,8 @@ export const widget_snapshot = onRequest(
       res.status(401).json({ error: "unauthorized" });
       return;
     }
-    const parsed = query_schema.safeParse(req.query);
-    if (!parsed.success || (parsed.data.kind === "budget_txns" && !parsed.data.budget)) {
+    const query = parse_widget_query(req.query);
+    if (!query) {
       res.status(400).json({ error: "invalid_query" });
       return;
     }
@@ -56,12 +73,12 @@ export const widget_snapshot = onRequest(
     try {
       const outcome = await widget_snapshot_orchestrator(ctx, {
         token,
-        kind: parsed.data.kind,
-        budget_id: parsed.data.budget ?? null,
-        group_id: parsed.data.group ?? null,
-        cadence: parsed.data.cadence,
-        lookahead_days: parsed.data.lookahead,
-        have_version: parsed.data.have ?? null,
+        kind: query.kind,
+        budget_id: query.budget ?? null,
+        group_id: query.group ?? null,
+        cadence: query.cadence,
+        lookahead_days: query.lookahead,
+        have_version: query.have ?? null,
         now_ms: Date.now(),
       });
       res.set("Cache-Control", "no-store");
