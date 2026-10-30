@@ -59,9 +59,27 @@ service cloud.firestore {
       return isAuthenticated() && getUserRole() == role;
     }
 
-    // Check if user is admin (supports both legacy and new RBAC)
+    // Admin = the server-written `users/{uid}.systemRole == 'admin'` ONLY. The legacy custom
+    // claim `role == 'admin'` (written by the retired group endpoints / makeUserAdmin) is no
+    // longer trusted: a claim outlives its doc and a legacy family "admin" isn't a system admin
+    // (Code-Health-Review S1-M1).
     function isAdmin() {
-      return hasRole('admin') || isSystemAdmin();
+      return isSystemAdmin();
+    }
+
+    // Budget Settings: a change to ONLY the rollover defaults under `preferences.financial`,
+    // each with a valid value (RolloverStrategy = 'immediate' | 'spread'; spread 1–6 periods).
+    function isRolloverDefaultsChange(before, after) {
+      return after is map &&
+             after.diff(before).affectedKeys().hasOnly(
+               ['budgetRolloverEnabled', 'budgetRolloverStrategy', 'budgetRolloverSpreadPeriods']) &&
+             (!('budgetRolloverEnabled' in after) || after.budgetRolloverEnabled is bool) &&
+             (!('budgetRolloverStrategy' in after) ||
+               after.budgetRolloverStrategy in ['immediate', 'spread']) &&
+             (!('budgetRolloverSpreadPeriods' in after) ||
+               (after.budgetRolloverSpreadPeriods is int &&
+                after.budgetRolloverSpreadPeriods >= 1 &&
+                after.budgetRolloverSpreadPeriods <= 6));
     }
 
     // Check if user is parent (legacy)
@@ -310,6 +328,21 @@ service cloud.firestore {
                          (!('colorThemeId' in request.resource.data.preferences) ||
                            (request.resource.data.preferences.colorThemeId is string &&
                             request.resource.data.preferences.colorThemeId.size() <= 40))
+                       )
+                       ||
+                       // Fast-path: owner changing ONLY their Budget Settings rollover defaults
+                       // (`preferences.financial.budgetRollover*`). Real profiles (role 'editor',
+                       // legacy `preferences`) fail the full check below, which denied every
+                       // Budget Settings save (Code-Health-Review S1-M2 / S3-M1 / M8-M2).
+                       (
+                         isOwner(userId) &&
+                         request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['preferences', 'updatedAt']) &&
+                         request.resource.data.preferences.diff(resource.data.preferences).affectedKeys()
+                           .hasOnly(['financial']) &&
+                         isRolloverDefaultsChange(
+                           resource.data.preferences.get('financial', {}),
+                           request.resource.data.preferences.financial)
                        )
                        ||
                        (
