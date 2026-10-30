@@ -596,13 +596,28 @@ describe("on_recurring_updated trigger", () => {
     expect(jobs.docs.some((d) => (d.data().payload as { recurring_id?: string })?.recurring_id === id)).toBe(true);
   });
 
-  it("a sync-stamped amount change leaves the reconcile to the sync's follow-up", async () => {
+  // Batch 5 verify round 2: a sync's inline follow-up can reconcile before runUpdate* writes the
+  // new amount, so a sync-stamped amount change enqueues the (delayed) reconcile too.
+  it("a sync-stamped amount change also enqueues a reconcile", async () => {
     const id = uniq("inflow");
     await handle_recurring_write(
       "inflow",
       id,
       { transactionIds: ["t1"], averageAmount: 100 },
       { transactionIds: ["t1"], averageAmount: 120, userId: uniq("user"), syncRunId: "run_1" },
+      uniq("evt")
+    );
+    const jobs = await db.collection("_jobs").where("job_type", "==", "reconcile_recurring_period").get();
+    expect(jobs.docs.some((d) => (d.data().payload as { recurring_id?: string })?.recurring_id === id)).toBe(true);
+  });
+
+  it("a sync-stamped write that only changes transactionIds leaves it to the follow-up", async () => {
+    const id = uniq("inflow");
+    await handle_recurring_write(
+      "inflow",
+      id,
+      { transactionIds: ["t1"], averageAmount: 100 },
+      { transactionIds: ["t1", "t2"], averageAmount: 100, userId: uniq("user"), syncRunId: "run_2" },
       uniq("evt")
     );
     const jobs = await db.collection("_jobs").where("job_type", "==", "reconcile_recurring_period").get();

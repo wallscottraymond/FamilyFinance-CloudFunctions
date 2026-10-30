@@ -78,11 +78,13 @@ export async function handle_recurring_write(
   let did = false;
   const amount_changed = effective_amount(before) !== effective_amount(after);
 
-  // 1. `transactionIds` changed (Plaid recurring detection) → reconcile paid/received. So does an
-  //    expected-amount change: paid / received status is judged against the expected amount (a
+  // 1. `transactionIds` changed (Plaid recurring detection) → reconcile paid/received; a
+  //    sync-stamped write is reconciled by the sync's follow-up. An expected-amount change ALWAYS
+  //    enqueues one (sync-stamped too): paid / received status is judged against the amount
+  //    runUpdate* writes below, and a sync's inline follow-up can run before that write lands (a
   //    paid $100 bill raised to $150 kept isFullyPaid beside $50 unpaid — Code-Health-Review
-  //    batch 5). A sync-stamped write is reconciled by the sync's follow-up.
-  if (!by_sync && (transaction_ids_changed(before, after) || amount_changed)) {
+  //    batch 5). The job is delayed + coalesced per stream, so it runs after runUpdate*.
+  if ((!by_sync && transaction_ids_changed(before, after)) || amount_changed) {
     // Coalesced (Read-Cost-Review-Round-3): a burst of stream updates → one delayed reconcile.
     await enqueue_reconcile_recurring({
       user_id,
