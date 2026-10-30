@@ -45,6 +45,18 @@ export interface UpdateTransactionSplitsInput {
   splits: Array<Record<string, unknown>>;
   user_notes?: string;
   is_recurring?: boolean;
+  /** `updatedAt` (ms) of the copy the app edited. When set, the edit is refused if the stored
+   *  transaction changed since (it would overwrite that newer write; Code-Health-Review P4-H1).
+   *  Older app builds don't send it. */
+  base_updated_at_ms?: number;
+}
+
+/** The app edited an older copy of the transaction: it must re-read and re-apply. */
+export class StaleSplitEditError extends Error {
+  constructor(transaction_id: string) {
+    super(`Transaction ${transaction_id} changed since it was opened`);
+    this.name = "StaleSplitEditError";
+  }
 }
 
 export async function update_transaction_splits_orchestrator(
@@ -58,6 +70,15 @@ export async function update_transaction_splits_orchestrator(
   for (let attempt = 1; ; attempt++) {
     const [fresh] = await transaction_repo.get_raw_by_ids(ctx, [transaction_id]);
     if (!fresh) throw new Error(`Transaction ${transaction_id} no longer exists`);
+    // The app's splits were built from the copy it read. If the stored transaction changed since,
+    // writing them would silently undo that newer write. The conditional write below makes this
+    // check atomic with the write (a write landing in between fails it and we re-check).
+    if (input.base_updated_at_ms !== undefined) {
+      const stored = fresh.data.updatedAt as Timestamp | undefined;
+      if (stored && stored.toMillis() !== input.base_updated_at_ms) {
+        throw new StaleSplitEditError(transaction_id);
+      }
+    }
     const result = await apply_edit(ctx, input, owner_id, catalog, fresh.data, fresh.update_time);
     if (result) return result;
     if (attempt >= MAX_ATTEMPTS) {

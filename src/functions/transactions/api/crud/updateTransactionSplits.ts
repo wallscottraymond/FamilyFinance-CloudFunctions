@@ -11,7 +11,10 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Transaction, TransactionSplit } from "../../../../types";
 import { getDocument } from "../../../../utils/firestore";
 import { create_trace_context } from "../../../observability";
-import { update_transaction_splits_orchestrator } from "../../../orchestrators/transactions/update_transaction_splits.orchestrator";
+import {
+  update_transaction_splits_orchestrator,
+  StaleSplitEditError,
+} from "../../../orchestrators/transactions/update_transaction_splits.orchestrator";
 
 interface UpdateTransactionSplitsRequest {
   transactionId: string;
@@ -20,6 +23,8 @@ interface UpdateTransactionSplitsRequest {
   /** Ignored — Hide was removed (an old app build may still send it). */
   isHidden?: boolean;
   isRecurring?: boolean;
+  /** `updatedAt` (ms) of the copy the app edited; see StaleSplitEditError (P4-H1). */
+  baseUpdatedAtMs?: number;
 }
 
 interface UpdateTransactionSplitsResponse {
@@ -51,7 +56,7 @@ export const updateTransactionSplits = onCall<
   }
 
   const userId = request.auth.uid;
-  const { transactionId, splits, userNotes, isRecurring } = request.data;
+  const { transactionId, splits, userNotes, isRecurring, baseUpdatedAtMs } = request.data;
 
   // Validate required fields
   if (!transactionId) {
@@ -103,6 +108,7 @@ export const updateTransactionSplits = onCall<
         splits: splits as unknown as Array<Record<string, unknown>>,
         user_notes: userNotes,
         is_recurring: isRecurring,
+        base_updated_at_ms: typeof baseUpdatedAtMs === "number" ? baseUpdatedAtMs : undefined,
       }
     );
 
@@ -118,6 +124,10 @@ export const updateTransactionSplits = onCall<
     // Re-throw HttpsErrors as-is
     if (error instanceof HttpsError) {
       throw error;
+    }
+    if (error instanceof StaleSplitEditError) {
+      // The app re-reads the transaction and re-applies the edit.
+      throw new HttpsError("aborted", "This transaction just changed. Reload and try again.");
     }
 
     throw new HttpsError("internal", "Failed to update transaction splits");

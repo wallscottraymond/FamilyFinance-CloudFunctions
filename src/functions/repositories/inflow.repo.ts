@@ -1000,40 +1000,56 @@ export const inflow_repo = {
       }
     }
 
-    // Process in batches
+    // Process in batches. The prefetched copy only decides which streams changed (most don't);
+    // the ones to write are RE-READ inside a transaction and rebuilt from that read, so a user
+    // edit made while the sync ran (expected amount, Mark as paid, rename, remove) is kept, never
+    // reverted to the earlier copy. A concurrent edit makes the transaction retry with fresh data
+    // (Code-Health-Review M4-H1).
     const chunks = chunk_for_batch(entities);
     let unchanged = 0;
-
     for (const chunk of chunks) {
-      const batch = db.batch();
-      let writes = 0;
+      const candidates = chunk.filter((entity) => {
+        const prior = existing_docs.get(entity.id) ?? null;
+        return !(prior && is_unchanged_recurring_doc(prior, map_persistence_to_doc(entity, now, prior)));
+      });
+      unchanged += chunk.length - candidates.length;
+      if (candidates.length === 0) continue;
 
-      for (const entity of chunk) {
-        const existing_doc = existing_docs.get(entity.id) ?? null;
+      const committed = await db.runTransaction(async (tx) => {
+        const snaps = await tx.getAll(...candidates.map((e) => doc_ref(e.id)));
+        const out: Array<{
+          entity: (typeof candidates)[number];
+          existing_doc: LegacyInflowDoc | null;
+          doc_data: ReturnType<typeof map_persistence_to_doc>;
+          stamped: Record<string, unknown>;
+        }> = [];
+        candidates.forEach((entity, i) => {
+          const existing_doc = snaps[i].exists ? (snaps[i].data() as LegacyInflowDoc) : null;
+          const doc_data = map_persistence_to_doc(entity, now, existing_doc);
+          // Skip a no-op rewrite (only the sync timestamps would change) — avoids a
+          // pointless on_recurring_updated fan-out + derive-cache invalidation per stream.
+          if (existing_doc && is_unchanged_recurring_doc(existing_doc, doc_data)) return;
+          const stamped = (run_id
+            ? { ...doc_data, syncRunId: run_id, lastWriteSource: "plaid_sync" }
+            : doc_data) as unknown as Record<string, unknown>;
+          const { data: to_write, merge: as_merge } = without_lifecycle_markers(existing_doc, stamped);
+          if (as_merge) tx.set(doc_ref(entity.id), to_write, { merge: true });
+          else tx.set(doc_ref(entity.id), stamped);
+          out.push({ entity, existing_doc, doc_data, stamped });
+        });
+        return out;
+      });
+      unchanged += candidates.length - committed.length;
+
+      for (const { entity, existing_doc, doc_data, stamped } of committed) {
         const existing = existing_doc !== null;
-
-        const doc_data = map_persistence_to_doc(entity, now, existing_doc);
-        // Skip a no-op rewrite (only the sync timestamps would change) — avoids a
-        // pointless on_recurring_updated fan-out + derive-cache invalidation per stream.
-        if (existing_doc && is_unchanged_recurring_doc(existing_doc, doc_data)) {
-          unchanged++;
-          continue;
-        }
-        const stamped = run_id
-          ? { ...doc_data, syncRunId: run_id, lastWriteSource: "plaid_sync" }
-          : doc_data;
-        const { data: to_write, merge: as_merge } = without_lifecycle_markers(existing_doc, stamped as unknown as Record<string, unknown>);
-        if (as_merge) batch.set(doc_ref(entity.id), to_write, { merge: true });
-        else batch.set(doc_ref(entity.id), stamped);
-        writes++;
         written.push({
           id: entity.id,
           kind: "inflow",
           created: !existing,
           before: existing_doc as unknown as Record<string, unknown> | null,
-          after: stamped as unknown as Record<string, unknown>,
+          after: stamped,
         });
-
         results.push(
           create_write_result(
             "inflow",
@@ -1043,7 +1059,6 @@ export const inflow_repo = {
             doc_data
           )
         );
-
         // Audit entry (async)
         record_audit_entry_async({
           user_id: entity.owner_id,
@@ -1056,8 +1071,6 @@ export const inflow_repo = {
           metadata: { source: "api" },
         });
       }
-
-      if (writes > 0) await batch.commit();
     }
 
     console.log(

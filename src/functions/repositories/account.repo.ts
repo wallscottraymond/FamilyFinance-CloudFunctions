@@ -894,8 +894,10 @@ export const account_repo = {
             metadata: { source: "api", context: { balance_update: true } },
           });
         } else {
-          // CREATE: Full account creation
-          const doc_id = db.collection(COLLECTION).doc().id;
+          // CREATE: Full account creation. Deterministic id (one doc per Plaid account): two
+          // balance syncs running at once both saw "no doc" and created two copies with random
+          // ids (Code-Health-Review P2-M7). Older accounts keep their random ids (found by query).
+          const doc_id = `acct_${plaid_account.account_id}`;
           const ref = doc_ref(doc_id);
 
           const group_ids = group_id ? [group_id] : [];

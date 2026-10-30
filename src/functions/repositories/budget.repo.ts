@@ -10,7 +10,7 @@
  * @module repositories/budget
  */
 
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import {
   WriteResult,
   ReadOptions,
@@ -621,6 +621,49 @@ export const budget_repo = {
       before,
       doc_data
     );
+  },
+
+  /**
+   * Save an EDIT: write only the fields that differ between `before` (the copy the edit was
+   * built from) and `after`, as a field-level update. A change another path made in between (a
+   * category moved by a transfer, tags, the Everything Else type) is kept, never overwritten
+   * with the old copy's value (Code-Health-Review M3-M4).
+   */
+  async save_changes(
+    ctx: TraceContext,
+    before: BudgetEntity,
+    after: BudgetEntity
+  ): Promise<WriteResult> {
+    if (!after.id) throw new Error("Budget ID is required");
+    const now = Timestamp.now();
+    const prev = strip_undefined(map_to_doc(before) as unknown as Record<string, unknown>);
+    const next = strip_undefined(
+      map_to_doc({ ...after, updated_at: now }) as unknown as Record<string, unknown>
+    );
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const changes: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(next)) {
+      if (key !== "updatedAt" && !same(prev[key], value)) changes[key] = value;
+    }
+    for (const key of Object.keys(prev)) {
+      if (!(key in next)) changes[key] = FieldValue.delete();
+    }
+    changes.updatedAt = now;
+    await doc_ref(after.id).update(changes);
+    const audit_after = Object.fromEntries(
+      Object.entries(changes).filter(([, v]) => !(v instanceof FieldValue))
+    );
+    record_audit_entry_async({
+      user_id: after.user_id,
+      action: "update",
+      entity_type: "budget",
+      entity_id: after.id,
+      before: prev,
+      after: audit_after,
+      trace_id: ctx.trace_id,
+      metadata: { source: "api" },
+    });
+    return create_write_result("budget", after.id, "merge", prev, next);
   },
 
   /**

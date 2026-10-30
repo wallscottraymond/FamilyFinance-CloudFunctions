@@ -92,4 +92,19 @@ describe("account_repo.upsert_from_plaid (emulator)", () => {
     expect(created).toHaveLength(1);
     expect(created[0].data().isActive).toBe(true);
   });
+
+  // Code-Health-Review P2-M7: creation was check-then-create with a random id, so two balance
+  // syncs running at once (cron + webhook) could both see "no doc" and create two.
+  it("two concurrent upserts of a new account create ONE doc", async () => {
+    const userId = uniq("u");
+    const itemId = uniq("item");
+    const accountId = uniq("plaidacct");
+    await Promise.all([1, 2, 3].map(() =>
+      account_repo.upsert_from_plaid(ctx(), [plaidAccount(accountId, 70)], itemId, userId, { id: "ins_1", name: "Bank" })
+    ));
+    const docs = await docsFor(userId, accountId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0].data().isActive).toBe(true);
+  });
 });
+

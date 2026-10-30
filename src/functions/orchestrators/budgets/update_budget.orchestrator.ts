@@ -101,7 +101,8 @@ export async function update_budget_orchestrator(
     );
 
     // 4. Persist the updated budget document
-    await budget_repo.save(ctx, entity);
+    // Only the fields this edit changed: a concurrent change to the budget isn't overwritten (M3-M4).
+    await budget_repo.save_changes(ctx, dependencies.existing, entity);
 
     // 5. Enqueue cascade (claims/releases + period reallocation + rename)
     const name_changed = entity.name !== dependencies.existing.name;
