@@ -234,6 +234,16 @@ Manages recurring bill definitions from both Plaid and user-created sources.
 ### Purpose
 Manages period-specific withholding allocations, payment tracking, and **occurrence tracking**.
 
+> **Retired 2026-10-30 (Code-Health-Review F3 / M4-H2):** `autoMatchSinglePeriod`,
+> `matchAllTransactionsToOccurrences`, `autoMatchTransactionToOutflowPeriods` and the legacy
+> `onOutflowPeriodCreate` / `onOutflowPeriodUpdate` / `onOutflowUpdated` triggers are deleted.
+> What was PAID on a bill period has ONE writer: `reconcile_recurring_period` (from the
+> transactions' split links), enqueued by `on_recurring_updated` when `transactionIds` change.
+> `runUpdateOutflowPeriods` updates EXPECTED amounts (one per occurrence:
+> `amount × numberOfOccurrencesInPeriod`) and names only, never paid state (guarded by
+> `__tests__/runUpdateOutflowPeriods.paid.test.ts`). Sections below that describe the old
+> matchers are historical.
+
 ### Key Concepts: Occurrence Tracking System
 
 **What is an Occurrence?**

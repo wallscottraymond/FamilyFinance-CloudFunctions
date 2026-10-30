@@ -11,6 +11,9 @@
  *     2026-10-16; f3fcf7a);
  *   - a removed income (D27, deliberate) → identical except `isActive`, which now follows the
  *     month rule inside the removal window (base: every new period active).
+ *   - every income (Code-Health-Review M2-M6, deliberate): HEAD also writes `userId` / `groupIds`
+ *     (the 5-layer creator's owner fields); they are checked, then left out of the comparison.
+ *   - an income with an expected-amount override (M2-M1): HEAD uses the user's amount.
  * Its own year (2044); source periods are passed in, never stored.
  */
 import * as admin from "firebase-admin";
@@ -59,7 +62,13 @@ async function twinPeriods(name: string, o: Record<string, unknown>) {
     const snap = await db.collection("inflow_periods").where("inflowId", "==", id).get();
     return new Map(snap.docs.map((d) => [d.data().sourcePeriodId as string, JSON.parse(JSON.stringify(d.data()).split(id).join("ID"))]));
   };
-  return { head: await load(head_id), base: await load(base_id), n: n_head };
+  const head = await load(head_id);
+  for (const [k, doc] of head) {
+    expect({ k, userId: doc.userId, groupIds: doc.groupIds }).toEqual({ k, userId: "qzinfid_u", groupIds: [] });
+    delete doc.userId;
+    delete doc.groupIds;
+  }
+  return { head, base: await load(base_id), n: n_head };
 }
 
 describe("old inflow extension: HEAD == the 2ae62e6 body (emulator)", () => {
@@ -98,5 +107,16 @@ describe("old inflow extension: HEAD == the 2ae62e6 body (emulator)", () => {
     expect(flipped).toBeGreaterThan(10); // June onward: inactive (not a no-op test)
     expect(head.get("2044M05")!.isActive).toBe(true);
     expect(head.get("2044M06")!.isActive).toBe(false);
+  });
+
+  it("an income with an expected-amount override → its periods expect the user's amount (M2-M1)", async () => {
+    const id = "qzinfid_override";
+    await db.collection("inflows").doc(id).set(record({ expectedAmountOverride: 2500 }));
+    await extendInflowPeriodsFor(db, await db.collection("inflows").doc(id).get(), SOURCES, NOW);
+    const may = (await db.collection("inflow_periods").doc(`${id}_2044M05`).get()).data()!;
+    expect(may.numberOfOccurrencesInPeriod).toBeGreaterThan(0);
+    expect(may.averageAmount).toBe(2500);
+    expect(may.amountPerOccurrence).toBe(2500);
+    expect(may.totalAmountDue).toBe(2500 * may.numberOfOccurrencesInPeriod);
   });
 });

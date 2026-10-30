@@ -1,13 +1,16 @@
 /**
  * Update Inflow Configuration Callable
  *
- * Updates the income type configuration for an inflow and recalculates
- * all existing InflowPeriods in place (preserving user notes and other data).
- *
- * Key behaviors:
- * - Updates income type and type-specific configuration
- * - Recalculates expectedAmount and predictionConfidence for all periods
- * - Preserves existing period data (notes, transaction matches)
+ * Two kinds of call:
+ * - The "Regular Salary" toggle: `isRegularSalary` present → saves ONLY that flag. (The app sent
+ *   its screen's default type alongside it; the type and configs are left alone — Code-Health-
+ *   Review M7-H1.)
+ * - A type / config edit: saves the type, its variability and the config blocks SENT (blocks not
+ *   sent are kept — M2-M2). When the config implies an amount (hourly rate × hours, base +
+ *   commission, …) that differs from the current expected amount, it becomes the income's
+ *   expected amount (`expectedAmountOverride`), which the period page, the stored periods
+ *   (runUpdateInflowPeriods via on_inflow_updated) and the extenders all follow. Period AMOUNTS
+ *   are never written here; only the denormalized `incomeType` / `predictionConfidence`.
  * - Sets isUserClassified: true to indicate user has configured the income
  */
 
@@ -26,7 +29,9 @@ import {
 
 interface UpdateInflowConfigRequest {
   inflowId: string;
-  incomeType: IncomeType;
+  /** Required for a type / config edit; ignored when isRegularSalary is sent (the toggle). */
+  incomeType?: IncomeType;
+  isRegularSalary?: boolean;
   incomeVariability?: IncomeVariability;
   hourlyConfig?: HourlyIncomeConfig;
   commissionConfig?: CommissionIncomeConfig;
@@ -175,25 +180,31 @@ export const updateInflowConfiguration = onCall(
 
     const userId = request.auth.uid;
     const data = request.data as UpdateInflowConfigRequest;
-    const { inflowId, incomeType, incomeVariability, hourlyConfig, commissionConfig, bonusConfig, variableConfig } = data;
+    const {
+      inflowId, incomeType, isRegularSalary, incomeVariability,
+      hourlyConfig, commissionConfig, bonusConfig, variableConfig,
+    } = data;
+    const isToggle = typeof isRegularSalary === "boolean";
 
     // Validate required fields
     if (!inflowId) {
       throw new HttpsError("invalid-argument", "inflowId is required");
     }
-    if (!incomeType) {
-      throw new HttpsError("invalid-argument", "incomeType is required");
-    }
-
-    // Validate income type is valid enum value
-    if (!Object.values(IncomeType).includes(incomeType)) {
-      throw new HttpsError("invalid-argument", `Invalid incomeType: ${incomeType}`);
+    if (!isToggle) {
+      if (!incomeType) {
+        throw new HttpsError("invalid-argument", "incomeType is required");
+      }
+      // Validate income type is valid enum value
+      if (!Object.values(IncomeType).includes(incomeType)) {
+        throw new HttpsError("invalid-argument", `Invalid incomeType: ${incomeType}`);
+      }
     }
 
     const db = admin.firestore();
     const now = Timestamp.now();
 
-    console.log(`[updateInflowConfiguration] Starting for inflowId: ${inflowId}, incomeType: ${incomeType}`);
+    const change = isToggle ? `isRegularSalary: ${isRegularSalary}` : `incomeType: ${incomeType}`;
+    console.log(`[updateInflowConfiguration] Starting for inflowId: ${inflowId}, ${change}`);
 
     try {
       // Get the inflow document
@@ -211,97 +222,80 @@ export const updateInflowConfiguration = onCall(
         throw new HttpsError("permission-denied", "You can only update your own inflows");
       }
 
-      // Calculate expected amount based on new configuration
-      const averageAmount = Math.abs(inflowData.averageAmount || 0);
-      const newExpectedAmount = calculateExpectedAmount(incomeType, averageAmount, {
+      // The income's current expected amount: the user's, else Plaid's average (as the period page).
+      const currentExpected = Math.abs(
+        (inflowData.expectedAmountOverride as number | null | undefined) ?? inflowData.averageAmount ?? 0
+      );
+
+      if (isToggle) {
+        await inflowRef.update({ isRegularSalary, updatedAt: now, updatedBy: userId });
+        console.log(`[updateInflowConfiguration] Updated isRegularSalary on ${inflowId}`);
+        const storedType = (inflowData.incomeType as IncomeType) || IncomeType.OTHER;
+        return {
+          success: true,
+          inflowId,
+          periodsUpdated: 0,
+          newPrediction: {
+            expectedAmount: currentExpected,
+            confidence: getPredictionConfidence(storedType),
+          },
+        };
+      }
+
+      const type = incomeType as IncomeType;
+      const configExpected = calculateExpectedAmount(type, currentExpected, {
         hourlyConfig,
         commissionConfig,
         bonusConfig,
         variableConfig
       });
+      const newExpectedAmount = Math.round(configExpected * 100) / 100;
 
       // Determine variability (use provided or calculate default)
-      const finalVariability = incomeVariability || getDefaultVariability(incomeType);
-      const predictionConfidence = getPredictionConfidence(incomeType);
+      const finalVariability = incomeVariability || getDefaultVariability(type);
+      const predictionConfidence = getPredictionConfidence(type);
 
       // Build update object for inflow
       const inflowUpdate: Record<string, any> = {
-        incomeType,
+        incomeType: type,
         incomeVariability: finalVariability,
         isUserClassified: true,
         updatedAt: now,
         updatedBy: userId
       };
 
-      // Clear old configs and set new one based on type
-      inflowUpdate.hourlyConfig = null;
-      inflowUpdate.commissionConfig = null;
-      inflowUpdate.bonusConfig = null;
-      inflowUpdate.variableConfig = null;
+      // Save the config blocks sent; the others stay as they were.
+      if (hourlyConfig) inflowUpdate.hourlyConfig = hourlyConfig;
+      if (commissionConfig) inflowUpdate.commissionConfig = commissionConfig;
+      if (bonusConfig) inflowUpdate.bonusConfig = bonusConfig;
+      if (variableConfig) inflowUpdate.variableConfig = variableConfig;
 
-      // Set the appropriate config based on income type
-      if (incomeType === IncomeType.HOURLY && hourlyConfig) {
-        inflowUpdate.hourlyConfig = hourlyConfig;
-      } else if ((incomeType === IncomeType.BASE_PLUS_COMMISSION || incomeType === IncomeType.COMMISSION_ONLY) && commissionConfig) {
-        inflowUpdate.commissionConfig = commissionConfig;
-      } else if (incomeType === IncomeType.BONUS && bonusConfig) {
-        inflowUpdate.bonusConfig = bonusConfig;
-      } else if (variableConfig) {
-        inflowUpdate.variableConfig = variableConfig;
+      // A config that implies a different amount becomes the income's expected amount.
+      if (newExpectedAmount > 0 && Math.abs(newExpectedAmount - currentExpected) >= 0.005) {
+        inflowUpdate.expectedAmountOverride = newExpectedAmount;
       }
 
       // Update the inflow document
       await inflowRef.update(inflowUpdate);
       console.log(`[updateInflowConfiguration] Updated inflow ${inflowId}`);
 
-      // Get all inflow periods for this inflow
-      const periodsQuery = db.collection("inflow_periods")
-        .where("inflowId", "==", inflowId);
+      // Refresh the denormalized type on its periods (amounts follow the definition's expected
+      // amount through on_inflow_updated → runUpdateInflowPeriods).
+      const periodsSnapshot = await db.collection("inflow_periods")
+        .where("inflowId", "==", inflowId)
+        .get();
 
-      const periodsSnapshot = await periodsQuery.get();
-      console.log(`[updateInflowConfiguration] Found ${periodsSnapshot.size} periods to update`);
-
-      // Update periods in batches
       let periodsUpdated = 0;
       const batchSize = 500;
       let batch = db.batch();
       let batchCount = 0;
 
       for (const periodDoc of periodsSnapshot.docs) {
-        const periodData = periodDoc.data() as InflowPeriod;
-        const numberOfOccurrences = periodData.numberOfOccurrencesInPeriod || 1;
-
-        // Calculate new expected amounts
-        const newAmountPerOccurrence = newExpectedAmount;
-        const newTotalAmountDue = newAmountPerOccurrence * numberOfOccurrences;
-        const newTotalAmountUnpaid = newTotalAmountDue - (periodData.totalAmountPaid || 0);
-
-        // Calculate new withholding amount (for budget purposes)
-        // This is the expected amount earned during this period
-        const daysInPeriod = periodData.cycleDays || 30;
-        const newDailyWithholdingRate = newExpectedAmount / daysInPeriod;
-        const newAmountWithheld = Math.round(newDailyWithholdingRate * daysInPeriod * 100) / 100;
-
-        // Update period with new calculations
         const periodUpdate: Partial<InflowPeriod> = {
-          incomeType: incomeType,
+          incomeType: type,
           predictionConfidence: predictionConfidence,
-          expectedAmount: newTotalAmountDue,
-          amountPerOccurrence: newAmountPerOccurrence,
-          averageAmount: newAmountPerOccurrence,
-          totalAmountDue: newTotalAmountDue,
-          totalAmountUnpaid: newTotalAmountUnpaid,
-          amountWithheld: newAmountWithheld,
-          dailyWithholdingRate: newDailyWithholdingRate,
           updatedAt: now,
-          lastCalculated: now
         };
-
-        // Recalculate dollar progress percentage
-        if (newTotalAmountDue > 0) {
-          periodUpdate.dollarProgressPercentage = Math.round(((periodData.totalAmountPaid || 0) / newTotalAmountDue) * 100);
-        }
-
         batch.update(periodDoc.ref, periodUpdate);
         batchCount++;
         periodsUpdated++;

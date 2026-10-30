@@ -209,7 +209,10 @@ export async function extendInflowPeriodsFor(
   allSourcePeriods: SourcePeriod[],
   now: Timestamp
 ): Promise<number> {
-  const inflow = { id: inflowDoc.id, ...inflowDoc.data() } as any;
+  const data = inflowDoc.data() as any;
+  // The user's expected amount wins over Plaid's average, as on the period page and in the
+  // 5-layer creator (Code-Health-Review M2-M1).
+  const inflow = { id: inflowDoc.id, ...data, averageAmount: data.expectedAmountOverride ?? data.averageAmount } as any;
   let totalPeriodsCreated = 0;
   console.log(`[extendRecurringInflowPeriods] Processing inflow: ${inflow.description || inflow.merchantName || inflow.id}`);
 
@@ -239,6 +242,8 @@ export async function extendInflowPeriodsFor(
     // Extract ownership fields
     const userId = inflow.ownerId || inflow.userId;
     const groupId = inflow.groupId || null;
+    // Same owner fields the 5-layer creator writes; userId-scoped reads missed these (M2-M6).
+    const groupIds: string[] = inflow.groupIds ?? (groupId ? [groupId] : []);
 
     // Calculate period amounts
     const periodCalc = calculatePeriodAmounts(sourcePeriod, cycleInfo, inflow);
@@ -269,9 +274,11 @@ export async function extendInflowPeriodsFor(
 
       // === OWNERSHIP & ACCESS ===
       ownerId: userId,
+      userId: userId,
       createdBy: inflow.createdBy || userId,
       updatedBy: userId,
       groupId: groupId,
+      groupIds: groupIds,
 
       // === PLAID IDENTIFIERS ===
       accountId: inflow.accountId,

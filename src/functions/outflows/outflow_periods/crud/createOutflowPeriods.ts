@@ -72,6 +72,9 @@ export async function createOutflowPeriodsFromSource(
   const ownerId = outflow.ownerId;
   const createdBy = outflow.createdBy;
   const groupId = outflow.groupId || null;
+  // Same owner fields the 5-layer creator writes (outflow_period_repo); userId-scoped reads
+  // missed periods made here (Code-Health-Review M4-M1).
+  const groupIds: string[] = (outflow.groupIds as string[] | undefined) ?? (groupId ? [groupId] : []);
   const description = outflow.description || null;
   const merchantName = outflow.merchantName || null;
 
@@ -196,7 +199,9 @@ export async function createOutflowPeriodsFromSource(
   const outflowHidden = outflow.isHidden === true;
 
   // Calculate payment cycle information
-  const cycleInfo = calculatePaymentCycle(outflow);
+  // The user's expected amount wins over Plaid's average, as on the period page (M4-M2).
+  const amountOutflow = { ...outflow, averageAmount: outflow.expectedAmountOverride ?? outflow.averageAmount };
+  const cycleInfo = calculatePaymentCycle(amountOutflow);
   console.log(`[createOutflowPeriodsFromSource] Payment cycle: ${cycleInfo.cycleDays} days, Bill: $${cycleInfo.billAmount.toFixed(2)}`);
 
   // Create outflow_periods for each source period
@@ -207,7 +212,7 @@ export async function createOutflowPeriodsFromSource(
     const sourcePeriod = { id: doc.id, ...doc.data() } as SourcePeriod;
 
     // Calculate ALL occurrences in this period (handles variable 4 vs 5 Mondays)
-    const occurrences = calculateAllOccurrencesInPeriod(outflow, sourcePeriod);
+    const occurrences = calculateAllOccurrencesInPeriod(amountOutflow, sourcePeriod);
 
     // Calculate withholding amounts for this period
     const periodCalc = calculateWithholdingAmount(sourcePeriod, cycleInfo, outflow);
@@ -253,9 +258,11 @@ export async function createOutflowPeriodsFromSource(
 
       // === OWNERSHIP & ACCESS (Query-Critical) ===
       ownerId: ownerId,
+      userId: ownerId,
       createdBy: createdBy,
       updatedBy: createdBy,
       groupId: groupId,
+      groupIds: groupIds,
 
       // === PLAID IDENTIFIERS ===
       accountId: outflow.accountId,

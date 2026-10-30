@@ -4,17 +4,15 @@
  * Updates all outflow periods when parent outflow changes.
  * Only updates future unpaid periods to preserve historical payment data.
  *
- * Handles three types of changes:
- * 1. averageAmount - Recalculates period amounts
- * 2. userCustomName - Updates period descriptions
- * 3. transactionIds - Re-runs auto-matching
+ * Handles EXPECTED amounts and names/metadata only. What was PAID is written by
+ * reconcile_recurring_period alone (on_recurring_updated enqueues it when transactionIds
+ * change); the legacy auto-match + occurrence matcher that also ran here was retired
+ * 2026-10-30 (Code-Health-Review F3 / M4-H2), as its income twin was (F1).
  */
 
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { Outflow, OutflowPeriod } from "../../../../types";
-import { autoMatchSinglePeriod } from "./autoMatchSinglePeriod";
-import { matchAllTransactionsToOccurrences } from "./matchAllTransactionsToOccurrences";
 
 export interface OutflowUpdateResult {
   success: boolean;
@@ -23,35 +21,6 @@ export interface OutflowUpdateResult {
   periodsSkipped: number;
   fieldsUpdated: string[];
   errors: string[];
-}
-
-/**
- * Helper: Check if transactionIds array changed
- */
-function hasTransactionIdsChanged(before: Outflow, after: Outflow): boolean {
-  const beforeIds = before.transactionIds || [];
-  const afterIds = after.transactionIds || [];
-
-  // Quick length check
-  if (beforeIds.length !== afterIds.length) {
-    return true;
-  }
-
-  // Deep equality check
-  const beforeSet = new Set(beforeIds);
-  const afterSet = new Set(afterIds);
-
-  if (beforeSet.size !== afterSet.size) {
-    return true;
-  }
-
-  for (const id of beforeSet) {
-    if (!afterSet.has(id)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 /**
@@ -107,13 +76,6 @@ export async function runUpdateOutflowPeriods(
     if (outflowBefore.userCustomName !== outflowAfter.userCustomName) {
       changedFields.push("userCustomName");
       console.log(`[runUpdateOutflowPeriods] userCustomName changed: "${outflowBefore.userCustomName}" → "${outflowAfter.userCustomName}"`);
-    }
-
-    if (hasTransactionIdsChanged(outflowBefore, outflowAfter)) {
-      changedFields.push("transactionIds");
-      const beforeCount = (outflowBefore.transactionIds || []).length;
-      const afterCount = (outflowAfter.transactionIds || []).length;
-      console.log(`[runUpdateOutflowPeriods] transactionIds changed: ${beforeCount} → ${afterCount} transactions`);
     }
 
     // Check for description changes (separate from userCustomName)
@@ -208,7 +170,7 @@ export async function runUpdateOutflowPeriods(
     // is tied to the real transaction and is NEVER overwritten here. Previously amount changes were
     // gated to unpaid periods, so editing a bill whose current period was already paid silently did
     // nothing (the name — which always went to all periods — DID change), i.e. "name changes but
-    // amount doesn't". The `transactionIds` auto-match below stays gated to unpaid periods.
+    // amount doesn't".
     const periodsToUpdate = allPeriods;
     result.periodsSkipped = 0;
 
@@ -240,13 +202,17 @@ export async function runUpdateOutflowPeriods(
           // EXPECTED fields — recomputed on every period (paid included).
           updates.averageAmount = effectiveAmount;
           updates.amountWithheld = dailyRate * daysInPeriod;
-          updates.expectedAmount = effectiveAmount;
-          updates.totalAmountDue = effectiveAmount;
+          // The period expects one amount per occurrence, as generation does (a weekly bill in a
+          // month has 4-5; a bill not due this period has 0) (Code-Health-Review M4-M3).
+          const occurrenceCount = period.numberOfOccurrencesInPeriod ?? period.occurrences?.length ?? 1;
+          const totalDue = effectiveAmount * occurrenceCount;
+          updates.expectedAmount = totalDue;
+          updates.totalAmountDue = totalDue;
           updates.amountPerOccurrence = effectiveAmount;
           updates.dailyWithholdingRate = dailyRate;
           // ACTUAL paid is tied to the transaction and is NOT touched here; only the
           // derived "unpaid = expected − paid" is recomputed (clamped at 0 when overpaid).
-          updates.totalAmountUnpaid = Math.max(0, effectiveAmount - (period.totalAmountPaid || 0));
+          updates.totalAmountUnpaid = Math.max(0, totalDue - (period.totalAmountPaid || 0));
 
           // Update each occurrence's EXPECTED amountDue to the new amount, but PRESERVE its
           // ACTUAL payment facts (amountPaid, isPaid, paymentDate, transactionSplitId, …).
@@ -306,47 +272,7 @@ export async function runUpdateOutflowPeriods(
           console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: updating isActive to ${updates.isActive}`);
         }
 
-        // Handle transactionIds change - call autoMatchSinglePeriod.
-        // Gated to UNPAID periods (now that we iterate ALL periods for expected-amount updates):
-        // re-matching an already-paid period could double-assign, and its payment facts are settled.
-        if (changedFields.includes("transactionIds") && !isPaid) {
-          console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: running auto-match`);
-          try {
-            const matchResult = await autoMatchSinglePeriod(
-              db,
-              periodDoc.id,
-              period,
-              outflowAfter
-            );
-            console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: matched ${matchResult.transactionsMatched} transactions`);
-
-            // After auto-matching, run occurrence matching if period has occurrences
-            if (period.occurrenceDueDates && period.occurrenceDueDates.length > 0) {
-              console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: running occurrence matching for ${period.occurrenceDueDates.length} occurrences...`);
-              try {
-                // Re-fetch period to get updated transactionSplits from auto-matching
-                const updatedPeriodSnap = await db.collection("outflow_periods").doc(periodDoc.id).get();
-                if (updatedPeriodSnap.exists) {
-                  const updatedPeriodData = { id: updatedPeriodSnap.id, ...updatedPeriodSnap.data() } as OutflowPeriod;
-                  await matchAllTransactionsToOccurrences(db, periodDoc.id, updatedPeriodData);
-                  console.log(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: ✓ occurrence matching complete`);
-                }
-              } catch (occurrenceError: any) {
-                console.error(`[runUpdateOutflowPeriods] Period ${periodDoc.id}: ⚠️  occurrence matching failed:`, occurrenceError);
-                result.errors.push(`Occurrence matching error for period ${periodDoc.id}: ${occurrenceError.message}`);
-              }
-            }
-
-            // autoMatchSinglePeriod updates the period directly, so we skip batch update for this period
-            updatedCount++;
-            continue;
-          } catch (error: any) {
-            console.error(`[runUpdateOutflowPeriods] Error auto-matching period ${periodDoc.id}:`, error);
-            result.errors.push(`Auto-match error for period ${periodDoc.id}: ${error.message}`);
-          }
-        }
-
-        // Apply updates via batch (if not already updated by autoMatch)
+        // Apply updates via batch
         if (Object.keys(updates).length > 0) {
           updates.updatedAt = Timestamp.now();
           batch.update(periodDoc.ref, updates);

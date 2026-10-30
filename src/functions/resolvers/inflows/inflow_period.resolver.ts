@@ -49,7 +49,8 @@ function map_inflow_to_domain(inflow: Inflow): InflowForPeriodGeneration {
     group_ids: inflow.group_ids,
     plaid_item_id: inflow.plaid_item_id,
     account_id: inflow.account_id,
-    average_amount: inflow.average_amount,
+    // The user's expected amount wins, as on the period page (Code-Health-Review M4-M2 / M1-M5).
+    average_amount: inflow.expected_amount_override ?? inflow.average_amount,
     currency: inflow.currency,
     description: inflow.description,
     payer_name: inflow.payer_name,
@@ -175,7 +176,9 @@ export async function resolve_inflow_period_dependencies_from_doc(
       (inflow_data.groupId ? [inflow_data.groupId as string] : []),
     plaid_item_id: inflow_data.plaidItemId as string,
     account_id: inflow_data.accountId as string,
-    average_amount: inflow_data.averageAmount as number,
+    average_amount:
+      (inflow_data.expectedAmountOverride as number | null | undefined) ??
+      (inflow_data.averageAmount as number),
     currency: (inflow_data.currency as string) ?? "USD",
     description: (inflow_data.description as string) ?? null,
     payer_name: (inflow_data.merchantName as string) ?? (inflow_data.payerName as string) ?? null,

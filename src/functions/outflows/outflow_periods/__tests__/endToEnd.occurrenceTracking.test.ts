@@ -26,16 +26,7 @@ import {
   PeriodType
 } from "../../../../types";
 import { calculateAllOccurrencesInPeriod } from "../utils/calculateAllOccurrencesInPeriod";
-import { matchAllTransactionsToOccurrences } from "../utils/matchAllTransactionsToOccurrences";
 import { calculateEnhancedOutflowPeriodStatus } from "../utils/calculateOutflowPeriodStatus";
-
-// Mock Firestore for testing
-const mockUpdate = jest.fn().mockResolvedValue(undefined);
-const mockDoc = jest.fn(() => ({ update: mockUpdate }));
-const mockCollection = jest.fn(() => ({ doc: mockDoc }));
-const mockFirestore = {
-  collection: mockCollection
-};
 
 describe("End-to-End Occurrence Tracking", () => {
   // Reset mocks before each test
@@ -133,71 +124,6 @@ describe("End-to-End Occurrence Tracking", () => {
       console.log("✓ Weekly outflow: Created", occurrenceResult.numberOfOccurrences, "occurrences");
     });
 
-    it("should match 2 transactions to correct occurrence indices (partial payment)", async () => {
-      // Setup
-      const outflow = createTestOutflow(
-        PlaidRecurringFrequency.WEEKLY,
-        "Weekly Gym",
-        10,
-        new Date("2025-01-01")
-      );
-
-      const sourcePeriod = createTestSourcePeriod(
-        "2025-M01",
-        new Date("2025-01-01"),
-        new Date("2025-01-31")
-      );
-
-      const occurrenceResult = calculateAllOccurrencesInPeriod(outflow, sourcePeriod);
-
-      // Create test period with occurrences
-      const periodData: OutflowPeriod = {
-        id: "period_test_001",
-        outflowId: outflow.id,
-        sourcePeriodId: sourcePeriod.id,
-        occurrenceDueDates: occurrenceResult.occurrenceDueDates,
-        occurrenceDrawDates: occurrenceResult.occurrenceDrawDates,
-        numberOfOccurrencesInPeriod: occurrenceResult.numberOfOccurrences,
-        numberOfOccurrencesPaid: 0,
-        numberOfOccurrencesUnpaid: occurrenceResult.numberOfOccurrences,
-        transactionSplits: [
-          // Payment for first week (Jan 1)
-          createTestSplit("txn_001", "split_001", 10, new Date("2025-01-01")),
-          // Payment for second week (Jan 8)
-          createTestSplit("txn_002", "split_002", 10, new Date("2025-01-08"))
-        ]
-      } as unknown as OutflowPeriod;
-
-      // Step 2: Match transactions to occurrences
-      await matchAllTransactionsToOccurrences(mockFirestore as any, "period_test_001", periodData);
-
-      // Verify the update call was made with correct occurrence arrays
-      expect(mockUpdate).toHaveBeenCalled();
-
-      const updateData = mockUpdate.mock.calls[0][0];
-
-      // Should have 2 paid occurrences
-      expect(updateData.numberOfOccurrencesPaid).toBe(2);
-      expect(updateData.numberOfOccurrencesUnpaid).toBe(occurrenceResult.numberOfOccurrences - 2);
-
-      // First two occurrences should be marked as paid
-      expect(updateData.occurrencePaidFlags[0]).toBe(true);
-      expect(updateData.occurrencePaidFlags[1]).toBe(true);
-
-      // Remaining should be unpaid
-      for (let i = 2; i < occurrenceResult.numberOfOccurrences; i++) {
-        expect(updateData.occurrencePaidFlags[i]).toBe(false);
-      }
-
-      // Transaction IDs should be assigned
-      expect(updateData.occurrenceTransactionIds[0]).toBe("txn_001");
-      expect(updateData.occurrenceTransactionIds[1]).toBe("txn_002");
-
-      console.log("✓ Matched 2 of", occurrenceResult.numberOfOccurrences, "occurrences");
-      console.log("  - Paid:", updateData.numberOfOccurrencesPaid);
-      console.log("  - Unpaid:", updateData.numberOfOccurrencesUnpaid);
-    });
-
     it("should generate enhanced status with occurrence text", () => {
       // Setup: Period with 4 occurrences, 2 paid
       const occurrenceResult = calculateAllOccurrencesInPeriod(
@@ -258,48 +184,6 @@ describe("End-to-End Occurrence Tracking", () => {
       console.log("✓ Biweekly outflow: Created", occurrenceResult.numberOfOccurrences, "occurrences");
     });
 
-    it("should match all transactions when fully paid", async () => {
-      const outflow = createTestOutflow(
-        PlaidRecurringFrequency.BIWEEKLY,
-        "Biweekly Subscription",
-        25,
-        new Date("2025-01-01")
-      );
-
-      const sourcePeriod = createTestSourcePeriod(
-        "2025-M01",
-        new Date("2025-01-01"),
-        new Date("2025-01-31")
-      );
-
-      const occurrenceResult = calculateAllOccurrencesInPeriod(outflow, sourcePeriod);
-
-      const periodData: OutflowPeriod = {
-        id: "period_test_002",
-        outflowId: outflow.id,
-        sourcePeriodId: sourcePeriod.id,
-        occurrenceDueDates: occurrenceResult.occurrenceDueDates,
-        numberOfOccurrencesInPeriod: occurrenceResult.numberOfOccurrences,
-        transactionSplits: [
-          createTestSplit("txn_003", "split_003", 25, new Date("2025-01-01")),
-          createTestSplit("txn_004", "split_004", 25, new Date("2025-01-15")),
-          ...(occurrenceResult.numberOfOccurrences === 3
-            ? [createTestSplit("txn_005", "split_005", 25, new Date("2025-01-29"))]
-            : []
-          )
-        ]
-      } as unknown as OutflowPeriod;
-
-      await matchAllTransactionsToOccurrences(mockFirestore as any, "period_test_002", periodData);
-
-      const updateData = mockUpdate.mock.calls[0][0];
-
-      expect(updateData.numberOfOccurrencesPaid).toBe(occurrenceResult.numberOfOccurrences);
-      expect(updateData.numberOfOccurrencesUnpaid).toBe(0);
-
-      console.log("✓ Fully paid:", occurrenceResult.numberOfOccurrences, "of", occurrenceResult.numberOfOccurrences, "occurrences");
-    });
-
     it("should generate \"bi-weekly periods\" text in status", () => {
       const enhancedStatus = calculateEnhancedOutflowPeriodStatus(
         true,
@@ -342,44 +226,6 @@ describe("End-to-End Occurrence Tracking", () => {
       console.log("✓ Monthly outflow: Created", occurrenceResult.numberOfOccurrences, "occurrence");
     });
 
-    it("should match single transaction to single occurrence", async () => {
-      const outflow = createTestOutflow(
-        PlaidRecurringFrequency.MONTHLY,
-        "Monthly Rent",
-        1200,
-        new Date("2025-01-01")
-      );
-
-      const sourcePeriod = createTestSourcePeriod(
-        "2025-M01",
-        new Date("2025-01-01"),
-        new Date("2025-01-31")
-      );
-
-      const occurrenceResult = calculateAllOccurrencesInPeriod(outflow, sourcePeriod);
-
-      const periodData: OutflowPeriod = {
-        id: "period_test_003",
-        outflowId: outflow.id,
-        sourcePeriodId: sourcePeriod.id,
-        occurrenceDueDates: occurrenceResult.occurrenceDueDates,
-        numberOfOccurrencesInPeriod: 1,
-        transactionSplits: [
-          createTestSplit("txn_006", "split_006", 1200, new Date("2025-01-01"))
-        ]
-      } as unknown as OutflowPeriod;
-
-      await matchAllTransactionsToOccurrences(mockFirestore as any, "period_test_003", periodData);
-
-      const updateData = mockUpdate.mock.calls[0][0];
-
-      expect(updateData.numberOfOccurrencesPaid).toBe(1);
-      expect(updateData.numberOfOccurrencesUnpaid).toBe(0);
-      expect(updateData.occurrencePaidFlags).toEqual([true]);
-
-      console.log("✓ Single occurrence matched");
-    });
-
     it("should generate \"months\" text in status", () => {
       const enhancedStatus = calculateEnhancedOutflowPeriodStatus(
         true,
@@ -419,46 +265,6 @@ describe("End-to-End Occurrence Tracking", () => {
       expect(occurrenceResult.occurrenceDueDates).toHaveLength(0);
 
       console.log("✓ Zero occurrences handled correctly");
-    });
-
-    it("should handle transaction outside tolerance window", async () => {
-      const outflow = createTestOutflow(
-        PlaidRecurringFrequency.WEEKLY,
-        "Weekly Gym",
-        10,
-        new Date("2025-01-01")
-      );
-
-      const sourcePeriod = createTestSourcePeriod(
-        "2025-M01",
-        new Date("2025-01-01"),
-        new Date("2025-01-31")
-      );
-
-      const occurrenceResult = calculateAllOccurrencesInPeriod(outflow, sourcePeriod);
-
-      const periodData: OutflowPeriod = {
-        id: "period_test_004",
-        outflowId: outflow.id,
-        sourcePeriodId: sourcePeriod.id,
-        occurrenceDueDates: occurrenceResult.occurrenceDueDates,
-        numberOfOccurrencesInPeriod: occurrenceResult.numberOfOccurrences,
-        transactionSplits: [
-          // Transaction far from any occurrence (>3 days)
-          createTestSplit("txn_007", "split_007", 10, new Date("2025-01-12"))
-        ]
-      } as unknown as OutflowPeriod;
-
-      await matchAllTransactionsToOccurrences(mockFirestore as any, "period_test_004", periodData);
-
-      const updateData = mockUpdate.mock.calls[0][0];
-
-      // Transaction should still match to closest occurrence if within tolerance
-      // If outside tolerance, some occurrences may remain unpaid
-      expect(updateData.numberOfOccurrencesPaid).toBeGreaterThanOrEqual(0);
-      expect(updateData.numberOfOccurrencesPaid).toBeLessThanOrEqual(occurrenceResult.numberOfOccurrences);
-
-      console.log("✓ Tolerance window respected");
     });
 
     it("should not track occurrences when count is 0", () => {

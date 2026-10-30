@@ -5,4 +5,3 @@
  */
 
 export * from "./onOutflowCreated";
-export * from "./onOutflowUpdated";

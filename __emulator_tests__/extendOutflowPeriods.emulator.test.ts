@@ -294,5 +294,36 @@ describe("run_outflow_period_extension (emulator)", () => {
     expect((await get(straddle.id))?.isActive).toBe(true); // its Oct 29 occurrence is before the end (D27)
     expect((await get(after.id))?.isActive).toBe(false);
   });
-});
 
+  // Code-Health-Review M4-M1 / M4-M2: extended periods carry the owner fields the 5-layer
+  // creator writes (userId-scoped reads missed them) and the user's expected amount, not Plaid's
+  // average.
+  it("extended periods carry userId / groupIds and the user's expected amount", async () => {
+    const userId = `u_ext_owner_${Date.now()}`;
+    const id = `of_ext_owner_${Date.now()}`;
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection("outflows").doc(id).set({
+      userId, ownerId: userId, createdBy: userId, accountId: "acct_ext", plaidItemId: "item_ext",
+      groupId: "grp_1", groupIds: ["grp_1"], source: "plaid", type: "outflow", tags: [],
+      plaidPrimaryCategory: "GENERAL_SERVICES", plaidDetailedCategory: "GENERAL_SERVICES_OTHER_GENERAL_SERVICES",
+      isActive: true, description: "Owner Bill", merchantName: "Owner",
+      averageAmount: 50, lastAmount: 50, expectedAmountOverride: 80, frequency: "MONTHLY",
+      firstDate: Timestamp.fromDate(utc(2041, 6, 3)), lastDate: Timestamp.fromDate(utc(2041, 7, 3)),
+      predictedNextDate: Timestamp.fromDate(utc(2041, 8, 3)), transactionIds: [],
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    await seedExistingPeriod(id, "2041M07", "monthly", utc(2041, 7, 1), endOfDay(2041, 7, 31));
+
+    const run = await run_outflow_period_extension(db, utc(2041, 7, 10), { owner_id: userId });
+    expect(run.errors).toBe(0);
+
+    const aug = (await db.collection("outflow_periods").doc(`${id}_2041M08`).get()).data();
+    expect(aug).toBeDefined();
+    expect(aug?.userId).toBe(userId);
+    expect(aug?.groupIds).toEqual(["grp_1"]);
+    expect(aug?.averageAmount).toBe(80);
+    expect(aug?.amountPerOccurrence).toBe(80);
+    expect(aug?.totalAmountDue).toBe(80);
+    expect(aug?.occurrences?.[0]?.amountDue).toBe(80);
+  });
+});

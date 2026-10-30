@@ -49,7 +49,8 @@ function map_outflow_to_domain(outflow: Outflow): OutflowForPeriodGeneration {
     group_ids: outflow.group_ids,
     plaid_item_id: outflow.plaid_item_id,
     account_id: outflow.account_id,
-    average_amount: outflow.average_amount,
+    // The user's expected amount wins, as on the period page (Code-Health-Review M4-M2 / M1-M5).
+    average_amount: outflow.expected_amount_override ?? outflow.average_amount,
     last_amount: outflow.last_amount,
     currency: outflow.currency,
     description: outflow.description,
@@ -189,7 +190,9 @@ export async function resolve_outflow_period_dependencies_from_doc(
       (outflow_data.groupId ? [outflow_data.groupId as string] : []),
     plaid_item_id: outflow_data.plaidItemId as string,
     account_id: outflow_data.accountId as string,
-    average_amount: outflow_data.averageAmount as number,
+    average_amount:
+      (outflow_data.expectedAmountOverride as number | null | undefined) ??
+      (outflow_data.averageAmount as number),
     last_amount: (outflow_data.lastAmount as number) ?? (outflow_data.averageAmount as number),
     currency: (outflow_data.currency as string) ?? "USD",
     description: (outflow_data.description as string) ?? null,
