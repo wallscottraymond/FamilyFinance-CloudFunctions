@@ -54,7 +54,3 @@ export * from "./outflow_periods/types";
 // Scheduled (cron) maintenance — keeps a rolling forward window of outflow periods.
 export * from "./outflow_periods/scheduled";
 
-// Dev testing functions (emulator + production)
-export * from "./outflow_main/dev";
-export * from "./outflow_periods/dev";
-export * from "./outflow_summaries/dev";

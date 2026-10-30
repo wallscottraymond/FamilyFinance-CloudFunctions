@@ -191,6 +191,87 @@ describe("apply_rule_intents", () => {
     expect(out.splits.map((s) => s.amount)).toEqual([25, 75]);
   });
 
+  // Code-Health-Review A1-H1: specs are unbounded user input. A split must never exceed what's
+  // left of the transaction, must follow the transaction's sign, and the remainder is never
+  // negative (a "$50 to Groceries" rule on a $30 purchase used to give +$50 and a -$20 remainder).
+  describe("split bounds (A1-H1)", () => {
+    const amounts = (t: TransactionForPersistence) =>
+      apply_rule_intents(t, intents({ split: SPECS, applied_rule_ids: ["r"] })).splits.map((s) => s.amount);
+    let SPECS: Array<{ percent?: number; amount?: number }> = [];
+
+    it("a fixed amount larger than the purchase is capped at the purchase (no negative remainder)", () => {
+      SPECS = [{ amount: 50 }];
+      expect(amounts(txn({ amount: 30, splits: [split({ amount: 30 })] }))).toEqual([30]);
+    });
+
+    it("fixed amounts that add up to more than the purchase: the last one gets what's left", () => {
+      SPECS = [{ amount: 20 }, { amount: 20 }];
+      expect(amounts(txn({ amount: 30, splits: [split({ amount: 30 })] }))).toEqual([20, 10]);
+    });
+
+    it("a spec after the purchase is fully allocated makes no zero split", () => {
+      SPECS = [{ amount: 30 }, { amount: 10 }];
+      expect(amounts(txn({ amount: 30, splits: [split({ amount: 30 })] }))).toEqual([30]);
+    });
+
+    it("percents adding up to more than 100 are capped at the total", () => {
+      SPECS = [{ percent: 70 }, { percent: 70 }];
+      expect(amounts(txn({ amount: 100, splits: [split({ amount: 100 })] }))).toEqual([70, 30]);
+    });
+
+    it("a percent above 100 is capped at the total", () => {
+      SPECS = [{ percent: 150 }];
+      expect(amounts(txn({ amount: 80, splits: [split({ amount: 80 })] }))).toEqual([80]);
+    });
+
+    it("negative or zero specs are ignored (the whole amount stays in the remainder)", () => {
+      SPECS = [{ amount: -10 }, { percent: -20 }, { amount: 0 }, { percent: 0 }];
+      expect(amounts(txn({ amount: 40, splits: [split({ amount: 40 })] }))).toEqual([40]);
+    });
+
+    it("a refund (negative total) with a fixed amount keeps the refund's sign", () => {
+      SPECS = [{ amount: 25 }];
+      expect(amounts(txn({ amount: -40, splits: [split({ amount: -40 })] }))).toEqual([-25, -15]);
+    });
+
+    it("a refund with a percent keeps the refund's sign", () => {
+      SPECS = [{ percent: 50 }];
+      expect(amounts(txn({ amount: -40, splits: [split({ amount: -40 })] }))).toEqual([-20, -20]);
+    });
+
+    it("a refund smaller than a fixed amount is capped at the refund", () => {
+      SPECS = [{ amount: 50 }];
+      expect(amounts(txn({ amount: -30, splits: [split({ amount: -30 })] }))).toEqual([-30]);
+    });
+
+    it("cents: 3 × 33.33% of $10 leaves a 1-cent remainder, never a negative one", () => {
+      SPECS = [{ percent: 33.33 }, { percent: 33.33 }, { percent: 33.33 }];
+      const out = amounts(txn({ amount: 10, splits: [split({ amount: 10 })] }));
+      expect(out).toEqual([3.33, 3.33, 3.33, 0.01]);
+    });
+
+    it("invariant over many random specs: splits sum to the total, none crosses zero, none is zero", () => {
+      let seed = 42;
+      const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+      for (let run = 0; run < 500; run++) {
+        const total = Math.round((rnd() * 400 - 100) * 100) / 100 || 1;
+        SPECS = Array.from({ length: 1 + Math.floor(rnd() * 4) }, () =>
+          rnd() < 0.5
+            ? { percent: Math.round((rnd() * 160 - 30) * 100) / 100 }
+            : { amount: Math.round((rnd() * 300 - 50) * 100) / 100 }
+        );
+        const out = amounts(txn({ amount: total, splits: [split({ amount: total })] }));
+        const sum = Math.round(out.reduce((a, b) => a + b, 0) * 100) / 100;
+        expect({ run, total, sum }).toEqual({ run, total, sum: total });
+        for (const a of out) {
+          expect({ run, total, a, sameSign: Math.sign(a) === Math.sign(total) }).toEqual(
+            { run, total, a, sameSign: true }
+          );
+        }
+      }
+    });
+  });
+
   it("DEFERRED intent make_recurring does not change the txn here (orchestrator handles it)", () => {
     const t = txn();
     const out = apply_rule_intents(t, intents({ make_recurring: "outflow", applied_rule_ids: ["r"] }));

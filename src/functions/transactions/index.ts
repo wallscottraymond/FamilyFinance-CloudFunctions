@@ -103,12 +103,6 @@ export {
 // (entry/triggers/), which enqueues `assign_transaction` and fans out
 // invalidation-based `recompute_budget_spent` jobs.
 
-// ===== Development/Testing Functions =====
-// These functions are for local development only - they seed test data
-
-export { createTestTransactions } from "./dev/createTestTransactions";
-export { createTestTransactionsByCategory } from "./dev/createTestTransactionsByCategory";
-
 // ===== Admin Functions =====
 // (Legacy admin functions can be placed here)
 

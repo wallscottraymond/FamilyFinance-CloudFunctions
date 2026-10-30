@@ -159,20 +159,28 @@ function materialize_splits(
   const total = round2(txn.splits.reduce((sum, s) => sum + s.amount, 0));
   const specs = intents.split ?? [];
 
+  // Specs are user input (A1-H1): each portion is capped at what's left of the transaction,
+  // takes the transaction's sign (a refund splits into negative parts), and a spec that is
+  // non-positive or finds nothing left makes no split. So the parts always add up to the total
+  // and the remainder can't go negative.
+  const sign = total < 0 ? -1 : 1;
+  const magnitude = Math.abs(total);
   const out: TransactionSplitForPersistence[] = [];
   let allocated = 0;
   specs.forEach((spec, i) => {
-    const portion =
-      spec.percent !== undefined ? round2((total * spec.percent) / 100) : spec.amount ?? 0;
+    const asked =
+      spec.percent !== undefined ? round2((magnitude * spec.percent) / 100) : spec.amount ?? 0;
+    const portion = round2(Math.min(Math.max(asked, 0), round2(magnitude - allocated)));
+    if (!(portion >= 0.01)) return;
     allocated = round2(allocated + portion);
     out.push(
       make_split(
-        base, `${base.split_id}_r${i}`, portion, spec, intents, false
+        base, `${base.split_id}_r${i}`, round2(sign * portion), spec, intents, false
       )
     );
   });
 
-  const remainder = round2(total - allocated);
+  const remainder = round2(sign * (magnitude - allocated));
   if (Math.abs(remainder) >= 0.01) {
     out.push(
       make_split(

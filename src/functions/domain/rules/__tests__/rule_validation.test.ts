@@ -47,4 +47,30 @@ describe("rule_validation", () => {
     ]);
     expect(validate_rule(groupWith(0), {}).length).toBe(2);
   });
+
+  // Code-Health-Review A1-H1: reject split specs that can't be a real split when the rule is saved.
+  describe("split specs", () => {
+    const v = (split: RuleActions["split"]) => validate_rule(groupWith(1), { split });
+
+    it("accepts valid percents and amounts", () => {
+      expect(v([{ percent: 50 }, { percent: 50 }])).toEqual([]);
+      expect(v([{ percent: 30 }, { amount: 12.5 }])).toEqual([]);
+      expect(v([{ amount: 40 }])).toEqual([]);
+    });
+
+    it.each([
+      ["a zero percent", [{ percent: 0 }]],
+      ["a negative percent", [{ percent: -10 }]],
+      ["a percent above 100", [{ percent: 101 }]],
+      ["percents adding up to more than 100", [{ percent: 60 }, { percent: 50 }]],
+      ["a zero amount", [{ amount: 0 }]],
+      ["a negative amount", [{ amount: -5 }]],
+      ["a spec with neither percent nor amount", [{ budget_id: "b1" }]],
+      ["a spec with both percent and amount", [{ percent: 10, amount: 5 }]],
+      ["a non-finite amount", [{ amount: Number.POSITIVE_INFINITY }]],
+    ])("rejects %s", (_label, split) => {
+      expect(v(split as RuleActions["split"]).length).toBeGreaterThan(0);
+    });
+  });
 });
+

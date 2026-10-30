@@ -134,13 +134,6 @@ Firestore Triggers → Budget Spending Updates → User Sees Results
 │   ├── categoryMapper.ts                # Category mapping with cache
 │   └── [legacy utils for old structure]
 │
-├── dev/
-│   ├── createTestTransactions.ts        # Development function (full pipeline test)
-│   └── index.ts
-│
-├── admin/
-│   └── createTestTransactions.ts        # Admin test function
-│
 └── index.ts                              # Exports all functions
 ```
 
@@ -1361,8 +1354,7 @@ const count = await batchCreateTransactions(withOutflows, updates);
 2. Follow naming pattern: `match[Entity]To[Target].ts`
 3. Input: Transactions array
 4. Output: Modified transactions array
-5. Update `createTestTransactions` to include new step
-6. Document in pipeline section
+5. Document in pipeline section
 
 **Example:**
 ```typescript

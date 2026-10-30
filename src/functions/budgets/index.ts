@@ -14,8 +14,6 @@ export * from "./orchestration";
 // Admin Functions (migrations and admin-only operations)
 export * from "./admin";
 
-// Dev Functions (development and testing utilities)
-export * from "./dev";
 
 // Utilities (shared business logic)
 export * from "./utils";
