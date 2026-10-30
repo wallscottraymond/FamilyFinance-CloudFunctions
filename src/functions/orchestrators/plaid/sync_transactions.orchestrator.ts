@@ -367,14 +367,22 @@ async function restore_hidden_for_reactivated_accounts(
   const hidden_accounts = [...new Set(txns.map((t) => t.account_id))]
     .filter((id) => !active_account_ids.has(id));
   let restored = 0;
-  for (const account_id of hidden_accounts) {
-    const account = await account_repo.get_by_plaid_account_id_any_status(ctx, account_id, ctx.user_id);
-    if (!account?.is_active) continue;
-    for (;;) {
-      const page = await transaction_repo.restore_for_account(ctx, account_id, ctx.user_id);
-      restored += page.restored;
-      if (!page.has_more || page.restored === 0) break;
+  try {
+    for (const account_id of hidden_accounts) {
+      for (;;) {
+        // Re-checked every page, like the restore job (P1-M8): stop if it's removed again.
+        const account = await account_repo.get_by_plaid_account_id_any_status(
+          ctx, account_id, ctx.user_id
+        );
+        if (!account?.is_active) break;
+        const page = await transaction_repo.restore_for_account(ctx, account_id, ctx.user_id);
+        restored += page.restored;
+        if (!page.has_more || page.restored === 0) break;
+      }
     }
+  } catch (error) {
+    // Best effort: the queued restore job (or the next sync) still catches these rows.
+    console.error(`[${ctx.trace_id}] Mid-sync restore re-check failed:`, error);
   }
   if (restored > 0) {
     console.log(`[${ctx.trace_id}] Restored ${restored} transactions of accounts restored mid-sync`);
