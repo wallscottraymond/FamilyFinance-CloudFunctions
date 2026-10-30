@@ -3,7 +3,7 @@
  *
  * Handles Plaid API client creation and basic operations
  */
-import { PlaidApi } from 'plaid';
+import { PlaidApi } from "plaid";
 /**
  * Creates and configures a Plaid API client
  */

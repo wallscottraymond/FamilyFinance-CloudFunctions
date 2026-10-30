@@ -92,6 +92,11 @@ export interface TransactionSyncDependencies {
     pending_transactions: Map<string, PendingTransactionInfo>;
     /** Set of active (non-hidden) account IDs for filtering transactions */
     active_account_ids: Set<string>;
+    /** Plaid account id → its name / official name / mask (for a rule's Account condition). */
+    account_labels?: Map<string, string[]>;
+    /** Every account of the item we have a doc for (active + hidden). An account id outside this
+     *  set is not saved yet — its transactions must not be dropped. */
+    known_account_ids: Set<string>;
 }
 /**
  * Minimal info needed for pending transaction lookup.
@@ -129,6 +134,21 @@ export interface TransactionSplitForMigration {
     is_ignored?: boolean;
     is_refund?: boolean;
     is_tax_deductible?: boolean;
+    /** The user's manual choices, carried pending → posted so the assignment engine keeps them
+     *  (without the "manual"/"user" markers it re-derives — a manual budget, bill or category set on a
+     *  pending transaction was lost when it posted). */
+    budget_assignment_source?: "category" | "manual";
+    outflow_assignment_source?: "auto" | "manual";
+    outflow_pinned_period_id?: string | null;
+    /** A manual bill pin parked while its bill is removed / paused for that month (X9). */
+    suspended_outflow_pin_id?: string | null;
+    /** A manual income pin (Convert-To-Recurring Phase 2), carried pending → posted. */
+    inflow_assignment_source?: "auto" | "manual";
+    inflow_id?: string | null;
+    category_source?: "plaid" | "user";
+    overall_category_id?: string | null;
+    first_category_id?: string | null;
+    second_category_id?: string | null;
 }
 /**
  * Input for resolving transaction sync dependencies.
@@ -155,6 +175,10 @@ export interface TransactionForPersistence {
     group_ids: string[];
     /** Whether transaction is active (false = soft-deleted) */
     is_active: boolean;
+    /** Stored hidden because its account is removed (kept, not dropped, so restoring the account
+     *  brings it back; Code-Health-Review P1-H2). Hidden = inactive but not deleted. */
+    is_hidden?: boolean;
+    hidden_reason?: "account_removed";
     /** Plaid item document ID */
     plaid_item_id: string;
     /** Plaid account ID */
@@ -213,6 +237,18 @@ export interface TransactionSplitForPersistence {
      * a rule's assign-budget action). Absent = engine default ("category"). */
     budget_assignment_source?: "category" | "manual";
     outflow_id: string | null;
+    /** Manual bill pin (+ pinned period) and user category override — carried pending → posted. */
+    outflow_assignment_source?: "auto" | "manual";
+    outflow_pinned_period_id?: string | null;
+    /** A manual bill pin parked while its bill is removed / paused for that month (X9). */
+    suspended_outflow_pin_id?: string | null;
+    /** A manual income pin (Convert-To-Recurring Phase 2), carried pending → posted. */
+    inflow_assignment_source?: "auto" | "manual";
+    inflow_id?: string | null;
+    category_source?: "plaid" | "user";
+    overall_category_id?: string | null;
+    first_category_id?: string | null;
+    second_category_id?: string | null;
     monthly_period_id: string | null;
     weekly_period_id: string | null;
     bi_weekly_period_id: string | null;

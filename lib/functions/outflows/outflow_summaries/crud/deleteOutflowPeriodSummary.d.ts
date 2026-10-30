@@ -8,7 +8,7 @@
  * The function recalculates the affected period group to reflect the
  * deletion and ensure summary totals remain accurate.
  */
-import { OutflowPeriod } from '../../../../types';
+import { OutflowPeriod } from "../../../../types";
 /**
  * Update outflow summaries for a deleted period
  *

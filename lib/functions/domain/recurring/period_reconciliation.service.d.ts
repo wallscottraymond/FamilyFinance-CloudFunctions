@@ -14,6 +14,8 @@
  *
  * @module domain/recurring/period_reconciliation
  */
+import { ManualSettledOccurrences } from "./manual_settlement.service";
+import { RemovalInterval } from "./recurring_suppression.service";
 /** A period a transaction might be aligned to. */
 export interface PeriodForAlignment {
     period_id: string;
@@ -67,6 +69,42 @@ export declare const MAX_EARLY_WINDOW_MS: number;
  * be mis-filed as an early payment for the next week. = min(5 days, ¼ period).
  */
 export declare function default_early_window_ms(period_start_ms: number, period_end_ms: number): number;
+/** A stored period of ONE type, active or not (D28 carry). */
+export interface CarryPeriod {
+    period_id: string;
+    start_ms: number;
+    end_ms: number;
+    occurrence_due_dates_ms: number[];
+}
+/** Where a payment that carries a removed month's occurrence lands. */
+export interface CarriedPayment {
+    /** Index of the payment in the input list. */
+    index: number;
+    /** The period (of this type, active or not) whose range holds the payment date. */
+    period_id: string;
+    /** The suppressed-month occurrence it paid early — or (`late`) the kept one it paid late. */
+    carried_due_ms: number;
+    /** D31: a payment made in a suppressed month that pays the occurrence before the cut-off LATE
+     *  (due Sep 29, paid Oct 2, removed from Oct 1) — placed in the period holding that occurrence
+     *  (which keeps its due date). Absent = early (D28). */
+    late?: true;
+}
+/**
+ * D28 (stored periods, the derive's rule): a payment made in a month that isn't suppressed, a few
+ * days BEFORE an occurrence due in a removed / paused / ended month (due Oct 1, paid Sep 29,
+ * removed from Oct 1), pays that occurrence — counted as paid where the payment was made: the
+ * period of this type containing its date, which then expects that occurrence AT the payment date.
+ *
+ * Round 5 defects 3 + 4: WHICH payment pays which occurrence is decided by the derive's own
+ * matcher (`reconcile_occurrences`, run over this type's due dates and the payments) — exactly
+ * what it assigns to a suppressed occurrence is carried. Two early payments for one occurrence
+ * carry only the one the matcher gives it (the other stays an ordinary payment, as on the page);
+ * a tie, or an occurrence already paid, breaks the way the derive breaks it. PURE.
+ */
+export declare function carried_payments(periods: CarryPeriod[], payments: Array<{
+    date_ms: number;
+    amount: number;
+}>, intervals: RemovalInterval[]): CarriedPayment[];
 /** The period fields reconciliation reads. */
 export interface PeriodForReconciliation {
     period_id: string;
@@ -104,6 +142,8 @@ export interface OccurrenceStatus {
     amount: number | null;
     /** True when this occurrence is satisfied ONLY by a still-pending payment. */
     pending: boolean;
+    /** Settled by the user's "Mark as paid / received" (no transaction; `amount` = the mark). */
+    manual: boolean;
 }
 export interface ReconciliationResult {
     period_id: string;
@@ -112,6 +152,8 @@ export interface ReconciliationResult {
     matched_amount: number;
     /** Pending-only amount (tracked separately; does NOT flip status). */
     pending_amount: number;
+    /** Amount settled by "Mark as paid / received" marks (occurrences no real payment settled). */
+    manual_amount: number;
     /** Recomputed = occurrences_expected × amount_per_occurrence (self-corrected). */
     expected_amount: number;
     /** Occurrences the period expects (self-corrected to its date range). */
@@ -143,12 +185,13 @@ export interface ReconciliationResult {
  *
  * PURE FUNCTION.
  */
-export declare function compute_period_reconciliation(period: PeriodForReconciliation, linked_splits: LinkedSplit[]): ReconciliationResult;
+export declare function compute_period_reconciliation(period: PeriodForReconciliation, linked_splits: LinkedSplit[], manual_marks?: ManualSettledOccurrences): ReconciliationResult;
 /** A stored transaction split — subset needed for the countable-amount math. */
 export interface CountableSplitInput {
     amount?: number | null;
     isIgnored?: boolean;
     isRefund?: boolean;
+    spendStatus?: string;
     splitId?: string;
 }
 /**

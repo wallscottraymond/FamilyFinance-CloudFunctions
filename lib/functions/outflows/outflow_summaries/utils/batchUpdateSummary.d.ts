@@ -3,16 +3,16 @@ import { PeriodType } from "../../../../types";
  * Operation types supported by batch update
  */
 export type SummaryOperation = {
-    type: 'recalculate';
+    type: "recalculate";
     data: RecalculateOperationData;
 } | {
-    type: 'updateNames';
+    type: "updateNames";
     data: UpdateNamesOperationData;
 };
 interface RecalculateOperationData {
     sourcePeriodId: string;
     ownerId: string;
-    ownerType: 'user' | 'group';
+    ownerType: "user" | "group";
     periodType: PeriodType;
 }
 interface UpdateNamesOperationData {
@@ -46,6 +46,6 @@ export declare function batchUpdateSummary(params: {
 /**
  * Helper function to get or create summary ID
  */
-export declare function getSummaryId(ownerId: string, ownerType: 'user' | 'group', periodType: PeriodType): string;
+export declare function getSummaryId(ownerId: string, ownerType: "user" | "group", periodType: PeriodType): string;
 export {};
 //# sourceMappingURL=batchUpdateSummary.d.ts.map

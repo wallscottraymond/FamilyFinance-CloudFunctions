@@ -9,11 +9,11 @@
  * - leaveGroupV2 (was leaveGroup)
  * - removeGroupMemberV2 (was removeGroupMember)
  */
-export { createGroup as createGroupV2 } from './createGroup';
-export { deleteGroup as deleteGroupV2 } from './deleteGroup';
-export { addGroupMember as addGroupMemberV2 } from './addGroupMember';
-export { removeGroupMember as removeGroupMemberV2 } from './removeGroupMember';
-export { updateGroupMemberRole as updateGroupMemberRoleV2 } from './updateGroupMemberRole';
-export { leaveGroup as leaveGroupV2 } from './leaveGroup';
-export { transferGroupOwnership } from './transferGroupOwnership';
+export { createGroup as createGroupV2 } from "./createGroup";
+export { deleteGroup as deleteGroupV2 } from "./deleteGroup";
+export { addGroupMember as addGroupMemberV2 } from "./addGroupMember";
+export { removeGroupMember as removeGroupMemberV2 } from "./removeGroupMember";
+export { updateGroupMemberRole as updateGroupMemberRoleV2 } from "./updateGroupMemberRole";
+export { leaveGroup as leaveGroupV2 } from "./leaveGroup";
+export { transferGroupOwnership } from "./transferGroupOwnership";
 //# sourceMappingURL=index.d.ts.map

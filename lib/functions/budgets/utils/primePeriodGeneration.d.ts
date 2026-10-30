@@ -5,8 +5,8 @@
  * Prime periods are the authoritative source for budget allocation calculations.
  * Non-prime periods derive their amounts from overlapping prime periods.
  */
-import * as admin from 'firebase-admin';
-import { Budget, BudgetPeriodDocument, PeriodType, BudgetPeriod } from '../../../types';
+import * as admin from "firebase-admin";
+import { Budget, BudgetPeriodDocument, PeriodType, BudgetPeriod } from "../../../types";
 /**
  * Maps a Budget's period field to the corresponding PeriodType
  *

@@ -15,7 +15,7 @@
 interface CategoryInfo {
     id: string;
     name: string;
-    type: 'Income' | 'Outflow';
+    type: "Income" | "Outflow";
     /** first_category slug + label (Simplified-Transaction-Categories) — the user-facing level. */
     firstCategoryId: string | null;
     firstCategory: string | null;

@@ -47,6 +47,11 @@ export declare function hard_delete_by_field(collection: string, field: string, 
  */
 export declare function hard_delete_by_fields_union(collection: string, fields: string[], value: string, writer: BulkWriter, on_batch?: OnBatch): Promise<number>;
 /**
+ * Hard-delete every doc in `collection` whose id starts with `prefix` (the per-user derive caches
+ * key their docs `${user_id}__…`). Paged by document id; returns the count enqueued.
+ */
+export declare function hard_delete_by_id_prefix(collection: string, prefix: string, writer: BulkWriter, on_batch?: OnBatch): Promise<number>;
+/**
  * Hard-delete every doc in `collection` whose `parent_field` is one of
  * `parent_ids` (the "subcollection" pattern — these are top-level collections
  * keyed by a parent id). Iterates parent ids; each is its own batched sweep.
@@ -74,7 +79,7 @@ export declare function find_owned_shared_groups(user_id: string): Promise<Array
     name: string;
 }>>;
 /**
- * Hard-delete the SOLE-member groups/families the user owns (nothing to
+ * Hard-delete the SOLE-member legacy families the user owns (nothing to
  * transfer). Owned groups with other members are handled by the pre-check
  * block, so by purge time only solo groups remain. Best-effort / never throws.
  *

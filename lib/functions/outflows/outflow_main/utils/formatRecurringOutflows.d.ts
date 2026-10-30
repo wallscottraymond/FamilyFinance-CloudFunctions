@@ -10,8 +10,8 @@
  * IMPORTANT: This produces the NEW flat structure. Old outflows with nested
  * structure will remain untouched and continue to work.
  */
-import { TransactionStream } from 'plaid';
-import { Outflow } from '../../../../types';
+import { TransactionStream } from "plaid";
+import { Outflow } from "../../../../types";
 /**
  * Format Plaid outflow streams to flat Outflow documents
  *

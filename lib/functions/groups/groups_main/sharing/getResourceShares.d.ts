@@ -1,6 +1,6 @@
 import { ResourceShare } from "../../../../types";
 interface GetResourceSharesRequest {
-    resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     resourceId: string;
 }
 interface GetResourceSharesResponse {

@@ -23,6 +23,17 @@ export interface RecomputeBudgetSpentInput {
      * (needed because spent must be rebuilt even where no assignment changed).
      */
     transaction_date_ms?: number;
+    /**
+     * Many dates at once (a sync's follow-up pass): budget id → transaction dates. Recomputes each
+     * budget's periods containing ANY of its dates, in one job — instead of one job per day.
+     */
+    dates_ms_by_budget?: Record<string, number[]>;
+    /**
+     * Read the user's transactions across ALL the affected periods ONCE and slice each window from
+     * memory (a convert touches ~100 windows of one year; each was its own read). Opt-in: callers
+     * that don't pass it read exactly as before.
+     */
+    preload_window?: boolean;
 }
 /**
  * Recompute spent for the touched budgets' affected periods.

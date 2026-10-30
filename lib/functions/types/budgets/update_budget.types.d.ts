@@ -70,6 +70,16 @@ export interface UpdateBudgetDependencies {
     everything_else_budget_id: string | null;
     /** Whether the amount changed (drives period re-allocation) */
     amount_changed: boolean;
+    /** The view's budgets (same owner key) when categories change — per-view ownership (A3). */
+    view_budgets: Array<{
+        id: string;
+        name: string;
+        category_ids: string[];
+        is_everything_else: boolean;
+        start_ms: number;
+    }>;
+    /** category id (slug or legacy Plaid code) → the first category it means. */
+    first_by_category: Record<string, string>;
 }
 /**
  * Pure input for the update_budget domain service.
@@ -106,6 +116,10 @@ export interface ProcessBudgetUpdatedPayload {
     /** Categories removed from this budget (release to Everything Else) */
     released_category_ids: string[];
     everything_else_budget_id: string | null;
+    /** Re-assign the view's transactions from here (earliest start of this + source budgets). */
+    rehome_from_ms?: number;
+    /** The budget's end date / ongoing flag changed (its owned date range moved). */
+    range_changed?: boolean;
     /** Regenerate budget periods (amount changed) */
     regenerate_periods: boolean;
     /** The budget name changed — propagate budgetName to current+future periods */

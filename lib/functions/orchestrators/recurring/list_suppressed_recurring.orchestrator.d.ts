@@ -16,6 +16,8 @@ export interface SuppressedRecurringItem {
     status: "removed" | "paused";
     /** For `paused`: when it auto-resumes. */
     resume_ms: number | null;
+    /** An "It ended" whose end starts next month (it still counts this month). */
+    ends_ms?: number;
 }
 export interface ListSuppressedRecurringResult {
     items: SuppressedRecurringItem[];

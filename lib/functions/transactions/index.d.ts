@@ -28,11 +28,9 @@
  * - admin: Admin and testing functions (placeholder)
  */
 export { createTransaction } from "./api/crud/createTransaction";
-export { getTransaction } from "./api/crud/getTransaction";
 export { updateTransaction } from "./api/crud/updateTransaction";
 export { updateTransactionSplits } from "./api/crud/updateTransactionSplits";
 export { deleteTransaction } from "./api/crud/deleteTransaction";
-export { approveTransaction } from "./api/crud/approveTransaction";
 export { format_transactions, formatTransactions } from "./utils/format_transactions";
 export { match_categories_to_transactions, matchCategoriesToTransactions } from "./utils/match_categories_to_transactions";
 export { match_transaction_splits_to_source_periods, matchTransactionSplitsToSourcePeriods } from "./utils/match_transaction_splits_to_source_periods";
@@ -42,8 +40,6 @@ export { validate_and_redistribute_splits, validateAndRedistributeSplits } from 
 export { validate_and_fix_budget_ids, is_valid_budget_id, validateAndFixBudgetIds, isValidBudgetId } from "./utils/validate_budget_ids";
 export { build_transaction_data, buildTransactionData } from "./utils/build_transaction_data";
 export { batch_create_transactions, batchCreateTransactions } from "./utils/batch_create_transactions";
-export { createTestTransactions } from "./dev/createTestTransactions";
-export { createTestTransactionsByCategory } from "./dev/createTestTransactionsByCategory";
 /**
  * Function Overview:
  *

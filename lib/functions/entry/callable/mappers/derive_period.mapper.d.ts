@@ -26,6 +26,7 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         }[];
     }[];
     bills: {
+        ownerUserId?: string | undefined;
         recurringId: string;
         name: string;
         groups: {
@@ -39,6 +40,8 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             isFullyPaid: boolean;
             status: import("../../../domain/recurring/occurrence_placement.service").OccurrenceReconStatus;
             occurrences: {
+                transactionId?: string | undefined;
+                manual?: boolean | undefined;
                 dueMs: number;
                 paid: boolean;
                 amount: number;
@@ -48,6 +51,7 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         }[];
     }[];
     income: {
+        ownerUserId?: string | undefined;
         recurringId: string;
         name: string;
         groups: {
@@ -61,6 +65,8 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             isFullyPaid: boolean;
             status: import("../../../domain/recurring/occurrence_placement.service").OccurrenceReconStatus;
             occurrences: {
+                transactionId?: string | undefined;
+                manual?: boolean | undefined;
                 dueMs: number;
                 paid: boolean;
                 amount: number;

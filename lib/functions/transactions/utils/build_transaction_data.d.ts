@@ -12,7 +12,7 @@
  *
  * @module transactions/utils/build_transaction_data
  */
-import { Transaction as FamilyTransaction, PlaidAccount } from '../../../types';
+import { Transaction as FamilyTransaction, PlaidAccount } from "../../../types";
 /**
  * Build transaction data from Plaid transaction
  *
@@ -26,6 +26,6 @@ import { Transaction as FamilyTransaction, PlaidAccount } from '../../../types';
  * @param item_id - Plaid item ID
  * @returns Formatted transaction ready for Firestore, or null if formatting fails
  */
-export declare function build_transaction_data(plaid_transaction: any, plaid_account: PlaidAccount, user_id: string, group_id: string | undefined, currency: string, item_id: string): Promise<FamilyTransaction | null>;
+export declare function build_transaction_data(plaid_transaction: any, plaid_account: PlaidAccount, user_id: string, group_id: string | undefined, currency: string, item_id: string): Promise<FamilyTransaction>;
 export { build_transaction_data as buildTransactionData };
 //# sourceMappingURL=build_transaction_data.d.ts.map

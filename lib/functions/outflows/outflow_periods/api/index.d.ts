@@ -3,7 +3,7 @@
  *
  * Exports all public-facing API functions for outflow periods
  */
-export * from './assignSplitToAllOutflowPeriods';
-export * from './unassignSplitFromAllOutflowPeriods';
-export * from './getOutflowPeriodTransactions';
+export * from "./assignSplitToAllOutflowPeriods";
+export * from "./unassignSplitFromAllOutflowPeriods";
+export * from "./getOutflowPeriodTransactions";
 //# sourceMappingURL=index.d.ts.map

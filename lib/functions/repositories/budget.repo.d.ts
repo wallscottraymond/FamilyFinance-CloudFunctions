@@ -35,6 +35,11 @@ export declare const budget_repo: {
     /**
      * Counts active budgets for a user (used for the budget limit).
      */
+    /**
+     * Moves a budget to another view (Account-Rooted-Sharing PD6): rewrites the
+     * owner key ("uid" or "group:<id>") and who brought it in. `createdBy` is kept.
+     */
+    set_owner(ctx: TraceContext, budget_id: string, owner_key: string, brought_by: string | null, actor_id: string): Promise<void>;
     count_by_user_id(_ctx: TraceContext, user_id: string): Promise<number>;
     /**
      * Finds the user's system "Everything Else" budget, if any.
@@ -44,12 +49,15 @@ export declare const budget_repo: {
      * Atomically removes category IDs from a budget's categoryIds array.
      * Idempotent: removing an absent category is a no-op.
      */
-    remove_category_ids(ctx: TraceContext, id: string, category_ids: string[], user_id: string): Promise<WriteResult>;
     /**
-     * Atomically adds category IDs to a budget's categoryIds array.
-     * Idempotent: adding an existing category is a no-op.
+     * Replace a budget's categoryIds only if they still equal `expected` (the one-time A2
+     * migration — a budget edited since the reviewed dry run is skipped, never clobbered).
+     * @returns false when the budget changed meanwhile.
      */
-    add_category_ids(ctx: TraceContext, id: string, category_ids: string[], user_id: string): Promise<WriteResult>;
+    replace_category_ids_if_unchanged(_ctx: TraceContext, id: string, expected: string[], next: string[]): Promise<boolean>;
+    /** Every active budget (all users + group views) — the one-time A2 migration's input. */
+    get_all_active(_ctx: TraceContext): Promise<BudgetEntity[]>;
+    remove_category_ids(ctx: TraceContext, id: string, category_ids: string[], user_id: string): Promise<WriteResult>;
     /**
      * Replaces a budget's `tags` with the given (deduped) set. Top-level array so it is directly
      * queryable via array-contains (budget tags, Tag System). Owner check happens in the caller.
@@ -70,6 +78,13 @@ export declare const budget_repo: {
      * Saves a budget (create or update).
      */
     save(ctx: TraceContext, entity: BudgetEntity): Promise<WriteResult>;
+    /**
+     * Save an EDIT: write only the fields that differ between `before` (the copy the edit was
+     * built from) and `after`, as a field-level update. A change another path made in between (a
+     * category moved by a transfer, tags, the Everything Else type) is kept, never overwritten
+     * with the old copy's value (Code-Health-Review M3-M4).
+     */
+    save_changes(ctx: TraceContext, before: BudgetEntity, after: BudgetEntity): Promise<WriteResult>;
     /**
      * Updates only the category ownership for a budget (claim/release).
      * Used by the cascade job to transfer categories without a full rewrite.

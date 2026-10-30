@@ -14,7 +14,7 @@
  *
  * Memory: 256MiB, Timeout: 30s
  */
-import { OutflowPeriod } from '../../../../types';
+import { OutflowPeriod } from "../../../../types";
 /**
  * Request to unassign a split from all outflow periods
  */

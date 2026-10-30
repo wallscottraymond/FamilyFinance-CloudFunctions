@@ -12,9 +12,9 @@
  * 5. Persist non-prime periods to Firestore
  * 6. Return combined result
  */
-import * as admin from 'firebase-admin';
-import { Budget } from '../../../types';
-import { CreateBudgetPeriodsResult } from './budgetPeriods';
+import * as admin from "firebase-admin";
+import { Budget } from "../../../types";
+import { CreateBudgetPeriodsResult } from "./budgetPeriods";
 /**
  * Generate all budget periods using the Prime/Non-Prime system
  *

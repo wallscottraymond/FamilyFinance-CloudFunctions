@@ -9,8 +9,8 @@
  * 2. userCustomName - Updates period descriptions
  * 3. transactionIds - Re-runs transaction alignment
  */
-import * as admin from 'firebase-admin';
-import { Inflow } from '../../../../types';
+import * as admin from "firebase-admin";
+import { Inflow } from "../../../../types";
 export interface InflowUpdateResult {
     success: boolean;
     periodsQueried: number;

@@ -1,11 +1,8 @@
 import * as admin from "firebase-admin";
 export * from "./functions/auth";
 export * from "./functions/users";
-export * from "./functions/sharing";
-export * from "./functions/groups";
 export * from "./functions/transactions";
 export * from "./functions/budgets";
-export * from "./functions/categories";
 export * from "./functions/admin";
 export * from "./functions/outflows";
 export * from "./functions/inflows";

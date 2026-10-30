@@ -25,6 +25,8 @@ export interface GoalViewItem {
     met: boolean;
     targetReached: boolean;
     dataIncomplete: boolean;
+    /** Group views only: whose goal this is (the linked account's owner), for the owner badge. */
+    ownerUserId?: string;
 }
 export interface DeriveGoalsViewResult {
     periodId: string;
@@ -35,5 +37,5 @@ export interface DeriveGoalsViewResult {
 export declare function build_goals_view(period_id: string, views: Array<{
     goal: GoalEntity;
     measurement: GoalMeasurement;
-}>): DeriveGoalsViewResult;
+}>, with_owner?: boolean): DeriveGoalsViewResult;
 //# sourceMappingURL=goals_view.service.d.ts.map

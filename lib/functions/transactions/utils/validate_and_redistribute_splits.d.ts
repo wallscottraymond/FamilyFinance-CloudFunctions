@@ -13,7 +13,7 @@
  *
  * @module transactions/utils/validate_and_redistribute_splits
  */
-import { Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from "@google-cloud/firestore";
 export interface TransactionSplit {
     splitId: string;
     budgetId: string;

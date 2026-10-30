@@ -13,8 +13,8 @@
  * 4. OVERDUE - Expected date passed, not received
  * 5. PENDING - Expecting income, not yet received
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { InflowPeriod } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { InflowPeriod } from "../../../../types";
 /**
  * Inflow period status enum
  */

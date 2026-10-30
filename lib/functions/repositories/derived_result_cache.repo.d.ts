@@ -16,7 +16,14 @@
  * @module repositories/derived_result_cache
  */
 import { Timestamp } from "firebase-admin/firestore";
-/** Serve a version-matched entry only within this TTL backstop (matches `derive_period`). */
+/**
+ * TTL SAFETY BACKSTOP for every derive cache (`derive_period`, `derive_period_range`,
+ * `derive_budget_transactions`, `derive_recurring_view`): serve a version-matched entry only
+ * within this age. Correctness comes from the version match — every derive-input writer bumps
+ * the version (audited 2026-10-08, [[Performance-Review-4]]); this only bounds staleness if a
+ * future writer forgets. Cached results are clock-free (no today/overdue/isCurrent), so age
+ * alone never makes one wrong. Was 10 min, which made most app opens a full ~4.5K-read miss.
+ */
 export declare const DERIVED_CACHE_TTL_MS: number;
 export interface CachedDerivedResult<TResult> {
     data_version: number;

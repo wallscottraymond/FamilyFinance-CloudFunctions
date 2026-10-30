@@ -16,11 +16,17 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { GoalEntity, GoalMeasurement } from "../../types/goals/goal_entity.types";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 export interface GoalMeasurementView {
     goal: GoalEntity;
     measurement: GoalMeasurement;
 }
-export declare function resolve_goal_measurements(ctx: TraceContext, user_id: string, period_id: string, period_start: Timestamp, period_end: Timestamp): Promise<GoalMeasurementView[]>;
+export declare function resolve_goal_measurements(ctx: TraceContext, user_id: string, period_id: string, period_start: Timestamp, period_end: Timestamp, scope_request?: DeriveScopeRequest): Promise<GoalMeasurementView[]>;
+/**
+ * Every goal the user owns, wherever its account is shared (the Goals tab + goal detail).
+ * Measurement is per goal + its account, so it matches the goal's numbers in any view.
+ */
+export declare function resolve_own_goal_measurements(ctx: TraceContext, user_id: string, period_id: string, period_start: Timestamp, period_end: Timestamp): Promise<GoalMeasurementView[]>;
 export interface GoalMeasurementPeriod {
     period_id: string;
     start: Timestamp;
@@ -29,6 +35,8 @@ export interface GoalMeasurementPeriod {
 /**
  * Multi-period variant: reads the user's goals ONCE, then measures each period (each period still
  * needs its own start/end balance snapshots). Per period, identical to `resolve_goal_measurements`.
+ * `preloaded_goals`: the view's goals when the caller already loaded them with the SAME filter
+ * (`load_period_derivation_raw().all_goals`) — skips resolving the scope + goals a second time.
  */
-export declare function resolve_goal_measurements_for_periods(ctx: TraceContext, user_id: string, periods: GoalMeasurementPeriod[]): Promise<Map<string, GoalMeasurementView[]>>;
+export declare function resolve_goal_measurements_for_periods(ctx: TraceContext, user_id: string, periods: GoalMeasurementPeriod[], scope_request?: DeriveScopeRequest, preloaded_goals?: GoalEntity[]): Promise<Map<string, GoalMeasurementView[]>>;
 //# sourceMappingURL=goal_measurement.resolver.d.ts.map

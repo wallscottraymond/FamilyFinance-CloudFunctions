@@ -20,6 +20,17 @@
  * @module domain/widgets/widget_snapshot
  */
 export declare const WIDGET_DATA_VERSION = 2;
+/**
+ * Per-kind LOGIC revision, folded into the version a widget compares ("have"). A widget skips
+ * re-downloading while the version is unchanged, and the view version only moves when the user's
+ * data does, so a server-side logic fix would otherwise not reach a widget that already cached an
+ * answer. Raise a kind's number whenever its output changes for the same data; the next deploy
+ * then refreshes those widgets. Kinds not listed are 0 (their versions are unchanged).
+ * recent: 2 = Me shows every transaction on your own accounts (was the period page's Me scope).
+ */
+export declare const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>>;
+/** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
+export declare function versioned_for_kind(version: number, kind: string): number;
 export interface WidgetBudgetInput {
     budget_id?: string;
     name?: string;
@@ -105,6 +116,29 @@ export interface WidgetBudgetTxn {
     pending: boolean;
     refund: boolean;
 }
+/** A raw transaction doc, as read for the Recent transactions widget. */
+export interface WidgetRawTxn {
+    id: string;
+    data: Record<string, unknown>;
+}
+/** One row of the Recent transactions widget (camelCase wire format, like the other kinds). */
+export interface WidgetRecentTxn {
+    id: string;
+    /** With `id` → the app's transaction detail link. */
+    accountId: string;
+    name: string;
+    dateMs: number;
+    /** Magnitude; `income` says which way it went (the app shows "+" for money in). */
+    amount: number;
+    income: boolean;
+    pending: boolean;
+    /** Set when a split pays a recurring bill: that bill's name. */
+    bill: string | null;
+    /** The primary split's budget ("Everything else", or "Income" for money in with no budget). */
+    budget: string | null;
+    /** How many OTHER budgets the splits go to ("Groceries +1"). */
+    moreBudgets: number;
+}
 export interface WidgetBillItem {
     id: string;
     /** Source period the occurrence was placed in (→ the app's `{id}_{periodId}` bill detail). */
@@ -114,7 +148,11 @@ export interface WidgetBillItem {
     amount: number;
     overdue: boolean;
 }
-export type WidgetData = {
+/** Every payload; `groupName` is set only for a widget showing a group view (its small label). */
+export type WidgetData = WidgetPayload & {
+    groupName?: string;
+};
+type WidgetPayload = {
     v: number;
     kind: "left";
     asOfMs: number;
@@ -146,6 +184,11 @@ export type WidgetData = {
     lookaheadDays: number;
     items: WidgetBillItem[];
     moreCount: number;
+} | {
+    v: number;
+    kind: "recent";
+    asOfMs: number;
+    recent: WidgetRecentTxn[];
 };
 /** "Oct", "Week of Sep 28", "Oct 1–15" (UTC) — mobile `shortPeriodLabel`. */
 export declare function short_period_label(cadence: string, start_ms: number, end_ms: number): string;
@@ -160,6 +203,20 @@ export declare function compute_left_to_spend(budgets: WidgetBudgetInput[], peri
 /** One row per budget (period page order, Everything-Else last). PURE. */
 export declare function compute_budget_lines(budgets: WidgetBudgetInput[], period_id: string): WidgetBudgetLine[];
 /** Most recent transactions that count toward a budget (newest first). PURE. */
+/** Most rows any size shows (large). */
+export declare const MAX_RECENT_TXNS = 9;
+/** The app's `isTransferTransaction`: the stored matched-pair role decides ("internal" between your
+ *  own accounts, "external" unpaired); without one, every split must be a transfer category. */
+export declare function is_recent_transfer(data: Record<string, unknown>): boolean;
+/**
+ * The rows the widget shows, newest first: what the app's Home card lists (not soft-deleted, has an
+ * owner and at least one split) minus transfers, de-duplicated by id. PURE.
+ */
+export declare function select_recent_transactions(rows: WidgetRawTxn[], limit?: number): WidgetRawTxn[];
+/** The bill ids the selected rows paid (a split not ignored, linked to an outflow). PURE. */
+export declare function recent_bill_ids(rows: WidgetRawTxn[]): string[];
+/** The selected rows as the widget wire format. `bills` = outflow docs by id. PURE. */
+export declare function compute_recent_transactions(rows: WidgetRawTxn[], bills: Map<string, Record<string, unknown>>): WidgetRecentTxn[];
 export declare function compute_recent_budget_transactions(rows: WidgetBudgetTxnInput[], limit?: number): WidgetBudgetTxn[];
 /** Home Summary card (`mapResult` → `computePeriodSummary`; four planned/actual pairs). PURE. */
 export declare function compute_period_summary(derived: WidgetDeriveInput, period_id: string, goals: WidgetGoalInput[]): WidgetSummary;
@@ -174,4 +231,5 @@ export declare function compute_bills_due_soon(periods: Array<{
     items: WidgetBillItem[];
     moreCount: number;
 };
+export {};
 //# sourceMappingURL=widget_snapshot.service.d.ts.map

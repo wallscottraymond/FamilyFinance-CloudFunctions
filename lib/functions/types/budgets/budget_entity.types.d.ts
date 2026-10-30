@@ -9,6 +9,20 @@
  */
 import { Timestamp } from "firebase-admin/firestore";
 /**
+ * One "This Period Only" adjustment on a monthly budget period (Firestore `periodAdjustments[]`
+ * as `{ periodId, startMs, endMs, amount }`): extra dollars for one edited view period, clipped to
+ * that month. See domain/budgets/period_allocation_view.
+ */
+export interface PeriodAdjustment {
+    /** The edited view period, e.g. "2031W28", "2031BM10A", "2031M10". */
+    period_id: string;
+    /** Inclusive bounds of the edited period's part inside this month, epoch ms. */
+    start_ms: number;
+    end_ms: number;
+    /** Extra dollars (may be negative) for that part. */
+    amount: number;
+}
+/**
  * Budget period cadence. Mirrors the `BudgetPeriod` enum string values from the
  * legacy types so wire payloads and stored documents stay compatible.
  */
@@ -77,6 +91,12 @@ export interface BudgetEntity {
     rollover_enabled?: boolean;
     rollover_strategy?: RolloverStrategy;
     rollover_spread_periods?: number;
+    /**
+     * Account-Rooted-Sharing (PD6): the uid that moved this budget into a group
+     * (it returns to them if they leave, D13). Null/absent for budgets made or
+     * copied in the group and for every Me budget.
+     */
+    brought_by?: string | null;
     created_at: Timestamp;
     updated_at: Timestamp;
 }
@@ -113,6 +133,17 @@ export interface BudgetPeriodEntity {
     period_id: string;
     period_type: PeriodInstanceCadence;
     allocated_amount: number;
+    /**
+     * "This Period Only" amount (`modifiedAmount` while `isModified`), else null. READ-ONLY: the
+     * period page shows it in place of `allocated_amount`; writers never copy it back.
+     */
+    modified_amount?: number | null;
+    /**
+     * "This Period Only" adjustments (`periodAdjustments`) on a MONTHLY doc — extra dollars for one
+     * edited view period each (domain/budgets/period_allocation_view). READ-ONLY: written only by
+     * `updateBudgetPeriodAmount`; never written back by save_batch / update_allocations.
+     */
+    period_adjustments?: PeriodAdjustment[];
     rolled_over_amount: number;
     effective_amount: number;
     spent: number;

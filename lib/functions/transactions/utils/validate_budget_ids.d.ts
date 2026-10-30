@@ -6,7 +6,7 @@
  *
  * @module transactions/utils/validate_budget_ids
  */
-import { TransactionSplit } from '../../../types';
+import { TransactionSplit } from "../../../types";
 /**
  * Validate and auto-fix budgetIds in transaction splits
  *

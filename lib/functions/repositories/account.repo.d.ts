@@ -56,6 +56,20 @@ export interface Account extends BaseEntity {
     liability?: LiabilityDetail;
     /** Access control metadata */
     access: AccessMetadata;
+    /**
+     * Where the account lives (Account-Rooted-Sharing P1): null/absent = private
+     * (the owner's Me view); otherwise shared with exactly one group (D7) from
+     * `shared_from_ms` (N9). Written only by the sharing orchestrators.
+     */
+    placement?: AccountPlacement | null;
+}
+/** An account's sharing placement. */
+export interface AccountPlacement {
+    group_id: string;
+    /** Transactions on/after this instant count in the group; null = all history. */
+    shared_from_ms: number | null;
+    shared_by: string;
+    shared_at_ms: number;
 }
 /**
  * Account Repository
@@ -147,6 +161,15 @@ export declare const account_repo: {
      * @param include_deleted - Include soft-deleted accounts
      * @returns Count of accounts
      */
+    /**
+     * Sets or clears an account's sharing placement (Account-Rooted-Sharing).
+     * Only the sharing orchestrators call this.
+     */
+    set_placement(ctx: TraceContext, account_id: string, placement: AccountPlacement | null, user_id: string): Promise<void>;
+    /** Makes several accounts private in one batch (leaving / deleting a group). */
+    clear_placements(ctx: TraceContext, account_ids: string[], user_id: string): Promise<void>;
+    /** Active accounts shared with a group (any owner). */
+    get_shared_with_group(_ctx: TraceContext, group_id: string): Promise<Account[]>;
     count_by_user_id(_ctx: TraceContext, user_id: string, include_deleted?: boolean): Promise<number>;
     /**
      * Checks if an account exists.
@@ -157,14 +180,10 @@ export declare const account_repo: {
      */
     exists(_ctx: TraceContext, id: string): Promise<boolean>;
     /**
-     * Gets an account by Plaid account ID.
-     *
-     * @param _ctx - Trace context
-     * @param plaid_account_id - Plaid account ID
-     * @param user_id - User ID for scoping query
-     * @returns Account entity or null if not found
+     * Gets an account by Plaid account ID whatever its status (active or removed). When both
+     * exist (an active copy created before P2-H1 was fixed), the active one wins.
      */
-    get_by_plaid_account_id(_ctx: TraceContext, plaid_account_id: string, user_id: string): Promise<Account | null>;
+    get_by_plaid_account_id_any_status(_ctx: TraceContext, plaid_account_id: string, user_id: string): Promise<Account | null>;
     /**
      * Upserts accounts from Plaid data.
      *

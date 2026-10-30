@@ -27,6 +27,8 @@ import { TraceContext } from "../../types";
 /** Input: backfill one user, or (no user_id) fan out to all users. */
 export interface BackfillAssignmentsInput {
     user_id?: string;
+    /** Report what would change (a `_reassign_runs` doc) without writing any transaction. */
+    dry_run?: boolean;
 }
 /** Result summary (handy for logs/tests). */
 export interface BackfillAssignmentsResult {

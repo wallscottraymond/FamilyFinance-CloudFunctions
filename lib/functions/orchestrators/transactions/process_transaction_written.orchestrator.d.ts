@@ -26,5 +26,7 @@ export interface ProcessTransactionWrittenInput {
     /** Firestore event id — seeds the per-event job deduplication keys. */
     event_id: string;
 }
+/** True when THIS write set a new run id (a later user edit leaves the stored id unchanged). */
+export declare function written_by_run(before: Record<string, unknown> | null, after: Record<string, unknown> | null, field: "syncRunId" | "assignRunId"): boolean;
 export declare function process_transaction_written_orchestrator(ctx: TraceContext, input: ProcessTransactionWrittenInput): Promise<void>;
 //# sourceMappingURL=process_transaction_written.orchestrator.d.ts.map

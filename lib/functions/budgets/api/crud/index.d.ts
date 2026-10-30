@@ -7,5 +7,5 @@
  * (2026-06-01) — they wrote budgets WITHOUT the v2 cascade and were a footgun.
  * Only the read (getBudget) remains here.
  */
-export { getBudget } from './getBudget';
+export {};
 //# sourceMappingURL=index.d.ts.map

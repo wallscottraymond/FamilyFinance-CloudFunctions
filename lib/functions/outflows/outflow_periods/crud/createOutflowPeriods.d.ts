@@ -6,7 +6,7 @@
  *
  * ARCHITECTURE: This is a pure orchestration function that delegates to utilities.
  */
-import * as admin from 'firebase-admin';
+import * as admin from "firebase-admin";
 /**
  * Result of creating outflow periods
  */
@@ -14,7 +14,7 @@ export interface CreateOutflowPeriodsResult {
     periodsCreated: number;
     periodIds: string[];
 }
-export { calculatePeriodGenerationRange } from '../utils';
+export { calculatePeriodGenerationRange } from "../utils";
 /**
  * Create outflow periods from source periods for a given outflow - FLAT STRUCTURE
  *
@@ -32,5 +32,7 @@ export { calculatePeriodGenerationRange } from '../utils';
  * @returns Result with count and IDs of created periods
  */
 export declare function createOutflowPeriodsFromSource(db: admin.firestore.Firestore, outflowId: string, outflow: any, // Accept flat outflow structure
-startDate: Date, endDate: Date): Promise<CreateOutflowPeriodsResult>;
+startDate: Date, endDate: Date, options?: {
+    skip_existing?: boolean;
+}): Promise<CreateOutflowPeriodsResult>;
 //# sourceMappingURL=createOutflowPeriods.d.ts.map

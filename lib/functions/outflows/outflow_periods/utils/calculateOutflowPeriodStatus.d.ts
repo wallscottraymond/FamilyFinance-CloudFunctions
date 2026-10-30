@@ -10,8 +10,8 @@
  * This replaces the placeholder updateBillStatus function with intelligent
  * status calculation based on real payment data.
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { TransactionSplitReference } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { TransactionSplitReference } from "../../../../types";
 /**
  * Enhanced Status Result with Occurrence Information
  *

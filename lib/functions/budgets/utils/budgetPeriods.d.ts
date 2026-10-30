@@ -4,9 +4,9 @@
  * Centralized logic for creating and managing budget periods.
  * Handles the creation of budget_periods from source_periods with proper amount allocation.
  */
-import * as admin from 'firebase-admin';
-import { Budget, BudgetPeriodDocument } from '../../../types';
-export { generateBudgetPeriodsWithPrimeSystem } from './periodGenerationOrchestrator';
+import * as admin from "firebase-admin";
+import { Budget, BudgetPeriodDocument } from "../../../types";
+export { generateBudgetPeriodsWithPrimeSystem } from "./periodGenerationOrchestrator";
 /**
  * Result of budget period creation
  */

@@ -71,6 +71,26 @@ export interface InflowForPersistence {
     transaction_ids: string[];
     tags: string[];
     rules: unknown[];
+    /** Stamp for a NEW record created under the v2 rules (ignored for an existing doc). */
+    capture_rules_version?: number;
+    /** Plaid's own `is_active` for a v2 record (whose `is_active` is ours). */
+    plaid_is_active?: boolean;
+    /** A schedule the user picked when tracking a suggestion (D8). */
+    user_frequency?: AppFrequency;
+    /** The stored vendor key payments are matched by (D1) — with the account, the D1 key. */
+    vendor_key?: string;
+    /** The transaction the user converted this record from. */
+    converted_from_txn_id?: string;
+    /** UTC day the record was created by the new path (D1 links payments from this day on). */
+    converted_at_ms?: number;
+    /** Plaid ids of the past payments a convert linked (D2 / D46): D1 keeps them linked. */
+    retro_txn_ids?: string[];
+    converted_from_split_ids?: string[];
+    /** The expected amount, written at creation (a Plaid average never drifts it). */
+    expected_amount_override?: number | null;
+    /** Add Income (D43): the settings the form collected (hourly / commission / bonus / variable
+     *  config, variability, isPrivate …) — written on a NEW doc only, never by a Plaid sync. */
+    income_extras?: Record<string, unknown>;
 }
 /**
  * Outflow (recurring expense) prepared for persistence.
@@ -113,6 +133,23 @@ export interface OutflowForPersistence {
     transaction_ids: string[];
     tags: string[];
     rules: unknown[];
+    /** Stamp for a NEW record created under the v2 rules (ignored for an existing doc). */
+    capture_rules_version?: number;
+    /** Plaid's own `is_active` for a v2 record (whose `is_active` is ours). */
+    plaid_is_active?: boolean;
+    /** A schedule the user picked when tracking a suggestion (D8). */
+    user_frequency?: AppFrequency;
+    /** The stored vendor key payments are matched by (D1) — with the account, the D1 key. */
+    vendor_key?: string;
+    /** The transaction the user converted this record from. */
+    converted_from_txn_id?: string;
+    /** UTC day the record was created by the new path (D1 links payments from this day on). */
+    converted_at_ms?: number;
+    /** Plaid ids of the past payments a convert linked (D2 / D46): D1 keeps them linked. */
+    retro_txn_ids?: string[];
+    converted_from_split_ids?: string[];
+    /** The expected amount, written at creation (a Plaid average never drifts it). */
+    expected_amount_override?: number | null;
 }
 /**
  * Maps Plaid recurring frequency to app frequency.

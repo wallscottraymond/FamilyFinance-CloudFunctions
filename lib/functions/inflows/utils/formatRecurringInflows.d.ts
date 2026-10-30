@@ -9,8 +9,8 @@
  *
  * UPDATED: Now produces FLAT structure with all fields at root level.
  */
-import { TransactionStream } from 'plaid';
-import { Inflow } from '../../../types';
+import { TransactionStream } from "plaid";
+import { Inflow } from "../../../types";
 /**
  * Format Plaid inflow streams to internal Inflow documents (FLAT STRUCTURE)
  *

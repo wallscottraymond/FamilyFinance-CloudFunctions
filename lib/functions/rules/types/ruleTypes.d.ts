@@ -12,8 +12,8 @@
  *
  * See: src/functions/rules/CLAUDE.md for comprehensive documentation
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { BaseDocument } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { BaseDocument } from "../../../types";
 /**
  * CategoryRule - User-defined rule for transaction categorization
  *
@@ -80,7 +80,7 @@ export interface CategoryRule extends BaseDocument {
  * }
  */
 export interface RuleConditions {
-    operator: 'AND' | 'OR';
+    operator: "AND" | "OR";
     conditionGroups: ConditionGroup[];
 }
 /**
@@ -89,7 +89,7 @@ export interface RuleConditions {
  * Allows nesting for complex logic like: (A AND B) OR (C AND D)
  */
 export interface ConditionGroup {
-    operator: 'AND' | 'OR';
+    operator: "AND" | "OR";
     conditions: RuleCondition[];
     nested?: ConditionGroup[];
 }
@@ -107,7 +107,7 @@ export interface RuleCondition {
  *
  * These correspond to transaction fields that rules can evaluate.
  */
-export type RuleConditionField = 'merchantName' | 'description' | 'amount' | 'date' | 'plaidCategory' | 'plaidDetailedCategory' | 'plaidPrimaryCategory' | 'dayOfWeek' | 'tags';
+export type RuleConditionField = "merchantName" | "description" | "amount" | "date" | "plaidCategory" | "plaidDetailedCategory" | "plaidPrimaryCategory" | "dayOfWeek" | "tags";
 /**
  * StringCondition - String matching conditions
  *
@@ -120,7 +120,7 @@ export type RuleConditionField = 'merchantName' | 'description' | 'amount' | 'da
  * { regex: "^(Smiths|Smith's) Gas$", caseSensitive: false }
  */
 export interface StringCondition {
-    type: 'string';
+    type: "string";
     equals?: string;
     contains?: string;
     startsWith?: string;
@@ -140,7 +140,7 @@ export interface StringCondition {
  * { equals: 45.99 }            // Exact amount
  */
 export interface NumberRange {
-    type: 'number';
+    type: "number";
     equals?: number;
     min?: number;
     max?: number;
@@ -158,7 +158,7 @@ export interface NumberRange {
  * { relative: { unit: 'days', value: 30, direction: 'past' } } // Last 30 days
  */
 export interface DateRange {
-    type: 'date';
+    type: "date";
     before?: Timestamp;
     after?: Timestamp;
     between?: {
@@ -176,9 +176,9 @@ export interface DateRange {
  * { unit: 'weeks', value: 2, direction: 'future' }   // Next 2 weeks
  */
 export interface RelativeDateCondition {
-    unit: 'days' | 'weeks' | 'months' | 'years';
+    unit: "days" | "weeks" | "months" | "years";
     value: number;
-    direction: 'past' | 'future';
+    direction: "past" | "future";
 }
 /**
  * CategoryCondition - Category matching conditions
@@ -192,7 +192,7 @@ export interface RelativeDateCondition {
  * { excludes: ["FAST_FOOD"] }
  */
 export interface CategoryCondition {
-    type: 'category';
+    type: "category";
     exactMatch?: string;
     primaryMatch?: string;
     includes?: string[];
@@ -209,7 +209,7 @@ export interface CategoryCondition {
  * { excludes: ["tag3"] }              // Must not include
  */
 export interface ArrayCondition {
-    type: 'array';
+    type: "array";
     includes?: string[];
     excludes?: string[];
     includesAny?: string[];
@@ -353,8 +353,8 @@ export interface DeleteRuleRequest {
  */
 export interface ListRulesRequest {
     isActive?: boolean;
-    sortBy?: 'priority' | 'createdAt' | 'matchCount' | 'name';
-    sortDirection?: 'asc' | 'desc';
+    sortBy?: "priority" | "createdAt" | "matchCount" | "name";
+    sortDirection?: "asc" | "desc";
     limit?: number;
 }
 /**
@@ -449,7 +449,7 @@ export interface RuleValidationResult {
 export interface RuleConflict {
     ruleId1: string;
     ruleId2: string;
-    conflictType: 'category' | 'tag' | 'budget' | 'priority';
+    conflictType: "category" | "tag" | "budget" | "priority";
     description: string;
     resolution?: string;
 }

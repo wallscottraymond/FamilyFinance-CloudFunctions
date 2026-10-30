@@ -3,7 +3,7 @@
  *
  * Gathers dependencies for the initial sync orchestrator.
  * - Fetches plaid_item and decrypts access token
- * - Gets user's group_ids for RBAC
+ * - Accounts start private (no group ids)
  * - Builds institution info for account creation
  *
  * @module resolvers/plaid/initial_sync
@@ -16,7 +16,7 @@ import { InitialSyncInput, InitialSyncDependencies } from "../../types/plaid";
  * This resolver:
  * 1. Fetches the plaid_item document
  * 2. Decrypts the access token
- * 3. Fetches user profile for group_ids
+ * 3. Leaves group_ids empty (accounts start private)
  * 4. Builds institution info
  *
  * @param ctx - Trace context

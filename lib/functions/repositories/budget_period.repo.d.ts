@@ -10,8 +10,30 @@
  *
  * @module repositories/budget_period
  */
+import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext, WriteResult } from "../types";
-import { BudgetPeriodEntity, PendingRolloverByType } from "../types/budgets/budget_entity.types";
+import { BudgetPeriodEntity, PendingRolloverByType, PeriodAdjustment } from "../types/budgets/budget_entity.types";
+/** One re-allocated period's allocation update (input of `allocation_update_fields`). */
+export interface AllocationUpdate {
+    id: string;
+    allocated_amount: number;
+    daily_rate: number;
+    remaining: number;
+    is_prime?: boolean;
+    prime_period_ids?: string[];
+    prime_period_breakdown?: BudgetPeriodEntity["prime_period_breakdown"];
+    /**
+     * Rebased "This Period Only" adjustments (domain rebase_reallocated_periods), written in the
+     * SAME write as the allocation so a custom period stays what the user typed. Omitted → the
+     * stored adjustments are left untouched.
+     */
+    period_adjustments?: PeriodAdjustment[];
+}
+/**
+ * The Firestore fields of one allocation update — shared by `update_allocations` (batch) and
+ * "All Periods Forward" (its transaction), so both write the identical shape.
+ */
+export declare function allocation_update_fields(u: AllocationUpdate, now: Timestamp): Record<string, unknown>;
 /**
  * Budget Period Repository.
  */
@@ -24,6 +46,11 @@ export declare const budget_period_repo: {
     /**
      * Returns all periods for a budget as entities.
      */
+    /**
+     * Re-keys every period of a budget to a new owner key (Account-Rooted-Sharing
+     * PD6: "uid" or "group:<id>"). Used when a budget moves between Me and a group.
+     */
+    set_owner_for_budget(ctx: TraceContext, budget_id: string, owner_key: string): Promise<number>;
     get_by_budget_id(_ctx: TraceContext, budget_id: string): Promise<BudgetPeriodEntity[]>;
     /**
      * Returns only the periods that could CONTAIN a given date — those whose `periodStart` is
@@ -94,15 +121,7 @@ export declare const budget_period_repo: {
      * originalAmount / remaining / dailyRate while preserving everything else on
      * the period (userNotes, checklistItems, modifiedAmount, spent, etc.).
      */
-    update_allocations(_ctx: TraceContext, updates: Array<{
-        id: string;
-        allocated_amount: number;
-        daily_rate: number;
-        remaining: number;
-        is_prime?: boolean;
-        prime_period_ids?: string[];
-        prime_period_breakdown?: BudgetPeriodEntity["prime_period_breakdown"];
-    }>): Promise<WriteResult[]>;
+    update_allocations(_ctx: TraceContext, updates: AllocationUpdate[]): Promise<WriteResult[]>;
     /**
      * Updates the denormalized budgetName on the given periods (max 500 per
      * batch). Used when a budget is renamed. Preserves all other period fields.

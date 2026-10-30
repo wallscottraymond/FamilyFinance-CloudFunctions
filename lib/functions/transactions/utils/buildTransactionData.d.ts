@@ -10,7 +10,7 @@
  * - Transaction split creation with flat structure
  * - Transaction structure building with all fields at root level
  */
-import { Transaction as FamilyTransaction, PlaidAccount } from '../../../types';
+import { Transaction as FamilyTransaction, PlaidAccount } from "../../../types";
 /**
  * Build transaction data from Plaid transaction
  *

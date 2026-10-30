@@ -27,5 +27,20 @@ export interface ClassifyInternalTransfersResult {
     /** True when the inputs were unchanged and the transaction scan was skipped. */
     skipped: boolean;
 }
-export declare function classify_internal_transfers_orchestrator(ctx: TraceContext, user_id: string, now_ms: number): Promise<ClassifyInternalTransfersResult>;
+export declare function classify_internal_transfers_orchestrator(ctx: TraceContext, user_id: string, now_ms: number, 
+/** `force`: transfer transactions were just written — a new matched pair can exist even though
+ *  the recurring records (all the fingerprint covers) are unchanged. */
+opts?: {
+    force?: boolean;
+}): Promise<ClassifyInternalTransfersResult>;
+/**
+ * Re-decide transfer roles only AROUND one transaction (a user moved it into / out of a transfer
+ * category). A role depends only on legs within the pairing slack, so the transactions within
+ * [date − slack, date + slack] are re-decided with the SAME pairing as the full run (which reads
+ * ~6 months); stream hiding is left to the daily full pass. Changed roles are written, re-assigned
+ * in one batch with one follow-up, and partners refreshed — exactly as the full run does.
+ */
+export declare function classify_transfers_around(ctx: TraceContext, user_id: string, txn_date_ms: number): Promise<void>;
+/** Job type: re-classify one user's transfers (forced) — a partner's pair changed. */
+export declare const CLASSIFY_TRANSFERS_JOB = "classify_transfers";
 //# sourceMappingURL=classify_internal_transfers.orchestrator.d.ts.map

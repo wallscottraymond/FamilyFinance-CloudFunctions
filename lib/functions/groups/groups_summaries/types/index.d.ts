@@ -12,7 +12,7 @@
 export interface GroupOutflowSummary {
     groupId: string;
     summaryId: string;
-    periodType: 'weekly' | 'bi_monthly' | 'monthly' | 'annual';
+    periodType: "weekly" | "bi_monthly" | "monthly" | "annual";
     periodStartDate: FirebaseFirestore.Timestamp;
     periodEndDate: FirebaseFirestore.Timestamp;
     totalOutflows: number;
@@ -58,7 +58,7 @@ export interface GroupOutflowEntry {
 export interface GroupInflowSummary {
     groupId: string;
     summaryId: string;
-    periodType: 'weekly' | 'bi_monthly' | 'monthly' | 'annual';
+    periodType: "weekly" | "bi_monthly" | "monthly" | "annual";
     periodStartDate: FirebaseFirestore.Timestamp;
     periodEndDate: FirebaseFirestore.Timestamp;
     totalInflows: number;

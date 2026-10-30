@@ -39,6 +39,8 @@ export interface PlaidItemForRecurringSync {
     institution_name: string;
     /** Last recurring sync timestamp */
     last_recurring_sync?: Date | null;
+    /** The user has a "Not a bill" / delete memory the planner must honour (C). */
+    review_memory?: boolean;
 }
 /**
  * User context for recurring sync.
@@ -75,7 +77,83 @@ export interface RecurringSyncDependencies {
      * the account removal soft-deleted (same rule as the transaction sync).
      */
     active_account_ids: Set<string>;
+    /** Plaid account id → account type (`depository` / `credit` / `loan` …) for this item's active
+     *  accounts — the capture rules' income gate (X17). Same read as `active_account_ids`. */
+    account_types: Map<string, string>;
+    /**
+     * The user's ACTIVE bills / income (already loaded above), as the capture planner needs them:
+     * v2 stamp, Plaid's flag, answers, vendor, dates. Nothing extra is read for this.
+     */
+    active_records: CaptureRecordInfo[];
 }
+/** A stored bill / income as the capture planner sees it (a lookup shape, no logic). */
+export interface CaptureRecordInfo {
+    id: string;
+    direction: "outflow" | "inflow";
+    is_active: boolean;
+    is_hidden: boolean;
+    v2: boolean;
+    plaid_is_active: boolean | null;
+    plaid_inactive_ack_ms: number | null;
+    merged_into_id: string | null;
+    account_id: string;
+    plaid_item_id: string;
+    source: string;
+    name: string;
+    merchant_name: string | null;
+    description: string | null;
+    average_amount: number;
+    frequency: string;
+    plaid_status: string;
+    plaid_detailed_category: string;
+    first_date_ms: number;
+    last_date_ms: number;
+    removal_intervals: Array<{
+        from_ms: number;
+        to_ms: number | null;
+        mode: string;
+    }>;
+    transaction_ids: string[];
+    /** The user's own name for it (wins over Plaid's merchant / description in `name`). */
+    custom_name?: string | null;
+    vendor_key?: string | null;
+    expected_amount_override?: number | null;
+    user_frequency?: string | null;
+    absorbed_streams?: import("../../domain/recurring/convert_recurring.service").AbsorbedStream[];
+    absorbed_txn_ids?: string[];
+}
+/** Map a loaded outflow / inflow entity → the planner's lookup shape (no reads). */
+export declare function to_capture_record_info(r: {
+    id: string;
+    is_active: boolean;
+    is_hidden: boolean;
+    capture_rules_version: number | null;
+    plaid_is_active: boolean | null;
+    plaid_inactive_ack_at_ms: number | null;
+    merged_into_id: string | null;
+    account_id: string;
+    plaid_item_id: string;
+    source: string;
+    user_custom_name: string | null;
+    description: string | null;
+    average_amount: number;
+    frequency: string;
+    plaid_status: string;
+    plaid_detailed_category: string;
+    first_date: unknown;
+    last_date: unknown;
+    removal_intervals: Array<{
+        from_ms: number;
+        to_ms: number | null;
+        mode: string;
+    }>;
+    transaction_ids: string[];
+    vendor_key?: string | null;
+    expected_amount_override?: number | null;
+    user_frequency?: string | null;
+    absorbed_streams?: import("../../domain/recurring/convert_recurring.service").AbsorbedStream[];
+    absorbed_txn_ids?: string[];
+}, direction: "outflow" | "inflow", merchant_name: string | null): CaptureRecordInfo;
 /**
  * Resolves dependencies needed for the recurring sync orchestrator.
  *

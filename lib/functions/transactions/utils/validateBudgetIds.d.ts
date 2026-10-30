@@ -4,7 +4,7 @@
  * Validates that budgetIds in transaction splits reference valid, active budgets.
  * Auto-fixes invalid budgetIds to the user's "Everything Else" system budget.
  */
-import { TransactionSplit } from '../../../types';
+import { TransactionSplit } from "../../../types";
 /**
  * Validate and auto-fix budgetIds in transaction splits
  *

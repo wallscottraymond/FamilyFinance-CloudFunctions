@@ -27,22 +27,13 @@
  */
 import { SplitForSpend } from "./budget_spend.service";
 import { PeriodInstanceType } from "./period_generation.service";
+import { MonthlyPeriodForDerivation } from "./period_allocation_view.service";
+export type { MonthlyPeriodForDerivation };
 /** A view's calendar bucket to derive (a weekly / bi-weekly source period). */
 export interface ViewBucket {
     period_id: string;
     period_type: PeriodInstanceType;
     /** Inclusive bucket bounds, epoch ms. */
-    start_ms: number;
-    end_ms: number;
-}
-/**
- * A materialized MONTHLY budget period, as the pro-ration needs it. `effective`
- * = allocated + rolled_over (the amount the user actually has this month).
- */
-export interface MonthlyPeriodForDerivation {
-    allocated_amount: number;
-    effective_amount: number;
-    /** Inclusive period bounds, epoch ms. */
     start_ms: number;
     end_ms: number;
 }

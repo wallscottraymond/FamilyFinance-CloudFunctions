@@ -10,8 +10,8 @@
  * - Week of Jan 22-28: Shows Feb 15
  * - Week of Feb 1-7: Shows Feb 15
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { RecurringOutflow, SourcePeriod } from "../../../../types";
 /**
  * Result of predicting future bill due date
  */

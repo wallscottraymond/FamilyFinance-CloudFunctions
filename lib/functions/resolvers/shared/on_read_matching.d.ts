@@ -14,6 +14,7 @@
  */
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
 import { InternalTransferResult } from "../../domain/transactions/internal_transfer.service";
+import { CategoryCatalog } from "../../domain/transactions/split_category.service";
 /** Transaction-level context a split inherits (computed once per transaction). */
 export interface TxnMatchContext {
     txn_date_ms: number;
@@ -26,15 +27,23 @@ export interface TxnMatchContext {
      *  the split's `outflowId`/`inflowId` link is unset. Excludes it from budget spend (S5).
      *  Optional; callers without stream context omit it (defaults false). */
     is_recurring_member?: boolean;
+    /** For the category function's merchant / keyword rules. */
+    merchant_name?: string | null;
+    name?: string | null;
 }
 /**
  * Map a raw Firestore split (+ its transaction context) into the on-read matcher's
  * shape. The single source of truth for how a split's spendStatus, categories, and
  * manual pin are read.
  */
-export declare function map_raw_split_to_on_read_match(raw_split: Record<string, unknown>, ctx: TxnMatchContext): SplitForOnReadMatch;
-/** The effective (internal-override-aware) category of a transaction's first split. */
-export declare function txn_effective_category(data: Record<string, unknown>): string;
+export declare function map_raw_split_to_on_read_match(raw_split: Record<string, unknown>, ctx: TxnMatchContext, catalog: CategoryCatalog): SplitForOnReadMatch;
+/**
+ * The category MEANING (a Plaid code) of a transaction for transfer pairing, from the ONE
+ * category function (a user pick away from a transfer category makes that split spending): the
+ * first split that is still a TRANSFER, else the first split. Order-independent — a transaction
+ * with any transfer split pairs, whichever split comes first.
+ */
+export declare function txn_effective_category(data: Record<string, unknown>, catalog: CategoryCatalog): string;
 /**
  * Detect INTERNAL (own-account matched-pair) transfers over a set of already-loaded
  * transactions. Builds the pure matcher's input from the raw docs, then runs
@@ -43,5 +52,5 @@ export declare function txn_effective_category(data: Record<string, unknown>): s
 export declare function detect_internal_transfers_from_txns(txns: Array<{
     id: string;
     data: Record<string, unknown>;
-}>): InternalTransferResult;
+}>, catalog: CategoryCatalog): InternalTransferResult;
 //# sourceMappingURL=on_read_matching.d.ts.map

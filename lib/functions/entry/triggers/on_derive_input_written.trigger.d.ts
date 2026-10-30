@@ -7,12 +7,14 @@
  * so their cached periods recompute on the next read ([[Firestore-Read-Cost-Reduction]]).
  *
  * These are thin invalidation-only triggers (no orchestrator, no cascade): extract the
- * owner, fire-and-forget a version bump, done. `bump_derive_version` writes only to
+ * owner, await a version bump, done (awaited: gen2 may drop work still running after the
+ * handler returns). `bump_derive_version` writes only to
  * `user_data_versions` (no trigger there), so there is no loop.
  *
  * NOT covered here: `source_periods` is a GLOBAL, non-owner-scoped calendar that changes
  * rarely (period generation extends the horizon) — a per-user version can't target it, so
- * it relies on the cache's TTL backstop (minutes) to pick up new period definitions.
+ * it relies on the cache's TTL backstop (24h) to pick up new period definitions. After a
+ * manual source-period regenerate, clear the `derived_*_cache` collections.
  *
  * @module entry/triggers/on_derive_input_written
  */

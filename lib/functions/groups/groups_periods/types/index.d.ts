@@ -12,7 +12,7 @@
 export interface GroupPeriod {
     groupId: string;
     periodId: string;
-    periodType: 'weekly' | 'bi_monthly' | 'monthly' | 'annual';
+    periodType: "weekly" | "bi_monthly" | "monthly" | "annual";
     periodStartDate: FirebaseFirestore.Timestamp;
     periodEndDate: FirebaseFirestore.Timestamp;
     isCurrent: boolean;

@@ -16,8 +16,8 @@
  * - Historical periods (periodEnd < today) are preserved
  * - Follows the same pattern as runUpdateInflowPeriods/runUpdateOutflowPeriods
  */
-import * as admin from 'firebase-admin';
-import { Budget } from '../../../types';
+import * as admin from "firebase-admin";
+import { Budget } from "../../../types";
 export interface BudgetUpdateResult {
     success: boolean;
     periodsQueried: number;

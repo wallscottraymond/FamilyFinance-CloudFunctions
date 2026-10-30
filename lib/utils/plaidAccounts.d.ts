@@ -3,7 +3,7 @@
  *
  * Handles account data retrieval and storage operations
  */
-import { PlaidApi } from 'plaid';
+import { PlaidApi } from "plaid";
 export interface ProcessedAccount {
     id: string;
     name: string;

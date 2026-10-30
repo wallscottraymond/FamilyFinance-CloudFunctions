@@ -11,7 +11,7 @@ export interface ResourcePermissions {
     canViewDetails: boolean;
 }
 export interface ResourceShare {
-    type: 'group' | 'user';
+    type: "group" | "user";
     targetId: string;
     role: ResourceRole;
     sharedBy: string;
@@ -29,10 +29,10 @@ export interface SharedResource {
     sharing: ResourceSharing;
 }
 export interface ShareResourceRequest {
-    resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     resourceId: string;
     shareWith: {
-        type: 'group' | 'user';
+        type: "group" | "user";
         targetId: string;
         role: ResourceRole;
         permissions?: ResourcePermissions;
@@ -43,9 +43,9 @@ export interface ShareResourceResponse {
     message?: string;
 }
 export interface UnshareResourceRequest {
-    resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     resourceId: string;
-    targetType: 'group' | 'user';
+    targetType: "group" | "user";
     targetId: string;
 }
 export interface UnshareResourceResponse {
@@ -53,9 +53,9 @@ export interface UnshareResourceResponse {
     message?: string;
 }
 export interface UpdateSharePermissionsRequest {
-    resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     resourceId: string;
-    targetType: 'group' | 'user';
+    targetType: "group" | "user";
     targetId: string;
     newRole?: ResourceRole;
     newPermissions?: ResourcePermissions;
@@ -65,7 +65,7 @@ export interface UpdateSharePermissionsResponse {
     message?: string;
 }
 export interface GetUserSharedResourcesRequest {
-    resourceType?: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType?: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     includeOwned?: boolean;
 }
 export interface GetUserSharedResourcesResponse {
@@ -81,9 +81,9 @@ export interface GetUserSharedResourcesResponse {
 }
 export interface CheckResourceAccessRequest {
     userId: string;
-    resourceType: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     resourceId: string;
-    requiredPermission: 'read' | 'edit' | 'delete' | 'share';
+    requiredPermission: "read" | "edit" | "delete" | "share";
 }
 export interface CheckResourceAccessResponse {
     hasAccess: boolean;

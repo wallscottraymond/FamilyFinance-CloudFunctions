@@ -9,8 +9,8 @@
  * Operates in-memory on transaction arrays (no DB writes).
  * Returns both modified transactions and outflow period updates for batching.
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { Transaction as FamilyTransaction } from "../../../types";
 /**
  * Result of outflow matching with both transactions and period updates
  */

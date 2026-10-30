@@ -9,7 +9,7 @@
  *
  * @module transactions/utils/match_transaction_splits_to_source_periods
  */
-import { Transaction as FamilyTransaction } from '../../../types';
+import { Transaction as FamilyTransaction } from "../../../types";
 /**
  * Match transaction splits to source periods (batch in-memory processing)
  *

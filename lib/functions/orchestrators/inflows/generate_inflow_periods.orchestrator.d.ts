@@ -19,6 +19,8 @@ export interface GenerateInflowPeriodsInput {
     inflow_id: string;
     inflow_data: Record<string, unknown>;
     user_id: string;
+    /** Write only periods that don't exist yet (convert). */
+    only_missing?: boolean;
 }
 /**
  * Result from the generate inflow periods orchestrator.

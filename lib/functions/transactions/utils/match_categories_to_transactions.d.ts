@@ -9,7 +9,7 @@
  *
  * @module transactions/utils/match_categories_to_transactions
  */
-import { Transaction as FamilyTransaction, TransactionCategory } from '../../../types';
+import { Transaction as FamilyTransaction, TransactionCategory } from "../../../types";
 /**
  * Match categories to transactions based on additional business logic (in-memory)
  *

@@ -6,8 +6,8 @@
  *
  * @module transactions/utils/batch_create_transactions
  */
-import { Transaction as FamilyTransaction } from '../../../types';
-import { OutflowPeriodUpdate } from './match_transaction_splits_to_outflows';
+import { Transaction as FamilyTransaction } from "../../../types";
+import { OutflowPeriodUpdate } from "./match_transaction_splits_to_outflows";
 /**
  * Batch create transactions and update outflow periods atomically
  *

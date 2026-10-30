@@ -10,7 +10,7 @@
  * - Spread strategy distributes overspend across multiple periods (max 6)
  * - Extreme overspend can result in negative remaining amounts
  */
-import { Budget, BudgetPeriodDocument, RolloverStrategy, FinancialSettings } from '../../../types';
+import { Budget, BudgetPeriodDocument, RolloverStrategy, FinancialSettings } from "../../../types";
 /**
  * Rollover settings resolved from budget or user preferences
  */

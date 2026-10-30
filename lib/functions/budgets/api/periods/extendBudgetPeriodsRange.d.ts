@@ -14,7 +14,7 @@
  *
  * Memory: 512MiB, Timeout: 60s (increased for batch processing)
  */
-import { PeriodType } from '../../../../types';
+import { PeriodType } from "../../../../types";
 interface ExtendBudgetPeriodsRangeRequest {
     startPeriodId: string;
     endPeriodId: string;

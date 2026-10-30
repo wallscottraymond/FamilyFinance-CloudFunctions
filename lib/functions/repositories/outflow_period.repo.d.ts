@@ -103,7 +103,9 @@ export declare const outflow_period_repo: {
      * Creates new outflow period documents for a recurring outflow.
      * Called when a new outflow is created or when periods need to be extended.
      */
-    save_batch(ctx: TraceContext, entities: OutflowPeriodForPersistence[], user_id: string): Promise<BatchWriteResult>;
+    save_batch(ctx: TraceContext, entities: OutflowPeriodForPersistence[], user_id: string, options?: {
+        only_missing?: boolean;
+    }): Promise<BatchWriteResult>;
     /**
      * Updates outflow periods with transaction split references.
      *
@@ -195,6 +197,13 @@ export declare const outflow_period_repo: {
      * fields in place, batched, **NOT** `increment` (invalidation model). The
      * orchestrator is responsible for NOT passing inactive periods.
      */
+    /**
+     * D28: turn periods on that hold an early payment carried out of a removed month (marked
+     * `carryActive`), and turn off the ones that no longer do (only periods carrying the mark —
+     * a period inactive or active for any other reason is never touched). Writes only those two
+     * fields. Returns the number of docs written.
+     */
+    set_carry_active(_ctx: TraceContext, on_ids: string[], off_ids: string[], clear_ids?: string[]): Promise<number>;
     update_reconciliation(_ctx: TraceContext, results: ReconciliationResult[]): Promise<WriteResult[]>;
     /**
      * Merge-update ONLY the generation-derived occurrence fields on existing periods

@@ -17,6 +17,8 @@
  * @module orchestrators/budgets/derive_budget_transactions
  */
 import { TraceContext } from "../../types";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
+import { CardTransaction } from "../../domain/transactions/transaction_card.service";
 export type DerivedSpendStatus = "counted" | "ignored" | "refund";
 export type IgnoredReason = "transfer" | "income" | "manual" | null;
 export interface DerivedBudgetTransaction {
@@ -28,6 +30,9 @@ export interface DerivedBudgetTransaction {
     is_pending: boolean;
     spend_status: DerivedSpendStatus;
     ignored_reason: IgnoredReason;
+    /** The whole transaction, for the app's shared transaction row (one per split row; the app
+     *  groups a transaction's rows into one tile). */
+    card: CardTransaction;
 }
-export declare function derive_budget_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, force?: boolean): Promise<DerivedBudgetTransaction[]>;
+export declare function derive_budget_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, force?: boolean, scope_request?: DeriveScopeRequest): Promise<DerivedBudgetTransaction[]>;
 //# sourceMappingURL=derive_budget_transactions.orchestrator.d.ts.map

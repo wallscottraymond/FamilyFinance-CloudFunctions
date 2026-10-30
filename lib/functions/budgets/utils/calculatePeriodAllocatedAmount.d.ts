@@ -7,7 +7,7 @@
  * This is the single source of truth for budget amount allocation across
  * all budget period creation and extension functions.
  */
-import { PeriodType, SourcePeriod } from '../../../types';
+import { PeriodType, SourcePeriod } from "../../../types";
 /**
  * Calculate the allocated budget amount for a specific period based on actual days
  *

@@ -12,11 +12,11 @@
  *
  * This only affects the specific budget period being toggled.
  */
-import * as admin from 'firebase-admin';
-import { BudgetPeriodDocument } from '../../../types';
+import * as admin from "firebase-admin";
+import { BudgetPeriodDocument } from "../../../types";
 export interface PauseResumeResult {
     success: boolean;
-    action: 'paused' | 'resumed' | 'skipped';
+    action: "paused" | "resumed" | "skipped";
     message: string;
     splitsReassigned: number;
     amountRedistributed: number;

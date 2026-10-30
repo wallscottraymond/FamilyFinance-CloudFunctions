@@ -91,7 +91,9 @@ export declare const inflow_period_repo: {
      * Creates new inflow period documents for a recurring inflow.
      * Called when a new inflow is created or when periods need to be extended.
      */
-    save_batch(ctx: TraceContext, entities: InflowPeriodForPersistence[], user_id: string): Promise<BatchWriteResult>;
+    save_batch(ctx: TraceContext, entities: InflowPeriodForPersistence[], user_id: string, options?: {
+        only_missing?: boolean;
+    }): Promise<BatchWriteResult>;
     /**
      * Gets inflow periods by inflow ID.
      */
@@ -155,6 +157,13 @@ export declare const inflow_period_repo: {
      * orchestrator is responsible for NOT passing inactive periods. (Inflow reuses
      * the existing `isPaid` field for "received"; richer status lives in `reconciliation`.)
      */
+    /**
+     * D28: turn periods on that hold an early payment carried out of a removed month (marked
+     * `carryActive`), and turn off the ones that no longer do (only periods carrying the mark —
+     * a period inactive or active for any other reason is never touched). Writes only those two
+     * fields. Returns the number of docs written.
+     */
+    set_carry_active(_ctx: TraceContext, on_ids: string[], off_ids: string[], clear_ids?: string[]): Promise<number>;
     update_reconciliation(_ctx: TraceContext, results: ReconciliationResult[]): Promise<WriteResult[]>;
     /**
      * Merge-update ONLY the generation-derived occurrence fields on existing periods

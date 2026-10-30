@@ -1,7 +1,8 @@
 /**
  * Get Category Ownership Map (callable)
  *
- * Returns which budget owns each category for the authenticated user. Consumed by the mobile
+ * Returns which budget owns each category IN A VIEW (canon A3 — one budget per category per
+ * view): the caller's own budgets (Me), or a group's when `{ groupId }` is passed (members only). Consumed by the mobile
  * app via `httpsCallable('getCategoryOwnershipMap')` — so this MUST be an `onCall`, not an
  * `onRequest` (the previous onRequest silently failed the callable protocol → the budget-wizard
  * grey-out never received ownership data).

@@ -8,8 +8,8 @@
  * - Period boundary validation
  * - Sum tolerance checking
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { PeriodType, SourcePeriod, Budget, BudgetPeriod } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { PeriodType, SourcePeriod, Budget, BudgetPeriod } from "../../../../types";
 /**
  * Round to 2 decimal places (standard currency rounding)
  * Uses banker's rounding (round half to even) for consistency

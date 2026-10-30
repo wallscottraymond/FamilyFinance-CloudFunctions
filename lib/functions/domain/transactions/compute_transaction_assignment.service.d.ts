@@ -20,7 +20,7 @@
 import { BudgetForMatch, PeriodLens } from "./match_budget.service";
 /** The three period lenses, in a stable order. */
 export declare const PERIOD_LENSES: PeriodLens[];
-import { CategoryRule } from "./match_category.service";
+import { CategoryCatalog } from "./split_category.service";
 import { SourcePeriodForMatch } from "./match_source_periods.service";
 /** A split as it currently stands, with the fields the engine reads + owns. */
 export interface SplitForAssignment {
@@ -34,14 +34,22 @@ export interface SplitForAssignment {
     monthly_budget_id?: string;
     weekly_budget_id?: string;
     bi_weekly_budget_id?: string;
-    internal_match_category: string | null;
+    /** Raw Plaid detailed code (immutable). The legacy `internalDetailedCategory` override is
+     *  NOT an input any more (canon M2) — user picks live in the slug fields + `category_source`. */
     plaid_match_category: string;
     outflow_id: string | null;
     /** Manual bill-assignment pin: when `"manual"`, `outflow_id` is a user-chosen bill
      *  that the engine PRESERVES (doesn't re-derive) while that outflow still exists —
      *  survives Plaid re-sync. Defaults to `"auto"` (engine derives from recurring match). */
     outflow_source?: "auto" | "manual";
+    /** A manual bill pin PARKED while its bill is removed / paused for this payment's month (the
+     *  money counts as spending meanwhile); restored when the bill is live again (X9). */
+    suspended_outflow_pin?: string | null;
     inflow_id: string | null;
+    /** Manual income-pin (Convert-To-Recurring Phase 2): when `"manual"`, `inflow_id` is a
+     *  user-chosen income the engine PRESERVES while that income is the owner's own and in this
+     *  view. Absent = `"auto"` (the engine derives it from the recurring match). */
+    inflow_source?: "auto" | "manual";
     monthly_period_id: string | null;
     weekly_period_id: string | null;
     bi_weekly_period_id: string | null;
@@ -67,23 +75,30 @@ export interface AssignmentContext {
     /** True for income transactions. Income NEVER auto-assigns to a budget (B1) —
      *  it stays unassigned unless the user manually pins it. */
     txn_is_income: boolean;
+    /** The transaction's stored transfer role (3d, canon A7) — "edge_out" money leaving the view
+     *  is spending (as on the period page); absent = not yet classified. */
+    txn_transfer_role?: string | null;
     /** All real budgets across every cadence; the engine filters per lens. */
     real_budgets: BudgetForMatch[];
     /** The Everything Else budget id PER LENS (null for a lens with no EE budget). */
     everything_else_budget_ids: Record<PeriodLens, string | null>;
-    category_rules: CategoryRule[];
-    /** plaidDetailed → the two app-category slugs, from the `categories` collection.
-     *  Missing key → the split gets null slugs (unmapped Plaid detailed). */
-    category_slugs_by_plaid: Record<string, {
-        overall_category_id: string | null;
-        first_category_id: string | null;
-    }>;
+    /** The `categories` collection as the ONE category function needs it (canon M7). */
+    category_catalog: CategoryCatalog;
     source_periods: SourcePeriodForMatch[];
     /** Recurring match per split id (empty = no recurring match). */
     recurring_by_split: Record<string, RecurringMatch>;
     /** Active outflow (bill) ids — validates a manual outflow pin so a stale pin (bill
      *  deleted) falls back to auto-derivation. Omitted → pins are trusted as-is. */
     active_outflow_ids?: Set<string>;
+    /** Bills (in this view) removed / paused for this transaction's month: a manual pin to one is
+     *  PARKED (`suspended_outflow_pin`), not dropped, so Restore brings it back. */
+    suppressed_outflow_ids?: Set<string>;
+    /** The caller's OWN live incomes in this view — validates a manual income pin. Omitted → no pin
+     *  is honoured (deny by default: a pin never links to an income the resolver didn't vouch for). */
+    active_inflow_ids?: Set<string>;
+    /** Incomes (in this view) removed / paused for this transaction's month: a manual pin to one
+     *  stays as stored (the readers drop a released link on read). */
+    suppressed_inflow_ids?: Set<string>;
 }
 /** The computed assignment for one split (the engine-owned fields only). */
 export interface AssignedSplit {
@@ -99,7 +114,11 @@ export interface AssignedSplit {
     outflow_id: string | null;
     /** "manual" = a user-pinned bill assignment the engine preserves; else "auto". */
     outflow_source: "auto" | "manual";
+    /** A parked manual bill pin (see `SplitForAssignment.suspended_outflow_pin`), else null. */
+    suspended_outflow_pin: string | null;
     inflow_id: string | null;
+    /** "manual" = a user-pinned income the engine preserves; else "auto". */
+    inflow_source: "auto" | "manual";
     monthly_period_id: string | null;
     weekly_period_id: string | null;
     bi_weekly_period_id: string | null;

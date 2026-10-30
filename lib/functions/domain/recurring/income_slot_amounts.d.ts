@@ -28,4 +28,11 @@ export interface DepositForSlot {
  *          a single occurrence day (no per-slot differentiation needed) or no deposits.
  */
 export declare function estimate_slot_amounts(occurrence_days: number[], deposits: DepositForSlot[], recent_n?: number): Map<number, number>;
+/**
+ * A stored transaction (raw doc fields) → its deposit for slotting, or null when it isn't real
+ * income (a removed account's / superseded pending's `isActive=false`). Amount = |Σ splits|, else
+ * |amount|. Shared by the period page and "Mark as received" so both estimate from the same
+ * history. PURE.
+ */
+export declare function history_doc_to_deposit(d: Record<string, unknown>): DepositForSlot | null;
 //# sourceMappingURL=income_slot_amounts.d.ts.map

@@ -6,8 +6,8 @@
  *
  * Memory: 256MiB, Timeout: 30s
  */
-import { TransactionSplitReference } from '../../../../types';
-import * as admin from 'firebase-admin';
+import { TransactionSplitReference } from "../../../../types";
+import * as admin from "firebase-admin";
 /**
  * Request to get transactions for an outflow period
  */

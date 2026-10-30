@@ -16,4 +16,12 @@
  */
 /** True when writing `next` over `stored` would change nothing but the sync timestamps. */
 export declare function is_unchanged_recurring_doc(stored: object, next: object): boolean;
+/** A bill / income doc a sync wrote (before = stored doc, null when created). */
+export interface RecurringWrittenDoc {
+    id: string;
+    kind: "outflow" | "inflow";
+    created: boolean;
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown>;
+}
 //# sourceMappingURL=recurring_doc_equality.d.ts.map

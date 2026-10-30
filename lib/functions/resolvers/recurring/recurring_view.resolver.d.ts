@@ -22,6 +22,7 @@ import { PeriodInstanceType } from "../../domain/budgets";
 import { RecurringScheduleForGeneration } from "../../domain/outflows/outflow_period.service";
 import { PlacementBucket } from "../../domain/recurring/occurrence_placement.service";
 import { ActualPayment } from "../../domain/recurring/reconcile_occurrences.service";
+import { ManualSettledOccurrences } from "../../domain/recurring/manual_settlement.service";
 /** Which recurring stream: a bill (outflow) or income (inflow). */
 export type RecurringKind = "outflow" | "inflow";
 /** Everything the recurring-view derivation needs, gathered read-only. */
@@ -30,6 +31,8 @@ export interface RecurringViewDeps {
     schedule: RecurringScheduleForGeneration;
     buckets: PlacementBucket[];
     payments: ActualPayment[];
+    /** "Mark as paid / received" marks on the definition (applied after reconcile). */
+    manual_settled_occurrences: ManualSettledOccurrences;
     /** The union span of the buckets (generation + payment fetch range), epoch ms. */
     span_start_ms: number;
     span_end_ms: number;

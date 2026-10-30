@@ -20,6 +20,7 @@ export declare const backfill_transaction_assignments: import("firebase-function
     success: boolean;
     enqueued: boolean;
     scope: string;
+    dry_run: boolean;
     trace_id: string;
 }>, unknown>;
 //# sourceMappingURL=backfill_transaction_assignments.entry.d.ts.map

@@ -11,8 +11,11 @@ interface UpdateTransactionSplitsRequest {
     transactionId: string;
     splits: TransactionSplit[];
     userNotes?: string;
+    /** Ignored — Hide was removed (an old app build may still send it). */
     isHidden?: boolean;
     isRecurring?: boolean;
+    /** `updatedAt` (ms) of the copy the app edited; see StaleSplitEditError (P4-H1). */
+    baseUpdatedAtMs?: number;
 }
 interface UpdateTransactionSplitsResponse {
     success: boolean;

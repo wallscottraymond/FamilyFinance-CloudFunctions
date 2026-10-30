@@ -37,6 +37,12 @@ export interface ActualPayment {
     split_id: string | null;
     date_ms: number;
     amount: number;
+    /** A payment the user PINNED to a period (the two-stage bill picker): it settles an occurrence
+     *  due inside that period, however far from its date — as stored reconcile places it. */
+    pinned_window?: {
+        start_ms: number;
+        end_ms: number;
+    };
 }
 /** A reconciled occurrence: canonical + which payment settled it. */
 export interface ReconciledOccurrence extends CanonicalOccurrence {

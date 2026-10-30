@@ -10,8 +10,8 @@
  *   - Get that prime's dailyRate
  *   - Add to running total
  */
-import * as admin from 'firebase-admin';
-import { Budget, BudgetPeriodDocument, PeriodType, PrimePeriodContribution } from '../../../types';
+import * as admin from "firebase-admin";
+import { Budget, BudgetPeriodDocument, PeriodType, PrimePeriodContribution } from "../../../types";
 /**
  * Find all prime periods that overlap with the target date range
  *

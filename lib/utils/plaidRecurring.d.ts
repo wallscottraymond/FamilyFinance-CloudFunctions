@@ -3,7 +3,7 @@
  *
  * Handles recurring transaction streams (income and expense patterns)
  */
-import { PlaidApi } from 'plaid';
+import { PlaidApi } from "plaid";
 export interface RecurringProcessingResult {
     totalStreams: number;
     inflowStreams: number;

@@ -21,8 +21,9 @@
  *   it), sharing fields, ownership, `initialPlaidData`, `createdAt`.
  * - Amount change: the DEFAULT split absorbs the difference (user decision). If there's no
  *   default split, or it would go negative, splits are rescaled proportionally instead.
- * - Category: a split the user re-categorized (`categorySource: "user"`) keeps its internal
- *   categories; an untouched split takes Plaid's new mapping.
+ * - Category: a split's pick (`categorySource: "user"` + slugs) is kept; every split takes Plaid's
+ *   new code, so an untouched split's category follows Plaid (canon M4). `internal*` is never
+ *   written from Plaid's payload (canon M2).
  */
 type Doc = Record<string, unknown>;
 type Split = Record<string, unknown>;

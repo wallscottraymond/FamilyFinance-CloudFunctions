@@ -19,6 +19,8 @@ import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { goal_repo } from "../../repositories/goal.repo";
 import { PeriodInstanceType } from "../../domain/budgets";
+import { DeriveScope, DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
+import { CategoryCatalog } from "../../domain/transactions/split_category.service";
 export type { BudgetForDerivation, RecurringForDerivation, PeriodDerivationDeps, } from "../../domain/periods/period_derivation.types";
 import type { PeriodDerivationDeps } from "../../domain/periods/period_derivation.types";
 type Awaited2<T> = T extends Promise<infer U> ? U : T;
@@ -36,13 +38,62 @@ export interface PeriodDerivationRaw {
     outflows: Awaited2<ReturnType<typeof outflow_repo.get_by_user_id>>;
     inflows: Awaited2<ReturnType<typeof inflow_repo.get_by_user_id>>;
     all_goals: Awaited2<ReturnType<typeof goal_repo.get_by_user>>;
-    /** Active transactions across the UNION of every window's derivation span. */
+    /** Active transactions across the UNION of every window's derivation span (in the view). */
     txns: Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>;
+    /**
+     * The same span's transactions for ALL the view's members, BEFORE the view filter — used only
+     * to pair transfers across every known account, so a transfer that crosses the view boundary
+     * counts at the edge (D12). Server-side only; never returned. For Me with nothing shared this
+     * equals `txns`.
+     */
+    all_member_txns: Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>;
+    /**
+     * D37: the view's transactions just BEFORE `txns`' range (up to 21 days before a removed bill's
+     * cut-off that a payment in the range is late for) — read only when such a cut-off is near; used
+     * only to judge whether that bill's last occurrence was already paid (the release rule).
+     */
+    release_lookback_txns?: Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>;
+    /**
+     * The view's active payments of every bill that has a hand-pinned period
+     * (`outflow_pinned_period.repo`) among the loaded periods — whatever their date. A payment pinned to a period here but dated
+     * outside the loaded range (a late payment of an overdue month, or paid ahead) is found only
+     * through this. Read only when such a bill exists (usually none).
+     */
+    pinned_bill_txns?: Array<{
         id: string;
         data: Record<string, unknown>;
     }>;
     /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
     inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
+    /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
+    scope: DeriveScope;
+    /**
+     * Ids (+ Plaid stream transaction ids) of the members' bills / income that exist but were
+     * left OUT of this view because their account is in another view. A payment linked to one
+     * of these counts as ordinary money in this view instead of vanishing (it's not this view's
+     * bill). Empty for Me with nothing shared.
+     */
+    out_of_view_recurring: {
+        ids: Set<string>;
+        stream_txn_ids: Set<string>;
+    };
+    /** The category collection (canon M7) — module-cached reference data, not a per-call read. */
+    category_catalog: CategoryCatalog;
+    /**
+     * Plaid transaction ids held out of FUZZY bill / income links (Convert-To-Recurring X3), from
+     * each member's review state (one get per member). A stored link on one of these that the user
+     * didn't make (a merchant guess) is ignored on read; manual pins / detaches still win.
+     */
+    fuzzy_excluded_plaid_ids?: Set<string>;
 }
 export interface DerivationWindow {
     start_ms: number;
@@ -58,16 +109,11 @@ export interface DerivationWindow {
  * fallback, which already looks only at span-overlapping periods).
  */
 export declare function monthly_period_load_bounds(range_start_ms: number, range_end_ms: number): [number, number];
-export declare function load_period_derivation_raw(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, windows: DerivationWindow[]): Promise<PeriodDerivationRaw>;
-/**
- * Lookup/shaping half (NO IO): build ONE window's derivation inputs from a raw load, applying the
- * same predicates the per-window queries apply — so the result is identical to loading that
- * window alone.
- */
+export declare function load_period_derivation_raw(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, windows: DerivationWindow[], scope_request?: DeriveScopeRequest): Promise<PeriodDerivationRaw>;
 export declare function shape_period_derivation_deps(raw: PeriodDerivationRaw, view_cadence: PeriodInstanceType, window_start_ms: number, window_end_ms: number): PeriodDerivationDeps;
 /**
  * Load + shape for a SINGLE window — the `derive_period` path. Identical output to deriving any
  * window of a multi-window load (see `derive_period_range`).
  */
-export declare function resolve_period_derivation_deps(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, window_start_ms: number, window_end_ms: number): Promise<PeriodDerivationDeps>;
+export declare function resolve_period_derivation_deps(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, window_start_ms: number, window_end_ms: number, scope_request?: DeriveScopeRequest): Promise<PeriodDerivationDeps>;
 //# sourceMappingURL=period_derivation.resolver.d.ts.map

@@ -7,8 +7,8 @@
  *
  * This is the single source of truth for withholding amount calculations.
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from "../../../../types";
 /**
  * Payment cycle information
  */

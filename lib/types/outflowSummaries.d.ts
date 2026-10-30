@@ -44,9 +44,9 @@ export interface OutflowStatusCounts {
  */
 export interface OutflowPeriodSummary {
     ownerId: string;
-    ownerType: 'user' | 'group';
+    ownerType: "user" | "group";
     periodType: PeriodType;
-    resourceType: 'outflow';
+    resourceType: "outflow";
     windowStart: Timestamp;
     windowEnd: Timestamp;
     periods: {

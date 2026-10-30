@@ -3,7 +3,7 @@
  *
  * Shared utilities for determining period types from source period IDs.
  */
-import { PeriodType } from '../../../../types';
+import { PeriodType } from "../../../../types";
 /**
  * Determine PeriodType from sourcePeriodId format
  *

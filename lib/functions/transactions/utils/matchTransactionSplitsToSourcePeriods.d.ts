@@ -7,7 +7,7 @@
  *
  * This version operates in-memory on transaction arrays with batch period queries.
  */
-import { Transaction as FamilyTransaction } from '../../../types';
+import { Transaction as FamilyTransaction } from "../../../types";
 /**
  * Match transaction splits to source periods (batch in-memory processing)
  *

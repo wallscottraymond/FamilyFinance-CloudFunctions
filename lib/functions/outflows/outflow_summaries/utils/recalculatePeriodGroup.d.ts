@@ -15,7 +15,7 @@ import { OutflowPeriodEntry, PeriodType } from "../../../../types";
  */
 export declare function recalculatePeriodGroup(params: {
     ownerId: string;
-    ownerType: 'user' | 'group';
+    ownerType: "user" | "group";
     periodType: PeriodType;
     sourcePeriodId: string;
 }): Promise<OutflowPeriodEntry[]>;

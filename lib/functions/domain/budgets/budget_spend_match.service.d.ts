@@ -38,12 +38,15 @@ export interface SplitForOnReadMatch {
     /** Txn is in a recurring bill/income Plaid stream (even if this split's link is
      *  unset) → excluded from budget spend (S5). Optional; defaults false. */
     is_recurring_member?: boolean;
-    internal_match_category: string | null;
-    plaid_match_category: string | null;
-    overall_category_id?: string | null;
-    first_category_id?: string | null;
+    first_category_id: string | null;
+    /** The Plaid code giving the category its meaning (income? transfer?). */
+    semantic_code: string;
     /** Manual budget pin (user assigned this split to a budget); null otherwise. */
     manual_pin_budget_id: string | null;
+    /** Account-Rooted-Sharing D12: this split is money leaving the VIEW through a transfer to a
+     *  member's account in another view → it counts as spending here even though it's a
+     *  transfer. Optional; defaults false (always false with nothing shared). */
+    is_edge_out?: boolean;
 }
 /**
  * Resolve the budget a split belongs to on read.
@@ -54,7 +57,7 @@ export interface SplitForOnReadMatch {
  *
  * PURE.
  */
-export declare function resolve_split_owner(split: SplitForOnReadMatch, real_budgets: BudgetForMatch[], ee_budget_id: string | null): string;
+export declare function resolve_split_owner(split: SplitForOnReadMatch, real_budgets: BudgetForMatch[], ee_budget_id: string | null, ee_alias_ids?: ReadonlySet<string>): string;
 /**
  * The splits owned by `target_budget_id` on read, mapped to `SplitForSpend`
  * (with `budget_id` stamped to the target) so they flow straight into the
@@ -62,5 +65,5 @@ export declare function resolve_split_owner(split: SplitForOnReadMatch, real_bud
  *
  * PURE.
  */
-export declare function owned_splits_for_budget(target_budget_id: string, real_budgets: BudgetForMatch[], ee_budget_id: string | null, splits: SplitForOnReadMatch[]): SplitForSpend[];
+export declare function owned_splits_for_budget(target_budget_id: string, real_budgets: BudgetForMatch[], ee_budget_id: string | null, splits: SplitForOnReadMatch[], ee_alias_ids?: ReadonlySet<string>): SplitForSpend[];
 //# sourceMappingURL=budget_spend_match.service.d.ts.map

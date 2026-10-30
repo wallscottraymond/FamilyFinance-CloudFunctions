@@ -51,6 +51,12 @@ export declare const plaid_item_repo: {
      * @param include_inactive - Include inactive items
      * @returns Array of PlaidItem entities
      */
+    /** Doc ids of the user's ACTIVE Plaid items (one query; Convert-To-Recurring round 4 — a track
+     *  handed to the user's other items). */
+    get_active_doc_ids_by_user(_ctx: TraceContext, user_id: string): Promise<string[]>;
+    /** Mark items as carrying a review memory ("Not a bill" vendors, held-out ids) — the recurring sync
+     *  already reads its item, so it learns the planner must run without any extra read. */
+    set_review_memory(_ctx: TraceContext, doc_ids: string[]): Promise<void>;
     get_by_user_id(ctx: TraceContext, user_id: string, include_inactive?: boolean): Promise<PlaidItem[]>;
     /**
      * Gets all ACTIVE items currently in one of the given (transient) statuses,

@@ -17,10 +17,15 @@
  */
 import { TraceContext } from "../../types";
 import { RecurringCandidate } from "../../domain/transactions/match_recurring.service";
+import { ConvertedIndex } from "../../domain/recurring/converted_match.service";
 /** Per-split recurring links keyed by split id (the engine's `recurring_by_split`). */
 export type RecurringBySplit = Record<string, {
     outflow_id: string | null;
     inflow_id: string | null;
+    /** A stream-member payment that ALSO has an eligible converted bill of its D1 key: used by the
+     *  caller only when the stream's bill is dropped as another view's (D1 fallthrough). */
+    d1_alt_id?: string | null;
+    d1_alt_kind?: "outflow" | "inflow";
 }>;
 /**
  * Bill + income candidate periods loaded ONCE for a whole assign-batch (covering
@@ -65,5 +70,20 @@ export declare function resolve_recurring_matches(ctx: TraceContext, user_id: st
     inflow_tx_to_id?: Map<string, string>;
     /** Batch-preloaded candidate periods (loaded once per batch) — avoids the per-txn query. */
     preloaded_candidates?: PreloadedRecurringCandidates;
+    /** Plaid ids held out of the FUZZY scorer (X3) — stream membership above still applies. */
+    fuzzy_excluded_plaid_ids?: Set<string>;
+    /** v2 record id → its account: fuzzy-linked only from that account (F13). */
+    v2_account_by_recurring_id?: Map<string, string>;
+    /** The transaction's (Plaid) account id. */
+    txn_account_id?: string | null;
+    /** Converted bills / income by D1 key (Convert-To-Recurring Phase 2). */
+    converted_index?: ConvertedIndex;
+    /** The transaction's vendor key (stored, else computed the same way). */
+    txn_vendor_key?: string | null;
+    /** When our copy of the transaction was created (a late arrival links, A). */
+    txn_created_ms?: number | null;
+    /** Plaid payment id → the converted bill that ABSORBED it (D42). Subject to the same floors and
+     *  the single-split rule as a D1 key hit (B). */
+    absorbed_tx_to_id?: Map<string, string>;
 }): Promise<RecurringBySplit>;
 //# sourceMappingURL=recurring_matches.resolver.d.ts.map

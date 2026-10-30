@@ -56,7 +56,7 @@
  *
  * This is a UTILITY function (reusable business logic) in the outflows module.
  */
-import * as admin from 'firebase-admin';
+import * as admin from "firebase-admin";
 /**
  * Result object returned when searching for matching outflow periods
  *

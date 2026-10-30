@@ -107,6 +107,9 @@ export interface User extends BaseDocument {
     isActive: boolean;
     isInitialized?: boolean;
     initializedAt?: Timestamp;
+    features?: {
+        groups?: boolean;
+    };
 }
 export declare enum UserRole {
     ADMIN = "admin",
@@ -170,7 +173,7 @@ export interface AccessibilitySettings {
     hapticFeedback: boolean;
     longPressDelay: number;
 }
-export type RolloverStrategy = 'immediate' | 'spread';
+export type RolloverStrategy = "immediate" | "spread";
 export interface FinancialSettings {
     defaultTransactionCategory: TransactionCategory;
     autoCategorizationEnabled: boolean;
@@ -239,7 +242,7 @@ export declare enum PaymentType {
  * - `refund`  — STILL counted in `spent`, but |amount| also accrues into the
  *   budget's parallel `returnAmount` (expected returns, planned before completed).
  */
-export type SpendStatus = 'counted' | 'ignored' | 'refund';
+export type SpendStatus = "counted" | "ignored" | "refund";
 export interface TransactionSplit {
     splitId: string;
     budgetId: string;
@@ -250,9 +253,9 @@ export interface TransactionSplit {
     monthlyBudgetName?: string | null;
     weeklyBudgetName?: string | null;
     biWeeklyBudgetName?: string | null;
-    monthlyBudgetSource?: 'category' | 'manual';
-    weeklyBudgetSource?: 'category' | 'manual';
-    biWeeklyBudgetSource?: 'category' | 'manual';
+    monthlyBudgetSource?: "category" | "manual";
+    weeklyBudgetSource?: "category" | "manual";
+    biWeeklyBudgetSource?: "category" | "manual";
     monthlyPeriodId: string | null;
     weeklyPeriodId: string | null;
     biWeeklyPeriodId: string | null;
@@ -264,7 +267,7 @@ export interface TransactionSplit {
     overallCategoryId?: string | null;
     firstCategoryId?: string | null;
     secondCategoryId?: string | null;
-    categorySource?: 'plaid' | 'user';
+    categorySource?: "plaid" | "user";
     amount: number;
     description?: string | null;
     isDefault: boolean;
@@ -303,7 +306,7 @@ export interface Transaction extends BaseDocument {
     plaidDetailedCategory: string;
     plaidPrimaryCategory: string;
     plaidItemId: string;
-    source: 'plaid' | 'manual' | 'import';
+    source: "plaid" | "manual" | "import";
     transactionStatus: TransactionStatus;
     type: TransactionType | null;
     name: string;
@@ -319,7 +322,7 @@ export interface Transaction extends BaseDocument {
         plaidName: string;
         plaidTransactionId: string;
         plaidPending: boolean;
-        source: 'plaid';
+        source: "plaid";
     };
 }
 export declare enum TransactionType {
@@ -360,7 +363,7 @@ export interface Category extends BaseDocument {
     primary_plaid_category: string;
     detailed_plaid_category: string;
     description: string;
-    type: 'Income' | 'Outflow';
+    type: "Income" | "Outflow";
     second_category: string;
     first_category: string;
     overall_category: string;
@@ -396,7 +399,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
     remaining: number;
     alertThreshold: number;
     isActive: boolean;
-    budgetType: 'recurring' | 'limited';
+    budgetType: "recurring" | "limited";
     endPeriod?: string;
     totalPeriods?: number;
     selectedStartPeriod?: string;
@@ -408,7 +411,7 @@ export interface Budget extends BaseDocument, ResourceOwnership {
     isOngoing: boolean;
     budgetEndDate?: Timestamp;
     isSystemEverythingElse?: boolean;
-    everythingElsePeriodType?: 'monthly' | 'weekly' | 'bi_monthly';
+    everythingElsePeriodType?: "monthly" | "weekly" | "bi_monthly";
     flaggedForDeletion?: boolean;
     deletionScheduledAt?: Timestamp;
     deletedBy?: string;
@@ -581,7 +584,7 @@ export interface CreateBudgetRequest {
     amount: number;
     categoryIds: string[];
     period: BudgetPeriod;
-    budgetType?: 'recurring' | 'limited';
+    budgetType?: "recurring" | "limited";
     startDate: string;
     endDate?: string;
     alertThreshold?: number;
@@ -1224,19 +1227,19 @@ export interface BaseRecurringTransaction extends BaseDocument, ResourceOwnershi
     predictedNextDate?: Timestamp;
 }
 export interface RecurringIncome extends BaseRecurringTransaction {
-    incomeType?: 'salary' | 'dividend' | 'interest' | 'rental' | 'freelance' | 'bonus' | 'other';
+    incomeType?: "salary" | "dividend" | "interest" | "rental" | "freelance" | "bonus" | "other";
     isRegularSalary?: boolean;
     employerName?: string;
     taxable?: boolean;
-    inflowSource?: 'user' | 'plaid';
+    inflowSource?: "user" | "plaid";
 }
 export interface RecurringOutflow extends BaseRecurringTransaction {
-    expenseType?: 'subscription' | 'utility' | 'loan' | 'rent' | 'insurance' | 'tax' | 'other';
+    expenseType?: "subscription" | "utility" | "loan" | "rent" | "insurance" | "tax" | "other";
     isEssential?: boolean;
     merchantCategory?: string;
     isCancellable?: boolean;
     reminderDays?: number;
-    outflowSource?: 'user' | 'plaid';
+    outflowSource?: "user" | "plaid";
 }
 export interface PlaidRecurringTransaction extends BaseRecurringTransaction {
     streamType: PlaidRecurringTransactionStreamType;
@@ -1435,7 +1438,7 @@ export interface OutflowOccurrence {
     paymentDate: Timestamp | null;
     amountDue: number;
     amountPaid: number;
-    paymentType: 'regular' | 'catch_up' | 'advance' | 'extra_principal' | null;
+    paymentType: "regular" | "catch_up" | "advance" | "extra_principal" | null;
     isAutoMatched: boolean;
     matchedAt: Timestamp | null;
     matchedBy: string | null;
@@ -1539,7 +1542,7 @@ export interface PeriodManagementConfig {
     maxPreloadExpansion: number;
     batchExtensionSize: number;
     maxBatchExtensionLimit: number;
-    preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
+    preloadStrategy: "conservative" | "balanced" | "aggressive";
 }
 /**
  * Income Type Classification
@@ -1585,14 +1588,14 @@ export interface CommissionIncomeConfig {
     basePlusCommission: boolean;
     baseAmount?: number;
     targetCommission?: number;
-    schedule: 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
+    schedule: "monthly" | "quarterly" | "semi_annually" | "annually";
     expectedPaymentDay?: number;
 }
 /**
  * Bonus Income Configuration
  */
 export interface BonusIncomeConfig {
-    schedule: 'annual' | 'quarterly' | 'monthly' | 'performance' | 'custom';
+    schedule: "annual" | "quarterly" | "monthly" | "performance" | "custom";
     expectedMonth?: number;
     expectedQuarter?: number;
     lastBonusAmount?: number;
@@ -1705,7 +1708,7 @@ export interface InflowPeriod extends BaseDocument {
     description: string;
     frequency: string;
     incomeType?: IncomeType | string;
-    predictionConfidence?: 'high' | 'medium' | 'low';
+    predictionConfidence?: "high" | "medium" | "low";
     isPaid: boolean;
     isFullyPaid: boolean;
     isPartiallyPaid: boolean;
@@ -1754,6 +1757,6 @@ export interface PeriodManagementConfig {
     maxPreloadExpansion: number;
     batchExtensionSize: number;
     maxBatchExtensionLimit: number;
-    preloadStrategy: 'conservative' | 'balanced' | 'aggressive';
+    preloadStrategy: "conservative" | "balanced" | "aggressive";
 }
 //# sourceMappingURL=index.d.ts.map

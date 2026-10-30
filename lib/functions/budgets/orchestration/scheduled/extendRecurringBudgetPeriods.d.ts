@@ -15,14 +15,16 @@
  *
  * Runs on the 1st of each month at 2:00 AM UTC. Memory: 512MiB, Timeout: 300s.
  */
-import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 export declare const extendRecurringBudgetPeriods: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**
  * Core of the scheduled extension, extracted so it can be driven directly in
  * integration tests. Returns a summary for logging/assertions.
  */
-export declare function run_recurring_budget_period_extension(db: admin.firestore.Firestore, now: Timestamp): Promise<{
+export declare function run_recurring_budget_period_extension(db: admin.firestore.Firestore, now: Timestamp, opts?: {
+    budget_ids?: string[];
+}): Promise<{
     budgetsProcessed: number;
     totalPeriodsCreated: number;
 }>;

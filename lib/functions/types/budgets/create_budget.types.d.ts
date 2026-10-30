@@ -38,6 +38,7 @@ export declare const create_budget_input_schema: z.ZodObject<{
     alert_threshold: z.ZodOptional<z.ZodNumber>;
     is_shared: z.ZodOptional<z.ZodBoolean>;
     group_id: z.ZodOptional<z.ZodString>;
+    view_group_id: z.ZodOptional<z.ZodString>;
     selected_start_period: z.ZodOptional<z.ZodString>;
     is_ongoing: z.ZodOptional<z.ZodBoolean>;
     budget_end_date: z.ZodOptional<z.ZodString>;
@@ -64,6 +65,8 @@ export interface CreateBudgetInput {
     alert_threshold: number;
     is_shared: boolean;
     group_id?: string;
+    /** Account-Rooted-Sharing (PD6): create in this group's view instead of Me. */
+    view_group_id?: string;
     selected_start_period?: string;
     is_ongoing: boolean;
     budget_end_date?: string;
@@ -78,10 +81,18 @@ export interface CreateBudgetDependencies {
     group_ids: string[];
     /** Number of budgets the user already owns (for the 50-budget limit) */
     existing_budget_count: number;
-    /** Map of requested category_id → current owner budget_id (null = unassigned) */
-    category_owners: Record<string, string | null>;
     /** The user's "Everything Else" budget ID, if one exists */
     everything_else_budget_id: string | null;
+    /** The view's budgets (same owner key) — who owns what, per view (canon A3). */
+    view_budgets: Array<{
+        id: string;
+        name: string;
+        category_ids: string[];
+        is_everything_else: boolean;
+        start_ms: number;
+    }>;
+    /** category id (slug or legacy Plaid code) → the first category it means. */
+    first_by_category: Record<string, string>;
 }
 /**
  * Pure input for the create_budget domain service. Combines normalized client
@@ -89,7 +100,10 @@ export interface CreateBudgetDependencies {
  */
 export interface CreateBudgetComputeInput {
     budget_id: string;
+    /** Owner key: the creator's uid, or "group:<id>" for a group budget (PD6). */
     user_id: string;
+    /** The person creating it (defaults to user_id). */
+    created_by?: string;
     input: CreateBudgetInput;
     dependencies: CreateBudgetDependencies;
     now: Timestamp;
@@ -122,6 +136,8 @@ export interface ProcessBudgetCreatedPayload {
     is_recurring: boolean;
     claims: CategoryClaim[];
     everything_else_budget_id: string | null;
+    /** Re-assign the view's transactions from here (earliest start of this + source budgets). */
+    rehome_from_ms?: number;
     /**
      * When true, generate ONLY prime periods (skip non-prime). Used by the
      * per-lens Everything Else budgets, which must appear in their OWN period view

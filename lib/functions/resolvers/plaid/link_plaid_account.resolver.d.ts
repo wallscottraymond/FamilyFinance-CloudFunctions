@@ -11,7 +11,7 @@ import { TraceContext, LinkAccountDependencies, ResolveLinkAccountInput } from "
  * Resolves dependencies for linking a Plaid account.
  *
  * Gathers:
- * - User's group IDs for RBAC
+ * - (no group IDs: accounts start private)
  * - Whether the institution is already linked (duplicate detection)
  *
  * @param ctx - Trace context

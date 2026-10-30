@@ -12,8 +12,8 @@
  * NOTE: Plaid amounts for inflows are NEGATIVE (money coming IN).
  * We store and return all amounts as POSITIVE values.
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { Inflow, SourcePeriod } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { Inflow, SourcePeriod } from "../../../../types";
 /**
  * Result of calculating occurrences for a period
  */

@@ -11,8 +11,8 @@
  *
  * @module transactions/utils/match_transaction_splits_to_outflows
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { Transaction as FamilyTransaction } from '../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { Transaction as FamilyTransaction } from "../../../types";
 /**
  * Result of outflow matching with both transactions and period updates
  */

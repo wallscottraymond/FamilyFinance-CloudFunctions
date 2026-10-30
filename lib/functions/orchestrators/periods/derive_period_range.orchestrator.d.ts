@@ -18,6 +18,7 @@ import { TraceContext } from "../../types";
 import { DerivePeriodResult } from "../../domain/periods/period_view.service";
 import { DeriveGoalsViewResult } from "../../domain/goals/goals_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 export interface DeriveRangeWindow {
     period_id: string;
     start_ms: number;
@@ -28,6 +29,8 @@ export interface DerivePeriodRangeInput {
     windows: DeriveRangeWindow[];
     /** Bypass cached results (recompute every window, still writing the cache). */
     force?: boolean;
+    /** Account-Rooted-Sharing: which view (default Me). A group view needs membership. */
+    scope?: DeriveScopeRequest;
 }
 export interface DerivePeriodRangeWindowResult {
     period_id: string;

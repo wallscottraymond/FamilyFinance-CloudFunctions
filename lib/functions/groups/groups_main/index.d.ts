@@ -7,9 +7,9 @@
  * - Group settings and configuration
  * - Group-level triggers and automation
  */
-export * from './crud';
-export * from './sharing';
-export * from './permissions';
-export * from './types';
-export * from './utils';
+export * from "./crud";
+export * from "./sharing";
+export * from "./permissions";
+export * from "./types";
+export * from "./utils";
 //# sourceMappingURL=index.d.ts.map

@@ -203,6 +203,22 @@ export declare function purge_finished_jobs(options?: {
     failed: number;
     reached_cap: boolean;
 }>;
+/**
+ * Checks if an active job (pending or processing) already exists with the given deduplication key.
+ *
+ * Used to prevent enqueueing duplicate jobs for the same logical operation.
+ * The deduplication_key is stored in the job payload.
+ *
+ * Checks both "pending" and "processing" statuses to prevent creating duplicates
+ * while a job is currently being processed.
+ *
+ * @param job_type - Job type to check
+ * @param deduplication_key - Unique key for deduplication (e.g., summary_id)
+ * @returns True if an active job exists, false otherwise
+ */
+/** Build the top-level dedup key: `${job_type}::${deduplication_key}`. Encoding the type into
+ *  the key preserves the previous per-type dedup semantics with a single 2-field index. */
+export declare function build_dedup_key(job_type: string, deduplication_key: string): string;
 export declare function has_active_job(job_type: string, deduplication_key: string): Promise<boolean>;
 /**
  * Creates a job only if no active job (pending or processing) exists with the same deduplication key.
@@ -239,6 +255,9 @@ export declare function coalesce_job<TPayload extends {
     delay_seconds: number;
     trace_id?: string;
     max_retries?: number;
+    /** Only merge into a pending job this accepts (e.g. a re-assign run that hasn't STARTED —
+     *  a pending retry of a started run resumes from its cursor, so it can't absorb a change). */
+    can_merge_into?: (pending_payload: TPayload) => Promise<boolean>;
 }): Promise<Job<TPayload> | null>;
 /**
  * Claims a job for processing using a transaction.

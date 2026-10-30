@@ -11,14 +11,14 @@ export interface GroupMember {
     role: GroupRole;
     joinedAt: Timestamp;
     invitedBy: string;
-    status: 'active' | 'invited' | 'suspended';
+    status: "active" | "invited" | "suspended";
 }
 export interface GroupMembership {
     groupId: string;
     role: GroupRole;
     joinedAt: Timestamp;
     invitedBy: string;
-    status: 'active' | 'invited' | 'suspended';
+    status: "active" | "invited" | "suspended";
 }
 export interface GroupSettings {
     allowMemberInvites: boolean;

@@ -13,6 +13,6 @@
  *
  * @module budgets/utils/createEverythingElseBudget
  */
-import { Firestore } from 'firebase-admin/firestore';
+import { Firestore } from "firebase-admin/firestore";
 export declare function createEverythingElseBudget(db: Firestore, userId: string, userCurrency?: string): Promise<string>;
 //# sourceMappingURL=createEverythingElseBudget.d.ts.map

@@ -12,7 +12,8 @@
  *   → revoke Plaid access tokens (/item/remove) BEFORE deleting plaid_items
  *   → hard-delete child collections (by parent id)
  *   → hard-delete top-level user-keyed collections
- *   → delete sole-owned groups
+ *   → (after the group check) leave every group (D13), close solo groups,
+ *     return moved-in budgets, drop connections + code
  *   → delete users/{uid} doc
  *   → delete the Firebase Auth user
  *   → status → done

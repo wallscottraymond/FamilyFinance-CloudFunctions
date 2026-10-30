@@ -6,7 +6,7 @@
  *
  * Usage: firebase functions:call createMissingEverythingElseBudgets
  */
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from "firebase-admin/firestore";
 /**
  * Summary of migration results
  */

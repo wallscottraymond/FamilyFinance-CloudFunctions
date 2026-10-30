@@ -44,7 +44,8 @@ export declare function detect_material_changes(existing: {
  * PURE FUNCTION - no IO, deterministic.
  *
  * When a pending transaction posts with a different amount,
- * we adjust each split proportionally to preserve the user's allocation.
+ * we adjust each split proportionally to preserve the user's allocation — and the adjusted splits
+ * always add up to the new amount exactly (to the cent).
  *
  * @param splits - Original splits from pending transaction
  * @param old_amount - Original total amount

@@ -11,13 +11,29 @@
  * 7. Events: Emit transaction sync events
  * 8. Update cursor for incremental sync
  *
- * NOTE: Budget calculations are handled by existing Firestore triggers.
- * This orchestrator only syncs transactions from Plaid to Firestore.
+ * One writer, one write per transaction: every page is pulled first, the assignment engine runs
+ * in memory, each transaction is written once (stamped `syncRunId` so the per-transaction trigger
+ * skips it), and ONE follow-up pass (bill/income reconcile, budget spent, transfer check, derive
+ * bump) runs at the end — inline, not as hundreds of queued jobs.
  *
  * @module orchestrators/plaid/sync_transactions
  */
 import { OrchestratorContext } from "../../types";
 import { TransactionSyncInput, TransactionSyncResponse } from "../../types/plaid";
+import { SyncFollowUps } from "./sync_follow_ups";
+export interface SyncTransactionsOptions {
+    /** Stamped on every written doc (`syncRunId`); defaults to the trace id. */
+    run_id?: string;
+    /** The caller (sync_item) runs the follow-ups once, merged with the recurring sync's. */
+    defer_follow_ups?: boolean;
+}
+export interface TransactionSyncResult extends TransactionSyncResponse {
+    /** Plaid's `transactions_update_status` (NOT_READY / INITIAL_UPDATE_COMPLETE / HISTORICAL_UPDATE_COMPLETE). */
+    update_status?: string;
+    /** An account in this pull isn't saved yet — nothing was written; save accounts and re-sync. */
+    needs_accounts?: boolean;
+    follow_ups: SyncFollowUps;
+}
 /**
  * Orchestrates the transaction synchronization flow.
  *
@@ -32,5 +48,5 @@ import { TransactionSyncInput, TransactionSyncResponse } from "../../types/plaid
  * @param ctx - Orchestrator context with input and user info
  * @returns Sync results with counts and next cursor
  */
-export declare function sync_transactions_orchestrator(ctx: OrchestratorContext<TransactionSyncInput>): Promise<TransactionSyncResponse>;
+export declare function sync_transactions_orchestrator(ctx: OrchestratorContext<TransactionSyncInput>, opts?: SyncTransactionsOptions): Promise<TransactionSyncResult>;
 //# sourceMappingURL=sync_transactions.orchestrator.d.ts.map

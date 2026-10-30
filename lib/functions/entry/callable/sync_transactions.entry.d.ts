@@ -25,7 +25,7 @@ export declare const sync_transactions: import("firebase-functions/v2/https").Ca
     removedCount: number;
     pendingMigratedCount: number;
     hasMore: boolean;
-    nextCursor: string | null;
+    nextCursor: null;
     error: string | undefined;
     traceId: string;
 }>, unknown>;

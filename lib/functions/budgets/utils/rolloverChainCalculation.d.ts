@@ -10,8 +10,8 @@
  * - Updates remaining to include rollover (allocated + rollover - spent)
  * - Respects per-budget and global rollover settings
  */
-import * as admin from 'firebase-admin';
-import { PeriodType } from '../../../types';
+import * as admin from "firebase-admin";
+import { PeriodType } from "../../../types";
 export interface RolloverChainResult {
     success: boolean;
     periodsUpdated: number;

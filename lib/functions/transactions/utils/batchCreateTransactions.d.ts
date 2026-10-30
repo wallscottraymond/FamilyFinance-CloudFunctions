@@ -4,8 +4,8 @@
  * Handles atomic batch writing of transactions and outflow period updates to Firestore.
  * This is the final step in the transaction processing pipeline.
  */
-import { Transaction as FamilyTransaction } from '../../../types';
-import { OutflowPeriodUpdate } from './matchTransactionSplitsToOutflows';
+import { Transaction as FamilyTransaction } from "../../../types";
+import { OutflowPeriodUpdate } from "./matchTransactionSplitsToOutflows";
 /**
  * Batch create transactions and update outflow periods atomically
  *

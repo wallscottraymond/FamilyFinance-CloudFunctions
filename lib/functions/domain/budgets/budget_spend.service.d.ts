@@ -85,4 +85,10 @@ export declare function is_countable(split: SplitForSpend): boolean;
  * PURE FUNCTION.
  */
 export declare function compute_budget_spent(budget_id: string, period_start_ms: number, period_end_ms: number, splits: SplitForSpend[]): BudgetSpendResult;
+/**
+ * A stored split's spend status — THE one reading (the period page, stored spend and every other
+ * reader): explicit `spendStatus` wins, else the legacy `isIgnored` / `isRefund` booleans, else
+ * "counted". PURE.
+ */
+export declare function split_spend_status(split: Record<string, unknown>): "counted" | "ignored" | "refund";
 //# sourceMappingURL=budget_spend.service.d.ts.map

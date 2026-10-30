@@ -20,6 +20,10 @@ export interface CreateManualOutflowInput {
     expense_type: string;
     is_essential: boolean;
     due_day: number | null;
+    /** D43 (flag on only): a Plaid account the bill is paid from, and/or a real transaction it came
+     *  from — the only source of a D1 vendor key. Ignored with the flag off. */
+    account_id?: string | null;
+    source_transaction_id?: string | null;
 }
 /**
  * Result of creating a bill.

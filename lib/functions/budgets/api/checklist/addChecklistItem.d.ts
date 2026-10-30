@@ -5,7 +5,7 @@
  * Security: Only budget owners can modify their checklist items
  * Memory: 256MiB, Timeout: 30s
  */
-import { ChecklistItem } from '../../../../types';
+import { ChecklistItem } from "../../../../types";
 interface ChecklistItemResponse {
     success: boolean;
     checklistItem?: ChecklistItem;

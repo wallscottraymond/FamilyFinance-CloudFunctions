@@ -107,8 +107,14 @@ export interface RuleEvaluableTransaction {
     amount: number;
     transaction_date: Date;
     account_id: string;
+    /** The account's name / official name / mask — an older rule stored a typed account name
+     *  (the app now stores the picked account's id), so the Account condition matches either. */
+    account_labels?: string[];
     plaid_primary_category: string;
     internal_primary_category: string | null;
+    /** The transaction's FIRST category slug (canon M7 — what the category condition compares;
+     *  the Rule Book stores first-category slugs). */
+    first_category_id?: string | null;
     /** Current tag ids (union of splits' tags). Empty for a fresh Plaid txn; the evaluator threads
      *  add_tag through this so a later rule's `has tag` sees an earlier rule's `add tag`. */
     tags?: string[];

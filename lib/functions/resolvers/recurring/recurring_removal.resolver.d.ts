@@ -17,14 +17,25 @@ export interface RemovalReadableRepo {
         id: string;
         user_id: string;
         group_ids: string[];
+        account_id?: string | null;
         removal_intervals: RemovalInterval[];
+        /** Set when merged into another bill (Convert-To-Recurring) — no Restore from the list. */
+        merged_into_id?: string | null;
+        /** The stream's last payment date (Plaid `last_date`) — where an "It ended" starts after. */
+        last_date?: {
+            toMillis: () => number;
+        } | null;
     } | null>;
 }
 export interface RecurringRemovalContext {
     id: string;
     owner_id: string;
     group_ids: string[];
+    /** The account its payments come from (scopes the re-assign); null for a manual item. */
+    account_id: string | null;
     removal_intervals: RemovalInterval[];
+    merged_into_id: string | null;
+    last_payment_ms: number | null;
 }
 /** Load the removal context for a recurring item, or null if it doesn't exist. */
 export declare function resolve_recurring_removal_context(ctx: TraceContext, repo: RemovalReadableRepo, id: string): Promise<RecurringRemovalContext | null>;

@@ -7,6 +7,15 @@
  * @module infrastructure/feature_flags
  */
 import { Timestamp } from "firebase-admin/firestore";
+/** The production flag collection. */
+export declare const FEATURE_FLAGS_COLLECTION = "_feature_flags";
+/**
+ * Collection for feature flags. The override exists ONLY for the emulator suites (each test file
+ * gets its own flag collection, so parallel suites can't clobber one global flag doc). It is
+ * honored ONLY when `FIRESTORE_EMULATOR_HOST` is set (hardening, review round 3 defect 7): a stray
+ * override in a deployed function's environment can never redirect the real flag read.
+ */
+export declare function feature_flags_collection(env?: NodeJS.ProcessEnv): string;
 /**
  * Feature flag definition.
  */
@@ -34,7 +43,7 @@ export interface FeatureFlag {
  *
  * @param force_reload - Force reload even if cache is valid
  */
-export declare function load_feature_flags(force_reload?: boolean): Promise<void>;
+export declare function load_feature_flags(force_reload?: boolean, _retries?: number): Promise<void>;
 /**
  * Gets a feature flag by name.
  *
@@ -64,6 +73,13 @@ export declare function is_flag_enabled(flag_name: string, context?: {
     user_id?: string;
     group_ids?: string[];
 }): Promise<boolean>;
+/**
+ * Is the Convert-To-Recurring capture-rules flag on for this user? (`_feature_flags/
+ * convert_to_recurring_v1`, owner allowlist.) Never throws; any problem = off. Gates ONLY new
+ * stamping, the possible-bill detector and the review-answer callable (X11) — records already
+ * stamped v2 keep v2 behavior whatever the flag says (D16).
+ */
+export declare function is_convert_to_recurring_enabled(user_id: string): Promise<boolean>;
 /**
  * Creates or updates a feature flag.
  *

@@ -12,6 +12,7 @@
  * @module orchestrators/plaid/sync_recurring
  */
 import { OrchestratorContext, TraceContext, PerformanceBudget } from "../../types";
+import type { RecurringWrittenDoc } from "../../repositories/recurring_doc_equality";
 /**
  * Input for recurring sync orchestrator.
  */
@@ -69,7 +70,25 @@ export declare const RECURRING_SYNC_BUDGET: PerformanceBudget;
  * @param ctx - Orchestrator context with input and user info
  * @returns Sync results with counts
  */
-export declare function sync_recurring_orchestrator(ctx: OrchestratorContext<RecurringSyncInput>): Promise<RecurringSyncResponse>;
+export declare function sync_recurring_orchestrator(ctx: OrchestratorContext<RecurringSyncInput>, 
+/** From `sync_item`: stamp writes with the run id and leave the transfer check to the run's
+ *  single follow-up pass (it needs the transactions in place first). */
+opts?: {
+    run_id?: string;
+}): Promise<RecurringSyncResponse & {
+    written: RecurringWrittenDoc[];
+    /** Plaid txn ids newly held out of fuzzy bill matching — the item sync re-assigns them (X3). */
+    newly_suppressed_plaid_ids?: string[];
+    review_items_written?: number;
+    /** Other Plaid items a "Track" was handed to (round 4 defect 2): the item sync re-syncs them. */
+    handoff_item_doc_ids?: string[];
+    /** Plaid payments newly claimed by a converted record's absorb — the item sync re-assigns them. */
+    newly_absorbed_plaid_ids?: string[];
+    absorbing_records?: Array<{
+        id: string;
+        direction: "outflow" | "inflow";
+    }>;
+}>;
 /**
  * Orchestrates recurring sync triggered by a Plaid webhook.
  *

@@ -4,7 +4,7 @@
  * Provides centralized Plaid client creation and management
  * to reduce code duplication across Plaid functions.
  */
-import { PlaidApi } from 'plaid';
+import { PlaidApi } from "plaid";
 /**
  * Creates a standardized Plaid client with shared configuration
  *

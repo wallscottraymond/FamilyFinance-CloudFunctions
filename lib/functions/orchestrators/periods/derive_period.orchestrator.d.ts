@@ -13,6 +13,7 @@ import { TraceContext } from "../../types";
 import { DerivePeriodResult } from "../../domain/periods/period_view.service";
 export type { DerivedBudgetResult, DerivedRecurringResult, DerivePeriodResult, } from "../../domain/periods/period_view.service";
 import { PeriodInstanceType } from "../../domain/budgets";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 export interface DerivePeriodInput {
     view_cadence: PeriodInstanceType;
     window_start_ms: number;
@@ -20,6 +21,8 @@ export interface DerivePeriodInput {
     /** Bypass the cached result and recompute fresh (still overwrites the cache with the result,
      *  stamped at the current version). Used by the FE right after a config mutation. */
     force?: boolean;
+    /** Account-Rooted-Sharing: which view (default Me). A group view needs membership. */
+    scope?: DeriveScopeRequest;
 }
 export declare function derive_period_orchestrator(ctx: TraceContext, user_id: string, input: DerivePeriodInput): Promise<DerivePeriodResult>;
 //# sourceMappingURL=derive_period.orchestrator.d.ts.map

@@ -38,7 +38,7 @@
  *
  * See CLAUDE.md for detailed workflow examples and data architecture.
  */
-import { OutflowPeriod, TransactionSplit } from '../../../../types';
+import { OutflowPeriod, TransactionSplit } from "../../../../types";
 /**
  * Request to assign a split to all outflow periods
  */
@@ -46,7 +46,7 @@ export interface AssignSplitToAllOutflowPeriodsRequest {
     transactionId: string;
     splitId: string;
     outflowId: string;
-    paymentType?: 'regular' | 'catch_up' | 'advance' | 'extra_principal';
+    paymentType?: "regular" | "catch_up" | "advance" | "extra_principal";
     clearBudgetAssignment?: boolean;
     targetPeriodId?: string;
 }

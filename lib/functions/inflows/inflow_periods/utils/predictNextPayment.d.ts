@@ -10,16 +10,16 @@
  * 3. Rolling average (for variable income)
  * 4. Frequency-based calculation from last date
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { Inflow } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { Inflow } from "../../../../types";
 /**
  * Payment prediction result
  */
 export interface PaymentPrediction {
     expectedDate: Timestamp;
     expectedAmount: number;
-    confidenceLevel: 'high' | 'medium' | 'low';
-    predictionMethod: 'plaid' | 'frequency' | 'rolling_average' | 'user_override' | 'hourly_calc' | 'commission_calc';
+    confidenceLevel: "high" | "medium" | "low";
+    predictionMethod: "plaid" | "frequency" | "rolling_average" | "user_override" | "hourly_calc" | "commission_calc";
     isInPeriod: boolean;
     daysUntilPayment: number;
 }

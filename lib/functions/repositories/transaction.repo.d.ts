@@ -74,6 +74,7 @@ interface LegacySplitDoc {
     biWeeklyPeriodId: string | null;
     outflowId?: string | null;
     inflowId?: string | null;
+    inflowAssignmentSource?: string;
     plaidPrimaryCategory: string;
     plaidDetailedCategory: string;
     internalPrimaryCategory: string | null;
@@ -94,6 +95,19 @@ interface LegacySplitDoc {
     createdAt: Timestamp;
     updatedAt: Timestamp;
 }
+/** A transaction doc a sync wrote, with what it replaced (null = created). */
+export interface SyncWrittenDoc {
+    doc_id: string;
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown>;
+}
+/** Options for a sync's transaction writes. */
+export interface SyncWriteOptions {
+    /** Stamped as `syncRunId` on every written doc (see `on_transaction_written`). */
+    run_id?: string;
+    /** Final shaping before the write — the sync runs the assignment engine here, in memory. */
+    before_write?: (doc_id: string, data: Record<string, unknown>, existing: Record<string, unknown> | null) => Promise<Record<string, unknown>>;
+}
 /**
  * Transaction Repository
  *
@@ -113,7 +127,7 @@ export declare const transaction_repo: {
      * @param plaid_item_id - Plaid item ID (for scoping)
      * @returns Upsert results with created/updated counts
      */
-    upsert_from_plaid_sync(ctx: TraceContext, transactions: TransactionForPersistence[], user_id: string, plaid_item_id: string, on_create?: (txn: TransactionForPersistence) => TransactionForPersistence, on_update?: (existing: Record<string, unknown>, fresh: Record<string, unknown>) => Record<string, unknown>): Promise<{
+    upsert_from_plaid_sync(ctx: TraceContext, transactions: TransactionForPersistence[], user_id: string, plaid_item_id: string, on_create?: (txn: TransactionForPersistence) => TransactionForPersistence, on_update?: (existing: Record<string, unknown>, fresh: Record<string, unknown>) => Record<string, unknown>, opts?: SyncWriteOptions): Promise<{
         created: number;
         updated: number;
         results: Array<{
@@ -121,6 +135,8 @@ export declare const transaction_repo: {
             doc_id: string;
             action: "created" | "updated";
         }>;
+        /** Every doc written (before = the stored doc, null on create) — the sync's follow-up input. */
+        written: SyncWrittenDoc[];
     }>;
     /**
      * Loads full transaction docs by their PLAID transaction ids (the membership
@@ -129,7 +145,7 @@ export declare const transaction_repo: {
      * owner in memory. Batched via Firestore `in` (≤30 per query). Used by the
      * recurring reconciliation resolver.
      */
-    get_by_plaid_transaction_ids(ctx: TraceContext, user_id: string, plaid_transaction_ids: string[]): Promise<LegacyTransactionDoc[]>;
+    get_by_plaid_transaction_ids(ctx: TraceContext, user_id: string, plaid_transaction_ids: string[], update_times?: Map<string, Timestamp>): Promise<LegacyTransactionDoc[]>;
     /**
      * Loads active transactions whose splits are linked to a recurring outflow/inflow,
      * via the denormalized queryable `splitOutflowIds` / `splitInflowIds`
@@ -158,6 +174,35 @@ export declare const transaction_repo: {
         is_pending: boolean;
     }>): Promise<WriteResult>;
     /**
+     * A user's ACTIVE transactions of one vendor from `from_ms` on, newest first, capped. Uses the
+     * existing composite index `(userId, isActive, vendorKey, transactionDate DESC)`; the caller
+     * filters the account in memory (no new index). Reads one doc per row returned — the cap bounds
+     * the busiest vendor. A transaction written before `vendorKey` was stored isn't found here.
+     */
+    get_by_vendor_key(_ctx: TraceContext, user_id: string, vendor_key: string, from_ms: number, max_rows?: number): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
+     * An account's ACTIVE transactions from `from_ms` on, newest first (existing index
+     * `(ownerId, accountId, transactionDate DESC)`), capped. Only the convert's fallback for a source
+     * transaction written before `vendorKey` was stored: the caller computes the key in memory.
+     */
+    get_account_window(_ctx: TraceContext, user_id: string, account_id: string, from_ms: number, limit?: number): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
+     * An owner's newest transactions, newest first, capped (existing index
+     * `(ownerId, transactionDate DESC)`, the same query the app's Home "Recent transactions" card
+     * pages). Raw docs, any state: the caller drops soft-deleted / out-of-view rows in memory (there
+     * is no isActive + date index). Only the fields a recent-transactions row needs (`select`).
+     */
+    get_latest_by_owner(_ctx: TraceContext, owner_id: string, limit: number): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
      * Manually PIN a split to a recurring bill (outflow) or CLEAR the pin (outflow_id
      * = null), or DETACH it from bills (`outflow_id = null` + `detach`: a manual pin to
      * "none" — "remove from bill" — that beats auto/stream re-linking; see
@@ -171,6 +216,17 @@ export declare const transaction_repo: {
      */
     pin_split_to_outflow(ctx: TraceContext, doc_id: string, split_id: string, outflow_id: string | null, user_id: string, clear_budget?: boolean, outflow_period_id?: string | null, detach?: boolean): Promise<WriteResult>;
     /**
+     * Manually PIN a split to a recurring INCOME (`inflow_id`) or CLEAR the pin (null) — the income
+     * twin of `pin_split_to_outflow`. One Firestore transaction reads the transaction and the income
+     * and checks BOTH owners structurally (the caller owns the transaction and the income); the
+     * business rules (credit only, same view, …) are decided by the domain before this is called.
+     * `mutate` is the domain's pure edit of the split. Recomputes BOTH durable denorms
+     * (`splitInflowIds` and `splitOutflowIds`: a pin clears the split's bill link). Unstamped, like
+     * the bill pin: its write fires `on_transaction_written` (assignment + reconcile of the
+     * touched streams).
+     */
+    pin_split_to_inflow(ctx: TraceContext, doc_id: string, split_id: string, inflow_id: string | null, user_id: string, mutate: (split: Record<string, unknown>) => Record<string, unknown>): Promise<WriteResult>;
+    /**
      * Soft-deletes transactions by Plaid transaction IDs.
      *
      * @param ctx - Trace context
@@ -179,7 +235,10 @@ export declare const transaction_repo: {
      * @param reason - Reason for deletion
      * @returns Write results
      */
-    soft_delete_by_plaid_ids(ctx: TraceContext, user_id: string, plaid_transaction_ids: string[], reason: string): Promise<WriteResult[]>;
+    soft_delete_by_plaid_ids(ctx: TraceContext, user_id: string, plaid_transaction_ids: string[], reason: string, opts?: {
+        run_id?: string;
+        written?: SyncWrittenDoc[];
+    }): Promise<WriteResult[]>;
     /**
      * Gets pending transactions for a Plaid item.
      *
@@ -222,6 +281,7 @@ export declare const transaction_repo: {
     get_raw_by_ids(_ctx: TraceContext, doc_ids: string[]): Promise<Array<{
         id: string;
         data: Record<string, unknown>;
+        update_time?: Timestamp;
     }>>;
     /**
      * Writes the Transaction Assignment Engine's output: the updated splits array
@@ -235,7 +295,7 @@ export declare const transaction_repo: {
      * @param split_outflow_ids - Distinct recurring-outflow links (queryable)
      * @param split_inflow_ids - Distinct recurring-inflow links (queryable)
      */
-    apply_split_assignments(_ctx: TraceContext, doc_id: string, updated_splits: Array<Record<string, unknown>>, split_budget_ids: string[], split_outflow_ids?: string[], split_inflow_ids?: string[]): Promise<void>;
+    apply_split_assignments(_ctx: TraceContext, doc_id: string, updated_splits: Array<Record<string, unknown>>, split_budget_ids: string[], split_outflow_ids?: string[], split_inflow_ids?: string[], assign_run_id?: string, extra_fields?: Record<string, unknown>, read_update_time?: Timestamp): Promise<boolean>;
     /**
      * Counts active transactions for a specific account.
      *
@@ -353,6 +413,44 @@ export declare const transaction_repo: {
         id: string;
         data: Record<string, unknown>;
     }>>;
+    /** Raw partial update of one transaction (fields already in Firestore shape). */
+    update_raw(_ctx: TraceContext, doc_id: string, fields: Record<string, unknown>): Promise<void>;
+    /** `update_raw` only if the doc is unchanged since `read_update_time`; false when a newer
+     *  write landed (FAILED_PRECONDITION) — the caller re-reads and rebuilds its edit. */
+    update_raw_if_unchanged(_ctx: TraceContext, doc_id: string, fields: Record<string, unknown>, read_update_time: Timestamp): Promise<boolean>;
+    /**
+     * Store each transaction's transfer role (3d — internal / edge_out / edge_in / external), only
+     * for the ones that changed. A role change is an assignment input (field guard), so the
+     * debounced per-user assignment batch re-assigns exactly those.
+     */
+    set_transfer_roles(_ctx: TraceContext, roles: Map<string, string>, run_id: string): Promise<number>;
+    /**
+     * One page of a user's transactions in DATE order (then doc id), starting after `cursor` —
+     * the bounded re-assign engine's walk (3-R): each page's dates are contiguous, so its
+     * recurring-candidate preload stays narrow. Inactive docs are dropped after the read (they still
+     * advance the cursor via `last`).
+     *
+     * Composite index: `transactions(userId, transactionDate)` (doc id is the implicit tiebreak).
+     */
+    get_page_by_date(_ctx: TraceContext, user_id: string, cursor: {
+        date_ms: number;
+        doc_id: string;
+    } | null, limit: number, scope?: {
+        from_ms?: number;
+        to_ms?: number;
+        account_ids?: string[];
+    }): Promise<{
+        docs: Array<{
+            id: string;
+            data: Record<string, unknown>;
+            update_time: Timestamp;
+        }>;
+        last: {
+            date_ms: number;
+            doc_id: string;
+        } | null;
+        exhausted: boolean;
+    }>;
     /**
      * Sets a split's tags (or every split's tags when `split_id` is null — the whole-transaction
      * case) and recomputes the top-level `tagIds` union. `splits_raw` is the already-read raw splits

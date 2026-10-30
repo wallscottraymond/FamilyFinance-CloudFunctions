@@ -12,8 +12,8 @@
  * Note: This syncs notes for the SAME BUDGET across different period types,
  * not across different budgets.
  */
-import * as admin from 'firebase-admin';
-import { BudgetPeriodDocument } from '../../../types';
+import * as admin from "firebase-admin";
+import { BudgetPeriodDocument } from "../../../types";
 export interface NoteSyncResult {
     success: boolean;
     periodsQueried: number;

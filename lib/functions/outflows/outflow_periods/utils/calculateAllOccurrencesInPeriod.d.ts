@@ -15,8 +15,8 @@
  * - February 2025: 4 Wednesdays (5, 12, 19, 26)
  * - March 2025: 5 Wednesdays (5, 12, 19, 26, and partial week to April 2)
  */
-import { Timestamp } from 'firebase-admin/firestore';
-import { RecurringOutflow, SourcePeriod, OutflowOccurrence } from '../../../../types';
+import { Timestamp } from "firebase-admin/firestore";
+import { RecurringOutflow, SourcePeriod, OutflowOccurrence } from "../../../../types";
 /**
  * Result of calculating all occurrences in a period
  *

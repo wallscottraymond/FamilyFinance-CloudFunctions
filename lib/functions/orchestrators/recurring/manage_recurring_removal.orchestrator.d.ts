@@ -22,6 +22,8 @@ export interface RemovalManageableRepo extends RemovalReadableRepo {
      * thus out of the live list + totals; restore flips them back.
      */
     apply_period_suppression(ctx: TraceContext, id: string, intervals: RemovalInterval[], user_id: string): Promise<number>;
+    /** Delete the item's stored periods (the delete path, before `hard_delete`). */
+    delete_periods(ctx: TraceContext, id: string, user_id: string): Promise<number>;
     hard_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;
 }
 export type ManageRecurringRemovalInput = {
@@ -38,6 +40,12 @@ export type ManageRecurringRemovalInput = {
 } | {
     id: string;
     action: "delete";
+}
+/** "It ended" (Convert-To-Recurring X4): end going forward after the last payment. Internal —
+ *  reached through the review-answer callable, not the manage entry. */
+ | {
+    id: string;
+    action: "end";
 };
 export interface ManageRecurringRemovalResult {
     id: string;

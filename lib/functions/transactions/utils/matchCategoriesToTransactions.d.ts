@@ -7,7 +7,7 @@
  * - User-specific category rules
  * - Group-level category preferences
  */
-import { Transaction as FamilyTransaction, TransactionCategory } from '../../../types';
+import { Transaction as FamilyTransaction, TransactionCategory } from "../../../types";
 /**
  * Match categories to transactions based on additional business logic (in-memory)
  *

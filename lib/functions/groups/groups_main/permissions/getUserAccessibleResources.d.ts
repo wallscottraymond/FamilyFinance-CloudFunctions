@@ -1,13 +1,13 @@
 import { ResourceRole } from "../../../../types";
 interface GetUserAccessibleResourcesRequest {
-    resourceType?: 'budget' | 'transaction' | 'outflow' | 'inflow' | 'rule';
+    resourceType?: "budget" | "transaction" | "outflow" | "inflow" | "rule";
     minAccessLevel?: ResourceRole;
 }
 interface AccessibleResource {
     resourceId: string;
     resourceType: string;
     accessLevel: ResourceRole;
-    accessSource: 'owner' | 'direct' | 'group';
+    accessSource: "owner" | "direct" | "group";
     groupId?: string;
 }
 interface GetUserAccessibleResourcesResponse {
