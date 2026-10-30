@@ -165,8 +165,11 @@ function materialize_splits(
   // and the remainder can't go negative.
   const sign = total < 0 ? -1 : 1;
   const magnitude = Math.abs(total);
-  // Nothing to divide: keep the existing splits rather than materializing none.
-  if (magnitude < 0.01) return txn.splits;
+  // Nothing to divide: keep the existing splits (ids + amounts) rather than materializing none,
+  // but still apply the rule's other per-split actions to them.
+  if (magnitude < 0.01) {
+    return txn.splits.map((s) => make_split(s, s.split_id, s.amount, {}, intents, true));
+  }
   const out: TransactionSplitForPersistence[] = [];
   let allocated = 0;
   specs.forEach((spec, i) => {

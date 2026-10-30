@@ -258,6 +258,16 @@ describe("apply_rule_intents", () => {
       );
       expect(out.splits).toHaveLength(1);
       expect(out.splits[0].amount).toBe(0);
+      expect(out.splits[0].split_id).toBe("s1");
+    });
+
+    it("a $0 transaction still gets the rule's other actions (tags, rule id)", () => {
+      const out = apply_rule_intents(
+        txn({ amount: 0, splits: [split({ amount: 0 })] }),
+        intents({ split: [{ percent: 50 }], add_tag: ["t1"], applied_rule_ids: ["r9"] })
+      );
+      expect(out.splits[0].tags).toContain("t1");
+      expect(out.splits[0].rules).toContain("r9");
     });
 
     it("invariant over many random specs: splits sum to the total, none crosses zero, none is zero", () => {
