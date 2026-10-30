@@ -74,8 +74,9 @@ export async function update_transaction_splits_orchestrator(
     // writing them would silently undo that newer write. The conditional write below makes this
     // check atomic with the write (a write landing in between fails it and we re-check).
     if (input.base_updated_at_ms !== undefined) {
-      const stored = fresh.data.updatedAt as Timestamp | undefined;
-      if (stored && stored.toMillis() !== input.base_updated_at_ms) {
+      // Not a Timestamp (a legacy string / number): can't compare — skip rather than refuse forever.
+      const stored = fresh.data.updatedAt as { toMillis?: () => number } | undefined;
+      if (typeof stored?.toMillis === "function" && stored.toMillis() !== input.base_updated_at_ms) {
         throw new StaleSplitEditError(transaction_id);
       }
     }
