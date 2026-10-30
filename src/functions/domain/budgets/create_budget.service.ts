@@ -49,6 +49,12 @@ export function compute_create_budget(
   if (!input.category_ids || input.category_ids.length === 0) {
     validation_errors.push("at least one category is required");
   }
+  // Period generation gives a quarterly / yearly budget its FULL amount in every month (12x for
+  // yearly; Code-Health-Review M5-H1 / M1-H1). Every create path (wizard, copy-to-group) comes
+  // through here, so refuse them until the generator allocates them per month.
+  if (input.period === "quarterly" || input.period === "yearly") {
+    validation_errors.push(`${input.period} budgets aren't supported yet`);
+  }
   if (dependencies.existing_budget_count >= MAX_BUDGETS_PER_USER) {
     validation_errors.push(
       `budget limit reached (${MAX_BUDGETS_PER_USER} budgets per user)`

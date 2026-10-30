@@ -313,6 +313,33 @@ describe("compute_reallocated_periods", () => {
 });
 
 describe("compute_create_budget", () => {
+  // Code-Health-Review M5-H1 / M1-H1 (+ batch-1 verify): period generation gives a quarterly /
+  // yearly budget its FULL amount in every month (12x for yearly). Reject them at the one create
+  // path (the wizard, copy-to-group and any other caller all go through compute_create_budget)
+  // until the generator allocates them per month.
+  const deps = {
+    currency: "USD",
+    group_ids: [],
+    existing_budget_count: 0,
+    everything_else_budget_id: "everything_else",
+    view_budgets: [],
+    first_by_category: {},
+  };
+  it.each(["quarterly", "yearly"] as const)("rejects a %s budget (not allocated per month yet)", (period) => {
+    const result = compute_create_budget({
+      budget_id: "b_q", user_id: "user_1", input: make_create_input({ period }), dependencies: deps, now: NOW,
+    });
+    expect(result.entity).toBeUndefined();
+    expect(result.validation_errors?.join(" ")).toMatch(new RegExp(period));
+  });
+  it.each(["weekly", "monthly", "bi_monthly"] as const)("still accepts a %s budget", (period) => {
+    const result = compute_create_budget({
+      budget_id: "b_ok", user_id: "user_1", input: make_create_input({ period }), dependencies: deps, now: NOW,
+    });
+    expect(result.validation_errors ?? []).toEqual([]);
+    expect(result.entity?.period).toBe(period);
+  });
+
   it("creates a valid budget with remaining = amount", () => {
     const result = compute_create_budget({
       budget_id: "budget_new",

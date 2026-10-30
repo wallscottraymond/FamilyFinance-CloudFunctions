@@ -72,12 +72,6 @@ outflows/
 │   ├── crud/                   # Create/Read/Update/Delete operations
 │   │   ├── createManualOutflow.ts
 │   │   └── index.ts
-│   ├── dev/                    # Development and testing functions
-│   │   ├── createTestOutflows.ts
-│   │   ├── debugOutflowPeriods.ts
-│   │   ├── simulatePlaidRecurring.ts
-│   │   ├── testOutflowUpdate.ts
-│   │   └── index.ts
 │   ├── triggers/               # Firestore triggers
 │   │   ├── onOutflowCreated.ts
 │   │   ├── onOutflowUpdated.ts
@@ -105,11 +99,6 @@ outflows/
 │   │   └── index.ts
 │   ├── crud/                   # CRUD operations
 │   │   ├── createOutflowPeriods.ts
-│   │   └── index.ts
-│   ├── dev/                    # Development functions
-│   │   ├── extendOutflowPeriods.ts
-│   │   ├── migrateTransactionSplits.ts
-│   │   ├── debugTransactionMatching.ts
 │   │   └── index.ts
 │   ├── triggers/               # Firestore triggers
 │   │   ├── onOutflowPeriodCreate.ts
@@ -146,9 +135,6 @@ outflows/
     │   ├── deleteOutflowPeriodSummary.ts
     │   ├── createOutflowPeriodSummary.ts         # NEW: Create summaries
     │   ├── batchUpdateOutflowPeriodSummaries.ts  # NEW: Batch operations
-    │   └── index.ts
-    ├── dev/                    # Development functions
-    │   ├── regenerateAllSummaries.ts             # NEW: Regenerate all
     │   └── index.ts
     ├── triggers/               # Firestore triggers
     │   └── index.ts
@@ -242,29 +228,6 @@ Manages recurring bill definitions from both Plaid and user-created sources.
   - Smart upsert logic (create vs update)
   - Preserves user modifications
   - Updates transaction IDs array
-
-#### Dev/Testing Functions
-- **`dev/createTestOutflows.ts`** - Create sample outflows for testing
-  - HTTP request function
-  - Simulates Plaid recurring sync pipeline
-  - Creates realistic test data (Internet, Netflix, Gym)
-
-- **`dev/debugOutflowPeriods.ts`** - Debug outflow period calculations
-  - HTTP request function
-  - Returns diagnostic information
-  - Shows payment cycles, withholding amounts
-
-- **`dev/simulatePlaidRecurring.ts`** - Simulate Plaid recurring transaction sync
-  - HTTP request function
-  - Fetches mock Plaid recurring data
-  - Runs full format → enhance → batch create pipeline
-
-- **`dev/testOutflowUpdate.ts`** - Test outflow update trigger
-  - HTTP request function
-  - Simulates outflow updates
-  - Validates period cascading
-
----
 
 ## Module 2: Outflow Periods
 
@@ -431,23 +394,6 @@ An occurrence represents a single instance of a recurring bill within a period. 
   - Placeholder/deprecated utility
   - Future: More sophisticated status logic
 
-#### Dev/Testing Functions
-- **`dev/extendOutflowPeriods.ts`** - Generate additional periods forward in time
-  - HTTP request function
-  - Extends periods beyond 3-month default
-  - Useful for testing long-term scenarios
-
-- **`dev/migrateTransactionSplits.ts`** - Add transactionSplits field to periods
-  - HTTP request function
-  - Data migration utility
-  - Adds empty transactionSplits array to existing periods
-
-- **`dev/debugTransactionMatching.ts`** - Debug transaction matching logic
-  - HTTP request function
-  - Shows matched/unmatched transactions
-  - Validates auto-matching results
-  - **Shows occurrence matching details**
-
 #### Tests (NEW)
 - **`__tests__/calculateAllOccurrencesInPeriod.test.ts`** - Test occurrence calculations
   - 18 comprehensive test cases
@@ -538,13 +484,6 @@ The summary system aggregates outflow periods by source period, creating denorma
   - Update multiple summaries atomically
   - Used for bulk operations (migrations, recalculations)
   - Ensures consistency across summary documents
-
-#### Dev Functions (NEW)
-- **`dev/regenerateAllSummaries.ts`** - **NEW: Regenerate all user summaries**
-  - HTTP request function for admin use
-  - Rebuilds all summary documents from scratch
-  - Useful after schema changes or data migrations
-  - Validates summary data integrity
 
 #### Utilities
 - **`utils/periodTypeHelpers.ts`** - Determine period type from source period ID
@@ -1297,9 +1236,8 @@ if (summarySnap.exists()) {
 - **Summary triggers** go in `outflow_periods/triggers/`
 
 **Dev/Testing:**
-- Place in `{module}/dev/` directory
-- HTTP request functions for emulator testing
-- Export from `{module}/dev/index.ts`
+- No dev or seeder functions in the deploy tree (dev == prod). Seed test data in emulator tests
+  (`__emulator_tests__/helpers/`); `src/__tests__/deploy_surface.test.ts` enforces it
 
 **Tests:**
 - Place in `{module}/__tests__/` directory
@@ -1508,28 +1446,6 @@ if (summarySnap.exists()) {
 - Summary aggregations
 - Centralized trigger flows
 
-### Dev Testing Functions
-
-**`createTestOutflows`:**
-- Simulates Plaid recurring sync
-- Creates realistic test data
-- Useful for frontend development
-
-**`debugOutflowPeriods`:**
-- Returns diagnostic information
-- Shows calculation details including occurrences
-- Useful for troubleshooting
-
-**`extendOutflowPeriods`:**
-- Generates additional future periods
-- Tests long-term scenarios
-- Useful for year-end testing
-
-**`regenerateAllSummaries`:** (NEW)
-- Rebuilds all summary documents
-- Validates summary integrity
-- Useful after schema changes
-
 ### Emulator Testing
 
 ```bash
@@ -1545,14 +1461,6 @@ curl -X POST http://localhost:5001/{project}/us-central1/createManualOutflow \
     "frequency": "monthly"
   }'
 
-# Test period generation
-curl http://localhost:5001/{project}/us-central1/debugOutflowPeriods?userId=testUser
-
-# Test Plaid sync simulation
-curl http://localhost:5001/{project}/us-central1/simulatePlaidRecurring?userId=testUser
-
-# Test summary regeneration
-curl http://localhost:5001/{project}/us-central1/regenerateAllSummaries?userId=testUser
 ```
 
 ---
@@ -1978,7 +1886,7 @@ Store in period.occurrences
 - ✅ No shared `/utils/` directory - utilities belong to specific modules
 - ✅ Triggers live in the module that owns the collection they watch
 - ✅ Public APIs exported from module-specific locations
-- ✅ Dev/testing functions in `{module}/dev/` directories
+- ✅ No dev/testing functions in the deploy tree (guard: `src/__tests__/deploy_surface.test.ts`)
 - ✅ **Occurrence tracking** is core to payment status calculation
 - ✅ **Centralized triggers** maintain summary consistency
 

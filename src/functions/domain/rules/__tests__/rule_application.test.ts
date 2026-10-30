@@ -250,6 +250,16 @@ describe("apply_rule_intents", () => {
       expect(out).toEqual([3.33, 3.33, 3.33, 0.01]);
     });
 
+    it("a $0 transaction keeps its split (a split rule never leaves it with none)", () => {
+      SPECS = [{ percent: 50 }, { amount: 10 }];
+      const out = apply_rule_intents(
+        txn({ amount: 0, splits: [split({ amount: 0 })] }),
+        intents({ split: SPECS, applied_rule_ids: ["r"] })
+      );
+      expect(out.splits).toHaveLength(1);
+      expect(out.splits[0].amount).toBe(0);
+    });
+
     it("invariant over many random specs: splits sum to the total, none crosses zero, none is zero", () => {
       let seed = 42;
       const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
