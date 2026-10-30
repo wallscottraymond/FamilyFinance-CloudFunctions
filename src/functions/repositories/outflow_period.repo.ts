@@ -7,7 +7,7 @@
  * @module repositories/outflow_period
  */
 
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import {
   WriteResult,
   BatchWriteResult,
@@ -657,8 +657,15 @@ export const outflow_period_repo = {
       .where("accountId", "==", account_id)
       .get();
 
+    // Removal turns off only active periods and marks them; restore turns back on only the
+    // marked ones, so a period inactive for another reason (removed bill, suppressed
+    // occurrence) stays off (Code-Health-Review P1-H1 / M4-M8).
     const ids = snapshot.docs
-      .filter((doc) => doc.get("isActive") !== is_active)
+      .filter((doc) =>
+        is_active
+          ? doc.get("deactivatedReason") === "account_removed"
+          : doc.get("isActive") !== false
+      )
       .map((doc) => doc.id);
 
     if (ids.length === 0) {
@@ -673,6 +680,7 @@ export const outflow_period_repo = {
         batch.update(db.collection(COLLECTION).doc(id), {
           isActive: is_active,
           updatedAt: now,
+          deactivatedReason: is_active ? FieldValue.delete() : "account_removed",
         });
         /* eslint-enable @typescript-eslint/naming-convention */
         updated++;

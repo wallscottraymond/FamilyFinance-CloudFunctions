@@ -20,7 +20,7 @@ import {
   fire_and_forget,
   log_async_debug,
 } from "../../observability";
-import { transaction_repo } from "../../repositories";
+import { transaction_repo, account_repo } from "../../repositories";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { create_job } from "../../infrastructure/job_queue";
 
@@ -81,6 +81,16 @@ export async function restore_account_transactions_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
+    // 0. Page-by-page job: if the account was removed again in between, stop (P1-M8).
+    const account = await account_repo.get_by_plaid_account_id_any_status(
+      ctx, input.plaid_account_id, input.user_id
+    );
+    perf.reads++;
+    if (account && !account.is_active) {
+      console.log(`[${ctx.trace_id}] Account ${input.plaid_account_id} is removed — not restoring`);
+      return { success: true, transactions_restored: 0 };
+    }
+
     // 1. Restore one page of the transactions the account removal hid. Only
     //    hiddenReason "account_removed" — rows soft-deleted for other reasons
     //    (superseded pendings, etc.) must stay deleted.

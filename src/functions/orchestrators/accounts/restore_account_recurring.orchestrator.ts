@@ -99,32 +99,25 @@ export async function restore_account_recurring_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
-    // 1. Get soft-deleted outflows for this account, restore via the repo.
-    const outflows = await outflow_repo.get_by_account_id(
+    // 1. Restore the outflows the account removal turned off (marked), not every inactive one:
+    //    a bill the user had already removed stays removed (Code-Health-Review P1-H1).
+    const deleted_outflow_ids = await outflow_repo.get_ids_removed_with_account(
       ctx,
-      input.plaid_account_id,
-      { include_deleted: true }
+      input.plaid_account_id
     );
     perf.reads++;
-    const deleted_outflow_ids = outflows
-      .filter((o) => !o.is_active)
-      .map((o) => o.id);
     const outflows_restored = await outflow_repo.restore_by_ids(
       ctx,
       deleted_outflow_ids
     );
     perf.writes += Math.ceil(outflows_restored / BATCH_SIZE);
 
-    // 2. Get soft-deleted inflows for this account, restore via the repo.
-    const inflows = await inflow_repo.get_by_account_id(
+    // 2. Same for inflows.
+    const deleted_inflow_ids = await inflow_repo.get_ids_removed_with_account(
       ctx,
-      input.plaid_account_id,
-      { include_deleted: true }
+      input.plaid_account_id
     );
     perf.reads++;
-    const deleted_inflow_ids = inflows
-      .filter((i) => !i.is_active)
-      .map((i) => i.id);
     const inflows_restored = await inflow_repo.restore_by_ids(
       ctx,
       deleted_inflow_ids

@@ -106,7 +106,7 @@ export async function cascade_soft_delete_recurring_orchestrator(
         perf.reads++;
 
         if (outflow && outflow.is_active) {
-          await outflow_repo.soft_delete(ctx, outflow_id, input.user_id);
+          await outflow_repo.soft_delete(ctx, outflow_id, input.user_id, "account_removed");
           perf.writes++;
           outflows_deleted++;
         }
@@ -127,7 +127,7 @@ export async function cascade_soft_delete_recurring_orchestrator(
         perf.reads++;
 
         if (inflow && inflow.is_active) {
-          await inflow_repo.soft_delete(ctx, inflow_id, input.user_id);
+          await inflow_repo.soft_delete(ctx, inflow_id, input.user_id, "account_removed");
           perf.writes++;
           inflows_deleted++;
         }

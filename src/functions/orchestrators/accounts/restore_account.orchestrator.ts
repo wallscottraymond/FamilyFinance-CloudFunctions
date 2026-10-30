@@ -225,6 +225,15 @@ export async function restore_account_orchestrator(
     // 8. Repository write: Restore the account
     await account_repo.restore(ctx, input.account_id, user_id);
     perf.writes++;
+
+    // If removing this (last) account flagged its bank connection for removal (Plaid's
+    // itemRemove failed), the 4-hourly retry would still disconnect the bank after this
+    // restore. The connection is wanted again: clear the flag (Code-Health-Review P1-M4).
+    if (account.item_id && item_is_active) {
+      /* eslint-disable-next-line @typescript-eslint/naming-convention */
+      await plaid_item_repo.apply_field_update(ctx, account.item_id, { removalPending: false });
+      perf.writes++;
+    }
     // The account's isActive is a derive-scope input (Me + any group it's shared into); the
     // transaction cascade job bumps too, but it may not run (no txns / not requested).
     await bump_derive_version(user_id).catch(() => {});

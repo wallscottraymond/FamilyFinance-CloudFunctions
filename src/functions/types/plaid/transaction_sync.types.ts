@@ -233,6 +233,11 @@ export interface TransactionForPersistence {
   /** Whether transaction is active (false = soft-deleted) */
   is_active: boolean;
 
+  /** Stored hidden because its account is removed (kept, not dropped, so restoring the account
+   *  brings it back; Code-Health-Review P1-H2). Hidden = inactive but not deleted. */
+  is_hidden?: boolean;
+  hidden_reason?: "account_removed";
+
   /** Plaid item document ID */
   plaid_item_id: string;
 

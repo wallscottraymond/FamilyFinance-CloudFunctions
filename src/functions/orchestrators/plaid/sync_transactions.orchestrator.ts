@@ -187,12 +187,14 @@ export async function sync_transactions_orchestrator(
       follow_ups: empty_follow_ups(),
     };
   }
-  const is_active = (t: import("plaid").Transaction) => deps.active_account_ids.has(t.account_id);
-  const active_added = fetched.added.filter(is_active);
-  const active_modified = fetched.modified.filter(is_active);
-  const skipped = all_txns.length - active_added.length - active_modified.length;
-  if (skipped > 0) {
-    console.log(`[${ctx.trace_id}] Skipped ${skipped} transactions for hidden accounts`);
+  // Transactions for an account the user removed are NOT dropped (the cursor moves past them, so
+  // a restore would lose them): they are stored hidden (`hiddenReason: "account_removed"`), and
+  // restoring the account brings them back (Code-Health-Review P1-H2). See mark_hidden_for_removed.
+  const active_added = fetched.added;
+  const active_modified = fetched.modified;
+  const hidden_count = all_txns.filter((t) => !deps.active_account_ids.has(t.account_id)).length;
+  if (hidden_count > 0) {
+    console.log(`[${ctx.trace_id}] Storing ${hidden_count} transactions hidden (removed accounts)`);
   }
 
   // Load the user's active rules ONCE per sync (first-write-only transform on new docs).
@@ -349,6 +351,20 @@ export async function sync_transactions_orchestrator(
   };
 }
 
+/** A transaction on an account the user removed is written hidden: inactive, not deleted, marked
+ *  `account_removed` so restoring the account brings it back. A Plaid update keeps it hidden
+ *  (the incoming copy is marked the same way). */
+function mark_hidden_for_removed(
+  txns: TransactionForPersistence[],
+  active_account_ids: Set<string>
+): TransactionForPersistence[] {
+  return txns.map((t) =>
+    active_account_ids.has(t.account_id)
+      ? t
+      : { ...t, is_active: false, is_hidden: true, hidden_reason: "account_removed" }
+  );
+}
+
 /** Pull every page from `start_cursor`; restart (max 3×) on a mutation-during-pagination error. */
 async function fetch_all_pages(
   ctx: OrchestratorContext<TransactionSyncInput>,
@@ -467,10 +483,9 @@ async function process_added_transactions(
       const final = with_periods;
 
       // Step 6a: Transform legacy format to new persistence format
-      let transactions_for_persistence = transform_legacy_to_persistence(
-        final,
-        ctx.user_id,
-        deps.user_context.group_ids
+      let transactions_for_persistence = mark_hidden_for_removed(
+        transform_legacy_to_persistence(final, ctx.user_id, deps.user_context.group_ids),
+        deps.active_account_ids
       );
 
       // Step 6a-migrate: for each pending->posted migration, OVERLAY the pending's
@@ -561,10 +576,9 @@ async function process_modified_transactions(
       const final = with_periods;
 
       // Transform to new persistence format
-      const transactions_for_persistence = transform_legacy_to_persistence(
-        final,
-        ctx.user_id,
-        deps.user_context.group_ids
+      const transactions_for_persistence = mark_hidden_for_removed(
+        transform_legacy_to_persistence(final, ctx.user_id, deps.user_context.group_ids),
+        deps.active_account_ids
       );
 
       // Upsert via new repository. Modified txns already exist → merge, never overwrite the

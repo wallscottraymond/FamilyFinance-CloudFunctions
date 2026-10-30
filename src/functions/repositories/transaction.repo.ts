@@ -263,7 +263,9 @@ function map_to_doc(
     createdAt: now,
     updatedAt: now,
     isActive: entity.is_active,
-    isDeleted: !entity.is_active,
+    // Hidden (its account is removed) is inactive but NOT deleted: restore brings it back.
+    isDeleted: !entity.is_active && !entity.is_hidden,
+    ...(entity.is_hidden ? { isHidden: true, hiddenReason: entity.hidden_reason ?? null } : {}),
     // Rules Engine flags (non-blocking; drive the "Needs review" queue). Written on every doc so the
     // queue query (needsReview == true) is consistent.
     needsReview: entity.needs_review ?? false,
@@ -1042,6 +1044,9 @@ export const transaction_repo = {
           isDeleted: true,
           deletionReason: reason,
           updatedAt: now,
+          // Deleted by Plaid while its account was removed: no longer "hidden by the removal", so
+          // restoring the account must not bring it back (Code-Health-Review P1-H3).
+          ...((before as { hiddenReason?: unknown }).hiddenReason ? { hiddenReason: null } : {}),
           ...(opts?.run_id ? { syncRunId: opts.run_id, lastWriteSource: "plaid_sync" } : {}),
         };
         /* eslint-enable @typescript-eslint/naming-convention */

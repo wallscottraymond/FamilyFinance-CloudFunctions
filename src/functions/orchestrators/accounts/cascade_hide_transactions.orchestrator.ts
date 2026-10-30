@@ -13,6 +13,7 @@ import {
   create_performance_metrics,
 } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { account_repo } from "../../repositories/account.repo";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { create_job } from "../../infrastructure/job_queue";
 import {
@@ -86,6 +87,18 @@ export async function cascade_hide_transactions_orchestrator(
   log_operation_start(span, input.user_id);
 
   try {
+    // This job re-enqueues itself page by page. If the account was restored in between, stop:
+    // a later page must not re-hide a restored account (Code-Health-Review P1-M8).
+    const account = await account_repo.get_by_plaid_account_id_any_status(
+      ctx, input.plaid_account_id, input.user_id
+    );
+    perf.reads++;
+    if (account?.is_active) {
+      console.log(`[${ctx.trace_id}] Account ${input.plaid_account_id} was restored — not hiding`);
+      log_operation_success(span, input.user_id);
+      return { transactions_hidden: 0, has_more: false, success: true };
+    }
+
     // Removing an account removes its transactions from budgets too (decided
     // 2026-10-05; the "Keep in Budgets" choice was dropped — it never worked,
     // since derive ignores inactive transactions). `removal_mode` stays on the

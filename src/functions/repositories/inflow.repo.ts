@@ -458,6 +458,18 @@ export const inflow_repo = {
    * decides which IDs to restore; the repo only persists isActive/restoredAt.
    * Returns the number of docs written.
    */
+  /** Ids on this account that the account-removal cascade turned off (`deactivatedReason:
+   *  "account_removed"`). A inflow the user had already removed is not among them. */
+  async get_ids_removed_with_account(_ctx: TraceContext, account_id: string): Promise<string[]> {
+    const snapshot = await getFirestore()
+      .collection(COLLECTION)
+      .where("accountId", "==", account_id)
+      .where("deactivatedReason", "==", "account_removed")
+      .select()
+      .get();
+    return snapshot.docs.map((d) => d.id);
+  },
+
   async restore_by_ids(ctx: TraceContext, ids: string[]): Promise<number> {
     if (ids.length === 0) {
       return 0;
@@ -469,7 +481,11 @@ export const inflow_repo = {
       const batch = db.batch();
       for (const id of chunk) {
         /* eslint-disable @typescript-eslint/naming-convention */
-        batch.update(doc_ref(id), { isActive: true, restoredAt: now });
+        batch.update(doc_ref(id), {
+          isActive: true,
+          restoredAt: now,
+          deactivatedReason: FieldValue.delete(),
+        });
         /* eslint-enable @typescript-eslint/naming-convention */
         restored++;
       }
@@ -1220,7 +1236,10 @@ export const inflow_repo = {
   async soft_delete(
     ctx: TraceContext,
     id: string,
-    user_id: string
+    user_id: string,
+    /** Why it was turned off. "account_removed" marks it so restoring the account brings back
+     *  exactly what the removal turned off (Code-Health-Review P1-H1). */
+    reason?: "account_removed"
   ): Promise<WriteResult> {
     const before_doc = await doc_ref(id).get();
 
@@ -1236,7 +1255,8 @@ export const inflow_repo = {
       ...before,
       isActive: false,
       updatedAt: now,
-    };
+      ...(reason ? { deactivatedReason: reason } : {}),
+    } as LegacyInflowDoc;
     /* eslint-enable @typescript-eslint/naming-convention */
 
     // the convert-lifecycle markers are never touched by a full-doc write built from a stale read

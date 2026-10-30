@@ -36,6 +36,11 @@ const ctx = () => ({
   span_id: `s_${Date.now()}`,
 });
 
+/** Mirror the real flow: remove_account marks the account inactive before queuing the hide job;
+ *  restore_account marks it active before queuing the restore job (the jobs check it, P1-M8). */
+const setAccountActive = (seed: { target: { id: string } }, isActive: boolean) =>
+  db.collection("accounts").doc(seed.target.id).update({ isActive });
+
 const txnDoc = async (id: string) =>
   (await db.collection("transactions").doc(id).get()).data();
 const outflowDoc = async (id: string) =>
@@ -55,6 +60,7 @@ describe("cascade_hide_transactions", () => {
   it("keep_history hides target txns (isActive:false, isHidden:true) without excluding from budgets", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 3 });
 
+    await setAccountActive(seed, false);
     const result = await cascade_hide_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
       user_id: seed.userId,
@@ -79,6 +85,8 @@ describe("cascade_hide_transactions", () => {
   it("delete_history is ignored: same result as keep_history (no excludeFromBudgets)", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
 
+    await setAccountActive(seed, false);
+
     await cascade_hide_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
       user_id: seed.userId,
@@ -97,6 +105,8 @@ describe("cascade_hide_transactions", () => {
   it("does NOT touch transactions on sibling accounts (cascade isolation)", async () => {
     const seed = await seedAccountGraph(db, { accounts: 2, txnsPerAccount: 2 });
     const sibling = seed.accounts[1];
+
+    await setAccountActive(seed, false);
 
     await cascade_hide_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
@@ -184,6 +194,7 @@ describe("restore_account_transactions (hide -> restore round-trip)", () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 3 });
 
     // Hide (as account removal would).
+    await setAccountActive(seed, false);
     await cascade_hide_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
       user_id: seed.userId,
@@ -192,6 +203,7 @@ describe("restore_account_transactions (hide -> restore round-trip)", () => {
     });
 
     // Restore.
+    await setAccountActive(seed, true);
     const result = await restore_account_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
       user_id: seed.userId,
@@ -211,12 +223,15 @@ describe("restore_account_transactions (hide -> restore round-trip)", () => {
   it("restore after delete_history fully restores (removal_mode ignored)", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
 
+    await setAccountActive(seed, false);
+
     await cascade_hide_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
       user_id: seed.userId,
       removal_mode: "delete_history",
       trace_id: "t",
     });
+    await setAccountActive(seed, true);
     await restore_account_transactions_orchestrator(ctx(), {
       plaid_account_id: seed.target.accountId,
       user_id: seed.userId,
@@ -278,4 +293,120 @@ describe("restore_account_recurring (soft-delete -> restore round-trip)", () => 
       expect((await inflowPeriodDoc(id))?.isActive).toBe(true);
     }
   });
+
+  // Code-Health-Review P1-H1 / M4-M8: restore brings back ONLY what the removal turned off. A bill
+  // or income the user had already removed (or a period inactive for another reason, e.g. a
+  // suppressed occurrence) stays off; restore used to reactivate every inactive one on the account.
+  describe("restores only what the removal turned off (P1-H1)", () => {
+    async function seedWithUserRemovedBill() {
+      const seed = await seedAccountGraph(db, {
+        accounts: 1, txnsPerAccount: 0, outflows: 2, inflows: 1, periodsPerRecurring: 2,
+      });
+      // The user removed bill #0 earlier: it and its periods are already inactive.
+      await db.collection("outflows").doc(seed.outflowIds[0]).update({ isActive: false });
+      for (const pid of seed.outflowPeriodIds.slice(0, 2)) {
+        await db.collection("outflow_periods").doc(pid).update({ isActive: false });
+      }
+      // One period of the still-active bill #1 is inactive for another reason (suppressed).
+      await db.collection("outflow_periods").doc(seed.outflowPeriodIds[2]).update({ isActive: false });
+      // One income period is inactive for another reason too.
+      await db.collection("inflow_periods").doc(seed.inflowPeriodIds[0]).update({ isActive: false });
+      return seed;
+    }
+    const removeThenRestore = async (seed: Awaited<ReturnType<typeof seedWithUserRemovedBill>>) => {
+      await cascade_soft_delete_recurring_orchestrator(ctx(), {
+        plaid_account_id: seed.target.accountId, user_id: seed.userId,
+        outflow_ids: seed.outflowIds, inflow_ids: seed.inflowIds, trace_id: "t",
+      });
+      return restore_account_recurring_orchestrator(ctx(), {
+        plaid_account_id: seed.target.accountId, user_id: seed.userId, trace_id: "t",
+      });
+    };
+
+    it("a bill the user had removed stays removed, with its periods", async () => {
+      const seed = await seedWithUserRemovedBill();
+      await removeThenRestore(seed);
+      expect((await outflowDoc(seed.outflowIds[0]))?.isActive).toBe(false);
+      for (const pid of seed.outflowPeriodIds.slice(0, 2)) {
+        expect((await outflowPeriodDoc(pid))?.isActive).toBe(false);
+      }
+    });
+
+    it("periods inactive for another reason stay inactive", async () => {
+      const seed = await seedWithUserRemovedBill();
+      await removeThenRestore(seed);
+      expect((await outflowPeriodDoc(seed.outflowPeriodIds[2]))?.isActive).toBe(false);
+      expect((await inflowPeriodDoc(seed.inflowPeriodIds[0]))?.isActive).toBe(false);
+    });
+
+    it("everything the removal turned off comes back, and the counts say so", async () => {
+      const seed = await seedWithUserRemovedBill();
+      const result = await removeThenRestore(seed);
+      expect((await outflowDoc(seed.outflowIds[1]))?.isActive).toBe(true);
+      expect((await inflowDoc(seed.inflowIds[0]))?.isActive).toBe(true);
+      expect((await outflowPeriodDoc(seed.outflowPeriodIds[3]))?.isActive).toBe(true);
+      expect((await inflowPeriodDoc(seed.inflowPeriodIds[1]))?.isActive).toBe(true);
+      expect(result.outflows_restored).toBe(1);
+      expect(result.inflows_restored).toBe(1);
+      expect(result.outflow_periods_restored).toBe(1);
+      expect(result.inflow_periods_restored).toBe(1);
+    });
+
+    it("restore clears the removal marker; a second restore changes nothing", async () => {
+      const seed = await seedWithUserRemovedBill();
+      await removeThenRestore(seed);
+      for (const id of seed.outflowIds) expect((await outflowDoc(id))?.deactivatedReason).toBeUndefined();
+      for (const id of seed.outflowPeriodIds) expect((await outflowPeriodDoc(id))?.deactivatedReason).toBeUndefined();
+      const again = await restore_account_recurring_orchestrator(ctx(), {
+        plaid_account_id: seed.target.accountId, user_id: seed.userId, trace_id: "t",
+      });
+      expect([again.outflows_restored, again.inflows_restored, again.outflow_periods_restored, again.inflow_periods_restored])
+        .toEqual([0, 0, 0, 0]);
+    });
+
+    it("removal marks exactly what it turned off", async () => {
+      const seed = await seedWithUserRemovedBill();
+      await cascade_soft_delete_recurring_orchestrator(ctx(), {
+        plaid_account_id: seed.target.accountId, user_id: seed.userId,
+        outflow_ids: seed.outflowIds, inflow_ids: seed.inflowIds, trace_id: "t",
+      });
+      expect((await outflowDoc(seed.outflowIds[0]))?.deactivatedReason).toBeUndefined(); // already off
+      expect((await outflowDoc(seed.outflowIds[1]))?.deactivatedReason).toBe("account_removed");
+      expect((await outflowPeriodDoc(seed.outflowPeriodIds[2]))?.deactivatedReason).toBeUndefined();
+      expect((await outflowPeriodDoc(seed.outflowPeriodIds[3]))?.deactivatedReason).toBe("account_removed");
+    });
+  });
 });
+
+// Code-Health-Review P1-M8: hide and restore are page-by-page self-re-enqueueing jobs; a page that
+// runs after the account changed state must not undo it.
+describe("hide / restore pages respect the account's current state (P1-M8)", () => {
+  it("a hide page that runs after the account was restored hides nothing", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 3 });
+    await setAccountActive(seed, true); // restored before the queued hide page ran
+    const r = await cascade_hide_transactions_orchestrator(ctx(), {
+      plaid_account_id: seed.target.accountId, user_id: seed.userId, removal_mode: "keep_history", trace_id: "t",
+    });
+    expect(r.transactions_hidden).toBe(0);
+    expect(r.has_more).toBe(false);
+    for (const id of seed.txnIdsByAccountId[seed.target.accountId]) {
+      expect((await txnDoc(id))?.isActive).toBe(true);
+    }
+  });
+
+  it("a restore page that runs after the account was removed again restores nothing", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 2 });
+    await setAccountActive(seed, false);
+    await cascade_hide_transactions_orchestrator(ctx(), {
+      plaid_account_id: seed.target.accountId, user_id: seed.userId, removal_mode: "keep_history", trace_id: "t",
+    });
+    // removed again before the queued restore page ran: account still inactive
+    await restore_account_transactions_orchestrator(ctx(), {
+      plaid_account_id: seed.target.accountId, user_id: seed.userId, trace_id: "t",
+    });
+    for (const id of seed.txnIdsByAccountId[seed.target.accountId]) {
+      expect((await txnDoc(id))?.isActive).toBe(false);
+    }
+  });
+});
+
