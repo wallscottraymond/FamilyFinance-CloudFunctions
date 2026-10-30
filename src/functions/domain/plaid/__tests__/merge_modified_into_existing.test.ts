@@ -308,3 +308,44 @@ describe("edge cases", () => {
     expect(JSON.stringify([e, f])).toBe(snapshot);
   });
 });
+
+// Code-Health-Review batch 3 verify: "hidden because its account is removed" follows the incoming
+// copy (it is set by the sync from the account's state), while a user's own hide is untouched.
+describe("hidden by account removal (account_removed)", () => {
+  const removedNow = { isActive: false, isDeleted: false, isHidden: true, hiddenReason: "account_removed" };
+
+  it("an update while the account is removed marks an ACTIVE existing doc hidden + account_removed", () => {
+    const out = merge_modified_into_existing(
+      { ...existing(), isHidden: false, isActive: true },
+      fresh(removedNow)
+    );
+    expect(out.isActive).toBe(false);
+    expect(out.isDeleted).toBe(false);
+    expect(out.isHidden).toBe(true);
+    expect(out.hiddenReason).toBe("account_removed"); // the restore job can now find it
+  });
+
+  it("an update after the account is active again clears a stale account_removed hide", () => {
+    const out = merge_modified_into_existing(
+      { ...existing(), isActive: false, isHidden: true, hiddenReason: "account_removed" },
+      fresh({ isActive: true, isDeleted: false })
+    );
+    expect(out.isActive).toBe(true);
+    expect(out.isHidden).toBe(false);
+    expect(out.hiddenReason).toBeNull();
+  });
+
+  it("CONTROL: a user's own hide (no hiddenReason) is kept on a normal update", () => {
+    const out = merge_modified_into_existing(
+      { ...existing(), isHidden: true },
+      fresh({ isActive: true, isDeleted: false })
+    );
+    expect(out.isHidden).toBe(true);
+    expect(out.hiddenReason).toBeUndefined();
+  });
+
+  it("CONTROL: a doc with no splits takes the incoming hidden markers too", () => {
+    const out = merge_modified_into_existing({ ...existing(), splits: [] }, fresh(removedNow));
+    expect(out.hiddenReason).toBe("account_removed");
+  });
+});

@@ -115,6 +115,17 @@ export function merge_modified_into_existing(existing: Doc, fresh: Doc): Doc {
     if (f in fresh) out[f] = fresh[f];
   }
 
+  // "Hidden because its account is removed" is set by the sync from the account's state, so it
+  // follows the incoming copy like `isActive` does: marked when the account is removed, cleared
+  // when it's active again. A user's own hide (no `account_removed` reason) is kept as is.
+  if (fresh.hiddenReason === "account_removed") {
+    out.isHidden = true;
+    out.hiddenReason = "account_removed";
+  } else if (existing.hiddenReason === "account_removed") {
+    out.isHidden = false;
+    out.hiddenReason = null;
+  }
+
   // Description: keep a user rename (description ≠ name on the existing doc), else Plaid's.
   const renamed =
     typeof existing.description === "string" &&

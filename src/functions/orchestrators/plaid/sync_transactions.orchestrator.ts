@@ -31,6 +31,7 @@ import {
   TransactionForPersistence,
 } from "../../types/plaid";
 import { rules_repo } from "../../repositories/rules.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { evaluate_rules } from "../../domain/rules/rule_evaluation.service";
 import {
   apply_rule_intents,
@@ -50,6 +51,7 @@ import {
 } from "../../domain/plaid";
 import {
   transaction_repo,
+  account_repo,
 } from "../../repositories";
 import type { SyncWrittenDoc, SyncWriteOptions } from "../../repositories/transaction.repo";
 import { create_in_memory_assigner } from "../transactions/assign_in_memory";
@@ -312,6 +314,12 @@ export async function sync_transactions_orchestrator(
     }
   }
 
+  // 4c. An account restored WHILE this sync ran: `deps` said "removed", so its transactions were
+  // just written hidden, possibly after the restore job already ran. Re-check those accounts now
+  // and bring their hidden transactions back. Whichever runs last (this check or the restore job)
+  // catches them (Code-Health-Review batch 3 verify).
+  await restore_hidden_for_reactivated_accounts(ctx, all_txns, deps.active_account_ids);
+
   // 5. CURSOR — only when every page was processed cleanly; never a null cursor. On an error the
   // cursor stays where it was so the next sync re-delivers (upserts are idempotent).
   if (errors.length === 0 && fetched.next_cursor) {
@@ -349,6 +357,29 @@ export async function sync_transactions_orchestrator(
     update_status: fetched.update_status,
     follow_ups,
   };
+}
+
+async function restore_hidden_for_reactivated_accounts(
+  ctx: OrchestratorContext<TransactionSyncInput>,
+  txns: Array<{ account_id: string }>,
+  active_account_ids: Set<string>
+): Promise<void> {
+  const hidden_accounts = [...new Set(txns.map((t) => t.account_id))]
+    .filter((id) => !active_account_ids.has(id));
+  let restored = 0;
+  for (const account_id of hidden_accounts) {
+    const account = await account_repo.get_by_plaid_account_id_any_status(ctx, account_id, ctx.user_id);
+    if (!account?.is_active) continue;
+    for (;;) {
+      const page = await transaction_repo.restore_for_account(ctx, account_id, ctx.user_id);
+      restored += page.restored;
+      if (!page.has_more || page.restored === 0) break;
+    }
+  }
+  if (restored > 0) {
+    console.log(`[${ctx.trace_id}] Restored ${restored} transactions of accounts restored mid-sync`);
+    await bump_derive_version(ctx.user_id).catch(() => {});
+  }
 }
 
 /** A transaction on an account the user removed is written hidden: inactive, not deleted, marked

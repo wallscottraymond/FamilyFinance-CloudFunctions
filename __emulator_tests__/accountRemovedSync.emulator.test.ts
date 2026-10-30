@@ -199,5 +199,44 @@ describe("sync while an account is removed (emulator)", () => {
     const account = (await db.collection("accounts").doc(s.removedDocId).get()).data();
     expect(account?.isActive).toBe(true);
   });
+
+  // Batch 3 verify: a sync that started while the account was removed decides "hidden" up front.
+  // If the account is restored mid-sync (after the restore job already ran), the sync itself must
+  // bring those transactions back once it has written them.
+  it("an account restored mid-sync gets its new transactions back without another restore job", async () => {
+    const s = await seed();
+    const r = rid("tr");
+    mockSync.mockReset();
+    mockSync.mockImplementation(async () => {
+      // The user restores the account while Plaid is being pulled (deps already said "removed").
+      await db.collection("accounts").doc(s.removedDocId).update({ isActive: true, isDeleted: false });
+      return {
+        added: [plaidTxn(r, s.removed)], modified: [], removed: [], next_cursor: "c1", has_more: false,
+        transactions_update_status: "HISTORICAL_UPDATE_COMPLETE", accounts: [], request_id: "r",
+      };
+    });
+    await runSync(s);
+    const t = await txn(r);
+    expect(t?.isActive).toBe(true);
+    expect(t?.isHidden).toBe(false);
+  });
+
+  it("a Plaid update while the account is removed marks a still-active transaction for restore", async () => {
+    const s = await seed();
+    const r = rid("tr");
+    // Written while the account was active (before removal), then the account was removed but
+    // the hide job hasn't reached it yet: still active, unmarked.
+    await db.collection("accounts").doc(s.removedDocId).update({ isActive: true, isDeleted: false });
+    scriptPulls([{ added: [plaidTxn(r, s.removed)] }]);
+    await runSync(s);
+    await db.collection("accounts").doc(s.removedDocId).update({ isActive: false, isDeleted: true });
+    scriptPulls([{ modified: [plaidTxn(r, s.removed, { amount: 30 })] }]);
+    await runSync(s);
+    const hidden = await txn(r);
+    expect(hidden?.isActive).toBe(false);
+    expect(hidden?.hiddenReason).toBe("account_removed"); // findable by restore
+    await restore(s);
+    expect((await txn(r))?.isActive).toBe(true);
+  });
 });
 
