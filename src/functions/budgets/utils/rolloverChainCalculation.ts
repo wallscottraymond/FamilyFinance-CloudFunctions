@@ -69,6 +69,10 @@ export async function recalculateRolloverChain(
   console.log(`[recalculateRolloverChain] Start from period: ${startFromPeriodId || "beginning"}`);
   console.log(`[recalculateRolloverChain] Period types: ${periodTypes?.join(", ") || "all"}`);
 
+  // Derive owner key + whether any chunk committed: a later chunk failing must still bump derive
+  // for the ones that landed (24h cache).
+  let bump_key: string | null = null;
+  let committed_chunks = 0;
   try {
     // 1. Fetch the budget to get rollover settings
     const budgetDoc = await db.collection("budgets").doc(budgetId).get();
@@ -82,6 +86,7 @@ export async function recalculateRolloverChain(
 
     // 2. Fetch user's financial settings for global defaults
     const userId = budget.userId || budget.createdBy;
+    bump_key = userId ?? null;
     let userFinancialSettings: Partial<FinancialSettings> | undefined;
 
     if (!userId) {
@@ -239,6 +244,7 @@ export async function recalculateRolloverChain(
           // Commit batch if approaching limit
           if (batchCount >= MAX_BATCH_SIZE) {
             await batch.commit();
+            committed_chunks++;
             console.log(`[recalculateRolloverChain] Committed batch of ${batchCount} updates`);
             batch = db.batch();
             batchCount = 0;
@@ -270,6 +276,7 @@ export async function recalculateRolloverChain(
 
   } catch (error) {
     console.error("[recalculateRolloverChain] ❌ Error:", error);
+    if (committed_chunks > 0 && bump_key) await bump_derive_version(bump_key).catch(() => {});
     result.success = false;
     result.errors.push(error instanceof Error ? error.message : String(error));
     return result;
