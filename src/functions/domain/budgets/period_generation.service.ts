@@ -472,6 +472,24 @@ export function synthesize_monthly_allocation(
   month_end_ms: number,
   priced: { from_ms: number; to_ms: number | null }
 ): number {
+  return round_to(
+    monthly_price_unrounded(amount, period, month_start_ms, month_end_ms, priced),
+    NON_PRIME_RATE_PRECISION
+  );
+}
+
+/**
+ * The unrounded price of one monthly record: each priced day of the month at its prime's daily
+ * rate (monthly cadence: the per-month amount, or 0 once the priced range has ended). Shared by
+ * `synthesize_monthly_allocation` and the All-Periods-Forward share (`page_share`). PURE.
+ */
+export function monthly_price_unrounded(
+  amount: number,
+  period: BudgetPeriodType | string,
+  month_start_ms: number,
+  month_end_ms: number,
+  priced: { from_ms: number; to_ms: number | null }
+): number {
   const cadence = budget_cadence_to_instance(String(period ?? "monthly").toLowerCase() as BudgetPeriodType);
   const per_instance = budget_amount_per_instance(amount, period);
   if (cadence === "monthly") {
@@ -484,7 +502,7 @@ export function synthesize_monthly_allocation(
   for (let day = Math.floor(from / MS_PER_DAY) * MS_PER_DAY; day <= to; day += MS_PER_DAY) {
     total += prime_daily_rate_on(per_instance, cadence, new Date(day));
   }
-  return round_to(total, NON_PRIME_RATE_PRECISION);
+  return total;
 }
 
 /**

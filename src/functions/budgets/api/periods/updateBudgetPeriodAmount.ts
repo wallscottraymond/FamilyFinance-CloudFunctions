@@ -509,7 +509,20 @@ async function set_all_periods_forward(
     if (!budget_snap.exists) throw new HttpsError("not-found", "Parent budget not found");
     const budget = budget_snap.data() as DocData;
     const cadence = String(budget.period || "monthly").toLowerCase();
-    const share = page_share(start_ms, period.periodEnd.toMillis(), cadence);
+    // Count only the days generation prices (a partial first / last month), as the page does.
+    const mi = budget_to_match_input({
+      id: budget_id, name: String(budget.name ?? ""), period: String(budget.period ?? "monthly"),
+      start_date: (budget.startDate as Timestamp | undefined) ?? Timestamp.fromMillis(0),
+      end_date: (budget.endDate as Timestamp | undefined) ?? null,
+      budget_end_date: (budget.budgetEndDate as Timestamp | undefined) ?? null,
+      is_ongoing: budget.isOngoing !== false,
+    });
+    const share = page_share(
+      start_ms,
+      period.periodEnd.toMillis(),
+      cadence,
+      budget_priced_range(mi.start_ms, mi.cadence, mi.is_ongoing, mi.end_ms)
+    );
     const new_budget_amount = share > 0 ? round2(new_amount / share) : new_amount;
     console.log(
       `[updateBudgetPeriodAmount] All Periods Forward ${period.periodId}: share ` +

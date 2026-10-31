@@ -118,7 +118,14 @@ export async function recalculateRolloverChain(
     // If rollover is disabled, clear rollover amounts
     if (!rolloverSettings.enabled) {
       console.log("[recalculateRolloverChain] Rollover disabled, clearing rollover amounts");
-      const clearedIds = await clearRolloverAmounts(db, budgetId, periodTypes);
+      let clearedIds: string[] = [];
+      try {
+        clearedIds = await clearRolloverAmounts(db, budgetId, periodTypes);
+      } catch (error) {
+        // Some chunks may have committed: bump so derive (24h cache) sees them, then fail as before.
+        if (userId) await bump_derive_version(userId).catch(() => {});
+        throw error;
+      }
       result.updatedPeriodIds = clearedIds;
       result.periodsUpdated = clearedIds.length;
       console.log(`[recalculateRolloverChain] Cleared rollover from ${clearedIds.length} periods`);
@@ -324,7 +331,10 @@ async function clearRolloverAmounts(
   });
 
   if (batchCount > 0) pendingCommits.push(batch.commit());
-  await Promise.all(pendingCommits);
+  // Wait for EVERY chunk before reporting a failure, so the caller's bump comes after all writes.
+  const settled = await Promise.allSettled(pendingCommits);
+  const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failed) throw failed.reason;
 
   return clearedIds;
 }

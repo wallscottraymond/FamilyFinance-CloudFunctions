@@ -27,6 +27,7 @@ export declare const WIDGET_DATA_VERSION = 2;
  * answer. Raise a kind's number whenever its output changes for the same data; the next deploy
  * then refreshes those widgets. Kinds not listed are 0 (their versions are unchanged).
  * recent: 2 = Me shows every transaction on your own accounts (was the period page's Me scope).
+ * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  */
 export declare const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>>;
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */

@@ -4,6 +4,7 @@
  * HTTPS GET called by the iOS widget extension on its own (no app, no Firebase SDK):
  *   GET /widget_snapshot?kind=left|summary|bills|budget_txns|recent&cadence=monthly&lookahead=7
  *       &budget=<id, budget_txns only>&group=<group id, optional>&have=<version>
+ *       &day=<the widget's LOCAL calendar day, YYYY-MM-DD, optional>
  *   Authorization: Bearer <widget token>
  * → 200 { unchanged: true, version }      (widget already current; ~2 reads)
  * → 200 { version, data }                 (fresh widget data, schema v2)
@@ -30,6 +31,7 @@ const query_schema = z.object({
   cadence: z.enum(["monthly", "weekly", "bi_monthly"]).default("monthly"),
   lookahead: z.coerce.number().int().optional(),
   have: z.coerce.number().int().nonnegative().optional(),
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 const BILLS_LOOKAHEADS = [7, 14, 30];
@@ -47,6 +49,28 @@ export function parse_widget_query(query: unknown): WidgetQuery | null {
   const lookahead = q.lookahead ?? 14;
   if (q.kind === "bills" && !BILLS_LOOKAHEADS.includes(lookahead)) return null;
   return { ...q, lookahead: q.kind === "bills" ? lookahead : 14 };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The instant the widget's period / bills window / daily version are chosen at: noon UTC of the
+ * caller's LOCAL calendar day (`day`), so its UTC day index IS that local day (batch 6 verify #3:
+ * on a US evening the server's UTC clock is already tomorrow, which flipped Left to Spend and
+ * Period Summary to the next period on a period's last evening). Accepted only within a day of
+ * the server's UTC day (every real time zone is); otherwise — or absent (older widget builds) —
+ * the server clock, as before.
+ */
+export function widget_day_ms(day: string | undefined, now_ms: number): number {
+  if (!day) return now_ms;
+  const [y, m, d] = day.split("-").map(Number);
+  const day_start = Date.UTC(y, m - 1, d);
+  const check = new Date(day_start);
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) {
+    return now_ms;
+  }
+  const diff = Math.floor(day_start / DAY_MS) - Math.floor(now_ms / DAY_MS);
+  return Math.abs(diff) <= 1 ? day_start + DAY_MS / 2 : now_ms;
 }
 
 export const widget_snapshot = onRequest(
@@ -70,6 +94,7 @@ export const widget_snapshot = onRequest(
     }
 
     const ctx = create_trace_context(false);
+    const now_ms = Date.now();
     try {
       const outcome = await widget_snapshot_orchestrator(ctx, {
         token,
@@ -79,7 +104,8 @@ export const widget_snapshot = onRequest(
         cadence: query.cadence,
         lookahead_days: query.lookahead,
         have_version: query.have ?? null,
-        now_ms: Date.now(),
+        now_ms,
+        day_ms: widget_day_ms(query.day, now_ms),
       });
       res.set("Cache-Control", "no-store");
       switch (outcome.status) {

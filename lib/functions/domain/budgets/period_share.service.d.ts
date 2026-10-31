@@ -13,7 +13,16 @@
  *    `budget_amount_per_instance`) → (1/3 or 1/12)/month days.
  * "All Periods Forward": new budget amount = typed amount ÷ this share, so the edited period then
  * shows what was typed (to the cent, modulo rounding of the stored monthly home). PURE.
+ *
+ * Partial months (batch 6 verify #3): generation prices a monthly record only over the budget's
+ * PRICED days (`budget_priced_range`) and the page spreads it over those days alone
+ * (`bucket_allocation`). So with `priced`, each day counts the month's price
+ * (`monthly_price_unrounded`) ÷ the month's priced days, and days outside the range count 0.
+ * Without `priced` every month is whole, which reduces to the per-cadence rules above.
  */
 /** The period [start_ms, end_ms] (inclusive, any time of day)'s share of a budget of `cadence`. */
-export declare function page_share(start_ms: number, end_ms: number, cadence: string): number;
+export declare function page_share(start_ms: number, end_ms: number, cadence: string, priced?: {
+    from_ms: number;
+    to_ms: number | null;
+}): number;
 //# sourceMappingURL=period_share.service.d.ts.map

@@ -111,11 +111,16 @@ describe("Recent transactions widget: each row", () => {
 
 describe("widget version per kind (logic revision)", () => {
   it("kinds without a revision keep the exact view version (no mass refetch on deploy)", () => {
-    for (const kind of ["left", "summary", "bills", "budget_txns"]) {
+    // left / summary / bills got revision 1 in batch 6 verify #3 (period from the LOCAL day).
+    for (const kind of ["budget_txns"]) {
       expect(versioned_for_kind(123456, kind)).toBe(123456);
     }
   });
   it("a revised kind gets a different version for the same data, so cached widgets refresh", () => {
+    for (const kind of ["left", "summary", "bills"]) {
+      expect(WIDGET_LOGIC_REVISION[kind]).toBeGreaterThan(0);
+      expect(versioned_for_kind(123456, kind)).not.toBe(123456);
+    }
     expect(WIDGET_LOGIC_REVISION.recent).toBeGreaterThan(0);
     expect(versioned_for_kind(123456, "recent")).not.toBe(123456);
     expect(versioned_for_kind(123456, "recent")).toBe(versioned_for_kind(123456, "recent"));

@@ -72,6 +72,11 @@ export interface WidgetSnapshotInput {
   /** The data version the widget already has (skip work when unchanged). */
   have_version: number | null;
   now_ms: number;
+  /**
+   * An instant inside the caller's LOCAL calendar day (noon UTC of it, see widget_day_ms): picks
+   * the current period, the bills window and the daily version. Defaults to `now_ms`.
+   */
+  day_ms?: number;
 }
 
 export type WidgetSnapshotOutcome =
@@ -109,6 +114,7 @@ export async function widget_snapshot_orchestrator(
       return { status: "unauthorized" };
     }
     const { user_id } = request;
+    const day_ms = input.day_ms ?? input.now_ms;
 
     // A group widget: the caller must still be a member; its "unchanged" check uses the group
     // view's version (moves when any member's data or the group's budgets change).
@@ -125,7 +131,7 @@ export async function widget_snapshot_orchestrator(
     }
     const version = versioned_for_kind(widget_view_version(
       (await resolve_view_version(ctx, user_id, scope)).version,
-      input.now_ms
+      day_ms
     ), input.kind);
     if (input.have_version !== null && input.have_version === version) {
       log_operation_success(span, user_id);
@@ -156,7 +162,7 @@ export async function widget_snapshot_orchestrator(
     const periods = await resolve_source_periods_from_now(
       ctx,
       cadence,
-      input.now_ms,
+      day_ms,
       input.kind === "bills" ? 2 : 1
     );
     const current = periods[0];
@@ -224,7 +230,7 @@ export async function widget_snapshot_orchestrator(
       );
       const due = compute_bills_due_soon(
         periods.map((p, i) => ({ period_id: p.period_id, bills: derives[i].bills })),
-        input.now_ms,
+        day_ms,
         input.lookahead_days
       );
       data = {

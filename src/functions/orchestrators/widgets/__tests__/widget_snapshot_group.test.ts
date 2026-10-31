@@ -39,7 +39,11 @@ jest.mock("../../../resolvers/periods/view_version.resolver", () => ({
 }));
 
 import { widget_snapshot_orchestrator } from "../widget_snapshot.orchestrator";
-import { widget_view_version } from "../../../domain/periods/derive_scope.service";
+import { widget_view_version as raw_view_version } from "../../../domain/periods/derive_scope.service";
+import { versioned_for_kind } from "../../../domain/widgets/widget_snapshot.service";
+// The version a left / summary widget compares (view version + that kind's logic revision).
+const widget_view_version = (v: number, ms: number): number =>
+  versioned_for_kind(raw_view_version(v, ms), "left");
 import { create_trace_context } from "../../../observability";
 
 const base = {
@@ -129,5 +133,25 @@ describe("widget_snapshot group views", () => {
       have_version: widget_view_version(42, base.now_ms - 86_400_000),
     });
     expect(out.status).toBe("data");
+  });
+});
+
+describe("widget_snapshot picks the period from the widget's LOCAL day (batch 6 verify #3)", () => {
+  it("day_ms drives the period lookup and the daily version; asOfMs stays the real clock", async () => {
+    const { resolve_source_periods_from_now } = jest.requireMock("../../../resolvers/widgets/widget.resolver");
+    view_version.mockResolvedValue({ view_key: "me", version: 5 });
+    // 8 pm Oct 31 in New York = 00:00 UTC Nov 1; the widget says its day is Oct 31.
+    const now_ms = Date.UTC(2026, 10, 1, 0, 0);
+    const day_ms = Date.UTC(2026, 9, 31, 12);
+    const out = await widget_snapshot_orchestrator(create_trace_context(false), {
+      ...base, group_id: null, now_ms, day_ms,
+    });
+    expect(resolve_source_periods_from_now.mock.calls[0][2]).toBe(day_ms);
+    expect(out.status).toBe("data");
+    if (out.status === "data") {
+      expect(out.version).toBe(widget_view_version(5, day_ms));
+      expect(out.version).not.toBe(widget_view_version(5, now_ms));
+      expect(out.data.asOfMs).toBe(now_ms);
+    }
   });
 });

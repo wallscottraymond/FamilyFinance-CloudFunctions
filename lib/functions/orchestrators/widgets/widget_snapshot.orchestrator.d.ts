@@ -30,6 +30,11 @@ export interface WidgetSnapshotInput {
     /** The data version the widget already has (skip work when unchanged). */
     have_version: number | null;
     now_ms: number;
+    /**
+     * An instant inside the caller's LOCAL calendar day (noon UTC of it, see widget_day_ms): picks
+     * the current period, the bills window and the daily version. Defaults to `now_ms`.
+     */
+    day_ms?: number;
 }
 export type WidgetSnapshotOutcome = {
     status: "unauthorized";

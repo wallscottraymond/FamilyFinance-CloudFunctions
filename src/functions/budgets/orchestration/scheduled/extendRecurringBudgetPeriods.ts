@@ -183,7 +183,11 @@ export async function run_recurring_budget_period_extension(
           console.log(`  ↻ Re-priced ${refreshes.length} edge period(s) for ${budget.id}`);
           // The monthly records feed derive (24h cache): bump the budget's owner key after the write.
           const owner_key = (budget as { userId?: string }).userId;
-          if (owner_key) await bump_derive_version(owner_key);
+          // A failed bump must not skip this budget's new periods below (stale ≤ 24h at worst).
+          if (owner_key) {
+            await bump_derive_version(owner_key).catch((e) =>
+              console.warn(`  ⚠️ derive bump failed for ${budget.id}:`, e));
+          }
         }
         const newEntities = (computed.entities ?? []).filter((e) => !existingIds.has(e.id));
         if (newEntities.length === 0) {

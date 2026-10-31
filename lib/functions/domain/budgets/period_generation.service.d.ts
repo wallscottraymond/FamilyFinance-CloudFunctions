@@ -188,6 +188,15 @@ export declare function synthesize_monthly_allocation(amount: number, period: Bu
     to_ms: number | null;
 }): number;
 /**
+ * The unrounded price of one monthly record: each priced day of the month at its prime's daily
+ * rate (monthly cadence: the per-month amount, or 0 once the priced range has ended). Shared by
+ * `synthesize_monthly_allocation` and the All-Periods-Forward share (`page_share`). PURE.
+ */
+export declare function monthly_price_unrounded(amount: number, period: BudgetPeriodType | string, month_start_ms: number, month_end_ms: number, priced: {
+    from_ms: number;
+    to_ms: number | null;
+}): number;
+/**
  * The daily rate the PRIME period of `cadence` containing `day` would have (same rounding as a
  * generated prime): weekly = amount / 7; monthly = amount / the month's days; bi_monthly =
  * amount / the half's days (1st–15th, 16th–end, matching the source periods). PURE.

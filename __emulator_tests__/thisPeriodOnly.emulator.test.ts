@@ -229,6 +229,22 @@ describe("This Period Only / Reset / All Periods Forward on the period page (emu
     }
   }
 
+  // Batch 6 verify #3 (Medium 1): a budget that starts mid-month is priced only over its active
+  // days, and the page spreads that month over those days — so All Periods Forward on the PARTIAL
+  // month must count those days too (it showed e.g. 24/30 of what was typed).
+  for (const c of [
+    { period: "weekly" as BudgetPeriodType, start: utc(Y, 10, 8) },      // Wed → priced from Sun Oct 5
+    { period: "bi_monthly" as BudgetPeriodType, start: utc(Y, 10, 20) }, // priced from Oct 16
+  ]) {
+    it(`${c.period} budget starting mid-October — All Periods Forward on October shows what was typed`, async () => {
+      const B = `afp_partial_${c.period}_${RUN}`;
+      await create_budget(B, c.period, 70, c.start, GEN_END);
+      await edit({ budgetPeriodId: `${B}_${Y}M10`, newAmount: 300, cascadeScope: "all_forward" });
+      const after = await page(B, WIN.lo, WIN.hi);
+      expect(Math.abs(after.monthly.get(`${Y}M10`)!.amount - 300)).toBeLessThanOrEqual(0.05);
+    });
+  }
+
   // Custom periods stay ABSOLUTE across re-allocation (adjustments are rebased, not left as
   // stale deltas): All Periods Forward on a LATER month, then an update_budget amount change.
   for (const c of CADENCES) {
