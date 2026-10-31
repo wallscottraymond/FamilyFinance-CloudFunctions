@@ -88,8 +88,17 @@ async function main() {
       for (const d of dropped.docs) {
         const data = d.data();
         const twin = kept_by_owner.get(owner_key(coll, data));
-        const only_here = user_data(coll, data).filter((f) => !twin || !has_value(twin[f]));
-        if ((only_here.length || !twin) && !FORCE_USER_DATA) {
+        // User data the kept twin doesn't hold with the SAME value (a different note counts).
+        const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const only_here = user_data(coll, data).filter((f) => !twin || !same(data[f], twin[f]));
+        if (!twin) {
+          // Nothing replaces it: never deleted, even with --force-user-data.
+          totals.skipped_user_data++;
+          blocked = true;
+          console.log(`   ⏸  ${coll}/${d.id}: no kept twin — left in place`);
+          continue;
+        }
+        if (only_here.length && !FORCE_USER_DATA) {
           totals.skipped_user_data++;
           blocked = true;
           console.log(`   ⏸  ${coll}/${d.id}: ${!twin ? 'no kept twin' : `user data only here: ${only_here.join(', ')}`} — left in place`);
@@ -118,11 +127,12 @@ async function main() {
     ` · skipped (user data / no twin): ${totals.skipped_user_data} · pin refs: ${totals.pinned_refs}`);
   if (!COMMIT) { console.log('\nDry run only. Re-run with --commit to delete.'); return; }
 
+  // Load the bump before deleting, so a missing build fails before anything changes.
+  const { bump_derive_version } = require('../lib/functions/repositories/derive_version.repo');
   const writer = db.bulkWriter();
   for (const r of deletes) writer.delete(r);
   await writer.close();
   console.log(`\n✅ Deleted ${deletes.length} docs.`);
-  const { bump_derive_version } = require('../lib/functions/repositories/derive_version.repo');
   for (const o of owners) await bump_derive_version(o);
   console.log(`✅ Bumped the derive version for ${owners.size} owner(s).`);
 }

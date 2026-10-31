@@ -169,7 +169,7 @@ export async function recalculateRolloverChain(
     }
 
     // 7. Calculate rollover for each type chain
-    const batch = db.batch();
+    let batch = db.batch(); // a committed WriteBatch can't be reused — a fresh one per 500
     let batchCount = 0;
     const MAX_BATCH_SIZE = 500;
 
@@ -233,6 +233,7 @@ export async function recalculateRolloverChain(
           if (batchCount >= MAX_BATCH_SIZE) {
             await batch.commit();
             console.log(`[recalculateRolloverChain] Committed batch of ${batchCount} updates`);
+            batch = db.batch();
             batchCount = 0;
           }
         }
@@ -283,7 +284,11 @@ async function clearRolloverAmounts(
   const snapshot = await query.get();
   if (snapshot.empty) return [];
 
-  const batch = db.batch();
+  // Chunked batches: a budget can have more than 500 periods (one WriteBatch caps at 500).
+  const MAX_BATCH_SIZE = 500;
+  let batch = db.batch();
+  let batchCount = 0;
+  const pendingCommits: Array<Promise<unknown>> = [];
   const clearedIds: string[] = [];
 
   snapshot.forEach(doc => {
@@ -309,12 +314,17 @@ async function clearRolloverAmounts(
         updatedAt: Timestamp.now(),
       });
       clearedIds.push(doc.id);
+      batchCount++;
+      if (batchCount >= MAX_BATCH_SIZE) {
+        pendingCommits.push(batch.commit());
+        batch = db.batch();
+        batchCount = 0;
+      }
     }
   });
 
-  if (clearedIds.length > 0) {
-    await batch.commit();
-  }
+  if (batchCount > 0) pendingCommits.push(batch.commit());
+  await Promise.all(pendingCommits);
 
   return clearedIds;
 }

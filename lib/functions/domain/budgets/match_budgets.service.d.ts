@@ -21,6 +21,19 @@
 import { BudgetForMatch, PeriodLens } from "../transactions/match_budget.service";
 /** Start (ms) of the cadence period containing `ms` — same bounds as the source periods. */
 export declare function period_start_ms(ms: number, cadence: PeriodLens): number;
+/** End (ms, inclusive: 23:59:59.999) of the cadence period containing `ms`. */
+export declare function period_end_ms(ms: number, cadence: PeriodLens): number;
+/**
+ * The days a budget's monthly records are PRICED for (generation prices only its own-cadence
+ * periods): from the start of the period holding its start date through the end of the period
+ * holding its end date (`to_ms` null = ongoing). The period page spreads a monthly record over
+ * these days only — spreading a weekly budget's partial first month over the whole month showed
+ * $56 for a $70 week (Code-Health-Review batch 6 verify #2). PURE.
+ */
+export declare function budget_priced_range(start_ms: number, cadence: PeriodLens, is_ongoing: boolean, end_ms: number | null): {
+    from_ms: number;
+    to_ms: number | null;
+};
 /** A budget as the builder needs it (mapped from the entity by the caller). */
 export interface BudgetForMatchInput {
     id: string;

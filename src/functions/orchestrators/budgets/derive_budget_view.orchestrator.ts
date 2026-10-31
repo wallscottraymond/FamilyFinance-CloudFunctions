@@ -26,6 +26,7 @@ import {
   log_async_debug,
 } from "../../observability";
 import { budget_repo } from "../../repositories/budget.repo";
+import { budget_priced_range, budget_to_match_input } from "../../domain/budgets/match_budgets.service";
 import {
   resolve_budget_view_deps,
   SpendMatchMode,
@@ -153,11 +154,16 @@ export async function derive_budget_view_orchestrator(
     perf.reads += input.match_mode === "on_read" ? 4 : 3;
 
     // 3. Pure derivation.
+    // Spread each monthly record over the days generation priced (same rule as the period page).
+    const mi = budget_to_match_input(budget);
     const periods = derive_budget_view_periods(
       input.budget_id,
       deps.buckets,
       deps.monthly_periods,
-      deps.splits
+      deps.splits,
+      undefined,
+      undefined,
+      budget_priced_range(mi.start_ms, mi.cadence, mi.is_ongoing, mi.end_ms)
     );
 
     if (is_budget_exceeded(perf, BUDGET)) {

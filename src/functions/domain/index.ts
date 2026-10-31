@@ -83,6 +83,7 @@ export {
   compute_budget_periods,
   budget_cadence_to_instance,
   budget_amount_per_instance,
+  stale_non_prime_refreshes,
   compute_period_generation_end,
   ExistingPeriodForRealloc,
   PeriodAllocationUpdate,

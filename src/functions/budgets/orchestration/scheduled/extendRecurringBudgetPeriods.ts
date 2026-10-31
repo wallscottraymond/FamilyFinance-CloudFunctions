@@ -25,10 +25,13 @@ import {
   compute_budget_periods,
   budget_cadence_to_instance,
   budget_amount_per_instance,
+  stale_non_prime_refreshes,
   SourcePeriodForGeneration,
 } from "../../../domain/budgets";
 import { source_period_repo } from "../../../repositories/source_period.repo";
 import { budget_period_repo } from "../../../repositories/budget_period.repo";
+import { bump_derive_version } from "../../../repositories/derive_version.repo";
+import { budget_priced_range, budget_to_match_input } from "../../../domain/budgets/match_budgets.service";
 
 /** How far BEHIND today to fetch source periods, so the current prime is present
  *  for accurate non-prime derivation at the near boundary (days). */
@@ -129,6 +132,18 @@ export async function run_recurring_budget_period_extension(
 
         // v2 generation — ONE cadence→prime source of truth (bi_monthly passes
         // through instead of being clamped to monthly).
+        // Only periods from the budget's own first period on: the window looks back 45 days, and
+        // a priced period before the budget existed (rolled into its first month with rollover
+        // on) is wrong (Code-Health-Review batch 6 verify #2).
+        const from_ms = budget.startDate
+          ? (() => {
+            const mi = budget_to_match_input({
+              id: budget.id!, name: budget.name ?? "", period: String(budget.period ?? "monthly"),
+              start_date: budget.startDate, end_date: null, budget_end_date: null, is_ongoing: true,
+            });
+            return budget_priced_range(mi.start_ms, mi.cadence, true, null).from_ms;
+          })()
+          : 0; // no start stored: no clip
         const computed = compute_budget_periods({
           budget_id: budget.id!,
           user_id,
@@ -137,7 +152,7 @@ export async function run_recurring_budget_period_extension(
           fill_after_last_prime: true, // this cron reads ongoing budgets only
           budget_cadence: budget_cadence_to_instance(budget.period),
           category_ids: budget.categoryIds ?? [],
-          source_periods,
+          source_periods: source_periods.filter((sp) => sp.end_date.toMillis() >= from_ms),
           now,
         });
         if (computed.validation_errors) {
@@ -145,7 +160,31 @@ export async function run_recurring_budget_period_extension(
           continue;
         }
 
-        // Persist ONLY periods that don't already exist (never overwrite spend).
+        // Re-price stored current / future non-primes the new primes complete (never spend; never
+        // a user-edited period). Then persist the periods that don't exist yet.
+        const refreshes = stale_non_prime_refreshes(
+          computed.entities ?? [],
+          existingSnap.docs.map((d) => {
+            const x = d.data();
+            return {
+              id: d.id,
+              allocated_amount: (x.allocatedAmount as number | undefined) ?? 0,
+              spent: (x.spent as number | undefined) ?? 0,
+              rolled_over_amount: (x.rolledOverAmount as number | undefined) ?? 0,
+              end_ms: (x.periodEnd as Timestamp | undefined)?.toMillis() ?? 0,
+              is_user_edited: x.modifiedAmount != null || x.isModified === true ||
+                (Array.isArray(x.periodAdjustments) && x.periodAdjustments.length > 0),
+            };
+          }),
+          Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+        );
+        if (refreshes.length > 0) {
+          await budget_period_repo.update_allocations(ctx, refreshes);
+          console.log(`  ↻ Re-priced ${refreshes.length} edge period(s) for ${budget.id}`);
+          // The monthly records feed derive (24h cache): bump the budget's owner key after the write.
+          const owner_key = (budget as { userId?: string }).userId;
+          if (owner_key) await bump_derive_version(owner_key);
+        }
         const newEntities = (computed.entities ?? []).filter((e) => !existingIds.has(e.id));
         if (newEntities.length === 0) {
           console.log(`  ✅ No new periods needed for ${budget.id}`);

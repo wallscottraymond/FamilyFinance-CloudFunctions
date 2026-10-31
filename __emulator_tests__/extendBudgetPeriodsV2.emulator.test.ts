@@ -115,4 +115,45 @@ describe("run_recurring_budget_period_extension (v2, emulator)", () => {
     expect(created.length).toBe(3);
     created.forEach((p) => expect(p.allocatedAmount).toBe(200)); // prime = 1:1
   });
+
+  // Code-Health-Review batch 6 verify #2: the 45-day lookback must not create periods before the
+  // budget's first period, and a stored far-edge monthly record the new weeks complete is re-priced
+  // (unless the user edited it). Its own year (2047), its own source periods, scoped run.
+  it("weekly budget: no periods before its start; a short future month is re-priced, an edited one kept", async () => {
+    const userId = uid();
+    const budgetId = bid();
+    const U = (m: number, d: number, end = false) =>
+      Timestamp.fromMillis(Date.UTC(2047, m - 1, d, end ? 23 : 0, end ? 59 : 0, end ? 59 : 0, end ? 999 : 0));
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection("budgets").doc(budgetId).set({
+      budgetType: "recurring", isOngoing: true, isActive: true, period: "weekly", amount: 70,
+      name: "Wk", categoryIds: [], createdBy: userId, userId, access: { createdBy: userId },
+      startDate: U(6, 10), // Mon Jun 10 2047 → its first week starts Sun Jun 9
+    });
+    const src = async (id: string, type: string, s: Timestamp, e: Timestamp) =>
+      db.collection("source_periods").doc(`${budgetId}_${id}`).set({ periodId: `${budgetId}_${id}`, type, startDate: s, endDate: e, year: 2047, index: 0 });
+    // Weeks Sun May 26 → Sat Jul 6 2047, plus May, June and July.
+    const weeks: Array<[number, number, number, number]> = [[5, 26, 6, 1], [6, 2, 6, 8], [6, 9, 6, 15], [6, 16, 6, 22], [6, 23, 6, 29], [6, 30, 7, 6]];
+    for (const [sm, sd, em, ed] of weeks) await src(`W${sm}${sd}`, "weekly", U(sm, sd), U(em, ed, true));
+    await src("M05", "monthly", U(5, 1), U(5, 31, true));
+    await src("M06", "monthly", U(6, 1), U(6, 30, true));
+    await src("M07", "monthly", U(7, 1), U(7, 31, true));
+    // A stored July record priced only for Jul 1–6 ($60) — the old far edge — and an edited one.
+    const julyId = `${budgetId}_${budgetId}_M07`;
+    await db.collection("budget_periods").doc(julyId).set({
+      id: julyId, budgetId, periodId: `${budgetId}_M07`, sourcePeriodId: `${budgetId}_M07`, periodType: "monthly",
+      allocatedAmount: 60, spent: 5, rolledOverAmount: 0, isActive: true, periodStart: U(7, 1), periodEnd: U(7, 31, true),
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    const NOW = new Date(Date.UTC(2047, 5, 20, 12));
+    await run_recurring_budget_period_extension(db, Timestamp.fromDate(NOW), { budget_ids: [budgetId] });
+    const docs = (await db.collection("budget_periods").where("budgetId", "==", budgetId).get()).docs.map((d) => d.data());
+    // Nothing before the budget's first week (Sun Jun 9): no May record, no May 26 / Jun 2 weeks.
+    expect(docs.filter((d) => d.periodEnd.toMillis() < U(6, 9).toMillis()).map((d) => d.id)).toEqual([]);
+    // July re-priced to the whole month ($10/day × 31), spend kept in remaining.
+    const july = docs.find((d) => d.id === julyId)!;
+    expect(july.allocatedAmount).toBeCloseTo(310, 2);
+    expect(july.remaining).toBeCloseTo(305, 2);
+    expect(july.spent).toBe(5);
+  });
 });

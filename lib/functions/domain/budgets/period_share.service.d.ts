@@ -8,8 +8,9 @@
  * month home's daily share, by the budget's cadence:
  *  - weekly     → 1/7 (the monthly home = the weekly primes' daily rate × the month's days);
  *  - bi_monthly → 2/month days (the monthly home holds 2 halves, spread evenly);
- *  - monthly / quarterly / yearly / custom / unknown (they allocate on the monthly grid —
- *    `budget_cadence_to_instance` — each month gets the full amount) → 1/month days.
+ *  - monthly / custom / unknown → 1/month days;
+ *  - quarterly / yearly (monthly grid, each month gets a third / a twelfth of the amount —
+ *    `budget_amount_per_instance`) → (1/3 or 1/12)/month days.
  * "All Periods Forward": new budget amount = typed amount ÷ this share, so the edited period then
  * shows what was typed (to the cent, modulo rounding of the stored monthly home). PURE.
  */

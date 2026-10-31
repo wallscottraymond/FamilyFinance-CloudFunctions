@@ -46,9 +46,13 @@ export declare function round2(value: number): number;
 /**
  * The page's allocation for the bucket [start_ms, end_ms] (inclusive): `allocated` (the budget
  * amount the page shows) and `effective` (incl. the monthly rollover), each rounded to cents.
- * PURE.
+ * Each monthly record is spread evenly over its PRICED days (`priced`, from
+ * `budget_priced_range`; whole month when omitted). PURE.
  */
-export declare function bucket_allocation(monthly_periods: MonthlyPeriodForDerivation[], start_ms: number, end_ms: number): {
+export declare function bucket_allocation(monthly_periods: MonthlyPeriodForDerivation[], start_ms: number, end_ms: number, priced?: {
+    from_ms: number;
+    to_ms: number | null;
+}): {
     allocated: number;
     effective: number;
 };

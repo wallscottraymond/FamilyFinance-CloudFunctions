@@ -29,6 +29,8 @@ export interface BudgetForDerivation {
   active_start_ms: number;
   /** End of the budget's active range, or null if ongoing. Periods after it are omitted. */
   active_end_ms: number | null;
+  /** Days its monthly records are priced for (`budget_priced_range`); absent = whole months (EE). */
+  priced?: { from_ms: number; to_ms: number | null };
 }
 
 export interface RecurringForDerivation {

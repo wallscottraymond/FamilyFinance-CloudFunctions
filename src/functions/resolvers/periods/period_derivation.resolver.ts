@@ -14,7 +14,7 @@
  * @module resolvers/periods/period_derivation
  */
 
-import { budget_amount_per_instance } from "../../domain/budgets/period_generation.service";
+import { synthesize_monthly_allocation } from "../../domain/budgets/period_generation.service";
 import { is_converted_candidate } from "../../domain/recurring/convert_recurring.service";
 import { RemovalInterval, is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
 import {
@@ -86,6 +86,7 @@ import {
 import { resolve_derive_scope, load_pairing_extra_txns } from "./derive_scope.resolver";
 import {
   budget_to_match_input,
+  budget_priced_range,
   build_match_budgets,
 } from "../../domain/budgets/match_budgets.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
@@ -96,16 +97,6 @@ import {
   CategoryCatalog,
 } from "../../domain/transactions/split_category.service";
 
-/**
- * A budget's amount expressed as a MONTHLY-equivalent, given its home cadence —
- * so a synthesized monthly allocation is right regardless of how the budget was
- * authored. Monthly is the target for everyone; weekly/bi-weekly are converted.
- */
-function monthly_equivalent_amount(amount: number, period: string): number {
-  if (period === "weekly") return amount * (52 / 12); // ~4.33 weeks / month
-  if (period === "bi_monthly") return amount * 2; // 2 half-months / month
-  return budget_amount_per_instance(amount, period); // monthly; quarterly ÷ 3; yearly ÷ 12
-}
 
 export type {
   BudgetForDerivation,
@@ -596,6 +587,9 @@ export function shape_period_derivation_deps(
     const active = active_by_id.get(b.id);
     const active_start_ms = is_ee || !active ? 0 : active.start_ms;
     const active_end_ms = is_ee || !active ? null : active.end_ms;
+    const mi = budget_to_match_input(b);
+    // EE: whole months (always active). Real budget: the days generation prices.
+    const priced = is_ee ? undefined : budget_priced_range(mi.start_ms, mi.cadence, mi.is_ongoing, mi.end_ms);
     // Prefer the materialized monthly periods (they carry per-period edits +
     // rollover). If none exist yet (a brand-new budget), SYNTHESIZE them from
     // the budget's `amount` so the limit shows instantly — no wait for the
@@ -605,7 +599,9 @@ export function shape_period_derivation_deps(
       materialized.length > 0
         ? materialized
         : monthly_source_periods.map((sp) => {
-          const amt = monthly_equivalent_amount(b.amount, b.period);
+          const amt = priced
+            ? synthesize_monthly_allocation(b.amount, b.period, sp.start_ms, sp.end_ms, priced)
+            : synthesize_monthly_allocation(b.amount, b.period, sp.start_ms, sp.end_ms, { from_ms: 0, to_ms: null });
           return {
             allocated_amount: amt,
             effective_amount: amt,
@@ -620,6 +616,7 @@ export function shape_period_derivation_deps(
       monthly_periods,
       active_start_ms,
       active_end_ms,
+      priced,
     });
   }
 

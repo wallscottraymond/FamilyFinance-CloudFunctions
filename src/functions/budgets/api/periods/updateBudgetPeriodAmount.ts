@@ -39,6 +39,7 @@ import { bump_derive_version } from "../../../repositories/derive_version.repo";
 import { create_job_if_not_exists } from "../../../infrastructure/job_queue";
 import { can_manage_budget, group_id_of_key } from "../../../domain/sharing/budget_view.service";
 import { page_share } from "../../../domain/budgets/period_share.service";
+import { budget_priced_range, budget_to_match_input } from "../../../domain/budgets/match_budgets.service";
 import {
   direct_period_override,
   period_allocation,
@@ -345,9 +346,11 @@ async function set_this_period_amount(
     .where("budgetId", "==", period.budgetId)
     .where("periodType", "==", "monthly");
 
+  const budget_ref = db.collection("budgets").doc(period.budgetId);
   return db.runTransaction(async (tx) => {
     const edited_snap = await tx.get(edited_ref);
     const months_snap = await tx.get(months_query);
+    const budget_snap = await tx.get(budget_ref);
     if (!edited_snap.exists) {
       throw new HttpsError("not-found", "Budget period not found");
     }
@@ -378,10 +381,20 @@ async function set_this_period_amount(
         );
       }
       // What the page shows for this period now, without this period's own earlier adjustment.
+      // Spread over the days generation priced — the period page's rule (budget_view.service).
+      const bd = (budget_snap.data() ?? {}) as DocData;
+      const mi = budget_to_match_input({
+        id: period.budgetId, name: String(bd.name ?? ""), period: String(bd.period ?? "monthly"),
+        start_date: (bd.startDate as Timestamp | undefined) ?? Timestamp.fromMillis(0),
+        end_date: (bd.endDate as Timestamp | undefined) ?? null,
+        budget_end_date: (bd.budgetEndDate as Timestamp | undefined) ?? null,
+        is_ongoing: bd.isOngoing !== false,
+      });
       const current = bucket_allocation(
         months.map((d) => to_monthly_for_derivation(d.data(), edited_pid)),
         start_ms,
-        end_ms
+        end_ms,
+        budget_snap.exists ? budget_priced_range(mi.start_ms, mi.cadence, mi.is_ongoing, mi.end_ms) : undefined
       ).allocated;
       const delta = round2(new_amount - current);
       if (delta !== 0) {

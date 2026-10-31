@@ -87,19 +87,24 @@ function adjustment_in_bucket(
 /**
  * The page's allocation for the bucket [start_ms, end_ms] (inclusive): `allocated` (the budget
  * amount the page shows) and `effective` (incl. the monthly rollover), each rounded to cents.
- * PURE.
+ * Each monthly record is spread evenly over its PRICED days (`priced`, from
+ * `budget_priced_range`; whole month when omitted). PURE.
  */
 export function bucket_allocation(
   monthly_periods: MonthlyPeriodForDerivation[],
   start_ms: number,
-  end_ms: number
+  end_ms: number,
+  priced?: { from_ms: number; to_ms: number | null }
 ): { allocated: number; effective: number } {
   let allocated = 0;
   let effective = 0;
   for (const mp of monthly_periods) {
-    const days = overlap_days(mp.start_ms, mp.end_ms, start_ms, end_ms);
+    const p_start = priced ? Math.max(mp.start_ms, priced.from_ms) : mp.start_ms;
+    const p_end = priced?.to_ms != null ? Math.min(mp.end_ms, priced.to_ms) : mp.end_ms;
+    if (utc_day_index(p_end) < utc_day_index(p_start)) continue;
+    const days = overlap_days(p_start, p_end, start_ms, end_ms);
     if (days === 0) continue;
-    const mp_days = days_inclusive(mp.start_ms, mp.end_ms);
+    const mp_days = days_inclusive(p_start, p_end);
     if (mp_days <= 0) continue;
     allocated += (mp.allocated_amount / mp_days) * days;
     effective += (mp.effective_amount / mp_days) * days;

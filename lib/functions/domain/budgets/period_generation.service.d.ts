@@ -25,6 +25,14 @@ export type PeriodInstanceType = "weekly" | "monthly" | "bi_monthly";
  */
 export declare function budget_cadence_to_instance(period: BudgetPeriodType): PeriodInstanceType;
 /**
+ * A budget's amount expressed per PRIME period of its allocation base
+ * (`budget_cadence_to_instance`). Quarterly / yearly budgets allocate on the monthly grid, so
+ * each month gets a third / a twelfth of the amount (Code-Health-Review M1-H1: giving every month
+ * the full amount was 3× / 12× too much). Every generator / re-allocator feeds this, never the raw
+ * amount. PURE.
+ */
+export declare function budget_amount_per_instance(amount: number, period: BudgetPeriodType | string): number;
+/**
  * Compute the END of the period-generation window (the horizon up to which
  * budget periods are created).
  *
@@ -100,6 +108,8 @@ export interface ComputeBudgetPeriodsInput {
     category_ids: string[];
     source_periods: SourcePeriodForGeneration[];
     now: Timestamp;
+    /** Ongoing budget: price non-prime days past the last generated prime (see `horizon_fill`). */
+    fill_after_last_prime?: boolean;
 }
 /**
  * A prime period reduced to what the overlap breakdown needs (pure helper).
@@ -140,12 +150,49 @@ export declare function compute_budget_periods(input: ComputeBudgetPeriodsInput)
  * add that prime's daily rate to the running total and to that prime's
  * contribution. `amount_contributed` is rounded to 2 decimals per prime.
  *
+ * `uncovered_day_rate` prices a day no given prime covers (`horizon_fill`: past the last
+ * generated prime of an ongoing budget). Those days add to the total only; the breakdown lists
+ * real prime docs.
+ *
  * PURE FUNCTION.
  */
-export declare function compute_prime_contributions(target_start: Date, target_end: Date, overlapping_primes: PrimePeriodForContribution[]): {
+export declare function compute_prime_contributions(target_start: Date, target_end: Date, overlapping_primes: PrimePeriodForContribution[], uncovered_day_rate?: (day: Date) => number): {
     total_amount: number;
     breakdown: PrimePeriodBreakdownEntry[];
 };
+/** A stored non-prime period as the extension refresh needs it (pure input). */
+export interface StoredNonPrimeForRefresh {
+    id: string;
+    allocated_amount: number;
+    spent: number;
+    rolled_over_amount: number;
+    end_ms: number;
+    /** "This Period Only" amount or adjustments set by the user — never re-priced here. */
+    is_user_edited: boolean;
+}
+/**
+ * Which EXISTING non-prime periods the extension cron re-prices (Code-Health-Review batch 6
+ * verify #2). The cron only adds missing periods, so a monthly record generated at the far edge
+ * of the window before its later weeks existed stayed short for good. Re-price a stored non-prime
+ * when it is current / future (ends on/after `cutoff_ms`), not user-edited, and its freshly
+ * computed allocation differs by a cent or more. `remaining` keeps its spend + rollover. PURE.
+ */
+export declare function stale_non_prime_refreshes(computed: BudgetPeriodEntity[], stored: StoredNonPrimeForRefresh[], cutoff_ms: number): PeriodAllocationUpdate[];
+/**
+ * A brand-new budget's monthly record before generation has run (derive synthesizes it so the
+ * limit shows instantly): the same price generation will store — each priced day of the month at
+ * its prime's daily rate. (A flat "amount × 52/12" disagreed with the stored docs.) PURE.
+ */
+export declare function synthesize_monthly_allocation(amount: number, period: BudgetPeriodType | string, month_start_ms: number, month_end_ms: number, priced: {
+    from_ms: number;
+    to_ms: number | null;
+}): number;
+/**
+ * The daily rate the PRIME period of `cadence` containing `day` would have (same rounding as a
+ * generated prime): weekly = amount / 7; monthly = amount / the month's days; bi_monthly =
+ * amount / the half's days (1st–15th, 16th–end, matching the source periods). PURE.
+ */
+export declare function prime_daily_rate_on(prime_amount: number, cadence: PeriodInstanceType, day: Date): number;
 /**
  * An existing budget period as needed for re-allocation (pure input).
  */
@@ -181,6 +228,8 @@ export interface ReallocateBudgetPeriodsInput {
     periods: ExistingPeriodForRealloc[];
     /** Only re-allocate periods that END on/after this cutoff (current + future). */
     cutoff: Timestamp;
+    /** Ongoing budget: price non-prime days past the last prime (see `horizon_fill`). */
+    fill_after_last_prime?: boolean;
 }
 /**
  * Recompute allocations for EXISTING periods after a budget's amount changes,

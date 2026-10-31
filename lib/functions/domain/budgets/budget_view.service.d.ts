@@ -75,5 +75,8 @@ export interface DerivedBudgetViewPeriod {
  *
  * PURE FUNCTION.
  */
-export declare function derive_budget_view_periods(budget_id: string, buckets: ViewBucket[], monthly_periods: MonthlyPeriodForDerivation[], splits: SplitForSpend[], active_start_ms?: number, active_end_ms?: number | null): DerivedBudgetViewPeriod[];
+export declare function derive_budget_view_periods(budget_id: string, buckets: ViewBucket[], monthly_periods: MonthlyPeriodForDerivation[], splits: SplitForSpend[], active_start_ms?: number, active_end_ms?: number | null, priced?: {
+    from_ms: number;
+    to_ms: number | null;
+}): DerivedBudgetViewPeriod[];
 //# sourceMappingURL=budget_view.service.d.ts.map

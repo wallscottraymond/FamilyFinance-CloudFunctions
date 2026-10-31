@@ -34,6 +34,35 @@ export function period_start_ms(ms: number, cadence: PeriodLens): number {
   return day_start - d.getUTCDay() * DAY_MS; // weekly: back to Sunday
 }
 
+/** End (ms, inclusive: 23:59:59.999) of the cadence period containing `ms`. */
+export function period_end_ms(ms: number, cadence: PeriodLens): number {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  if (cadence === "monthly") return Date.UTC(y, m + 1, 1) - 1;
+  if (cadence === "bi_monthly") return (d.getUTCDate() <= 15 ? Date.UTC(y, m, 16) : Date.UTC(y, m + 1, 1)) - 1;
+  return period_start_ms(ms, cadence) + 7 * DAY_MS - 1; // weekly: through Saturday
+}
+
+/**
+ * The days a budget's monthly records are PRICED for (generation prices only its own-cadence
+ * periods): from the start of the period holding its start date through the end of the period
+ * holding its end date (`to_ms` null = ongoing). The period page spreads a monthly record over
+ * these days only — spreading a weekly budget's partial first month over the whole month showed
+ * $56 for a $70 week (Code-Health-Review batch 6 verify #2). PURE.
+ */
+export function budget_priced_range(
+  start_ms: number,
+  cadence: PeriodLens,
+  is_ongoing: boolean,
+  end_ms: number | null
+): { from_ms: number; to_ms: number | null } {
+  return {
+    from_ms: period_start_ms(start_ms, cadence),
+    to_ms: is_ongoing || end_ms == null ? null : period_end_ms(end_ms, cadence),
+  };
+}
+
 /** A budget as the builder needs it (mapped from the entity by the caller). */
 export interface BudgetForMatchInput {
   id: string;

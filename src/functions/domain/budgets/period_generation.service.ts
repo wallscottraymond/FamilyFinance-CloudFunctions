@@ -418,6 +418,75 @@ export function compute_prime_contributions(
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
+/** A stored non-prime period as the extension refresh needs it (pure input). */
+export interface StoredNonPrimeForRefresh {
+  id: string;
+  allocated_amount: number;
+  spent: number;
+  rolled_over_amount: number;
+  end_ms: number;
+  /** "This Period Only" amount or adjustments set by the user — never re-priced here. */
+  is_user_edited: boolean;
+}
+
+/**
+ * Which EXISTING non-prime periods the extension cron re-prices (Code-Health-Review batch 6
+ * verify #2). The cron only adds missing periods, so a monthly record generated at the far edge
+ * of the window before its later weeks existed stayed short for good. Re-price a stored non-prime
+ * when it is current / future (ends on/after `cutoff_ms`), not user-edited, and its freshly
+ * computed allocation differs by a cent or more. `remaining` keeps its spend + rollover. PURE.
+ */
+export function stale_non_prime_refreshes(
+  computed: BudgetPeriodEntity[],
+  stored: StoredNonPrimeForRefresh[],
+  cutoff_ms: number
+): PeriodAllocationUpdate[] {
+  const fresh = new Map(computed.filter((e) => e.is_prime === false).map((e) => [e.id, e]));
+  const out: PeriodAllocationUpdate[] = [];
+  for (const s of stored) {
+    const e = fresh.get(s.id);
+    if (!e || s.is_user_edited || s.end_ms < cutoff_ms) continue;
+    if (Math.abs(e.allocated_amount - s.allocated_amount) < 0.01) continue;
+    out.push({
+      id: s.id,
+      allocated_amount: e.allocated_amount,
+      daily_rate: e.daily_rate,
+      remaining: e.allocated_amount + s.rolled_over_amount - s.spent,
+      is_prime: false,
+      prime_period_ids: e.prime_period_ids ?? [],
+      prime_period_breakdown: e.prime_period_breakdown ?? [],
+    });
+  }
+  return out;
+}
+
+/**
+ * A brand-new budget's monthly record before generation has run (derive synthesizes it so the
+ * limit shows instantly): the same price generation will store — each priced day of the month at
+ * its prime's daily rate. (A flat "amount × 52/12" disagreed with the stored docs.) PURE.
+ */
+export function synthesize_monthly_allocation(
+  amount: number,
+  period: BudgetPeriodType | string,
+  month_start_ms: number,
+  month_end_ms: number,
+  priced: { from_ms: number; to_ms: number | null }
+): number {
+  const cadence = budget_cadence_to_instance(String(period ?? "monthly").toLowerCase() as BudgetPeriodType);
+  const per_instance = budget_amount_per_instance(amount, period);
+  if (cadence === "monthly") {
+    // Whole months by construction (the start snaps to the month): the amount itself.
+    return priced.to_ms != null && priced.to_ms < month_start_ms ? 0 : per_instance;
+  }
+  const from = Math.max(month_start_ms, priced.from_ms);
+  const to = priced.to_ms == null ? month_end_ms : Math.min(month_end_ms, priced.to_ms);
+  let total = 0;
+  for (let day = Math.floor(from / MS_PER_DAY) * MS_PER_DAY; day <= to; day += MS_PER_DAY) {
+    total += prime_daily_rate_on(per_instance, cadence, new Date(day));
+  }
+  return round_to(total, NON_PRIME_RATE_PRECISION);
+}
+
 /**
  * Price for the non-prime days PAST the last generated prime of an ONGOING budget — the far edge
  * of the 12-month window, where e.g. a weekly budget's last monthly doc held only the weeks

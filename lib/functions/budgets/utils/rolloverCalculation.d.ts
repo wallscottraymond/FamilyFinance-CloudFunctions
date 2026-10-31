@@ -50,9 +50,13 @@ export declare function getEffectiveRolloverSettings(budget: Budget, userFinanci
  * @param currentPeriod - The period to calculate rollover for
  * @param previousPeriod - The previous period of the same type (null for first period)
  * @param rolloverSettings - Resolved rollover settings for this budget
+ * @param nowMs - "Now". Only an ENDED previous period carries anything forward: a current or
+ *   future period has spent little or nothing yet, so its whole allocation would roll into the
+ *   next, and the next… (Code-Health-Review M1-H2: the chain compounded through future months).
+ *   The 03:00 cron rolls a period over the day after it ends.
  * @returns Rollover calculation result
  */
-export declare function calculateRolloverForPeriod(currentPeriod: BudgetPeriodDocument, previousPeriod: BudgetPeriodDocument | null, rolloverSettings: ResolvedRolloverSettings): RolloverCalculationResult;
+export declare function calculateRolloverForPeriod(currentPeriod: BudgetPeriodDocument, previousPeriod: BudgetPeriodDocument | null, rolloverSettings: ResolvedRolloverSettings, nowMs?: number): RolloverCalculationResult;
 /**
  * Calculate the effective remaining amount for a period, including rollover.
  *
