@@ -41,9 +41,11 @@ export interface CachedDerivedPeriod<TResult> {
 
 /** Result SHAPE version, part of the doc id: bump whenever the derived result's shape changes
  *  so a cached result in the old shape is never served. v2 = paid occurrences carry
- *  `transaction_id` (Tappable-Transaction-Rows). Every function bundling this repo
- *  (derive_period, derive_period_range, derive_budget_view, widget_snapshot) deploys together. */
-const CACHE_SHAPE = "v2";
+ *  `transaction_id` (Tappable-Transaction-Rows). v3 = Code-Health-Review batch 6 (partial-month
+ *  pricing, quarterly/yearly per-month amounts): drop results computed with the old numbers.
+ *  Every function bundling this repo (derive_period, derive_period_range, derive_budget_view,
+ *  widget_snapshot) deploys together. */
+const CACHE_SHAPE = "v3";
 
 /** Deterministic doc id for a derive call. Windows are ms epoch ints — safe in an id. */
 function cache_doc_id(
