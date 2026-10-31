@@ -218,17 +218,18 @@ describe("budget_amount_per_instance — quarterly / yearly on the monthly grid 
   });
 });
 
-describe("compute_budget_periods — the window's edge months are whole (M1-H3)", () => {
+describe("compute_budget_periods — the window's far-edge month is whole (M1-H3)", () => {
   const ts = (iso: string): Timestamp => Timestamp.fromDate(new Date(iso));
   const week = (id: string, start: string, end: string) => ({
     id, period_id: id, period_type: "weekly" as const,
     start_date: ts(`${start}T00:00:00Z`), end_date: ts(`${end}T23:59:59.999Z`),
   });
-  // $70/week budget generated from Wed Jun 10 2026: the first week overlapping is Jun 7–13, so
-  // June 1–6 has no weekly prime in the input; the window ends mid-July (Jul 5–11 last week).
+  // $70/week ongoing budget generated from Wed Jun 10 2026: the first week overlapping is
+  // Jun 7–13, so June 1–6 has no weekly prime (before the budget starts); the window ends
+  // mid-July (Jul 5–11 is the last generated week).
   const input = {
     budget_id: "b1", user_id: "u1", group_ids: [], budget_amount: 70,
-    budget_cadence: "weekly" as const, category_ids: [], now: NOW,
+    budget_cadence: "weekly" as const, category_ids: [], now: NOW, fill_after_last_prime: true,
     source_periods: [
       week("2026W24", "2026-06-07", "2026-06-13"),
       week("2026W25", "2026-06-14", "2026-06-20"),
@@ -241,10 +242,17 @@ describe("compute_budget_periods — the window's edge months are whole (M1-H3)"
         start_date: ts("2026-07-01T00:00:00Z"), end_date: ts("2026-07-31T23:59:59.999Z") },
     ],
   };
-  it("every day of the month counts at the weekly rate ($10/day), not only the generated weeks", () => {
+  it("days past the last generated week count at the weekly rate ($10/day): July is whole", () => {
     const { entities } = compute_budget_periods(input);
-    expect(entities!.find((e) => e.period_id === "2026M06")!.allocated_amount).toBeCloseTo(300, 2);
     expect(entities!.find((e) => e.period_id === "2026M07")!.allocated_amount).toBeCloseTo(310, 2);
+  });
+  it("days before the budget's first week stay unpriced (June = its 24 active days)", () => {
+    const { entities } = compute_budget_periods(input);
+    expect(entities!.find((e) => e.period_id === "2026M06")!.allocated_amount).toBeCloseTo(240, 2);
+  });
+  it("a limited budget (no fill) keeps July to its generated days", () => {
+    const { entities } = compute_budget_periods({ ...input, fill_after_last_prime: false });
+    expect(entities!.find((e) => e.period_id === "2026M07")!.allocated_amount).toBeCloseTo(110, 2);
   });
   it("the breakdown lists only real prime docs", () => {
     const { entities } = compute_budget_periods(input);
@@ -255,6 +263,7 @@ describe("compute_budget_periods — the window's edge months are whole (M1-H3)"
   it("re-allocation fills the same edge days at the new amount", () => {
     const realloc = compute_reallocated_periods({
       new_amount: 140, budget_cadence: "weekly", cutoff: ts("2026-06-01T00:00:00Z"),
+      fill_after_last_prime: true,
       periods: input.source_periods.map((sp) => ({
         id: sp.id, period_id: sp.period_id, period_type: sp.period_type,
         start_date: sp.start_date, end_date: sp.end_date, spent: 0, rolled_over_amount: 0,

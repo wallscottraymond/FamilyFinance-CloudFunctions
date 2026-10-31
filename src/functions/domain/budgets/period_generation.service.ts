@@ -177,6 +177,8 @@ export interface ComputeBudgetPeriodsInput {
   category_ids: string[];
   source_periods: SourcePeriodForGeneration[];
   now: Timestamp;
+  /** Ongoing budget: price non-prime days past the last generated prime (see `horizon_fill`). */
+  fill_after_last_prime?: boolean;
 }
 
 /**
@@ -277,6 +279,7 @@ export function compute_budget_periods(
   }
 
   // Pass 2: non-prime periods — allocation derived from overlapping primes.
+  const fill = horizon_fill(input.fill_after_last_prime, primes_for_contrib, input.budget_amount, input.budget_cadence);
   const non_prime_entities: BudgetPeriodEntity[] = [];
   for (const source of input.source_periods) {
     if (source.period_type === input.budget_cadence) {
@@ -292,7 +295,7 @@ export function compute_budget_periods(
       start,
       end,
       overlapping,
-      (day) => prime_daily_rate_on(input.budget_amount, input.budget_cadence, day)
+      fill
     );
     const allocated = round_to(total_amount, NON_PRIME_RATE_PRECISION);
 
@@ -323,10 +326,9 @@ export function compute_budget_periods(
  * add that prime's daily rate to the running total and to that prime's
  * contribution. `amount_contributed` is rounded to 2 decimals per prime.
  *
- * `uncovered_day_rate` prices a day no given prime covers (the edges of the generation window:
- * the month holding a weekly budget's first / last week). Without it those days counted $0, so
- * the monthly doc derive reads came up short (Code-Health-Review M1-H3). Those days add to the
- * total only; the breakdown lists real prime docs.
+ * `uncovered_day_rate` prices a day no given prime covers (`horizon_fill`: past the last
+ * generated prime of an ongoing budget). Those days add to the total only; the breakdown lists
+ * real prime docs.
  *
  * PURE FUNCTION.
  */
@@ -417,6 +419,27 @@ export function compute_prime_contributions(
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 /**
+ * Price for the non-prime days PAST the last generated prime of an ONGOING budget — the far edge
+ * of the 12-month window, where e.g. a weekly budget's last monthly doc held only the weeks
+ * generated so far. The extension cron adds the later weeks but never rewrites that month, so it
+ * stayed short for good (Code-Health-Review M1-H3). Days BEFORE the first prime (before the
+ * budget starts) and after a limited budget's end stay unpriced: the budget isn't active then.
+ * PURE.
+ */
+function horizon_fill(
+  enabled: boolean | undefined,
+  primes: PrimePeriodForContribution[],
+  prime_amount: number,
+  cadence: PeriodInstanceType
+): ((day: Date) => number) | undefined {
+  if (!enabled || primes.length === 0) return undefined;
+  const last_end = Math.max(...primes.map((p) => Date.UTC(
+    p.end.getUTCFullYear(), p.end.getUTCMonth(), p.end.getUTCDate()
+  )));
+  return (day) => (day.getTime() > last_end ? prime_daily_rate_on(prime_amount, cadence, day) : 0);
+}
+
+/**
  * The daily rate the PRIME period of `cadence` containing `day` would have (same rounding as a
  * generated prime): weekly = amount / 7; monthly = amount / the month's days; bi_monthly =
  * amount / the half's days (1st–15th, 16th–end, matching the source periods). PURE.
@@ -499,6 +522,8 @@ export interface ReallocateBudgetPeriodsInput {
   periods: ExistingPeriodForRealloc[];
   /** Only re-allocate periods that END on/after this cutoff (current + future). */
   cutoff: Timestamp;
+  /** Ongoing budget: price non-prime days past the last prime (see `horizon_fill`). */
+  fill_after_last_prime?: boolean;
 }
 
 /**
@@ -566,6 +591,7 @@ export function compute_reallocated_periods(
 
   // Pass 2: non-prime periods (current+future only) — re-derive allocation and
   // breakdown from the (now updated) overlapping prime rates.
+  const fill = horizon_fill(input.fill_after_last_prime, primes_for_contrib, input.new_amount, input.budget_cadence);
   for (const period of input.periods) {
     if (period.period_type === input.budget_cadence || is_historical(period)) {
       continue;
@@ -580,7 +606,7 @@ export function compute_reallocated_periods(
       start,
       end,
       overlapping,
-      (day) => prime_daily_rate_on(input.new_amount, input.budget_cadence, day)
+      fill
     );
     const allocated = round_to(total_amount, NON_PRIME_RATE_PRECISION);
 

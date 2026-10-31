@@ -182,7 +182,7 @@ async function generateSourcePeriods() {
         weekEnd.setHours(23, 59, 59, 999);
         
         // Only include weeks that have some days in the current year
-        if (weekEnd.getFullYear() >= year && currentWeekStart.getFullYear() <= year) {
+        if (weekEnd.getFullYear() === year) { // a week belongs to the year it ends in (M1-M2)
           const isoWeekNumber = getISOWeekNumber(currentWeekStart);
           
           const weeklyPeriod = {

@@ -134,6 +134,7 @@ export async function run_recurring_budget_period_extension(
           user_id,
           group_ids,
           budget_amount: budget_amount_per_instance(budget.amount, budget.period),
+          fill_after_last_prime: true, // this cron reads ongoing budgets only
           budget_cadence: budget_cadence_to_instance(budget.period),
           category_ids: budget.categoryIds ?? [],
           source_periods,

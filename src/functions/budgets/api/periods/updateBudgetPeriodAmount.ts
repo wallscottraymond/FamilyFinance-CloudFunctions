@@ -544,6 +544,7 @@ async function set_all_periods_forward(
     // 2. Re-allocate with the shared domain rule, rebasing the adjustments that remain.
     const computed = compute_reallocated_periods({
       new_amount: budget_amount_per_instance(new_budget_amount, cadence),
+      fill_after_last_prime: budget.isOngoing === true,
       budget_cadence: budget_cadence_to_instance(cadence as BudgetPeriodType),
       cutoff,
       periods: snap.docs.map((d) => {

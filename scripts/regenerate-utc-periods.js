@@ -121,7 +121,7 @@ async function generateUTCPeriods() {
       weekEnd.setUTCHours(23, 59, 59, 999);
 
       // Only include weeks that have some days in the current year (UTC)
-      if (weekEnd.getUTCFullYear() >= year && currentWeekStart.getUTCFullYear() <= year) {
+      if (weekEnd.getUTCFullYear() === year) { // a week belongs to the year it ends in (M1-M2)
         // Get the ISO week number for better accuracy
         const isoWeekNumber = getISOWeekNumber(currentWeekStart);
         

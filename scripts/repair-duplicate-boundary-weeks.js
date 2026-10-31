@@ -9,8 +9,10 @@
  * outflow_periods and inflow_periods generated for it (they duplicate the kept week's docs).
  *
  * Before deleting anything it reports, per removed doc, whether it holds something a user set
- * that its kept twin lacks (notes, checklist, amount edits, manual paid marks, pins). Those are
- * listed and SKIPPED (left in place) unless --force-user-data is passed.
+ * that its kept twin lacks (notes, checklist, amount edits, manual paid marks, pins). A week with
+ * any such doc is SKIPPED WHOLE (nothing of it deleted, so it's never half-removed) unless
+ * --force-user-data is passed. After deleting, it bumps each affected owner's derive version
+ * (derive caches live 24h). Run `npm run build` first (the bump comes from lib/).
  *
  * DRY-RUN by default (reads only); pass --commit to delete.
  *   node scripts/repair-duplicate-boundary-weeks.js [--commit] [--force-user-data]
@@ -68,7 +70,10 @@ async function main() {
   const pinned = (await db.collection('outflow_pinned_periods').select('periodIds').get()).docs;
   const totals = { source: 0, dependents: 0, skipped_user_data: 0, pinned_refs: 0 };
   const deletes = [];
+  const owners = new Set();
   for (const { keep, drop, ref } of pairs) {
+    const week_deletes = [];
+    const week_owners = new Set();
     const line = [`${drop} (keep ${keep}):`];
     const pin_hits = pinned.filter((p) => (p.get('periodIds') ?? []).some((id) => String(id).includes(drop)));
     if (pin_hits.length) { totals.pinned_refs += pin_hits.length; line.push(`⚠️ ${pin_hits.length} pin doc(s) reference it`); }
@@ -90,13 +95,22 @@ async function main() {
           console.log(`   ⏸  ${coll}/${d.id}: ${!twin ? 'no kept twin' : `user data only here: ${only_here.join(', ')}`} — left in place`);
           continue;
         }
-        deletes.push(d.ref);
+        week_deletes.push(d.ref);
+        const owner = data.userId ?? data.ownerId;
+        if (owner) week_owners.add(owner);
         n++;
       }
       totals.dependents += n;
       line.push(`${coll} ${n}/${dropped.size}`);
     }
-    if (!blocked) { deletes.push(ref); totals.source++; } else line.push('source doc kept (something above was skipped)');
+    if (!blocked) {
+      deletes.push(...week_deletes, ref);
+      week_owners.forEach((o) => owners.add(o));
+      totals.source++;
+    } else {
+      totals.dependents -= week_deletes.length;
+      line.push('⏸  whole week kept (something above was skipped)');
+    }
     console.log(line.join(' · '));
   }
 
@@ -108,6 +122,9 @@ async function main() {
   for (const r of deletes) writer.delete(r);
   await writer.close();
   console.log(`\n✅ Deleted ${deletes.length} docs.`);
+  const { bump_derive_version } = require('../lib/functions/repositories/derive_version.repo');
+  for (const o of owners) await bump_derive_version(o);
+  console.log(`✅ Bumped the derive version for ${owners.size} owner(s).`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

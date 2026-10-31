@@ -147,6 +147,7 @@ async function reallocate_periods(
 
   const computed = compute_reallocated_periods({
     new_amount: payload.amount,
+    fill_after_last_prime: payload.is_recurring,
     budget_cadence: payload.cadence,
     cutoff: start_of_today_utc(),
     periods: existing.map((p) => ({
@@ -216,6 +217,7 @@ async function generate_fresh_periods(
     user_id: payload.user_id,
     group_ids: payload.group_ids,
     budget_amount: payload.amount,
+    fill_after_last_prime: payload.is_recurring,
     budget_cadence: payload.cadence,
     category_ids: payload.category_ids,
     source_periods: source_periods.map((sp) => ({

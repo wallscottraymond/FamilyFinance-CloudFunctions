@@ -287,7 +287,7 @@ async function callGenerateSourcePeriodsFunction() {
         weekEnd.setDate(weekEnd.getDate() + 6);
         weekEnd.setHours(23, 59, 59, 999);
         
-        if (weekEnd.getFullYear() >= year && currentWeekStart.getFullYear() <= year) {
+        if (weekEnd.getFullYear() === year) { // a week belongs to the year it ends in (M1-M2)
           periods.push({
             id: `${year}W${weekNumber.toString().padStart(2, '0')}`,
             periodId: `${year}W${weekNumber.toString().padStart(2, '0')}`,
