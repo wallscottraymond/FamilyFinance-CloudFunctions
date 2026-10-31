@@ -24,6 +24,7 @@ import { Budget } from "../../../../types";
 import {
   compute_budget_periods,
   budget_cadence_to_instance,
+  budget_amount_per_instance,
   SourcePeriodForGeneration,
 } from "../../../domain/budgets";
 import { source_period_repo } from "../../../repositories/source_period.repo";
@@ -132,7 +133,7 @@ export async function run_recurring_budget_period_extension(
           budget_id: budget.id!,
           user_id,
           group_ids,
-          budget_amount: budget.amount,
+          budget_amount: budget_amount_per_instance(budget.amount, budget.period),
           budget_cadence: budget_cadence_to_instance(budget.period),
           category_ids: budget.categoryIds ?? [],
           source_periods,

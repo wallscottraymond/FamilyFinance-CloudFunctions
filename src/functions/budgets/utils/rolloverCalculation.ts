@@ -84,15 +84,20 @@ export function getEffectiveRolloverSettings(
  * @param currentPeriod - The period to calculate rollover for
  * @param previousPeriod - The previous period of the same type (null for first period)
  * @param rolloverSettings - Resolved rollover settings for this budget
+ * @param nowMs - "Now". Only an ENDED previous period carries anything forward: a current or
+ *   future period has spent little or nothing yet, so its whole allocation would roll into the
+ *   next, and the next… (Code-Health-Review M1-H2: the chain compounded through future months).
+ *   The 03:00 cron rolls a period over the day after it ends.
  * @returns Rollover calculation result
  */
 export function calculateRolloverForPeriod(
   currentPeriod: BudgetPeriodDocument,
   previousPeriod: BudgetPeriodDocument | null,
-  rolloverSettings: ResolvedRolloverSettings
+  rolloverSettings: ResolvedRolloverSettings,
+  nowMs: number = Date.now()
 ): RolloverCalculationResult {
-  // No rollover if disabled or no previous period
-  if (!rolloverSettings.enabled || !previousPeriod) {
+  // No rollover if disabled, no previous period, or the previous period hasn't ended yet
+  if (!rolloverSettings.enabled || !previousPeriod || !periodEndedBy(previousPeriod, nowMs)) {
     return {
       rolledOverAmount: 0,
       rolledOverFromPeriodId: null,
@@ -164,6 +169,17 @@ export function calculateRolloverForPeriod(
     pendingRolloverDeduction: Math.round(pendingRolloverDeduction * 100) / 100,
     pendingRolloverPeriods,
   };
+}
+
+/** True when the period's last moment is before `nowMs`. */
+function periodEndedBy(period: BudgetPeriodDocument, nowMs: number): boolean {
+  const end = period.periodEnd as unknown;
+  const endMs = end instanceof Timestamp
+    ? end.toMillis()
+    : end && typeof (end as { toMillis?: unknown }).toMillis === "function"
+      ? (end as { toMillis(): number }).toMillis()
+      : new Date(end as string | number | Date).getTime();
+  return Number.isFinite(endMs) && endMs < nowMs;
 }
 
 /**

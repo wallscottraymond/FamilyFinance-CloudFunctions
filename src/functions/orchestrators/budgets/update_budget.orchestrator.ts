@@ -29,6 +29,7 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { compute_update_budget } from "../../domain/budgets/update_budget.service";
 import {
   budget_cadence_to_instance,
+  budget_amount_per_instance,
   compute_period_generation_end,
 } from "../../domain/budgets/period_generation.service";
 import { resolve_update_budget_dependencies } from "../../resolvers/budgets/update_budget.resolver";
@@ -129,7 +130,7 @@ export async function update_budget_orchestrator(
         group_ids: entity.group_ids,
         budget_name: entity.name,
         category_ids: entity.category_ids,
-        amount: entity.amount,
+        amount: budget_amount_per_instance(entity.amount, entity.period),
         cadence: budget_cadence_to_instance(entity.period),
         start_ms: entity.start_date.toMillis(),
         generation_end_ms: generation_end.getTime(),

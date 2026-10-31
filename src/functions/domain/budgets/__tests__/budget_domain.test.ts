@@ -12,6 +12,9 @@ import {
   compute_period_generation_end,
   compute_reallocated_periods,
   compute_budget_periods,
+  budget_amount_per_instance,
+  build_self_provision_budget_created_payload,
+  prime_daily_rate_on,
 } from "../period_generation.service";
 import { compute_create_budget } from "../create_budget.service";
 import { compute_update_budget } from "../update_budget.service";
@@ -193,6 +196,83 @@ describe("compute_budget_periods — prime/non-prime breakdown", () => {
   });
 });
 
+describe("budget_amount_per_instance — quarterly / yearly on the monthly grid (M1-H1)", () => {
+  it("monthly / weekly / bi_monthly keep their amount", () => {
+    for (const p of ["monthly", "weekly", "bi_monthly", "custom"]) {
+      expect(budget_amount_per_instance(300, p)).toBe(300);
+    }
+  });
+  it("a quarterly budget gives each month a third, a yearly one a twelfth", () => {
+    expect(budget_amount_per_instance(900, "quarterly")).toBe(300);
+    expect(budget_amount_per_instance(1200, "yearly")).toBe(100);
+    expect(budget_amount_per_instance(1200, "YEARLY")).toBe(100);
+  });
+  it("the self-provision payload carries the per-month amount", () => {
+    const payload = build_self_provision_budget_created_payload({
+      budget_id: "b", user_id: "u", group_ids: [], budget_name: "Gifts", category_ids: [],
+      amount: 1200, period: "yearly", start: new Date("2026-06-01T00:00:00Z"),
+      is_ongoing: true, budget_end_date: null,
+    });
+    expect(payload.cadence).toBe("monthly");
+    expect(payload.amount).toBe(100);
+  });
+});
+
+describe("compute_budget_periods — the window's edge months are whole (M1-H3)", () => {
+  const ts = (iso: string): Timestamp => Timestamp.fromDate(new Date(iso));
+  const week = (id: string, start: string, end: string) => ({
+    id, period_id: id, period_type: "weekly" as const,
+    start_date: ts(`${start}T00:00:00Z`), end_date: ts(`${end}T23:59:59.999Z`),
+  });
+  // $70/week budget generated from Wed Jun 10 2026: the first week overlapping is Jun 7–13, so
+  // June 1–6 has no weekly prime in the input; the window ends mid-July (Jul 5–11 last week).
+  const input = {
+    budget_id: "b1", user_id: "u1", group_ids: [], budget_amount: 70,
+    budget_cadence: "weekly" as const, category_ids: [], now: NOW,
+    source_periods: [
+      week("2026W24", "2026-06-07", "2026-06-13"),
+      week("2026W25", "2026-06-14", "2026-06-20"),
+      week("2026W26", "2026-06-21", "2026-06-27"),
+      week("2026W27", "2026-06-28", "2026-07-04"),
+      week("2026W28", "2026-07-05", "2026-07-11"),
+      { id: "2026M06", period_id: "2026M06", period_type: "monthly" as const,
+        start_date: ts("2026-06-01T00:00:00Z"), end_date: ts("2026-06-30T23:59:59.999Z") },
+      { id: "2026M07", period_id: "2026M07", period_type: "monthly" as const,
+        start_date: ts("2026-07-01T00:00:00Z"), end_date: ts("2026-07-31T23:59:59.999Z") },
+    ],
+  };
+  it("every day of the month counts at the weekly rate ($10/day), not only the generated weeks", () => {
+    const { entities } = compute_budget_periods(input);
+    expect(entities!.find((e) => e.period_id === "2026M06")!.allocated_amount).toBeCloseTo(300, 2);
+    expect(entities!.find((e) => e.period_id === "2026M07")!.allocated_amount).toBeCloseTo(310, 2);
+  });
+  it("the breakdown lists only real prime docs", () => {
+    const { entities } = compute_budget_periods(input);
+    const june = entities!.find((e) => e.period_id === "2026M06")!;
+    expect(june.prime_period_ids).toEqual(["b1_2026W24", "b1_2026W25", "b1_2026W26", "b1_2026W27"]);
+    expect(june.prime_period_breakdown!.reduce((n, b) => n + b.days_contributed, 0)).toBe(24);
+  });
+  it("re-allocation fills the same edge days at the new amount", () => {
+    const realloc = compute_reallocated_periods({
+      new_amount: 140, budget_cadence: "weekly", cutoff: ts("2026-06-01T00:00:00Z"),
+      periods: input.source_periods.map((sp) => ({
+        id: sp.id, period_id: sp.period_id, period_type: sp.period_type,
+        start_date: sp.start_date, end_date: sp.end_date, spent: 0, rolled_over_amount: 0,
+        daily_rate: 10,
+      })),
+    });
+    expect(realloc.entities!.find((u) => u.id === "2026M07")!.allocated_amount).toBeCloseTo(620, 2);
+  });
+  it("prime_daily_rate_on matches a generated prime for each cadence", () => {
+    const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
+    expect(prime_daily_rate_on(70, "weekly", d("2026-06-03"))).toBe(10);
+    expect(prime_daily_rate_on(310, "monthly", d("2026-07-09"))).toBe(10);
+    expect(prime_daily_rate_on(150, "bi_monthly", d("2026-07-15"))).toBe(10); // 1st–15th
+    expect(prime_daily_rate_on(160, "bi_monthly", d("2026-07-16"))).toBe(10); // 16th–31st
+    expect(prime_daily_rate_on(130, "bi_monthly", d("2026-02-20"))).toBe(10); // 16th–28th
+  });
+});
+
 describe("compute_period_generation_end", () => {
   const start = new Date("2026-06-01T00:00:00Z");
 
@@ -313,10 +393,8 @@ describe("compute_reallocated_periods", () => {
 });
 
 describe("compute_create_budget", () => {
-  // Code-Health-Review M5-H1 / M1-H1 (+ batch-1 verify): period generation gives a quarterly /
-  // yearly budget its FULL amount in every month (12x for yearly). Reject them at the one create
-  // path (the wizard, copy-to-group and any other caller all go through compute_create_budget)
-  // until the generator allocates them per month.
+  // Code-Health-Review M5-H1 / M1-H1: quarterly / yearly were refused (batch 1) until generation
+  // allocated them per month (batch 6, `budget_amount_per_instance`); every cadence is accepted.
   const deps = {
     currency: "USD",
     group_ids: [],
@@ -325,14 +403,7 @@ describe("compute_create_budget", () => {
     view_budgets: [],
     first_by_category: {},
   };
-  it.each(["quarterly", "yearly"] as const)("rejects a %s budget (not allocated per month yet)", (period) => {
-    const result = compute_create_budget({
-      budget_id: "b_q", user_id: "user_1", input: make_create_input({ period }), dependencies: deps, now: NOW,
-    });
-    expect(result.entity).toBeUndefined();
-    expect(result.validation_errors?.join(" ")).toMatch(new RegExp(period));
-  });
-  it.each(["weekly", "monthly", "bi_monthly"] as const)("still accepts a %s budget", (period) => {
+  it.each(["weekly", "monthly", "bi_monthly", "quarterly", "yearly"] as const)("accepts a %s budget", (period) => {
     const result = compute_create_budget({
       budget_id: "b_ok", user_id: "user_1", input: make_create_input({ period }), dependencies: deps, now: NOW,
     });

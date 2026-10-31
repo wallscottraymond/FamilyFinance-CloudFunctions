@@ -131,8 +131,10 @@ export const generateSourcePeriods = onRequest({
           weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
           weekEnd.setUTCHours(23, 59, 59, 999);
 
-          // Only include weeks that have some days in the current year (UTC)
-          if (weekEnd.getUTCFullYear() >= year && currentWeekStart.getUTCFullYear() <= year) {
+          // A week belongs to the year it ENDS in: the week spanning New Year is next year's W01, so
+          // it must not also be this year's last week (Code-Health-Review M1-M2: {Y}W53 and
+          // {Y+1}W01 covered the same days, so weekly totals counted that week twice).
+          if (weekEnd.getUTCFullYear() === year) {
             // Get the ISO week number for better accuracy
             const isoWeekNumber = getISOWeekNumber(currentWeekStart);
             

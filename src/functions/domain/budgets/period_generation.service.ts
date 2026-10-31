@@ -41,6 +41,20 @@ export function budget_cadence_to_instance(
   return "monthly";
 }
 
+/**
+ * A budget's amount expressed per PRIME period of its allocation base
+ * (`budget_cadence_to_instance`). Quarterly / yearly budgets allocate on the monthly grid, so
+ * each month gets a third / a twelfth of the amount (Code-Health-Review M1-H1: giving every month
+ * the full amount was 3× / 12× too much). Every generator / re-allocator feeds this, never the raw
+ * amount. PURE.
+ */
+export function budget_amount_per_instance(amount: number, period: BudgetPeriodType | string): number {
+  const p = String(period ?? "monthly").toLowerCase();
+  if (p === "quarterly") return amount / 3;
+  if (p === "yearly") return amount / 12;
+  return amount;
+}
+
 /** Months of budget periods generated ahead for ongoing/recurring budgets. */
 const GENERATION_HORIZON_MONTHS = 12;
 
@@ -110,7 +124,7 @@ export function build_self_provision_budget_created_payload(args: {
     group_ids: args.group_ids,
     budget_name: args.budget_name,
     category_ids: args.category_ids,
-    amount: args.amount,
+    amount: budget_amount_per_instance(args.amount, args.period),
     cadence: budget_cadence_to_instance(args.period),
     start_ms: window_start.getTime(),
     generation_end_ms: generation_end.getTime(),
@@ -277,7 +291,8 @@ export function compute_budget_periods(
     const { total_amount, breakdown } = compute_prime_contributions(
       start,
       end,
-      overlapping
+      overlapping,
+      (day) => prime_daily_rate_on(input.budget_amount, input.budget_cadence, day)
     );
     const allocated = round_to(total_amount, NON_PRIME_RATE_PRECISION);
 
@@ -308,14 +323,20 @@ export function compute_budget_periods(
  * add that prime's daily rate to the running total and to that prime's
  * contribution. `amount_contributed` is rounded to 2 decimals per prime.
  *
+ * `uncovered_day_rate` prices a day no given prime covers (the edges of the generation window:
+ * the month holding a weekly budget's first / last week). Without it those days counted $0, so
+ * the monthly doc derive reads came up short (Code-Health-Review M1-H3). Those days add to the
+ * total only; the breakdown lists real prime docs.
+ *
  * PURE FUNCTION.
  */
 export function compute_prime_contributions(
   target_start: Date,
   target_end: Date,
-  overlapping_primes: PrimePeriodForContribution[]
+  overlapping_primes: PrimePeriodForContribution[],
+  uncovered_day_rate?: (day: Date) => number
 ): { total_amount: number; breakdown: PrimePeriodBreakdownEntry[] } {
-  if (overlapping_primes.length === 0) {
+  if (overlapping_primes.length === 0 && !uncovered_day_rate) {
     return { total_amount: 0, breakdown: [] };
   }
 
@@ -371,6 +392,8 @@ export function compute_prime_contributions(
         c.overlap_start = day;
       }
       c.overlap_end = day;
+    } else if (uncovered_day_rate) {
+      total_amount += uncovered_day_rate(day);
     }
     cursor += MS_PER_DAY;
   }
@@ -392,6 +415,24 @@ export function compute_prime_contributions(
 }
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/**
+ * The daily rate the PRIME period of `cadence` containing `day` would have (same rounding as a
+ * generated prime): weekly = amount / 7; monthly = amount / the month's days; bi_monthly =
+ * amount / the half's days (1st–15th, 16th–end, matching the source periods). PURE.
+ */
+export function prime_daily_rate_on(
+  prime_amount: number,
+  cadence: PeriodInstanceType,
+  day: Date
+): number {
+  const dim = days_in_month(day.getUTCFullYear(), day.getUTCMonth());
+  let days: number;
+  if (cadence === "weekly") days = DAYS_IN_WEEK;
+  else if (cadence === "bi_monthly") days = day.getUTCDate() <= 15 ? 15 : dim - 15;
+  else days = dim;
+  return round_to(prime_amount / days, PRIME_RATE_PRECISION);
+}
 
 /** UTC `YYYY-MM-DD` key for a date. PURE. */
 function utc_day_key(date: Date): string {
@@ -538,7 +579,8 @@ export function compute_reallocated_periods(
     const { total_amount, breakdown } = compute_prime_contributions(
       start,
       end,
-      overlapping
+      overlapping,
+      (day) => prime_daily_rate_on(input.new_amount, input.budget_cadence, day)
     );
     const allocated = round_to(total_amount, NON_PRIME_RATE_PRECISION);
 

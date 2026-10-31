@@ -14,6 +14,7 @@
  * @module resolvers/periods/period_derivation
  */
 
+import { budget_amount_per_instance } from "../../domain/budgets/period_generation.service";
 import { is_converted_candidate } from "../../domain/recurring/convert_recurring.service";
 import { RemovalInterval, is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
 import {
@@ -103,7 +104,7 @@ import {
 function monthly_equivalent_amount(amount: number, period: string): number {
   if (period === "weekly") return amount * (52 / 12); // ~4.33 weeks / month
   if (period === "bi_monthly") return amount * 2; // 2 half-months / month
-  return amount; // monthly (and default)
+  return budget_amount_per_instance(amount, period); // monthly; quarterly ÷ 3; yearly ÷ 12
 }
 
 export type {

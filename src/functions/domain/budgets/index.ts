@@ -18,6 +18,7 @@ export {
   compute_daily_rate,
   compute_budget_periods,
   budget_cadence_to_instance,
+  budget_amount_per_instance,
   compute_period_generation_end,
   build_self_provision_budget_created_payload,
   EE_HISTORY_BACKDATE_MONTHS,

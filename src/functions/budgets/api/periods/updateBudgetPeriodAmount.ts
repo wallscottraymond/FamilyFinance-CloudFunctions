@@ -54,6 +54,7 @@ import {
 } from "../../../domain/budgets/period_allocation_view.service";
 import {
   budget_cadence_to_instance,
+  budget_amount_per_instance,
   compute_reallocated_periods,
   PeriodInstanceType,
 } from "../../../domain/budgets/period_generation.service";
@@ -542,7 +543,7 @@ async function set_all_periods_forward(
 
     // 2. Re-allocate with the shared domain rule, rebasing the adjustments that remain.
     const computed = compute_reallocated_periods({
-      new_amount: new_budget_amount,
+      new_amount: budget_amount_per_instance(new_budget_amount, cadence),
       budget_cadence: budget_cadence_to_instance(cadence as BudgetPeriodType),
       cutoff,
       periods: snap.docs.map((d) => {

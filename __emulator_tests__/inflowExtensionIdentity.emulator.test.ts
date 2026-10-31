@@ -14,6 +14,9 @@
  *   - every income (Code-Health-Review M2-M6, deliberate): HEAD also writes `userId` / `groupIds`
  *     (the 5-layer creator's owner fields); they are checked, then left out of the comparison.
  *   - an income with an expected-amount override (M2-M1): HEAD uses the user's amount.
+ *   - every income (Code-Health-Review M1-M4, deliberate): `amountWithheld` / `dailyWithholdingRate`
+ *     count whole UTC days (the base's ceil on a 23:59:59.999 end counted one day too many). They
+ *     are checked (withheld == allocated, rate == withheld / the period's days), then left out.
  * Its own year (2044); source periods are passed in, never stored.
  */
 import * as admin from "firebase-admin";
@@ -68,7 +71,19 @@ async function twinPeriods(name: string, o: Record<string, unknown>) {
     delete doc.userId;
     delete doc.groupIds;
   }
-  return { head, base: await load(base_id), n: n_head };
+  const base = await load(base_id);
+  const DAY = 86_400_000;
+  for (const [k, doc] of head) {
+    const src = SOURCES.find((sp) => sp.id === k)!;
+    const days = Math.round((Math.floor(src.endDate.toMillis() / DAY) * DAY - src.startDate.toMillis()) / DAY) + 1;
+    expect({ k, withheld: doc.amountWithheld }).toEqual({ k, withheld: doc.amountAllocated });
+    expect(doc.dailyWithholdingRate).toBeCloseTo(doc.amountWithheld / days, 9);
+    for (const m of [doc, base.get(k)]) {
+      delete m.amountWithheld;
+      delete m.dailyWithholdingRate;
+    }
+  }
+  return { head, base, n: n_head };
 }
 
 describe("old inflow extension: HEAD == the 2ae62e6 body (emulator)", () => {

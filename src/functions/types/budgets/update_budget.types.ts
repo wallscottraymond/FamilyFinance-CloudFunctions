@@ -138,6 +138,7 @@ export interface ProcessBudgetUpdatedPayload {
   budget_name: string;
   /** Denormalized onto every generated budget_period (self-contained periods). */
   category_ids: string[];
+  /** Per PRIME period (`budget_amount_per_instance`): a yearly budget's monthly share. */
   amount: number;
   cadence: "weekly" | "monthly" | "bi_monthly";
   /** Generation anchor (budget start) in epoch ms */

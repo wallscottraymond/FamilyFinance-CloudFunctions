@@ -10,6 +10,7 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { RecurringOutflow, SourcePeriod, PlaidRecurringFrequency } from "../../../../types";
+import { count_days_inclusive } from "../../../domain/budgets/period_generation.service";
 
 /**
  * Payment cycle information
@@ -36,11 +37,8 @@ export interface WithholdingCalculation {
  * Calculate the number of days in a period (inclusive of both start and end)
  */
 function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
-  const start = startDate.toDate();
-  const end = endDate.toDate();
-  const diffMs = end.getTime() - start.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end day
-  return diffDays;
+  // UTC-normalized inclusive day count (Code-Health-Review M1-M4: ceil on a 23:59:59 end gave October 32 days).
+  return count_days_inclusive(startDate.toDate(), endDate.toDate());
 }
 
 /**

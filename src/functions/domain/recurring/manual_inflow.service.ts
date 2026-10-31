@@ -50,7 +50,9 @@ export function build_manual_inflow(req: ManualInflowRequest): { errors?: string
   const day = utc_day_start(req.first_expected_ms);
   const built = build_converted_recurring({
     id: req.id, direction: "inflow", user_id: req.user_id, name: req.name, amount: req.amount, frequency: req.frequency,
-    next_due_ms: req.first_expected_ms, first_date_ms: req.first_expected_ms, account_id: req.account_id,
+    // The first date is a calendar day: store its UTC midnight, not the time it was entered
+    // (Code-Health-Review M2-M3).
+    next_due_ms: day, first_date_ms: day, account_id: req.account_id,
     vendor_key: req.vendor_key, merchant_source: req.name, converted_from_txn_id: null, now_ms: req.now_ms,
     plaid_primary_category: "INCOME", plaid_detailed_category: "INCOME_OTHER",
     expected_amount_override: null, // hand-added income carries no override (as before)
@@ -70,6 +72,5 @@ export function build_manual_inflow(req: ManualInflowRequest): { errors?: string
       unofficialCurrency: null,
     },
   });
-  void day;
   return built.errors ? { errors: built.errors } : { inflow: built.inflow };
 }

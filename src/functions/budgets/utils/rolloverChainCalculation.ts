@@ -186,7 +186,8 @@ export async function recalculateRolloverChain(
         }
       }
 
-      // Calculate rollover for each period in sequence
+      // Calculate rollover for each period in sequence (only ended periods carry forward)
+      const nowMs = Date.now();
       for (let i = startIndex; i < periods.length; i++) {
         const currentPeriod = periods[i];
         const previousPeriod = i > 0 ? periods[i - 1] : null;
@@ -194,7 +195,8 @@ export async function recalculateRolloverChain(
         const rolloverResult = calculateRolloverForPeriod(
           currentPeriod,
           previousPeriod,
-          rolloverSettings
+          rolloverSettings,
+          nowMs
         );
 
         // Check if update is needed

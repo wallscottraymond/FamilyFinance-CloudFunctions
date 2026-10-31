@@ -33,6 +33,7 @@ import { create_job } from "../../../infrastructure/job_queue";
 import { generate_id } from "../../../observability";
 import { predictNextPayment } from "../../inflow_periods/utils/predictNextPayment";
 import { calculateAllOccurrencesInPeriod as calculateOccurrencesUtil } from "../../inflow_periods/utils/calculateAllOccurrencesInPeriod";
+import { count_days_inclusive } from "../../../domain/budgets/period_generation.service";
 
 /**
  * Triggered when an inflow is created
@@ -377,7 +378,7 @@ function calculatePeriodAmounts(
   const cycleEnd = cycleInfo.cycleEndDate.toDate();
   
   // Calculate days in this period
-  const daysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const daysInPeriod = count_days_inclusive(periodStart, periodEnd);
   
   // Calculate amount earned for this period
   const amountEarned = cycleInfo.dailyRate * daysInPeriod;
@@ -422,8 +423,6 @@ async function batchCreateInflowPeriods(
  * Helper function to calculate days in a period
  */
 function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
-  const start = startDate.toDate();
-  const end = endDate.toDate();
-  const diffMs = end.getTime() - start.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end day
+  // UTC-normalized inclusive day count (Code-Health-Review M1-M4: ceil on a 23:59:59 end gave October 32 days).
+  return count_days_inclusive(startDate.toDate(), endDate.toDate());
 }

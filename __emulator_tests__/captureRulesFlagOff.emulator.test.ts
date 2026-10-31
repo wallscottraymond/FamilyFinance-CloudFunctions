@@ -233,9 +233,35 @@ const diff_keys = (a: any, b: any): string[] => {
  * straddling week no longer expects a Sep 29 occurrence — plus Everything Else's leftover in those
  * buckets only (it follows the bills due there). The bill-level outcome of each case is checked.
  */
+/**
+ * Code-Health-Review M1-M4 (deliberate): the materialized bill / income periods' `amountWithheld`
+ * and `amountAllocated` count whole UTC days now — the base's ceil on a 23:59:59.999 end counted
+ * one day too many. Each must equal the base's value × days / (days + 1) (to the rounding cent);
+ * then both are dropped so everything else is still compared byte for byte.
+ */
+function expectOneDayFewer(got: any, base: any, at = "$"): void {
+  if (!got || !base || typeof got !== "object" || typeof base !== "object") return;
+  const ms = (t: any): number =>
+    t && typeof t === "object" ? ("__ts" in t ? t.__ts : t._seconds * 1000) : Date.parse(t);
+  if ("periodStartDate" in got && "periodEndDate" in got) {
+    const day = 86_400_000;
+    const days = Math.round((Math.floor(ms(got.periodEndDate) / day) * day - ms(got.periodStartDate)) / day) + 1;
+    for (const f of ["amountWithheld", "amountAllocated"]) {
+      if (typeof got[f] !== "number" || typeof base[f] !== "number") continue;
+      const want = (base[f] * days) / (days + 1);
+      expect({ at, f, ok: Math.abs(got[f] - want) <= 0.02 }).toEqual({ at, f, ok: true });
+      delete got[f];
+      delete base[f];
+    }
+  }
+  for (const k of Object.keys(got)) expectOneDayFewer(got[k], base[k], `${at}.${k}`);
+}
+
 function expectGoldenWithA2(out: any, golden_all: any): void {
   const { derive_removed: got_removed, ...got_rest } = out;
-  const { derive_removed: base_removed, ...base_rest } = golden_all;
+  const { derive_removed: base_removed, ...base_shared } = golden_all;
+  const base_rest = JSON.parse(JSON.stringify(base_shared)); // the golden is shared by several tests
+  expectOneDayFewer(got_rest, base_rest);
   expect(got_rest).toEqual(base_rest);
   // Monthly views byte-identical (D26) — except EXACTLY the D28 and D31 cases (user-approved):
   //  - D28 (round 4): the ERL bill's Sep 29 early payment for its Oct 1 occurrence (removed from

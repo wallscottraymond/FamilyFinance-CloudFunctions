@@ -12,6 +12,7 @@ import { DomainResult, success_many, validation_failed } from "../../types";
 import { InflowPeriodForPersistence } from "../../repositories/inflow_period.repo";
 import { normalize_frequency } from "../recurring/frequency";
 import { occurrence_dates_in_window } from "../outflows/outflow_period.service";
+import { count_days_inclusive } from "../budgets/period_generation.service";
 
 /**
  * Inflow data needed for period generation (snake_case).
@@ -107,7 +108,8 @@ function get_cycle_days(frequency: string): number {
  * Get number of days in a period.
  */
 function get_period_days(start: Date, end: Date): number {
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  // UTC-normalized (Code-Health-Review M1-M4: ceil on a 23:59:59 end gave October 32 days).
+  return count_days_inclusive(start, end);
 }
 
 /**

@@ -13,6 +13,7 @@
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { Outflow, OutflowPeriod } from "../../../../types";
+import { count_days_inclusive } from "../../../domain/budgets/period_generation.service";
 
 export interface OutflowUpdateResult {
   success: boolean;
@@ -29,7 +30,7 @@ export interface OutflowUpdateResult {
 function calculateDaysInPeriod(period: OutflowPeriod): number {
   const start = period.periodStartDate.toDate();
   const end = period.periodEndDate.toDate();
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  return count_days_inclusive(start, end);
 }
 
 /**

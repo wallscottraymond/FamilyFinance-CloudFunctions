@@ -25,8 +25,14 @@ describe("page_share — a period's share of its budget under the PERIOD PAGE's 
       .toBeCloseTo((2 * 16) / 31, 9);
     expect(page_share(OCT[0], OCT[1], "bi_monthly")).toBeCloseTo(2, 9);
   });
-  it("quarterly / yearly / custom / unknown → the monthly rule", () => {
-    for (const c of ["quarterly", "yearly", "custom", "QUARTERLY", "whatever"]) {
+  it("quarterly / yearly → the monthly rule × a third / a twelfth (M1-H1)", () => {
+    expect(page_share(OCT[0], OCT[1], "quarterly")).toBeCloseTo(1 / 3, 9);
+    expect(page_share(OCT[0], OCT[1], "YEARLY")).toBeCloseTo(1 / 12, 9);
+    expect(page_share(at("2031-10-05T00:00:00Z"), at("2031-10-11T23:59:59Z"), "yearly"))
+      .toBeCloseTo(7 / 31 / 12, 9);
+  });
+  it("custom / unknown → the monthly rule", () => {
+    for (const c of ["custom", "whatever"]) {
       expect(page_share(OCT[0], OCT[1], c)).toBeCloseTo(1, 9);
       expect(page_share(at("2031-10-05T00:00:00Z"), at("2031-10-11T23:59:59Z"), c))
         .toBeCloseTo(7 / 31, 9);

@@ -16,6 +16,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { Inflow, SourcePeriod, PlaidRecurringFrequency } from "../../../../types";
 import { occurrence_dates_in_window } from "../../../domain/outflows/outflow_period.service";
+import { count_days_inclusive } from "../../../domain/budgets/period_generation.service";
 
 /**
  * Get approximate cycle days for a frequency
@@ -48,7 +49,7 @@ function getCycleDays(frequency: PlaidRecurringFrequency | string): number {
  * Get number of days in a period
  */
 function getPeriodDays(periodStart: Date, periodEnd: Date): number {
-  return Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  return count_days_inclusive(periodStart, periodEnd);
 }
 
 /**

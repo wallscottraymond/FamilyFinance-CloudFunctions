@@ -28,6 +28,7 @@ import {
   PlaidRecurringFrequency
 } from "../../../../types";
 import { calculateAllOccurrencesInPeriod } from "../utils/calculateAllOccurrencesInPeriod";
+import { count_days_inclusive } from "../../../domain/budgets/period_generation.service";
 
 // Simple admin key for this one-time task
 const ADMIN_KEY = "family-finance-admin-2025";
@@ -319,7 +320,6 @@ function calculatePaymentCycle(inflow: any) {
 }
 
 function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
-  const start = startDate.toDate();
-  const end = endDate.toDate();
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  // UTC-normalized inclusive day count (Code-Health-Review M1-M4: ceil on a 23:59:59 end gave October 32 days).
+  return count_days_inclusive(startDate.toDate(), endDate.toDate());
 }

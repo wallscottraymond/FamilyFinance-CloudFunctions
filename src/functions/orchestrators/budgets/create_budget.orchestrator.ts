@@ -29,6 +29,7 @@ import { compute_create_budget } from "../../domain/budgets/create_budget.servic
 import { plan_view_claims } from "../../domain/budgets/category_ownership.service";
 import {
   budget_cadence_to_instance,
+  budget_amount_per_instance,
   compute_period_generation_end,
 } from "../../domain/budgets/period_generation.service";
 import { resolve_create_budget_dependencies } from "../../resolvers/budgets/create_budget.resolver";
@@ -141,7 +142,7 @@ export async function create_budget_orchestrator(
       group_ids: entity.group_ids,
       budget_name: entity.name,
       category_ids: entity.category_ids,
-      amount: entity.amount,
+      amount: budget_amount_per_instance(entity.amount, entity.period),
       cadence: budget_cadence_to_instance(entity.period),
       start_ms: entity.start_date.toMillis(),
       generation_end_ms: generation_end.getTime(),

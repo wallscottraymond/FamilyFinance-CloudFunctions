@@ -82,6 +82,7 @@ export {
   compute_daily_rate,
   compute_budget_periods,
   budget_cadence_to_instance,
+  budget_amount_per_instance,
   compute_period_generation_end,
   ExistingPeriodForRealloc,
   PeriodAllocationUpdate,

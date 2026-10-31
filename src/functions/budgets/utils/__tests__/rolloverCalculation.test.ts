@@ -180,6 +180,37 @@ describe("calculateRolloverForPeriod", () => {
     spreadPeriods: 3,
   };
 
+  // Code-Health-Review M1-H2: a future period has spent ~0, so letting it carry forward
+  // compounded the whole allocation through every future month.
+  describe("only an ended previous period carries forward (M1-H2)", () => {
+    const jan = createMockPeriod({
+      id: "jan", spent: 100, allocatedAmount: 500,
+      periodStart: Timestamp.fromDate(new Date("2031-01-01T00:00:00Z")),
+      periodEnd: Timestamp.fromDate(new Date("2031-01-31T23:59:59.999Z")),
+    });
+    const feb = createMockPeriod({ id: "feb", periodId: "2031M02" });
+
+    test("previous period not ended yet → nothing rolls", () => {
+      const mid_jan = Date.parse("2031-01-15T12:00:00Z");
+      const result = calculateRolloverForPeriod(feb, jan, enabledSettings, mid_jan);
+      expect(result.rolledOverAmount).toBe(0);
+      expect(result.pendingRolloverDeduction).toBe(0);
+    });
+
+    test("previous period ended → its surplus rolls", () => {
+      const feb_1 = Date.parse("2031-02-01T03:00:00Z");
+      const result = calculateRolloverForPeriod(feb, jan, enabledSettings, feb_1);
+      expect(result.rolledOverAmount).toBe(400);
+    });
+
+    test("an overspent previous period that hasn't ended deducts nothing yet", () => {
+      const over = { ...jan, spent: 800 } as typeof jan;
+      const result = calculateRolloverForPeriod(feb, over, spreadSettings, Date.parse("2031-01-20T00:00:00Z"));
+      expect(result.rolledOverAmount).toBe(0);
+      expect(result.pendingRolloverPeriods).toBe(0);
+    });
+  });
+
   describe("disabled rollover", () => {
     test("should return zero rollover when disabled", () => {
       const currentPeriod = createMockPeriod();

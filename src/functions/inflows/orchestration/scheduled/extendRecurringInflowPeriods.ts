@@ -23,6 +23,7 @@ import {
 } from "../../../../types";
 import { calculateAllOccurrencesInPeriod } from "../../inflow_periods/utils/calculateAllOccurrencesInPeriod";
 import { RemovalMode, is_stored_period_active } from "../../../domain/recurring/recurring_suppression.service";
+import { count_days_inclusive } from "../../../domain/budgets/period_generation.service";
 
 /**
  * Scheduled function to extend recurring inflow periods
@@ -154,7 +155,7 @@ function calculatePeriodAmounts(
 ) {
   const periodStart = sourcePeriod.startDate.toDate();
   const periodEnd = sourcePeriod.endDate.toDate();
-  const daysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const daysInPeriod = count_days_inclusive(periodStart, periodEnd);
   const amountEarned = cycleInfo.dailyRate * daysInPeriod;
 
   return {
@@ -166,9 +167,8 @@ function calculatePeriodAmounts(
  * Helper function to calculate days in a period
  */
 function getDaysInPeriod(startDate: Timestamp, endDate: Timestamp): number {
-  const start = startDate.toDate();
-  const end = endDate.toDate();
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  // UTC-normalized inclusive day count (Code-Health-Review M1-M4: ceil on a 23:59:59 end gave October 32 days).
+  return count_days_inclusive(startDate.toDate(), endDate.toDate());
 }
 
 /**
