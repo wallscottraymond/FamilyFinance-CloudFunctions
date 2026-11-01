@@ -34,6 +34,12 @@ export interface RecomputeBudgetSpentInput {
      * that don't pass it read exactly as before.
      */
     preload_window?: boolean;
+    /**
+     * Queue the rollover chain even when the budget doc has no explicit `rolloverEnabled` (rollover
+     * is ON by default via user settings — the chain resolves the effective setting itself and
+     * clears when off). A pause / resume sets it so the next period's carry follows at once (PZ6).
+     */
+    force_rollover?: boolean;
 }
 /**
  * Recompute spent for the touched budgets' affected periods.

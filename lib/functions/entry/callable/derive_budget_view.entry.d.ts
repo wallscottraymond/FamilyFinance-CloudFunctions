@@ -25,6 +25,9 @@ interface DerivedViewPeriodResponse {
     returnAmount: number;
     remaining: number;
     isDerived: true;
+    /** Budget pause (PZ3): every day paused / how many days paused. */
+    isPaused: boolean;
+    pausedDays: number;
 }
 interface DeriveBudgetViewResponseData {
     budgetId: string;

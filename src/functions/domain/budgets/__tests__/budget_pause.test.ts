@@ -215,6 +215,18 @@ describe("compute_budget_pause (set_budget_pause's domain rule)", () => {
     const too_long = iso_from_day(d("2026-01-01") + MAX_PAUSE_DAYS);
     expect(compute_budget_pause({ ...base, start_day: "2026-01-01", end_day: too_long }).validation_errors).toBeDefined();
   });
+  it("the range cap refuses a pause but never a resume (verify #1 L6)", () => {
+    // MAX_PAUSED_RANGES one-day ranges, every other day.
+    const full: PausedDayRange[] = [];
+    for (let i = 0; i < 120; i++) full.push({ start_day: d("2026-01-01") + 2 * i, end_day: d("2026-01-01") + 2 * i });
+    const one = (iso: string) => ({ ...base, current: full, start_day: iso, end_day: iso });
+    expect(compute_budget_pause({ ...one(iso_from_day(d("2026-01-01") + 1000)) }).validation_errors).toBeDefined();
+    const wide = [{ start_day: d("2026-01-01"), end_day: d("2026-01-01") + 400 }, ...full.slice(0, 119).map((r) => ({ start_day: r.start_day + 1000, end_day: r.end_day + 1000 }))];
+    // Resuming one day inside the wide range splits it → 121 ranges, still allowed.
+    const out = compute_budget_pause({ ...base, current: wide, paused: false, start_day: iso_from_day(d("2026-01-01") + 10), end_day: iso_from_day(d("2026-01-01") + 10) });
+    expect(out.validation_errors).toBeUndefined();
+    expect(out.entity!.length).toBe(121);
+  });
   it("recompute dates: one per day (any stored period holding a paused day recomputes)", () => {
     const dates = pause_recompute_dates("2026-11-30", "2026-12-02");
     expect(dates.map((t) => new Date(t).toISOString().slice(0, 10))).toEqual(["2026-11-30", "2026-12-01", "2026-12-02"]);

@@ -170,6 +170,21 @@ describe("budget pause (emulator)", () => {
     expect(p.spent).toBe(30);
   });
 
+  it("the pause queues a spent recompute that also re-runs the rollover chain (verify #1 M1)", async () => {
+    const jobs = async (type: string) => (await db.collection("_jobs").where("job_type", "==", type).get()).docs
+      .map((d) => d.data().payload as Record<string, unknown>);
+    // The pause's own job: one date per paused day (Nov 2–8 → 7).
+    const recompute = (await jobs("recompute_budget_spent")).filter((p) =>
+      ((p.dates_ms_by_budget as Record<string, number[]> | undefined)?.[groceries] ?? []).length === 7);
+    expect(recompute.length).toBeGreaterThan(0);
+    expect(recompute[0]).toMatchObject({ force_rollover: true, user_id: U });
+    // Groceries has no explicit rolloverEnabled (rollover is on by default): the chain still runs.
+    const rollover_jobs = async () => (await jobs("recalculate_rollover")).filter((p) => p.budget_id === groceries).length;
+    const before_n = await rollover_jobs();
+    await recompute_budget_spent_orchestrator(t(), recompute[0] as never);
+    expect(await rollover_jobs()).toBeGreaterThan(before_n);
+  });
+
   it("no split was rewritten", async () => {
     expect((await db.collection("transactions").doc(id("paused_day")).get()).data()!.splits).toEqual(splits_before);
   });

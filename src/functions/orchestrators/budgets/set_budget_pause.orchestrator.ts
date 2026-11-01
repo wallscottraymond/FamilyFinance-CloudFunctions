@@ -83,6 +83,7 @@ export async function set_budget_pause_orchestrator(
             user_id: existing.user_id,
             budget_ids: [existing.id],
             dates_ms_by_budget: { [existing.id]: dates },
+            force_rollover: true, // the carry into later periods follows the pause now (PZ6)
           },
           { trace_id: ctx.trace_id }
         );

@@ -58,6 +58,9 @@ interface DerivedViewPeriodResponse {
   returnAmount: number;
   remaining: number;
   isDerived: true;
+  /** Budget pause (PZ3): every day paused / how many days paused. */
+  isPaused: boolean;
+  pausedDays: number;
 }
 
 interface DeriveBudgetViewResponseData {
@@ -83,6 +86,8 @@ function map_period_to_response(
     returnAmount: p.return_amount,
     remaining: p.remaining,
     isDerived: true,
+    isPaused: p.is_paused,
+    pausedDays: p.paused_days,
   };
 }
 

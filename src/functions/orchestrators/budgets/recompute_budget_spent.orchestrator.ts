@@ -57,6 +57,12 @@ export interface RecomputeBudgetSpentInput {
    * that don't pass it read exactly as before.
    */
   preload_window?: boolean;
+  /**
+   * Queue the rollover chain even when the budget doc has no explicit `rolloverEnabled` (rollover
+   * is ON by default via user settings — the chain resolves the effective setting itself and
+   * clears when off). A pause / resume sets it so the next period's carry follows at once (PZ6).
+   */
+  force_rollover?: boolean;
 }
 
 function round2(value: number): number {
@@ -184,7 +190,7 @@ export async function recompute_budget_spent_orchestrator(
       // writes rolledOverAmount/remaining — never spent — so it cannot re-enter
       // this pipeline. Non-fatal: a rollover hiccup must not fail the spend recompute.
       try {
-        if (budget?.rollover_enabled) {
+        if (budget?.rollover_enabled || (input.force_rollover && budget && budget.rollover_enabled !== false)) {
           await create_job_if_not_exists(
             "recalculate_rollover",
             {
