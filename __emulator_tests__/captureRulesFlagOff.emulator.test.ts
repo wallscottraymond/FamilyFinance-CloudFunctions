@@ -257,7 +257,23 @@ function expectOneDayFewer(got: any, base: any, at = "$"): void {
   for (const k of Object.keys(got)) expectOneDayFewer(got[k], base[k], `${at}.${k}`);
 }
 
+/**
+ * Code-Health-Review PZ3 (deliberate, 2026-11-01): every derived budget period now carries
+ * `is_paused` / `paused_days`. Nothing in this fixture is paused, so each must be exactly
+ * false / 0; then both are dropped so everything else is still compared byte for byte.
+ */
+function expectNotPaused(got: any, at = "$"): void {
+  if (!got || typeof got !== "object") return;
+  if (got.is_derived === true && "is_paused" in got) {
+    expect({ at, is_paused: got.is_paused, paused_days: got.paused_days }).toEqual({ at, is_paused: false, paused_days: 0 });
+    delete got.is_paused;
+    delete got.paused_days;
+  }
+  for (const k of Object.keys(got)) expectNotPaused(got[k], `${at}.${k}`);
+}
+
 function expectGoldenWithA2(out: any, golden_all: any): void {
+  expectNotPaused(out);
   const { derive_removed: got_removed, ...got_rest } = out;
   const { derive_removed: base_removed, ...base_shared } = golden_all;
   const base_rest = JSON.parse(JSON.stringify(base_shared)); // the golden is shared by several tests

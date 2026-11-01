@@ -12,6 +12,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { WriteResult, ReadOptions, TraceContext } from "../types";
 import { BudgetEntity } from "../types/budgets/budget_entity.types";
+import { PausedDayRange } from "../domain/budgets/budget_pause.service";
 /**
  * Budget Repository.
  * All write operations automatically create audit entries.
@@ -55,6 +56,13 @@ export declare const budget_repo: {
      * @returns false when the budget changed meanwhile.
      */
     replace_category_ids_if_unchanged(_ctx: TraceContext, id: string, expected: string[], next: string[]): Promise<boolean>;
+    /**
+     * Replace a budget's paused ranges only if they still equal `expected` (Code-Health-Review
+     * PZ5): a pause / resume is read-modify-write, so a concurrent one is retried by the caller
+     * instead of being overwritten. Empty `next` removes the field.
+     * @returns false when the ranges changed meanwhile (or the budget is gone).
+     */
+    replace_paused_ranges_if_unchanged(ctx: TraceContext, id: string, expected: PausedDayRange[], next: PausedDayRange[], user_id: string): Promise<boolean>;
     /** Every active budget (all users + group views) — the one-time A2 migration's input. */
     get_all_active(_ctx: TraceContext): Promise<BudgetEntity[]>;
     remove_category_ids(ctx: TraceContext, id: string, category_ids: string[], user_id: string): Promise<WriteResult>;

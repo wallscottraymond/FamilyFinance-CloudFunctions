@@ -20,6 +20,12 @@ import {
 import { BudgetEntity } from "../types/budgets/budget_entity.types";
 import { record_audit_entry_async } from "../audit";
 import { budget_cadence_to_instance } from "../domain/budgets";
+import {
+  PausedDayRange,
+  day_from_iso,
+  iso_from_day,
+  normalize_paused_ranges,
+} from "../domain/budgets/budget_pause.service";
 
 /**
  * Firestore collection name.
@@ -92,6 +98,8 @@ interface LegacyBudgetDoc {
   memberIds?: string[];
   isShared?: boolean;
   broughtBy?: string | null;
+  /** Paused days (Code-Health-Review PZ5): inclusive UTC days, "YYYY-MM-DD". */
+  pausedRanges?: Array<{ start: string; end: string }>;
   tags?: string[];
   everythingElsePeriodType?: string;
 }
@@ -99,6 +107,22 @@ interface LegacyBudgetDoc {
 /**
  * Maps legacy Firestore document to BudgetEntity.
  */
+/** Stored day strings → day ranges (malformed entries are dropped, never thrown). */
+function parse_paused_ranges(raw: LegacyBudgetDoc["pausedRanges"]): PausedDayRange[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PausedDayRange[] = [];
+  for (const r of raw) {
+    const start_day = typeof r?.start === "string" ? day_from_iso(r.start) : null;
+    const end_day = typeof r?.end === "string" ? day_from_iso(r.end) : null;
+    if (start_day !== null && end_day !== null && end_day >= start_day) out.push({ start_day, end_day });
+  }
+  return normalize_paused_ranges(out);
+}
+
+function format_paused_ranges(ranges: PausedDayRange[]): Array<{ start: string; end: string }> {
+  return ranges.map((r) => ({ start: iso_from_day(r.start_day), end: iso_from_day(r.end_day) }));
+}
+
 function map_to_entity(doc: LegacyBudgetDoc): BudgetEntity {
   const group_ids = doc.groupIds ?? [];
   return {
@@ -151,6 +175,7 @@ function map_to_entity(doc: LegacyBudgetDoc): BudgetEntity {
     rollover_strategy: doc.rolloverStrategy,
     rollover_spread_periods: doc.rolloverSpreadPeriods,
     brought_by: doc.broughtBy ?? null,
+    paused_ranges: parse_paused_ranges(doc.pausedRanges),
     created_at: doc.createdAt,
     updated_at: doc.updatedAt,
   };
@@ -207,6 +232,7 @@ function map_to_doc(entity: BudgetEntity): LegacyBudgetDoc {
     rolloverStrategy: entity.rollover_strategy,
     rolloverSpreadPeriods: entity.rollover_spread_periods,
     broughtBy: entity.brought_by ?? null,
+    ...(entity.paused_ranges?.length ? { pausedRanges: format_paused_ranges(entity.paused_ranges) } : {}),
     // Legacy compatibility fields
     familyId: entity.is_private ? undefined : single_group_id ?? undefined,
     groupId: single_group_id,
@@ -403,6 +429,49 @@ export const budget_repo = {
       tx.update(doc_ref(id), { categoryIds: next, updatedAt: Timestamp.now() });
       return true;
     });
+  },
+
+  /**
+   * Replace a budget's paused ranges only if they still equal `expected` (Code-Health-Review
+   * PZ5): a pause / resume is read-modify-write, so a concurrent one is retried by the caller
+   * instead of being overwritten. Empty `next` removes the field.
+   * @returns false when the ranges changed meanwhile (or the budget is gone).
+   */
+  async replace_paused_ranges_if_unchanged(
+    ctx: TraceContext,
+    id: string,
+    expected: PausedDayRange[],
+    next: PausedDayRange[],
+    user_id: string
+  ): Promise<boolean> {
+    const same = (a: PausedDayRange[], b: PausedDayRange[]): boolean =>
+      a.length === b.length && a.every((r, i) => r.start_day === b[i].start_day && r.end_day === b[i].end_day);
+    const ok = await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(doc_ref(id));
+      if (!snap.exists) return false;
+      const current = parse_paused_ranges((snap.data() as LegacyBudgetDoc).pausedRanges);
+      if (!same(current, expected)) return false;
+      /* eslint-disable @typescript-eslint/naming-convention */
+      tx.update(doc_ref(id), {
+        pausedRanges: next.length > 0 ? format_paused_ranges(next) : FieldValue.delete(),
+        updatedAt: Timestamp.now(),
+      });
+      /* eslint-enable @typescript-eslint/naming-convention */
+      return true;
+    });
+    if (ok) {
+      record_audit_entry_async({
+        user_id,
+        action: "update",
+        entity_type: "budget",
+        entity_id: id,
+        before: { paused_ranges: format_paused_ranges(expected) } as Record<string, unknown>,
+        after: { paused_ranges: format_paused_ranges(next) } as Record<string, unknown>,
+        trace_id: ctx.trace_id,
+        metadata: { source: "api", context: { pause: "set" } },
+      });
+    }
+    return ok;
   },
 
   /** Every active budget (all users + group views) — the one-time A2 migration's input. */

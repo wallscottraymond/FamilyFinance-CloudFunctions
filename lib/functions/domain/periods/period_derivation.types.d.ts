@@ -17,6 +17,7 @@ import { RemovalInterval } from "../recurring/recurring_suppression.service";
 import { ManualSettledOccurrences } from "../recurring/manual_settlement.service";
 import { DepositForSlot } from "../recurring/income_slot_amounts";
 import { RecurringScheduleForGeneration } from "../outflows/outflow_period.service";
+import type { PausedDayRange } from "../budgets/budget_pause.service";
 export interface BudgetForDerivation {
     id: string;
     name: string;
@@ -32,6 +33,8 @@ export interface BudgetForDerivation {
         from_ms: number;
         to_ms: number | null;
     };
+    /** Paused UTC-day ranges (Code-Health-Review PZ1); absent = not paused (EE is never paused). */
+    paused_ranges?: PausedDayRange[];
 }
 export interface RecurringForDerivation {
     id: string;

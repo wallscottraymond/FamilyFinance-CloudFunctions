@@ -20,6 +20,7 @@
  */
 
 import { BudgetForMatch, PeriodLens } from "../transactions/match_budget.service";
+import type { PausedDayRange } from "./budget_pause.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -74,6 +75,8 @@ export interface BudgetForMatchInput {
   end_ms: number | null;
   is_ongoing: boolean;
   is_everything_else: boolean;
+  /** Paused UTC-day ranges (PZ1); absent = never paused. */
+  paused_ranges?: PausedDayRange[];
 }
 
 export interface MatchBudgets {
@@ -111,6 +114,7 @@ export function build_match_budgets(budgets: BudgetForMatchInput[]): MatchBudget
       end_ms: b.is_ongoing ? null : b.end_ms,
       is_ongoing: b.is_ongoing,
       cadence: b.cadence,
+      ...(b.paused_ranges?.length ? { paused_ranges: b.paused_ranges } : {}),
     });
   }
   return {
@@ -133,6 +137,7 @@ export function budget_to_match_input(b: {
   budget_end_date?: { toMillis(): number } | null;
   is_ongoing: boolean;
   is_system_everything_else?: boolean;
+  paused_ranges?: PausedDayRange[];
 }): BudgetForMatchInput {
   const cadence: PeriodLens =
     b.period === "weekly" ? "weekly" : b.period === "bi_monthly" ? "bi_monthly" : "monthly";
@@ -146,5 +151,6 @@ export function budget_to_match_input(b: {
     end_ms: end ? end.toMillis() : null,
     is_ongoing: b.is_ongoing,
     is_everything_else: b.is_system_everything_else === true,
+    ...(b.paused_ranges?.length ? { paused_ranges: b.paused_ranges } : {}),
   };
 }

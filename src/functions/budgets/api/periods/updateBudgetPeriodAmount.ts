@@ -28,6 +28,8 @@
  */
 
 import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
+import { rolloverPauseOf } from "../../utils/rolloverCalculation";
+import { paused_days_in } from "../../../domain/budgets/budget_pause.service";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { Budget, BudgetPeriodDocument, UserRole } from "../../../../types";
@@ -269,6 +271,17 @@ export const updateBudgetPeriodAmount = onCall<
 
     if (budget.isSystemEverythingElse) {
       throw new HttpsError("failed-precondition", "Cannot edit \"Everything Else\" system budget");
+    }
+
+    // Budget pause (Code-Health-Review PZ4): a period with paused days can't show a typed amount
+    // (those days' share is out of the budget), so its amount is set only once it's resumed.
+    // Reset (dropping a custom amount) stays allowed.
+    const pause = rolloverPauseOf(budget as unknown as Budget);
+    if (
+      !reset && pause &&
+      paused_days_in(pause.ranges, period.periodStart.toMillis(), period.periodEnd.toMillis()) > 0
+    ) {
+      throw new HttpsError("failed-precondition", "Resume this period before changing its amount.");
     }
 
     const spent = period.spent || 0;

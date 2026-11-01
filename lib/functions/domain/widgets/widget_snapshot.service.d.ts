@@ -41,6 +41,8 @@ export interface WidgetBudgetInput {
         allocated_amount: number;
         effective_amount?: number | null;
         spent: number;
+        /** Every day of the period paused (PZ3) → not listed. */
+        is_paused?: boolean;
     }>;
 }
 export interface WidgetOccurrenceGroupInput {

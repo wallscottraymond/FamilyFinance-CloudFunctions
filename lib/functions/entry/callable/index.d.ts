@@ -53,6 +53,7 @@ export { delete_tag } from "./delete_tag.entry";
 export { list_tags } from "./list_tags.entry";
 export { set_transaction_tags } from "./set_transaction_tags.entry";
 export { set_budget_tags } from "./set_budget_tags.entry";
+export { set_budget_pause } from "./set_budget_pause.entry";
 export { backfill_transaction_assignments, } from "./backfill_transaction_assignments.entry";
 export { migrate_budget_categories } from "./migrate_budget_categories.entry";
 export { audit_transaction_assignments } from "./audit_transaction_assignments.entry";

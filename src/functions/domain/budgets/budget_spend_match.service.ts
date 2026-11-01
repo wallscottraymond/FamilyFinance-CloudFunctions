@@ -27,7 +27,9 @@ import {
   is_within_budget_range,
   match_budget,
   BudgetForMatch,
+  UNASSIGNED_BUDGET_ID,
 } from "../transactions/match_budget.service";
+import { is_paused_on } from "./budget_pause.service";
 import {
   SplitForSpend,
   SpendStatusForSpend,
@@ -77,13 +79,31 @@ export function resolve_split_owner(
   ee_budget_id: string | null,
   ee_alias_ids: ReadonlySet<string> = NO_ALIASES
 ): string {
+  return resolve_owner_detail(split, real_budgets, ee_budget_id, ee_alias_ids).owner;
+}
+
+/**
+ * The owner plus whether a live manual pin decided it. A pin or category match to a budget that
+ * is PAUSED on the split's (UTC) day moves the split to Everything Else (Code-Health-Review PZ1);
+ * `by_pin` stays true for a moved pinned split, so it keeps counting as spending there.
+ */
+function resolve_owner_detail(
+  split: SplitForOnReadMatch,
+  real_budgets: BudgetForMatch[],
+  ee_budget_id: string | null,
+  ee_alias_ids: ReadonlySet<string>
+): { owner: string; by_pin: boolean } {
   // 1. Manual pin wins — but ONLY while its budget still exists (a real budget or the EE).
   //    A pin to a DELETED budget is stale, so we fall through to category matching (→ EE),
   //    which re-homes the deleted budget's spending to Everything Else instead of orphaning it.
   const pinned = pin_owner(split, real_budgets, ee_budget_id, ee_alias_ids);
-  if (pinned) return pinned;
   // 2/3. Category match → else Everything-Else (both from the shared matcher).
-  return match_budget(split, split.txn_date_ms, real_budgets, ee_budget_id).budget_id;
+  const owner = pinned ?? match_budget(split, split.txn_date_ms, real_budgets, ee_budget_id).budget_id;
+  const budget = real_budgets.find((b) => b.id === owner);
+  if (budget && is_paused_on(budget.paused_ranges, split.txn_date_ms)) {
+    return { owner: ee_budget_id ?? UNASSIGNED_BUDGET_ID, by_pin: pinned !== null };
+  }
+  return { owner, by_pin: pinned !== null };
 }
 
 const NO_ALIASES: ReadonlySet<string> = new Set();
@@ -125,13 +145,14 @@ export function owned_splits_for_budget(
 ): SplitForSpend[] {
   const out: SplitForSpend[] = [];
   for (const s of splits) {
-    if (resolve_split_owner(s, real_budgets, ee_budget_id, ee_alias_ids) !== target_budget_id) {
+    const { owner, by_pin } = resolve_owner_detail(s, real_budgets, ee_budget_id, ee_alias_ids);
+    if (owner !== target_budget_id) {
       continue;
     }
     // A manual budget pin is the user's explicit word (canon A4, engine B2): the split counts in
     // the pinned budget even when it's a transfer or an income-category credit — exactly as the
-    // assignment engine stores it.
-    const pinned = pin_owner(s, real_budgets, ee_budget_id, ee_alias_ids) === target_budget_id;
+    // assignment engine stores it. A pinned split moved to Everything Else by a pause keeps that.
+    const pinned = by_pin;
     out.push({
       budget_id: target_budget_id,
       amount: s.amount,

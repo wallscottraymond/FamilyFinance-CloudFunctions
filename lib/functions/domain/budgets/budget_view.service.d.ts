@@ -28,6 +28,7 @@
 import { SplitForSpend } from "./budget_spend.service";
 import { PeriodInstanceType } from "./period_generation.service";
 import { MonthlyPeriodForDerivation } from "./period_allocation_view.service";
+import { PausedDayRange } from "./budget_pause.service";
 export type { MonthlyPeriodForDerivation };
 /** A view's calendar bucket to derive (a weekly / bi-weekly source period). */
 export interface ViewBucket {
@@ -55,6 +56,10 @@ export interface DerivedBudgetViewPeriod {
     remaining: number;
     /** Marker so read paths know this came from derivation, not a stored doc. */
     is_derived: true;
+    /** Days of this bucket the budget is paused (PZ1/PZ5; 0 = not paused). */
+    paused_days: number;
+    /** Every day of the bucket is paused → the app shows "Paused" (sorted last); some → "Partly paused". */
+    is_paused: boolean;
     /**
      * Everything-Else only: true when the period has NO expected income, so the FE
      * shows "add income to see what's left to spend" instead of the (meaningless)
@@ -78,5 +83,5 @@ export interface DerivedBudgetViewPeriod {
 export declare function derive_budget_view_periods(budget_id: string, buckets: ViewBucket[], monthly_periods: MonthlyPeriodForDerivation[], splits: SplitForSpend[], active_start_ms?: number, active_end_ms?: number | null, priced?: {
     from_ms: number;
     to_ms: number | null;
-}): DerivedBudgetViewPeriod[];
+}, paused?: PausedDayRange[]): DerivedBudgetViewPeriod[];
 //# sourceMappingURL=budget_view.service.d.ts.map

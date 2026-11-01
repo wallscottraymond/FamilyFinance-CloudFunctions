@@ -19,6 +19,7 @@
  *
  * @module domain/budgets/period_allocation_view
  */
+import { PausedDayRange } from "./budget_pause.service";
 import { PeriodAdjustment } from "../../types/budgets/budget_entity.types";
 export type { PeriodAdjustment };
 /**
@@ -53,6 +54,18 @@ export declare function bucket_allocation(monthly_periods: MonthlyPeriodForDeriv
     from_ms: number;
     to_ms: number | null;
 }): {
+    allocated: number;
+    effective: number;
+};
+/**
+ * `bucket_allocation` over only the NOT-paused days of the bucket (Code-Health-Review PZ1): the
+ * unrounded sum over each unpaused segment, rounded once — so with no pause it is exactly
+ * `bucket_allocation`. PURE.
+ */
+export declare function bucket_allocation_unpaused(monthly_periods: MonthlyPeriodForDerivation[], start_ms: number, end_ms: number, priced: {
+    from_ms: number;
+    to_ms: number | null;
+} | undefined, paused: PausedDayRange[] | undefined): {
     allocated: number;
     effective: number;
 };

@@ -41,9 +41,9 @@ jest.mock("../../../resolvers/periods/view_version.resolver", () => ({
 import { widget_snapshot_orchestrator } from "../widget_snapshot.orchestrator";
 import { widget_view_version as raw_view_version } from "../../../domain/periods/derive_scope.service";
 import { versioned_for_kind } from "../../../domain/widgets/widget_snapshot.service";
-// The version a left / summary widget compares (view version + that kind's logic revision).
-const widget_view_version = (v: number, ms: number): number =>
-  versioned_for_kind(raw_view_version(v, ms), "left");
+// The version a widget compares (view version + that kind's logic revision; default "left").
+const widget_view_version = (v: number, ms: number, kind: "left" | "summary" = "left"): number =>
+  versioned_for_kind(raw_view_version(v, ms), kind);
 import { create_trace_context } from "../../../observability";
 
 const base = {
@@ -109,7 +109,7 @@ describe("widget_snapshot group views", () => {
     expect(derive_period.mock.calls[0][2].scope).toEqual({ kind: "group", group_id: "g1" });
     expect(derive_goals.mock.calls[0][3]).toEqual({ kind: "group", group_id: "g1" });
     if (out.status === "data") {
-      expect(out.version).toBe(widget_view_version(42, base.now_ms));
+      expect(out.version).toBe(widget_view_version(42, base.now_ms, "summary"));
       expect(out.data.groupName).toBe("The Walls");
     }
   });

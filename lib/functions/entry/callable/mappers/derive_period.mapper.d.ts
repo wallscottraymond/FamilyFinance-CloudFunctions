@@ -23,6 +23,8 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             remaining: number;
             isDerived: boolean;
             noIncome: boolean;
+            isPaused: boolean;
+            pausedDays: number;
         }[];
     }[];
     bills: {

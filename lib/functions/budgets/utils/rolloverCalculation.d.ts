@@ -10,6 +10,7 @@
  * - Spread strategy distributes overspend across multiple periods (max 6)
  * - Extreme overspend can result in negative remaining amounts
  */
+import { PausedDayRange } from "../../domain/budgets/budget_pause.service";
 import { Budget, BudgetPeriodDocument, RolloverStrategy, FinancialSettings } from "../../../types";
 /**
  * Rollover settings resolved from budget or user preferences
@@ -56,7 +57,18 @@ export declare function getEffectiveRolloverSettings(budget: Budget, userFinanci
  *   The 03:00 cron rolls a period over the day after it ends.
  * @returns Rollover calculation result
  */
-export declare function calculateRolloverForPeriod(currentPeriod: BudgetPeriodDocument, previousPeriod: BudgetPeriodDocument | null, rolloverSettings: ResolvedRolloverSettings, nowMs?: number): RolloverCalculationResult;
+/** A budget's pause, as the rollover chain needs it (Code-Health-Review PZ6). */
+export interface RolloverPause {
+    ranges: PausedDayRange[];
+    /** The days the budget's monthly records are priced for (as the page spreads them). */
+    priced?: {
+        from_ms: number;
+        to_ms: number | null;
+    };
+}
+/** The budget doc's pause (stored "YYYY-MM-DD" ranges) + pricing, or undefined if never paused. */
+export declare function rolloverPauseOf(budget: Budget): RolloverPause | undefined;
+export declare function calculateRolloverForPeriod(currentPeriod: BudgetPeriodDocument, previousPeriod: BudgetPeriodDocument | null, rolloverSettings: ResolvedRolloverSettings, nowMs?: number, pause?: RolloverPause): RolloverCalculationResult;
 /**
  * Calculate the effective remaining amount for a period, including rollover.
  *

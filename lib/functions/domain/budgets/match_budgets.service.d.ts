@@ -19,6 +19,7 @@
  * @module domain/budgets/match_budgets
  */
 import { BudgetForMatch, PeriodLens } from "../transactions/match_budget.service";
+import type { PausedDayRange } from "./budget_pause.service";
 /** Start (ms) of the cadence period containing `ms` — same bounds as the source periods. */
 export declare function period_start_ms(ms: number, cadence: PeriodLens): number;
 /** End (ms, inclusive: 23:59:59.999) of the cadence period containing `ms`. */
@@ -45,6 +46,8 @@ export interface BudgetForMatchInput {
     end_ms: number | null;
     is_ongoing: boolean;
     is_everything_else: boolean;
+    /** Paused UTC-day ranges (PZ1); absent = never paused. */
+    paused_ranges?: PausedDayRange[];
 }
 export interface MatchBudgets {
     real_budgets: BudgetForMatch[];
@@ -73,5 +76,6 @@ export declare function budget_to_match_input(b: {
     } | null;
     is_ongoing: boolean;
     is_system_everything_else?: boolean;
+    paused_ranges?: PausedDayRange[];
 }): BudgetForMatchInput;
 //# sourceMappingURL=match_budgets.service.d.ts.map

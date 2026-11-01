@@ -163,7 +163,8 @@ export async function derive_budget_view_orchestrator(
       deps.splits,
       undefined,
       undefined,
-      budget_priced_range(mi.start_ms, mi.cadence, mi.is_ongoing, mi.end_ms)
+      budget_priced_range(mi.start_ms, mi.cadence, mi.is_ongoing, mi.end_ms),
+      mi.paused_ranges
     );
 
     if (is_budget_exceeded(perf, BUDGET)) {

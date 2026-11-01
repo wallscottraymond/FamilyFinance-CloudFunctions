@@ -32,10 +32,11 @@ import {
 } from "./budget_spend.service";
 import { PeriodInstanceType } from "./period_generation.service";
 import {
-  bucket_allocation,
+  bucket_allocation_unpaused,
   MonthlyPeriodForDerivation,
   round2,
 } from "./period_allocation_view.service";
+import { PausedDayRange, is_paused_on, paused_days_in, utc_day } from "./budget_pause.service";
 
 export type { MonthlyPeriodForDerivation };
 
@@ -66,6 +67,10 @@ export interface DerivedBudgetViewPeriod {
   remaining: number;
   /** Marker so read paths know this came from derivation, not a stored doc. */
   is_derived: true;
+  /** Days of this bucket the budget is paused (PZ1/PZ5; 0 = not paused). */
+  paused_days: number;
+  /** Every day of the bucket is paused → the app shows "Paused" (sorted last); some → "Partly paused". */
+  is_paused: boolean;
   /**
    * Everything-Else only: true when the period has NO expected income, so the FE
    * shows "add income to see what's left to spend" instead of the (meaningless)
@@ -94,9 +99,15 @@ export function derive_budget_view_periods(
   splits: SplitForSpend[],
   active_start_ms?: number,
   active_end_ms?: number | null,
-  priced?: { from_ms: number; to_ms: number | null }
+  priced?: { from_ms: number; to_ms: number | null },
+  paused?: PausedDayRange[]
 ): DerivedBudgetViewPeriod[] {
   const result: DerivedBudgetViewPeriod[] = [];
+  // A paused day's spending is Everything Else's (PZ1). The on-read owner rule already moved it;
+  // this also covers callers that pass STORED-assignment splits (derive_budget_view "stored").
+  const counted = paused && paused.length > 0
+    ? splits.filter((s) => !is_paused_on(paused, s.txn_date_ms))
+    : splits;
   for (const bucket of buckets) {
     // A budget must not appear in periods outside its active range — a bucket that ends before the
     // budget's first period (e.g. a newly-created budget shown in past periods) or starts after it
@@ -111,17 +122,22 @@ export function derive_budget_view_periods(
       budget_id,
       bucket.start_ms,
       bucket.end_ms,
-      splits
+      counted
     );
 
     // THE page rule (domain/budgets/period_allocation_view): each overlapping monthly period's
     // daily amount × days overlapped, plus the "This Period Only" adjustments by their own range.
-    const { allocated, effective } = bucket_allocation(
+    // A pause (PZ1) takes the paused days' share out; spend on those days is already Everything
+    // Else's (resolve_split_owner), so it never reaches `splits` here.
+    const { allocated, effective } = bucket_allocation_unpaused(
       monthly_periods,
       bucket.start_ms,
       bucket.end_ms,
-      priced
+      priced,
+      paused
     );
+    const paused_days = paused_days_in(paused, bucket.start_ms, bucket.end_ms);
+    const bucket_days = utc_day(bucket.end_ms) - utc_day(bucket.start_ms) + 1;
 
     result.push({
       budget_id,
@@ -136,6 +152,8 @@ export function derive_budget_view_periods(
       return_amount: spend.return_amount,
       remaining: round2(effective - spend.spent),
       is_derived: true,
+      paused_days,
+      is_paused: paused_days > 0 && paused_days >= bucket_days,
     });
   }
   return result;

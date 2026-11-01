@@ -177,3 +177,18 @@ describe("compute_recent_budget_transactions", () => {
     expect(out[1].refund).toBe(true);
   });
 });
+
+describe("compute_budget_lines — budget pause (Code-Health-Review PZ3)", () => {
+  const { compute_budget_lines: lines } = jest.requireActual("../widget_snapshot.service");
+  it("a budget paused for the whole period is not listed; a partly paused one shows its share", () => {
+    const out = lines([
+      { budget_id: "g", name: "Groceries", is_everything_else: false,
+        periods: [{ period_id: "2026W45", allocated_amount: 0, effective_amount: 0, spent: 0, is_paused: true }] },
+      { budget_id: "d", name: "Dining", is_everything_else: false,
+        periods: [{ period_id: "2026W45", allocated_amount: 60, effective_amount: 60, spent: 10, is_paused: false }] },
+      { budget_id: "ee", name: "Everything Else", is_everything_else: true,
+        periods: [{ period_id: "2026W45", allocated_amount: 300, spent: 50 }] },
+    ], "2026W45");
+    expect(out.map((l: { id: string }) => l.id)).toEqual(["d", "ee"]);
+  });
+});

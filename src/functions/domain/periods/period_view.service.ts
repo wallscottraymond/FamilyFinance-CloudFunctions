@@ -86,7 +86,8 @@ export function compute_period_view(
         owned,
         b.active_start_ms,
         b.active_end_ms,
-        b.priced
+        b.priced,
+        b.paused_ranges
       );
       return { budget_id: b.id, name: b.name, is_everything_else: b.is_ee, periods };
     })

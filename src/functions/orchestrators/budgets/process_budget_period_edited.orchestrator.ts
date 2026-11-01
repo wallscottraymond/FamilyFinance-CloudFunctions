@@ -5,14 +5,13 @@
  * budget_period's before/after snapshots it decides what (if anything) to sync
  * across the overlapping periods of OTHER types for the same budget:
  *   • notes / checklist / modified-amount edits → propagate via the sync utils
- *   • pause/resume (isActive flip)              → redistribute the allocation
+ * (Budget pause is NOT a period edit: it lives on the budget — `set_budget_pause`, PZ2.)
  *
  * Loop prevention: the sync utils stamp `*SyncedAt`; if one increased, this
  * update was itself a sync, so we skip.
  *
  * NOTE (legacy coupling): the cross-period sync is still performed by the legacy
- * `budgets/utils/syncNotesToOverlappingPeriods` + `handleBudgetPeriodPauseResume`
- * helpers (they own the overlap query + writes for this legacy feature, like a
+ * `budgets/utils/syncNotesToOverlappingPeriods` helpers (they own the overlap query + writes for this legacy feature, like a
  * scoped repo). Repo-ifying them is tracked as follow-up; the orchestrator only
  * delegates to them.
  *
@@ -32,8 +31,6 @@ import {
   syncChecklistToOverlappingPeriods,
   syncModifiedAmountToOverlappingPeriods,
 } from "../../budgets/utils/syncNotesToOverlappingPeriods";
-import { handleBudgetPeriodPauseResume } from "../../budgets/utils/handleBudgetPeriodPauseResume";
-import { bump_derive_version } from "../../repositories/derive_version.repo";
 
 /** Input: the edited period's snapshots. */
 export interface ProcessBudgetPeriodEditedInput {
@@ -83,10 +80,7 @@ export async function process_budget_period_edited_orchestrator(
     JSON.stringify(bf.checklistItems ?? []) !== JSON.stringify(af.checklistItems ?? []);
   const modified_changed =
     bf.modifiedAmount !== af.modifiedAmount || before.isModified !== after.isModified;
-  // Period pause/resume — the "Pause This Period" toggle flips isActive.
-  const active_changed = before.isActive !== after.isActive;
-
-  if (!notes_changed && !checklist_changed && !modified_changed && !active_changed) {
+  if (!notes_changed && !checklist_changed && !modified_changed) {
     log_operation_success(span, "system");
     return;
   }
@@ -111,22 +105,6 @@ export async function process_budget_period_edited_orchestrator(
         source,
         af.modifiedAmount as number | undefined
       );
-    }
-    if (active_changed) {
-      // Pausing redistributes this period's allocation to Everything Else;
-      // resuming restores it. The util writes allocatedAmount (not isActive),
-      // so it does not re-trigger this handler.
-      const is_pausing = before.isActive === true && after.isActive === false;
-      try {
-        await handleBudgetPeriodPauseResume(db, period_id, after, is_pausing);
-      } finally {
-        // The trigger's own bump fires BEFORE these split moves land, so a derive in between
-        // could re-cache pre-move data under the new version. Bump again once the transaction
-        // writes are committed (also the mobile app's transaction-change signal) — in `finally`
-        // so a partial failure still invalidates the writes that did land.
-        const owner = (af.userId ?? af.ownerId) as string | undefined;
-        if (owner) await bump_derive_version(owner).catch(() => {});
-      }
     }
   } catch (error) {
     // Non-fatal — a sync failure must not break the period edit.

@@ -617,6 +617,7 @@ export function shape_period_derivation_deps(
       active_start_ms,
       active_end_ms,
       priced,
+      ...(!is_ee && mi.paused_ranges?.length ? { paused_ranges: mi.paused_ranges } : {}),
     });
   }
 

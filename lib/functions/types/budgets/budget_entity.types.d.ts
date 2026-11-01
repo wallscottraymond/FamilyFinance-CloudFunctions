@@ -8,6 +8,7 @@
  * @module types/budgets/budget_entity
  */
 import { Timestamp } from "firebase-admin/firestore";
+import type { PausedDayRange } from "../../domain/budgets/budget_pause.service";
 /**
  * One "This Period Only" adjustment on a monthly budget period (Firestore `periodAdjustments[]`
  * as `{ periodId, startMs, endMs, amount }`): extra dollars for one edited view period, clipped to
@@ -97,6 +98,8 @@ export interface BudgetEntity {
      * copied in the group and for every Me budget.
      */
     brought_by?: string | null;
+    /** Paused UTC-day ranges (Code-Health-Review PZ5), normalized; empty = never paused. */
+    paused_ranges?: PausedDayRange[];
     created_at: Timestamp;
     updated_at: Timestamp;
 }

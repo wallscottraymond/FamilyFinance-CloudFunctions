@@ -22,6 +22,7 @@ import {
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { budget_repo } from "../../repositories/budget.repo";
 import { compute_budget_spent } from "../../domain/budgets/budget_spend.service";
+import { without_paused_days } from "../../domain/budgets/budget_pause.service";
 import { budget_cadence_to_instance } from "../../domain/budgets";
 import {
   resolve_spend_splits,
@@ -153,11 +154,13 @@ export async function recompute_budget_spent_orchestrator(
           cadence,
           load_txns
         );
+        // A paused day's spending is Everything Else's (Code-Health-Review PZ1/PZ6): the stored
+        // spent — what the rollover chain carries — leaves it out, exactly as the page does.
         const { spent, pending_spent, return_amount } = compute_budget_spent(
           budget_id,
           start_ms,
           end_ms,
-          splits
+          without_paused_days(splits, budget?.paused_ranges)
         );
         const effective =
           p.effective_amount ?? p.allocated_amount + p.rolled_over_amount;

@@ -69,6 +69,8 @@ it("a client can't write splits or category fields directly (callable only)", as
 it("budget categories change only through update_budget; budgets are created only by callable", async () => {
   await assertFails(updateDoc(doc(alex(), "budgets/b1"), { categoryIds: [] }));
   await assertSucceeds(updateDoc(doc(alex(), "budgets/b1"), { name: "Food" }));
+  // Pause goes only through set_budget_pause (validated, one owner rule) — never a client write.
+  await assertFails(updateDoc(doc(alex(), "budgets/b1"), { pausedRanges: [{ start: "2031-11-02", end: "2031-11-08" }] }));
   await assertFails(setDoc(doc(alex(), "budgets/b2"), {
     userId: "alex", createdBy: "alex", name: "X", amount: 10, categoryIds: [], isActive: true, isOngoing: true,
   }));
@@ -80,7 +82,7 @@ it("engine state (runs, snapshots, kill switch) is unreadable and unwritable by 
   await assertFails(setDoc(doc(alex(), "_config/reassign"), { enabled: false }));
 });
 
-it("a budget period's amount changes only through the callable; notes / pause stay client fields", async () => {
+it("a budget period's amount changes only through the callable; notes stay a client field; pause is the budget's callable (PZ2)", async () => {
   const bp = () => doc(alex(), "budget_periods/bp1");
   await assertFails(updateDoc(bp(), { modifiedAmount: 50 }));
   await assertFails(updateDoc(bp(), { modifiedAmount: 50, isModified: true }));
@@ -88,5 +90,5 @@ it("a budget period's amount changes only through the callable; notes / pause st
   await assertFails(updateDoc(bp(), { hasPeriodAdjustment: true }));
   await assertFails(updateDoc(bp(), { periodAdjustments: [] }));
   await assertSucceeds(updateDoc(bp(), { userNotes: "hi", updatedAt: new Date() }));
-  await assertSucceeds(updateDoc(bp(), { isActive: false }));
+  await assertFails(updateDoc(bp(), { isActive: false }));
 });

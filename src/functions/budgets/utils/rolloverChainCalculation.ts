@@ -24,6 +24,7 @@ import {
   getEffectiveRolloverSettings,
   calculateRolloverForPeriod,
   RolloverCalculationResult,
+  rolloverPauseOf,
 } from "./rolloverCalculation";
 import { bump_derive_version } from "../../repositories/derive_version.repo";
 
@@ -200,6 +201,8 @@ export async function recalculateRolloverChain(
 
       // Calculate rollover for each period in sequence (only ended periods carry forward)
       const nowMs = Date.now();
+      // Paused days carry nothing (Code-Health-Review PZ6).
+      const pause = rolloverPauseOf(budget);
       for (let i = startIndex; i < periods.length; i++) {
         const currentPeriod = periods[i];
         const previousPeriod = i > 0 ? periods[i - 1] : null;
@@ -208,7 +211,8 @@ export async function recalculateRolloverChain(
           currentPeriod,
           previousPeriod,
           rolloverSettings,
-          nowMs
+          nowMs,
+          pause
         );
 
         // Check if update is needed

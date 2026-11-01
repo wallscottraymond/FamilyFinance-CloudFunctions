@@ -31,6 +31,10 @@ function map_budget(b: DerivedBudgetResult) {
       isDerived: true,
       // Everything-Else only: no expected income → FE prompts instead of a negative.
       noIncome: p.no_income ?? false,
+      // Budget pause (Code-Health-Review PZ3/PZ5): every day paused → "Paused" (sorted last);
+      // some → "Partly paused". Paused days' spending is in Everything Else.
+      isPaused: p.is_paused ?? false,
+      pausedDays: p.paused_days ?? 0,
     })),
   };
 }

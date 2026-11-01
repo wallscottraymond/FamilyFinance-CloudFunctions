@@ -36,7 +36,7 @@ export const WIDGET_DATA_VERSION = 2;
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  */
 export const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>> = {
-  recent: 2, left: 1, summary: 1, bills: 1,
+  recent: 2, left: 2, summary: 1, bills: 1,
 };
 
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
@@ -60,6 +60,8 @@ export interface WidgetBudgetInput {
     allocated_amount: number;
     effective_amount?: number | null;
     spent: number;
+    /** Every day of the period paused (PZ3) → not listed. */
+    is_paused?: boolean;
   }>;
 }
 
@@ -302,7 +304,12 @@ export function compute_budget_lines(
   budgets: WidgetBudgetInput[],
   period_id: string
 ): WidgetBudgetLine[] {
-  const lines = budgets.map((b, i) => {
+  // A budget paused for the whole period (Code-Health-Review PZ3) has nothing to show here: its
+  // spending is in Everything Else. Partly paused ones show their unpaused share, like the app.
+  const shown = budgets
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => !budget_period(b, period_id)?.is_paused);
+  const lines = shown.map(({ b, i }) => {
     const p = budget_period(b, period_id);
     const allocated = p?.allocated_amount ?? 0;
     const budgeted = p?.effective_amount ?? allocated;

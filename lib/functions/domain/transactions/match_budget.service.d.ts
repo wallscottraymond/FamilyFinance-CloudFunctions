@@ -15,6 +15,7 @@
  *
  * @module domain/transactions/match_budget
  */
+import type { PausedDayRange } from "../budgets/budget_pause.service";
 /**
  * The minimal split shape this matcher needs: its FIRST category, from `resolve_split_category`
  * (domain/transactions/split_category), the ONE category function (canon M7). Budgets own
@@ -36,6 +37,11 @@ export interface BudgetForMatch {
     is_ongoing: boolean;
     /** The budget's prime cadence — used to filter budgets per assignment lens. */
     cadence: PeriodLens;
+    /**
+     * Paused UTC-day ranges (Code-Health-Review PZ1). READ-TIME ONLY: `resolve_split_owner` moves a
+     * paused day's spending to Everything Else; the write-time engine (`match_budget`) ignores it.
+     */
+    paused_ranges?: PausedDayRange[];
 }
 /** Result of matching a split to a budget. */
 export interface BudgetMatchResult {

@@ -20,6 +20,8 @@
  * @module domain/budgets/period_allocation_view
  */
 
+import { PausedDayRange, unpaused_segments } from "./budget_pause.service";
+
 import { PeriodAdjustment } from "../../types/budgets/budget_entity.types";
 
 export type { PeriodAdjustment };
@@ -96,6 +98,41 @@ export function bucket_allocation(
   end_ms: number,
   priced?: { from_ms: number; to_ms: number | null }
 ): { allocated: number; effective: number } {
+  const raw = bucket_allocation_raw(monthly_periods, start_ms, end_ms, priced);
+  return { allocated: round2(raw.allocated), effective: round2(raw.effective) };
+}
+
+/**
+ * `bucket_allocation` over only the NOT-paused days of the bucket (Code-Health-Review PZ1): the
+ * unrounded sum over each unpaused segment, rounded once — so with no pause it is exactly
+ * `bucket_allocation`. PURE.
+ */
+export function bucket_allocation_unpaused(
+  monthly_periods: MonthlyPeriodForDerivation[],
+  start_ms: number,
+  end_ms: number,
+  priced: { from_ms: number; to_ms: number | null } | undefined,
+  paused: PausedDayRange[] | undefined
+): { allocated: number; effective: number } {
+  if (!paused || paused.length === 0) {
+    return bucket_allocation(monthly_periods, start_ms, end_ms, priced);
+  }
+  let allocated = 0;
+  let effective = 0;
+  for (const seg of unpaused_segments(paused, start_ms, end_ms)) {
+    const raw = bucket_allocation_raw(monthly_periods, seg.start_ms, seg.end_ms, priced);
+    allocated += raw.allocated;
+    effective += raw.effective;
+  }
+  return { allocated: round2(allocated), effective: round2(effective) };
+}
+
+function bucket_allocation_raw(
+  monthly_periods: MonthlyPeriodForDerivation[],
+  start_ms: number,
+  end_ms: number,
+  priced?: { from_ms: number; to_ms: number | null }
+): { allocated: number; effective: number } {
   let allocated = 0;
   let effective = 0;
   for (const mp of monthly_periods) {
@@ -114,7 +151,7 @@ export function bucket_allocation(
       effective += extra;
     }
   }
-  return { allocated: round2(allocated), effective: round2(effective) };
+  return { allocated, effective };
 }
 
 /**
