@@ -1345,11 +1345,14 @@ service cloud.firestore {
       // `updateTransactionSplits` callable, which runs the one category function + the
       // assignment engine — a direct client write would bypass both (canon M2/M7, A1).
       // (Hide was removed — Ignore covers "doesn't count", visibly.)
-      let allowedFields = ['userNotes', 'notes', 'updatedAt'];
+      // `needsNote` may only be CLEARED (false): saving a note answers a "Require a note" rule
+      // (batch 9). Setting it stays server-only (the Rules Engine).
+      let allowedFields = ['userNotes', 'notes', 'updatedAt', 'needsNote'];
 
       // Only check that changed fields are in allowed list
       // Skip timestamp comparison for now (potential comparison issue)
-      return changedFields.hasOnly(allowedFields);
+      return changedFields.hasOnly(allowedFields) &&
+             (!changedFields.hasAny(['needsNote']) || data.needsNote == false);
     }
 
     // Validate budget period updates

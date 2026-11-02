@@ -114,3 +114,14 @@ it("change signals: own doc; a group's doc for its members; a CO-MEMBER's doc (e
   await assertFails(getDoc(doc(alex(), "user_data_versions/riley")));       // connected, no shared group
   await assertFails(setDoc(doc(alex(), "user_data_versions/alex"), { version: 9 })); // never writable
 });
+
+it("a note save may CLEAR needsNote (answers a 'Require a note' rule); a client can never SET it (batch 9)", async () => {
+  // Setting it (false → true) is refused…
+  await assertFails(updateDoc(doc(alex(), "transactions/t1"), { needsNote: true, userNotes: "x" }));
+  // …clearing it (true → false) with the note is allowed.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), "transactions/t1"), { needsNote: true });
+  });
+  await assertSucceeds(updateDoc(doc(alex(), "transactions/t1"), { userNotes: "paid back by Sam", needsNote: false, updatedAt: new Date() }));
+  await assertFails(updateDoc(doc(alex(), "transactions/t1"), { needsReview: false }));
+});
