@@ -119,6 +119,13 @@ Firebase project first.
 8. **One canonical owner field (`userId`)** — no `ownerId`/`createdBy` fallbacks in query paths. A query that unions two fields and dedupes is proof the schema drifted; gate a second field behind the RBAC flag.
 9. **Every array field needs a bound/prune policy at design time; every append-only/derived collection needs a TTL from day one** (default, not retrofit).
 
+## Deploying Indexes And Expiry Policies
+
+- **Never deploy the repo's `firestore.indexes.json` as-is:** it fails with 409 "index already exists".
+- To add an index or expiry (TTL) policy, put only that entry in a temporary folder (`firebase.json` + index file) and run `firebase deploy --only firestore:indexes --project family-budget-app-cb59b --non-interactive`. Never use `--force`.
+- This uses your Firebase CLI login. The service account key gets 403 on index and TTL admin.
+- Then add the same entry to `firestore.indexes.json` so the repo stays the record.
+
 ## Domain Areas
 
 | Domain | Path | Purpose |
