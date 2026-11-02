@@ -10,7 +10,7 @@ import * as path from "path";
 const create_job = jest.fn(async () => "job1");
 const refresh_repaired_item = jest.fn();
 const mark_item_repaired = jest.fn(async () => undefined);
-jest.mock("../../../infrastructure/job_queue", () => ({ create_job: (...a: unknown[]) => create_job(...(a as [])) }));
+jest.mock("../../../infrastructure/job_queue", () => ({ create_job_if_not_exists: (...a: unknown[]) => create_job(...(a as [])) }));
 jest.mock("../reauth_recovery.orchestrator", () => ({
   mark_item_repaired: (...a: unknown[]) => mark_item_repaired(...(a as [])),
   refresh_repaired_item: (...a: unknown[]) => refresh_repaired_item(...a),

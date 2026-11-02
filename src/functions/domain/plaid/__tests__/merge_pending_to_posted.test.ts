@@ -140,3 +140,20 @@ describe("merge_pending_to_posted — transaction-level user edits", () => {
     expect(out.needs_note ?? false).toBe(false);
   });
 });
+
+// Batch 7 verify #1 L1 (P2-M5 "split note too"): the split note and the Ignore / Refund reasons.
+describe("merge_pending_to_posted — split note + reasons", () => {
+  it("keeps the split's note, ignore reason and refund reason", () => {
+    const out = merge_pending_to_posted(posted, migration([pendingSplit({
+      description: "half is Sam's", ignored_reason: "work expense", refund_reason: "returning it",
+    } as Partial<TransactionSplitForMigration>)]));
+    expect(out.splits[0]).toMatchObject({
+      description: "half is Sam's", ignored_reason: "work expense", refund_reason: "returning it",
+    });
+  });
+  it("none set → none invented", () => {
+    const out = merge_pending_to_posted(posted, migration([pendingSplit()]));
+    expect(out.splits[0].description ?? null).toBeNull();
+    expect(out.splits[0].ignored_reason ?? null).toBeNull();
+  });
+});

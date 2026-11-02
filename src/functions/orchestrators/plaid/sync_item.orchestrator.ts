@@ -97,7 +97,11 @@ export async function enqueue_item_sync(input: {
       // recurring refresh — e.g. "Track" on a review item would never create the bill). Anything
       // else merges as before. A deliberate change for all users (D30, approved 2026-10-16): at
       // most one extra sync in a burst.
-      can_merge_into: async (pending) => !!pending.recurring || !input.recurring,
+      // A real request never merges into a pending lease WATCHDOG (verify #1 M1): the watchdog
+      // runs only if an older request is still unread, so it would skip and drop this one.
+      can_merge_into: async (pending) =>
+        (input.reason === LEASE_WATCHDOG_REASON || pending.reason !== LEASE_WATCHDOG_REASON) &&
+        (!!pending.recurring || !input.recurring),
     }
   );
 }

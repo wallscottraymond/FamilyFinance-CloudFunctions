@@ -31,6 +31,7 @@ import {
   TransactionForPersistence,
 } from "../../types/plaid";
 import { rules_repo } from "../../repositories/rules.repo";
+import { coalesce_job } from "../../infrastructure/job_queue";
 import { generate_id } from "../../observability/tracer";
 import { evaluate_rules } from "../../domain/rules/rule_evaluation.service";
 import {
@@ -393,6 +394,13 @@ async function restore_hidden_for_reactivated_accounts(
     await run_sync_follow_ups(ctx, ctx.user_id, follow_ups_from_written(written)).catch((e) =>
       console.error(`[${ctx.trace_id}] Mid-sync restore follow-ups failed (non-fatal):`, e)
     );
+    // Budgets may have changed while the account was hidden: ONE debounced assignment batch, as
+    // the restore job queues (verify #1 L2 — the trigger used to cover this per write).
+    await coalesce_job(
+      "assign_user_transactions",
+      { deduplication_key: `assign_user:${ctx.user_id}`, user_id: ctx.user_id },
+      { trace_id: ctx.trace_id, delay_seconds: 15 }
+    ).catch((e: unknown) => console.error(`[${ctx.trace_id}] Mid-sync restore assign enqueue failed:`, e));
   }
 }
 

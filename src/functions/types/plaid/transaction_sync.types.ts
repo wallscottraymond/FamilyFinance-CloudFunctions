@@ -187,6 +187,10 @@ export interface TransactionSplitForMigration {
   is_ignored?: boolean;
   is_refund?: boolean;
   is_tax_deductible?: boolean;
+  /** The user's split note + Ignore / Refund reasons (carried pending → posted; Code-Health-Review P2-M5). */
+  description?: string | null;
+  ignored_reason?: string | null;
+  refund_reason?: string | null;
   /** The user's manual choices, carried pending → posted so the assignment engine keeps them
    *  (without the "manual"/"user" markers it re-derives — a manual budget, bill or category set on a
    *  pending transaction was lost when it posted). */
@@ -353,6 +357,10 @@ export interface TransactionSplitForPersistence {
   is_ignored: boolean;
   is_refund: boolean;
   is_tax_deductible: boolean;
+  /** The user's split note + Ignore / Refund reasons (carried pending → posted; Code-Health-Review P2-M5). */
+  description?: string | null;
+  ignored_reason?: string | null;
+  refund_reason?: string | null;
   payment_date: Date;
   tags: string[];
   rules: string[];

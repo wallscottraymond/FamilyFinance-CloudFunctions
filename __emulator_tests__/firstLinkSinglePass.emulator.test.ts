@@ -280,6 +280,19 @@ describe("sync lease watchdog (Code-Health-Review P2-M8, emulator)", () => {
     expect(wait_ms).toBeGreaterThanOrEqual(30_000);
     expect(wait_ms).toBeLessThanOrEqual(40_000);
 
+    // Verify #1 M1: a REAL request arriving while the watchdog is pending must get its own job —
+    // merging into the watchdog would drop it (the watchdog skips unless an older request is unread).
+    const { enqueue_item_sync } = require("../src/functions/orchestrators/plaid/sync_item.orchestrator");
+    await enqueue_item_sync({ item_doc_id: itemDocId, user_id: userId, reason: "webhook" });
+    const after_webhook = (await db.collection("_jobs").where("job_type", "==", "sync_item").get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.item_doc_id === itemDocId);
+    expect(after_webhook.map((j) => j.payload.reason).sort()).toEqual(["lease_watchdog", "webhook"]);
+    // …while another watchdog request merges into the pending watchdog (no pile-up).
+    await enqueue_item_sync({ item_doc_id: itemDocId, user_id: userId, reason: "lease_watchdog", delay_seconds: 35 });
+    const after_wd = (await db.collection("_jobs").where("job_type", "==", "sync_item").get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.item_doc_id === itemDocId);
+    expect(after_wd).toHaveLength(2);
+
     // The lease runs out (the holder is dead); the watchdog runs: the request is served.
     await lease.update({ lease_until: Timestamp.fromMillis(Date.now() - 1000) });
     const served = await sync_item_orchestrator(

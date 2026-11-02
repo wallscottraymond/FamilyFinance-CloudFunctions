@@ -286,6 +286,10 @@ export function merge_pending_to_posted(
         payment_date: posted_transaction.transaction_date,
         tags: pending_split.tags, // Preserve user's tags
         rules: [],
+        // The split note + Ignore / Refund reasons (P2-M5).
+        ...(pending_split.description ? { description: pending_split.description } : {}),
+        ...(pending_split.ignored_reason ? { ignored_reason: pending_split.ignored_reason } : {}),
+        ...(pending_split.refund_reason ? { refund_reason: pending_split.refund_reason } : {}),
         // The user's MANUAL choices keep their markers, so the assignment engine (which now runs
         // before the write) preserves them instead of re-deriving.
         ...(pending_split.budget_assignment_source === "manual"

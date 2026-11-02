@@ -31,7 +31,7 @@ import {
   should_trigger_refresh,
 } from "../../domain/plaid/item_status_webhook.service";
 import { mark_item_repaired } from "./reauth_recovery.orchestrator";
-import { create_job } from "../../infrastructure/job_queue";
+import { create_job_if_not_exists } from "../../infrastructure/job_queue";
 
 /**
  * Orchestrates handling of ITEM.LOGIN_REPAIRED webhooks.
@@ -106,7 +106,7 @@ export async function handle_login_repaired_orchestrator(
       console.log(
         `[${ctx.trace_id}] Queuing data refresh after login repair for item ${deps.item_doc_id}`
       );
-      await create_job(
+      await create_job_if_not_exists(
         "refresh_repaired_item",
         { ...target, deduplication_key: `refresh_repaired_item:${target.item_doc_id}` },
         { trace_id: ctx.trace_id }

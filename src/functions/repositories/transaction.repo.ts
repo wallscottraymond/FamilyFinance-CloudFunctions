@@ -185,6 +185,9 @@ function map_to_pending_info(doc: LegacyTransactionDoc): PendingTransactionInfo 
       is_ignored: split_spend_status(s as unknown as Record<string, unknown>) === "ignored",
       is_refund: split_spend_status(s as unknown as Record<string, unknown>) === "refund",
       is_tax_deductible: !!s.isTaxDeductible,
+      description: s.description ?? null,
+      ignored_reason: s.ignoredReason ?? null,
+      refund_reason: s.refundReason ?? null,
       ...pending_manual_choices(s as unknown as Record<string, unknown>),
     })),
     internal_primary_category: doc.internalPrimaryCategory,
@@ -307,6 +310,10 @@ function map_split_to_doc(
     paymentDate: Timestamp.fromDate(split.payment_date),
     rules: split.rules,
     tags: split.tags,
+    // The user's split note + reasons (carried pending → posted) — only when there are some.
+    ...(split.description ? { description: split.description } : {}),
+    ...(split.ignored_reason ? { ignoredReason: split.ignored_reason } : {}),
+    ...(split.refund_reason ? { refundReason: split.refund_reason } : {}),
     // Only written when a rule pinned the budget → the assignment engine honors "manual" and won't
     // reassign it (compute_transaction_assignment). Absent = "category" (engine default).
     ...(split.budget_assignment_source
