@@ -160,3 +160,28 @@ describe("How often? — verify #1 fixes", () => {
     }
   });
 });
+
+describe("How often? — verify #2 fixes", () => {
+  const first = () => plan_recurring_capture(input({ streams: [stream("avant")], existing: new Map([["avant", record("avant")]]) })).review_items[0];
+  const owners = (id: string) => ({ user_id: U, suppressed_txn_ids: [], dismissed_vendor_keys: [], detector_last_run_day: null,
+    suggested_owners: [{ item_id: id, plaid_item_doc_id: "item" }] });
+
+  it("L1: an OLD record whose stream is in the response but rejected → its tile closes; a v2 one keeps it", () => {
+    const q = first();
+    const rejected = stream("avant", { entity: null as never });
+    const old = plan_recurring_capture(input({ streams: [rejected], existing: new Map([["avant", record("avant")]]),
+      review_items: new Map([[q.id, q]]), state: owners(q.id) }));
+    expect(how(old)[0]).toMatchObject({ status: "resolved", answer: "stream_gone" });
+    const v2 = plan_recurring_capture(input({ streams: [rejected], existing: new Map([["avant", record("avant", { v2: true, plaid_is_active: true })]]),
+      review_items: new Map([[q.id, q]]), state: owners(q.id) }));
+    expect(how(v2)).toHaveLength(0);
+  });
+
+  it("L2: closed because the stream left for a sync → asked again when it's back (still UNKNOWN)", () => {
+    const q = first();
+    const gone = { ...q, status: "resolved", answer: "stream_gone" } as ReviewItem;
+    const back = plan_recurring_capture(input({ streams: [stream("avant")], existing: new Map([["avant", record("avant")]]),
+      review_items: new Map([[gone.id, gone]]) }));
+    expect(how(back)[0]).toMatchObject({ status: "open" });
+  });
+});

@@ -397,7 +397,9 @@ function how_often_change(
   if (s.raw_is_active === false || String(s.raw_status).toUpperCase() === "TOMBSTONED") return null;
   // Asked once — but a question the SYSTEM closed only because the bill went out of sight is asked
   // again once it's back (as "Still a bill?", Top-25 #16; verify L3).
-  if ((existing && !reopens(existing)) || r.user_frequency || !is_shown(r, input.now_ms)) return null;
+  // A tile closed because the stream briefly left the response is asked again too (verify #2 L2).
+  const reopenable = !!existing && (reopens(existing) || existing.answer === "stream_gone");
+  if ((existing && !reopenable) || r.user_frequency || !is_shown(r, input.now_ms)) return null;
   const stored = normalize_frequency(r.frequency) === "UNKNOWN" ? null : r.frequency;
   return make_review_item(
     {
@@ -937,7 +939,10 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   // Plaid item exactly like a suggested tile, so the item's next sync always loads it (verify M1).
   for (const i of [...final_view.values()]) {
     if (i.kind !== "how_often" || i.status !== "open" || i.plaid_item_doc_id !== input.plaid_item_doc_id) continue;
-    if (!i.record_id || saved_ids.has(i.record_id) || in_response_stream_ids.has(i.record_id)) continue;
+    if (!i.record_id || saved_ids.has(i.record_id)) continue;
+    // A v2 record whose stream is in the response but rejected is kept as is: its tile stays. An OLD
+    // record in that case is switched off like a stale one, so its tile closes (verify #2 L1).
+    if (in_response_stream_ids.has(i.record_id) && input.existing.get(i.record_id)?.v2) continue;
     const closed = resolve_review_item(i, "stream_gone", input.now_ms);
     plan.review_items.push(closed);
     final_view.set(i.id, closed);
