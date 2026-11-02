@@ -11,6 +11,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { DomainResult } from "../../types";
 import { BudgetEntity } from "../../types/budgets/budget_entity.types";
+import { resume_on_recategorize } from "./budget_pause.service";
 import {
   UpdateBudgetComputeInput,
   UpdateBudgetInput,
@@ -84,6 +85,14 @@ export function compute_update_budget(
 
   const next_amount = input.amount !== undefined ? input.amount : existing.amount;
   const next_category_ids = input.category_ids ?? existing.category_ids;
+  // A category-less (returned, paused) budget given categories again resumes from today on
+  // (S1-M4 follow-up). Any other edit leaves the pause exactly as it is.
+  const resumed = resume_on_recategorize({
+    before_category_ids: existing.category_ids ?? [],
+    after_category_ids: next_category_ids ?? [],
+    paused_ranges: existing.paused_ranges,
+    now_ms: now.toMillis(),
+  });
 
   const entity: BudgetEntity = {
     ...existing,
@@ -117,6 +126,7 @@ export function compute_update_budget(
       input.rollover_spread_periods !== undefined
         ? input.rollover_spread_periods
         : existing.rollover_spread_periods,
+    ...(resumed ? { paused_ranges: resumed } : {}),
     updated_at: now,
   };
 

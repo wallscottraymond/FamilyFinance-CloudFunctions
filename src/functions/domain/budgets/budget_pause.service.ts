@@ -154,6 +154,29 @@ export function without_paused_days<T extends { txn_date_ms: number }>(
   return items.filter((i) => !is_paused_on(ranges, i.txn_date_ms));
 }
 
+/**
+ * Auto-resume on re-categorize (Code-Health-Review S1-M4 follow-up; user decision 2026-11-02):
+ * a budget that came back to Me with NO categories was paused from that day on. When an edit
+ * gives a category-less budget categories again, its paused days from TODAY's UTC day onward are
+ * cleared (past paused days stay paused). Only that empty → non-empty transition: a pause on a
+ * budget that has categories is the user's own and is never touched here.
+ *
+ * @returns the new ranges, or null when nothing changes. PURE.
+ */
+export function resume_on_recategorize(input: {
+  before_category_ids: string[];
+  after_category_ids: string[];
+  paused_ranges: PausedDayRange[] | undefined;
+  now_ms: number;
+}): PausedDayRange[] | null {
+  if (input.before_category_ids.length > 0 || input.after_category_ids.length === 0) return null;
+  const ranges = normalize_paused_ranges(input.paused_ranges ?? []);
+  const today = utc_day(input.now_ms);
+  const last = Math.max(today, ...ranges.map((r) => r.end_day));
+  if (!ranges.some((r) => r.end_day >= today)) return null;
+  return apply_pause_change(ranges, today, last, false);
+}
+
 /** The longest stretch one pause call may cover (a period is at most a month). */
 export const MAX_PAUSE_DAYS = 62;
 /** Bound on stored ranges (backend rule 9: every array field has a bound). */

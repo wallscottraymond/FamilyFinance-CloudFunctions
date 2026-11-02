@@ -497,6 +497,50 @@ describe("compute_update_budget", () => {
     expect(result.entity?.remaining).toBe(350);
   });
 
+  const deps = (existing: BudgetEntity, added: string[] = []) => ({
+    existing,
+    added_category_ids: added,
+    removed_category_ids: [],
+    everything_else_budget_id: "everything_else",
+    amount_changed: false,
+    view_budgets: [],
+    first_by_category: {},
+  });
+  // NOW = 2026-05-31: day indexes for the pause ranges.
+  const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
+  const far = [{ start_day: day("2026-05-01"), end_day: day("2099-12-31") }];
+
+  it("S1-M4 follow-up: an emptied (paused) budget given categories resumes from today on", () => {
+    const result = compute_update_budget({
+      user_id: "user_1",
+      input: { budget_id: "budget_1", category_ids: ["groceries"] },
+      dependencies: deps(
+        make_existing_budget({ category_ids: [], paused_ranges: far }),
+        ["groceries"]
+      ),
+      now: NOW,
+    });
+    expect(result.entity?.paused_ranges).toEqual([
+      { start_day: day("2026-05-01"), end_day: day("2026-05-30") },
+    ]);
+  });
+
+  it("S1-M4 follow-up: a user's pause on a budget WITH categories survives any edit", () => {
+    for (const input of [
+      { budget_id: "budget_1", amount: 999 },
+      { budget_id: "budget_1", name: "Renamed" },
+      { budget_id: "budget_1", category_ids: ["a", "b"] },
+    ]) {
+      const result = compute_update_budget({
+        user_id: "user_1",
+        input,
+        dependencies: deps(make_existing_budget({ category_ids: ["a"], paused_ranges: far })),
+        now: NOW,
+      });
+      expect(result.entity?.paused_ranges).toEqual(far);
+    }
+  });
+
   it("rejects amount edits on the Everything Else budget", () => {
     const result = compute_update_budget({
       user_id: "user_1",

@@ -25,6 +25,15 @@ import {
   fail_key,
 } from "../../infrastructure/idempotency_store";
 import { create_job } from "../../infrastructure/job_queue";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
+import {
+  iso_from_day,
+  pause_recompute_dates,
+  utc_day,
+} from "../../domain/budgets/budget_pause.service";
+
+/** Stored-spent days recomputed after an auto-resume (≤ one period, as for a return). */
+const RESUME_RECOMPUTE_DAYS = 31;
 import { budget_repo } from "../../repositories/budget.repo";
 import { compute_update_budget } from "../../domain/budgets/update_budget.service";
 import {
@@ -104,6 +113,29 @@ export async function update_budget_orchestrator(
     // 4. Persist the updated budget document
     // Only the fields this edit changed: a concurrent change to the budget isn't overwritten (M3-M4).
     await budget_repo.save_changes(ctx, dependencies.existing, entity);
+
+    // 4b. Auto-resume on re-categorize (S1-M4 follow-up): the domain cleared the paused days from
+    //     today on, written in the save above. Bump the derive caches AFTER that write, and
+    //     recompute the stored spent of today's period so rollover follows (as a pause does).
+    const pause_before = JSON.stringify(dependencies.existing.paused_ranges ?? []);
+    if (JSON.stringify(entity.paused_ranges ?? []) !== pause_before) {
+      await bump_derive_version(entity.user_id);
+      const today = utc_day(Date.now());
+      await create_job(
+        "recompute_budget_spent",
+        {
+          user_id: entity.user_id,
+          budget_ids: [entity.id],
+          dates_ms_by_budget: {
+            [entity.id]: pause_recompute_dates(
+              iso_from_day(today), iso_from_day(today + RESUME_RECOMPUTE_DAYS)
+            ),
+          },
+          force_rollover: true,
+        },
+        { trace_id: ctx.trace_id }
+      );
+    }
 
     // 5. Enqueue cascade (claims/releases + period reallocation + rename)
     const name_changed = entity.name !== dependencies.existing.name;

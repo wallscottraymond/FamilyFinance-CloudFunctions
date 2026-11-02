@@ -11,6 +11,7 @@
 
 import {
   apply_pause_change,
+  resume_on_recategorize,
   day_from_iso,
   iso_from_day,
   is_paused_on,
@@ -272,5 +273,45 @@ describe("rollover carries only the unpaused share (PZ6)", () => {
   it("a pause in another month doesn't touch November's carry", () => {
     const pause = rolloverPauseOf(budget_doc([{ start: "2026-10-01", end: "2026-10-07" }]));
     expect(calculateRolloverForPeriod(dec, nov({ spent: 100 }), settings, AFTER, pause).rolledOverAmount).toBe(500);
+  });
+});
+
+describe("auto-resume on re-categorize (S1-M4 follow-up, user decision 2026-11-02)", () => {
+  const D = (iso: string) => day_from_iso(iso)!;
+  const NOW_MS = Date.UTC(2026, 10, 2, 15, 0); // 2026-11-02
+  const returned = [{ start_day: D("2026-10-20"), end_day: D("2099-12-31") }];
+  it("empty → non-empty: paused days from TODAY on are cleared; past paused days stay", () => {
+    expect(resume_on_recategorize({
+      before_category_ids: [], after_category_ids: ["groceries"],
+      paused_ranges: returned, now_ms: NOW_MS,
+    })).toEqual([{ start_day: D("2026-10-20"), end_day: D("2026-11-01") }]);
+  });
+  it("a pause entirely in the future is cleared; one entirely in the past is kept", () => {
+    expect(resume_on_recategorize({
+      before_category_ids: [], after_category_ids: ["x"],
+      paused_ranges: [
+        { start_day: D("2026-09-01"), end_day: D("2026-09-30") },
+        { start_day: D("2026-12-01"), end_day: D("2026-12-31") },
+      ],
+      now_ms: NOW_MS,
+    })).toEqual([{ start_day: D("2026-09-01"), end_day: D("2026-09-30") }]);
+  });
+  it("null unless it's the empty → non-empty transition with something to clear", () => {
+    const base = { paused_ranges: returned, now_ms: NOW_MS };
+    // A user-paused budget that HAS categories: edits never touch the pause.
+    const edit = (before: string[], after: string[]) =>
+      resume_on_recategorize({ ...base, before_category_ids: before, after_category_ids: after });
+    expect(edit(["a"], ["a", "b"])).toBeNull();
+    expect(edit(["a"], ["a"])).toBeNull();
+    // Still empty.
+    expect(edit([], [])).toBeNull();
+    // Nothing paused from today on.
+    expect(resume_on_recategorize({
+      before_category_ids: [], after_category_ids: ["a"], now_ms: NOW_MS,
+      paused_ranges: [{ start_day: D("2026-09-01"), end_day: D("2026-09-30") }],
+    })).toBeNull();
+    expect(resume_on_recategorize({
+      before_category_ids: [], after_category_ids: ["a"], now_ms: NOW_MS, paused_ranges: [],
+    })).toBeNull();
   });
 });

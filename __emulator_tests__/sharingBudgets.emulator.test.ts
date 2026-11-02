@@ -37,6 +37,8 @@ import { create_budget_orchestrator } from "../src/functions/orchestrators/budge
 import { resolve_update_budget_dependencies } from "../src/functions/resolvers/budgets/update_budget.resolver";
 import { NotFoundError } from "../src/functions/types";
 import { derive_period_orchestrator } from "../src/functions/orchestrators/periods/derive_period.orchestrator";
+import { update_budget_orchestrator } from "../src/functions/orchestrators/budgets/update_budget.orchestrator";
+import { set_budget_pause_orchestrator } from "../src/functions/orchestrators/budgets/set_budget_pause.orchestrator";
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const ALEX = `alex_${RUN}`;
@@ -216,5 +218,68 @@ describe("budgets belong to a view (emulator)", () => {
     expect(ff).toMatchObject({ is_paused: true, allocated_amount: 0 });
     const coffee = r.budgets.find((b) => b.budget_id === sams)?.periods[0];
     expect(coffee).toMatchObject({ is_paused: false, allocated_amount: 400 });
+  });
+
+  // S1-M4 follow-up (user decision 2026-11-02): "Auto on re-categorize".
+  const DAY = 86_400_000;
+  const iso_day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  async function month_page(user: string, offset: number) {
+    const now = new Date();
+    const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1);
+    const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset + 1, 1) - 1;
+    const d = new Date(start);
+    const pid = `${d.getUTCFullYear()}M${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const ref = db.collection("source_periods").doc(pid);
+    if (!(await ref.get()).exists) {
+      await ref.set({
+        id: pid, periodId: pid, type: "monthly", startDate: admin.firestore.Timestamp.fromMillis(start),
+        endDate: admin.firestore.Timestamp.fromMillis(end), year: d.getUTCFullYear(),
+      });
+    }
+    const r = await derive_period_orchestrator(t(), user, {
+      view_cadence: "monthly", window_start_ms: start, window_end_ms: end, force: true,
+    });
+    return { r, start };
+  }
+
+  it("S1-M4 follow-up: giving the emptied budget a category resumes it from today; past days stay paused", async () => {
+    // As if it came back 10 days ago (so there ARE past paused days to keep).
+    const today_ms = Math.floor(Date.now() / DAY) * DAY;
+    const past_start = today_ms - 10 * DAY;
+    await db.collection("budgets").doc(fast_food).update({
+      pausedRanges: [{ start: iso_day(past_start), end: "2099-12-31" }],
+    });
+    await update_budget_orchestrator(t(), SAM, uuid(), {
+      budget_id: fast_food, category_ids: ["FOOD_AND_DRINK_VENDING_MACHINES"],
+    } as never);
+    const ff = await budget(fast_food);
+    expect(ff.categoryIds).toEqual(["FOOD_AND_DRINK_VENDING_MACHINES"]);
+    expect(ff.pausedRanges).toEqual([{ start: iso_day(past_start), end: iso_day(today_ms - DAY) }]);
+
+    // Next month: unpaused with its full allocation.
+    const next = (await month_page(SAM, 1)).r.budgets.find((b) => b.budget_id === fast_food)?.periods[0];
+    expect(next).toMatchObject({ is_paused: false, allocated_amount: 400, paused_days: 0 });
+    // This month: only the days before today are still paused.
+    const { r, start } = await month_page(SAM, 0);
+    const cur = r.budgets.find((b) => b.budget_id === fast_food)?.periods[0];
+    const expected_paused = Math.max(0, (today_ms - DAY - Math.max(start, past_start)) / DAY + 1);
+    expect(cur?.paused_days).toBe(expected_paused);
+    // The rollover follows: a stored-spent recompute was queued for it.
+    const jobs = await db.collection("_jobs").where("job_type", "==", "recompute_budget_spent").get();
+    expect(jobs.docs.some((d) => (d.data().payload?.budget_ids ?? []).includes(fast_food))).toBe(true);
+  });
+
+  it("S1-M4 follow-up: a user's own pause on a budget WITH categories survives amount / name edits", async () => {
+    const now = new Date();
+    const s = iso_day(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const e = iso_day(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1) - 1);
+    await set_budget_pause_orchestrator(t(), SAM, { budget_id: sams, start_day: s, end_day: e, paused: true });
+    const before = (await budget(sams)).pausedRanges;
+    expect(before).toEqual([{ start: s, end: e }]);
+    await update_budget_orchestrator(t(), SAM, uuid(), { budget_id: sams, amount: 450 } as never);
+    await update_budget_orchestrator(t(), SAM, uuid(), { budget_id: sams, name: "Coffee & Tea" } as never);
+    expect((await budget(sams)).pausedRanges).toEqual(before);
+    const next = (await month_page(SAM, 1)).r.budgets.find((b) => b.budget_id === sams)?.periods[0];
+    expect(next).toMatchObject({ is_paused: true, allocated_amount: 0 });
   });
 });
