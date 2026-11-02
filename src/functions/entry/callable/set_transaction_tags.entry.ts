@@ -14,6 +14,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { create_trace_context } from "../../observability";
 import { tags_repo } from "../../repositories/tags.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { set_transaction_tags_input_schema } from "../../types/tags_crud.types";
 
 export const set_transaction_tags = onCall(
@@ -61,6 +62,9 @@ export const set_transaction_tags = onCall(
       split_id ?? null,
       tag_ids
     );
+    // Tags are in the cached transaction card (derive input): invalidate AFTER the write
+    // (Code-Health-Review P1-M1; derive caches live 24h).
+    await bump_derive_version(user_id);
     return { success: true };
   }
 );

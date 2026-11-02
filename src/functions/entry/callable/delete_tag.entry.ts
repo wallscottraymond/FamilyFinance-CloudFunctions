@@ -9,6 +9,7 @@
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { create_trace_context } from "../../observability";
 import { tags_repo } from "../../repositories/tags.repo";
 import { transaction_repo } from "../../repositories/transaction.repo";
@@ -54,6 +55,8 @@ export const delete_tag = onCall(
     const rules = await rules_repo.strip_tag(ctx, user_id, parsed.data.tag_id);
 
     await tags_repo.delete_tag(ctx, parsed.data.tag_id);
+    // Stripped transaction tags change the cached cards: one bump for the whole strip (P1-M1).
+    if (transactions > 0) await bump_derive_version(user_id);
     return { success: true, stripped: { transactions, budgets, rules } };
   }
 );

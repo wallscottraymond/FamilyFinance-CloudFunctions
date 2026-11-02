@@ -18,6 +18,7 @@
  */
 
 import { Timestamp } from "firebase-admin/firestore";
+import { bump_derive_version } from "../../repositories/derive_version.repo";
 import { TraceContext } from "../../types";
 import {
   create_span,
@@ -164,8 +165,14 @@ export async function process_transaction_written_orchestrator(
   const assignment_relevant = is_assignment_relevant_change(before, after);
   const spend_relevant = is_spend_relevant_change(before, after);
 
-  // Cosmetic edit (notes/tags/description) — nothing to do.
+  // Cosmetic edit (notes/tags/description) — nothing to recompute. But the user's NOTE is in the
+  // cached transaction card, and the app writes it directly (no callable = no write boundary):
+  // bump here, once for that single edit (Code-Health-Review P4-M9). Bulk writers are stamped
+  // and returned above, so this never fans out per document.
   if (!assignment_relevant && !spend_relevant) {
+    if (before && after && (before.userNotes !== after.userNotes || before.notes !== after.notes)) {
+      await bump_derive_version(user_id);
+    }
     log_operation_success(span, user_id);
     return;
   }
