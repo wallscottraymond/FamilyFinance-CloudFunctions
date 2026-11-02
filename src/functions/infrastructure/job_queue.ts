@@ -607,15 +607,16 @@ export async function has_active_job(
 }
 
 /**
- * Creates a job only if no active job (pending or processing) exists with the same deduplication key.
+ * Creates a job unless one with the same deduplication key is still PENDING (which covers it).
+ * If one is RUNNING, a single delayed follow-up is queued behind it instead of dropping the
+ * request (it read its state at start; Code-Health-Review E1-M1).
  *
- * This is the recommended way to enqueue jobs that may be triggered multiple times
- * for the same logical operation (e.g., summary updates from multiple trigger events).
+ * For jobs that recompute from CURRENT state when they run (rollover chain, recurring reconcile).
  *
  * @param job_type - Type of job
  * @param payload - Job payload (must include deduplication_key)
  * @param options - Job options
- * @returns The created job, or null if a duplicate exists
+ * @returns The created job, or null if a pending one covers it
  */
 export async function create_job_if_not_exists<TPayload extends { deduplication_key: string }>(
   job_type: string,
@@ -626,23 +627,34 @@ export async function create_job_if_not_exists<TPayload extends { deduplication_
     trace_id?: string;
   }
 ): Promise<Job<TPayload> | null> {
-  // Check for existing active job (pending or processing)
-  const exists = await has_active_job(job_type, payload.deduplication_key);
+  const dedup_key = build_dedup_key(job_type, payload.deduplication_key);
+  const active = await getFirestore()
+    .collection(COLLECTIONS.JOBS)
+    .where("dedup_key", "==", dedup_key)
+    .where("status", "in", ["pending", "processing"])
+    .limit(5)
+    .get();
+  const statuses = active.docs.map((d) => d.get("status") as string);
 
-  if (exists) {
-    console.log(
-      `[job_queue] Skipping duplicate job: ${job_type} with key ${payload.deduplication_key}`
-    );
+  // A PENDING job hasn't read anything yet: it covers this request (merged).
+  if (statuses.includes("pending")) {
+    console.log(`[job_queue] Skipping duplicate job: ${job_type} with key ${payload.deduplication_key}`);
     return null;
   }
 
-  // Create the job, stamping the top-level `dedup_key` so the next `has_active_job` finds it
-  // via the indexed lookup (not an in-memory scan).
+  // Only a RUNNING one: it read its state at start, so this later change would be lost
+  // (Code-Health-Review E1-M1). Queue ONE follow-up that runs after it (delayed → the queue sweep),
+  // never concurrently; further requests merge into that pending follow-up.
+  const running = statuses.includes("processing");
   return create_job(job_type, payload, {
     ...options,
-    dedup_key: build_dedup_key(job_type, payload.deduplication_key),
+    ...(running ? { delay_seconds: Math.max(options?.delay_seconds ?? 0, FOLLOW_UP_DELAY_SECONDS) } : {}),
+    dedup_key,
   });
 }
+
+/** Delay of the follow-up queued behind a running job of the same key (E1-M1). */
+export const FOLLOW_UP_DELAY_SECONDS = 60;
 
 /**
  * COALESCING enqueue (Read-Cost-Review-Round-3): create the job unless one with the same key is

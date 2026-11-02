@@ -235,6 +235,7 @@ export function calculate_proportional_splits(
  * - User's split allocations (budgets, outflows)
  * - User's tags
  * - Split structure (adjusted proportionally if amount changed)
+ * - Transaction-level edits: the rename, notes, needs-review / needs-note (P1-M2)
  *
  * @param posted_transaction - New transaction from Plaid (posted)
  * @param migration - Migration data with pending transaction info
@@ -329,6 +330,13 @@ export function merge_pending_to_posted(
       posted_transaction.internal_detailed_category,
     // Use migrated splits
     splits: final_splits,
+    // Transaction-level edits (Code-Health-Review P2-M5 / P1-M2 / P3-M7): the rename, the notes,
+    // and the Rules Engine's flags (rules don't re-run for an inheriting posted txn).
+    ...(pending.description_override ? { description_override: pending.description_override } : {}),
+    ...(pending.user_notes ? { user_notes: pending.user_notes } : {}),
+    ...(pending.notes != null && pending.notes !== "" ? { notes: pending.notes } : {}),
+    needs_review: !!posted_transaction.needs_review || !!pending.needs_review,
+    needs_note: !!posted_transaction.needs_note || !!pending.needs_note,
     // Clear pending status (now posted)
     is_pending: false,
     pending_transaction_id: migration.pending_plaid_transaction_id,

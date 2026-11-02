@@ -113,10 +113,16 @@ export interface PendingTransactionInfo {
     /** User-set internal categories */
     internal_primary_category: string | null;
     internal_detailed_category: string | null;
-    /** User notes */
+    /** The user's rename (`description` ≠ Plaid `name`), else null. */
     description_override: string | null;
     /** User tags */
     tags: string[];
+    /** Transaction-level user / rule edits carried to the posted copy (Code-Health-Review P1-M2). */
+    user_notes?: string | null;
+    /** Legacy notes field (older app builds). */
+    notes?: unknown;
+    needs_review?: boolean;
+    needs_note?: boolean;
 }
 /**
  * Minimal split info for migration.
@@ -215,6 +221,12 @@ export interface TransactionForPersistence {
     needs_review?: boolean;
     /** Rule flag: transaction expects a note (non-blocking; set by the Rules Engine). */
     needs_note?: boolean;
+    /** Carried from the pending copy (P1-M2): the user's rename (written as `description`). */
+    description_override?: string | null;
+    /** Carried from the pending copy (P1-M2): the user's notes. */
+    user_notes?: string | null;
+    /** Carried from the pending copy (P1-M2): legacy notes. */
+    notes?: unknown;
     /** Transaction splits */
     splits: TransactionSplitForPersistence[];
     /** Initial Plaid data preservation */

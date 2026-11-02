@@ -108,3 +108,35 @@ describe("merge_pending_to_posted — manual income pin (Convert-To-Recurring Ph
     expect("inflow_id" in out.splits[0]).toBe(false);
   });
 });
+
+// Code-Health-Review P2-M5 / P1-M2 / P3-M7: the posted copy lost every TRANSACTION-level edit —
+// the rename (`description_override` was computed, never used), the user's notes, and the Rules
+// Engine's needs-review / needs-note flags (rules are skipped for an inheriting posted txn).
+describe("merge_pending_to_posted — transaction-level user edits", () => {
+  const with_edits = (over: Record<string, unknown>): PendingMigration => {
+    const m = migration([pendingSplit()]);
+    return { ...m, pending_transaction: { ...m.pending_transaction, ...over } } as unknown as PendingMigration;
+  };
+
+  it("keeps the rename, the notes and the review flags", () => {
+    const out = merge_pending_to_posted(posted, with_edits({
+      description_override: "Costco run", user_notes: "split w/ Sam", notes: "legacy note",
+      needs_review: true, needs_note: true,
+    }));
+    expect(out.description_override).toBe("Costco run");
+    expect(out.user_notes).toBe("split w/ Sam");
+    expect(out.notes).toBe("legacy note");
+    expect(out.needs_review).toBe(true);
+    expect(out.needs_note).toBe(true);
+  });
+
+  it("nothing edited → nothing invented (posted's own flags kept)", () => {
+    const out = merge_pending_to_posted({ ...posted, needs_review: true } as TransactionForPersistence, with_edits({
+      description_override: null, user_notes: null, notes: null, needs_review: false, needs_note: false,
+    }));
+    expect(out.description_override ?? null).toBeNull();
+    expect(out.user_notes ?? null).toBeNull();
+    expect(out.needs_review).toBe(true);
+    expect(out.needs_note ?? false).toBe(false);
+  });
+});

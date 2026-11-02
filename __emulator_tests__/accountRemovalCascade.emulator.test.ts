@@ -30,6 +30,7 @@ import { cascade_soft_delete_recurring_orchestrator } from "../src/functions/orc
 import { restore_account_transactions_orchestrator } from "../src/functions/orchestrators/accounts/restore_account_transactions.orchestrator";
 import { restore_account_recurring_orchestrator } from "../src/functions/orchestrators/accounts/restore_account_recurring.orchestrator";
 import { seedAccountGraph } from "./helpers/seedAccountGraph";
+import { written_by_run } from "../src/functions/orchestrators/transactions/process_transaction_written.orchestrator";
 
 const ctx = () => ({
   trace_id: `t_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
@@ -57,6 +58,38 @@ const inflowPeriodDoc = async (id: string) =>
 // ============================================================================
 
 describe("cascade_hide_transactions", () => {
+  it("hide and restore are STAMPED bulk writers: the per-transaction trigger skips every write, one follow-up pass runs (P1-M3)", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 3 });
+    const ids = seed.txnIdsByAccountId[seed.target.accountId];
+    const before = await Promise.all(ids.map(txnDoc));
+    const version = async () => (await db.collection("user_data_versions").doc(seed.userId).get()).data()?.version ?? 0;
+    const v0 = await version();
+
+    await setAccountActive(seed, false);
+    await cascade_hide_transactions_orchestrator(ctx(), {
+      plaid_account_id: seed.target.accountId, user_id: seed.userId, removal_mode: "keep_history", trace_id: "t",
+    });
+    const hidden = await Promise.all(ids.map(txnDoc));
+    hidden.forEach((t, i) => {
+      expect(String(t?.syncRunId)).toMatch(/^account_hide:/);
+      expect(written_by_run(before[i] as never, t as never, "syncRunId")).toBe(true);
+    });
+    expect(await version()).toBeGreaterThan(v0); // the follow-up's derive bump
+
+    await setAccountActive(seed, true);
+    await restore_account_transactions_orchestrator(ctx(), {
+      plaid_account_id: seed.target.accountId, user_id: seed.userId, trace_id: "t",
+    } as never);
+    const restored = await Promise.all(ids.map(txnDoc));
+    restored.forEach((t, i) => {
+      expect(t?.isActive).toBe(true);
+      expect(String(t?.syncRunId)).toMatch(/^account_restore:/);
+      expect(written_by_run(hidden[i] as never, t as never, "syncRunId")).toBe(true);
+    });
+    const assign_jobs = await db.collection("_jobs").where("job_type", "==", "assign_user_transactions").get();
+    expect(assign_jobs.docs.some((d) => (d.data().payload as { user_id?: string })?.user_id === seed.userId)).toBe(true);
+  });
+
   it("keep_history hides target txns (isActive:false, isHidden:true) without excluding from budgets", async () => {
     const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 3 });
 

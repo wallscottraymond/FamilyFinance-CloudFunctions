@@ -250,3 +250,50 @@ describe("first link — single pass (emulator)", () => {
     expect(pulls).toBe(2);       // never two pulls at once
   }, 60000);
 });
+
+describe("sync lease watchdog (Code-Health-Review P2-M8, emulator)", () => {
+  it("a request behind a holder that DIES is served by the watchdog; a served one is skipped", async () => {
+    const userId = rid("u_wd");
+    const itemDocId = rid("item_wd");
+    await db.collection("plaid_items").doc(itemDocId).set({
+      id: itemDocId, plaidItemId: itemDocId, userId, groupIds: [], accessToken: "enc", cursor: null,
+      isActive: true, institutionId: "ins_1", institutionName: "Test Bank", lastRecurringSyncAt: Timestamp.now(),
+    });
+    await db.collection("users").doc(userId).set({ id: userId, currency: "USD" });
+    mockSync.mockReset();
+    mockSync.mockImplementation(async () => ({
+      added: [], modified: [], removed: [], next_cursor: "k", has_more: false,
+      transactions_update_status: "HISTORICAL_UPDATE_COMPLETE", accounts: [], request_id: "r",
+    }));
+    // A holder that will never finish (crashed mid-sync), lease still valid for 5 s.
+    const lease = db.collection("_item_sync_leases").doc(itemDocId);
+    await lease.set({ run_id_holder: "dead_run", lease_until: Timestamp.fromMillis(Date.now() + 5000), requested: false });
+
+    const behind = await sync_item_orchestrator({ trace_id: rid("runB"), span_id: "s" }, { item_doc_id: itemDocId, user_id: userId });
+    expect(behind.status).toBe("already_running");
+    expect((await lease.get()).data()!.requested).toBe(true);
+    const jobs = (await db.collection("_jobs").where("job_type", "==", "sync_item").get()).docs
+      .map((d) => d.data()).filter((j) => j.payload?.item_doc_id === itemDocId);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].payload.reason).toBe("lease_watchdog");
+    const wait_ms = jobs[0].scheduled_for.toMillis() - jobs[0].created_at.toMillis();
+    expect(wait_ms).toBeGreaterThanOrEqual(30_000);
+    expect(wait_ms).toBeLessThanOrEqual(40_000);
+
+    // The lease runs out (the holder is dead); the watchdog runs: the request is served.
+    await lease.update({ lease_until: Timestamp.fromMillis(Date.now() - 1000) });
+    const served = await sync_item_orchestrator(
+      { trace_id: rid("wd1"), span_id: "s" }, { item_doc_id: itemDocId, user_id: userId, reason: "lease_watchdog" }
+    );
+    expect(served.status).toBe("synced");
+    expect((await lease.get()).data()!.requested).toBe(false);
+
+    // A second watchdog (the request was served meanwhile) does nothing.
+    const pulls_before = mockSync.mock.calls.length;
+    const skipped = await sync_item_orchestrator(
+      { trace_id: rid("wd2"), span_id: "s" }, { item_doc_id: itemDocId, user_id: userId, reason: "lease_watchdog" }
+    );
+    expect(skipped.status).toBe("skipped");
+    expect(mockSync.mock.calls.length).toBe(pulls_before);
+  }, 60000);
+});

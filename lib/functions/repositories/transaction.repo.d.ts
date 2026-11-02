@@ -329,9 +329,10 @@ export declare const transaction_repo: {
      * Inactive transactions drop out of every derived total. Idempotent. Returns
      * the count hidden and whether a full page came back (more may remain).
      */
-    hide_for_account(ctx: TraceContext, account_id: string, user_id: string): Promise<{
+    hide_for_account(ctx: TraceContext, account_id: string, user_id: string, run_id: string): Promise<{
         hidden: number;
         has_more: boolean;
+        written: SyncWrittenDoc[];
     }>;
     /**
      * Restores up to 500 transactions that an account removal hid (one page) —
@@ -339,9 +340,10 @@ export declare const transaction_repo: {
      * other reasons (e.g. superseded pendings) stay deleted. Idempotent. Returns
      * the count restored and whether a full page came back (more may remain).
      */
-    restore_for_account(ctx: TraceContext, account_id: string, user_id: string): Promise<{
+    restore_for_account(ctx: TraceContext, account_id: string, user_id: string, run_id: string): Promise<{
         restored: number;
         has_more: boolean;
+        written: SyncWrittenDoc[];
     }>;
     /**
      * Batch-applies a fixed set of fields to the given transaction IDs (chunked).
@@ -376,6 +378,7 @@ export declare const transaction_repo: {
     get_ids_updated_since(_ctx: TraceContext, user_id: string, since_ms: number, limit: number): Promise<Array<{
         id: string;
         updated_ms: number;
+        assigned_ms: number | null;
     }>>;
     /**
      * Gets active transaction IDs that have at least one split assigned to a

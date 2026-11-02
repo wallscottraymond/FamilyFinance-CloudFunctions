@@ -12,6 +12,7 @@
  * @module orchestrators/plaid/sync_recurring
  */
 
+import { keep_known_frequency } from "../../domain/recurring/frequency";
 import {
   OrchestratorContext,
   TraceContext,
@@ -277,16 +278,16 @@ export async function sync_recurring_orchestrator(
     errors.push(...(validated_outflows_result.validation_errors ?? []));
   }
 
-  const valid_inflows = get_entities(validated_inflows_result);
-  const valid_outflows = get_entities(validated_outflows_result);
+  const validated_inflows = get_entities(validated_inflows_result);
+  const validated_outflows = get_entities(validated_outflows_result);
 
   // 5. COMPUTE MERGE SUGGESTIONS
   const inflow_merge_result = compute_inflow_merge_suggestions(
-    valid_inflows,
+    validated_inflows,
     deps.existing_manual_inflows
   );
   const outflow_merge_result = compute_outflow_merge_suggestions(
-    valid_outflows,
+    validated_outflows,
     deps.existing_manual_outflows
   );
 
@@ -306,9 +307,15 @@ export async function sync_recurring_orchestrator(
   //    reads. The planner runs only when the user's flag is on or a record involved is stamped v2
   //    (X11); otherwise every stream is saved and stale-marked exactly as before.
   const [prefetched_inflows, prefetched_outflows] = await Promise.all([
-    inflow_repo.get_raw_by_ids(create_child_span(ctx), valid_inflows.map((i) => i.id)),
-    outflow_repo.get_raw_by_ids(create_child_span(ctx), valid_outflows.map((o) => o.id)),
+    inflow_repo.get_raw_by_ids(create_child_span(ctx), validated_inflows.map((i) => i.id)),
+    outflow_repo.get_raw_by_ids(create_child_span(ctx), validated_outflows.map((o) => o.id)),
   ]);
+  // Plaid UNKNOWN frequency: an existing record keeps its cadence, a new one stays "unknown" —
+  // never monthly (Code-Health-Review P1-M5). Uses the docs just prefetched: no extra reads.
+  const stored_freq = (docs: Map<string, Record<string, unknown>>) => (id: string) =>
+    docs.get(id)?.frequency as string | undefined;
+  const valid_inflows = keep_known_frequency(validated_inflows, stored_freq(prefetched_inflows));
+  const valid_outflows = keep_known_frequency(validated_outflows, stored_freq(prefetched_outflows));
   const stale_candidates = get_stale_candidates(
     deps,
     valid_inflows.map((i) => i.id),

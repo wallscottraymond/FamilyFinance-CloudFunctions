@@ -60,7 +60,7 @@ export interface CompleteRelinkResult {
 /**
  * The item identity the repair/refresh steps need.
  */
-interface RepairTarget {
+export interface RepairTarget {
   item_doc_id: string;
   plaid_item_id: string;
   user_id: string;

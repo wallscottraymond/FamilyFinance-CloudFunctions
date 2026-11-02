@@ -26,6 +26,7 @@ import {
   log_operation_error,
 } from "../../observability";
 import { transaction_repo } from "../../repositories/transaction.repo";
+import { plan_assignment_page } from "../../domain/transactions/assignment_watermark.service";
 import {
   get_assignment_watermark_ms,
   set_assignment_watermark_ms,
@@ -54,6 +55,7 @@ export async function assign_user_transactions_orchestrator(
       (await get_assignment_watermark_ms(input.user_id)) ??
       Date.now() - INITIAL_LOOKBACK_MS;
 
+    const read_started_ms = Date.now();
     const changed = await transaction_repo.get_ids_updated_since(
       ctx,
       input.user_id,
@@ -61,22 +63,26 @@ export async function assign_user_transactions_orchestrator(
       PAGE_LIMIT
     );
 
-    if (changed.length === 0) {
+    // Which rows to assign + where the watermark may move (Code-Health-Review A1-M1, pure).
+    const page = plan_assignment_page(changed, read_started_ms, PAGE_LIMIT);
+    if (page.next_watermark_ms === null) {
       log_operation_success(span, input.user_id);
       return { assigned: 0, more: false };
     }
 
     // One batch = shared context + recurring candidates resolved ONCE for all of these txns.
-    await assign_transactions_batch_orchestrator(ctx, {
-      user_id: input.user_id,
-      transaction_ids: changed.map((c) => c.id),
-    });
+    if (page.assign_ids.length > 0) {
+      await assign_transactions_batch_orchestrator(ctx, {
+        user_id: input.user_id,
+        transaction_ids: page.assign_ids,
+      });
+    }
 
-    // Advance ONLY on success, to the last processed txn's updatedAt (never past unprocessed rows).
-    const last_ms = changed[changed.length - 1].updated_ms;
-    await set_assignment_watermark_ms(input.user_id, last_ms);
+    // Advance ONLY on success; never past a row that may still be committing (last page).
+    const last_ms = page.next_watermark_ms;
+    if (last_ms > watermark_ms) await set_assignment_watermark_ms(input.user_id, last_ms);
 
-    const more = changed.length === PAGE_LIMIT;
+    const more = page.more;
     if (more) {
       // More changed txns than one page — continue in a follow-up run (deduped).
       // A fresh job: `create_job_if_not_exists` saw THIS running job as active and skipped, so
@@ -90,10 +96,10 @@ export async function assign_user_transactions_orchestrator(
 
     console.log(
       `[${ctx.trace_id}] assign_user_transactions: user=${input.user_id} ` +
-        `assigned=${changed.length} more=${more} watermark=${new Date(last_ms).toISOString()}`
+        `assigned=${page.assign_ids.length}/${changed.length} more=${more} watermark=${new Date(last_ms).toISOString()}`
     );
     log_operation_success(span, input.user_id);
-    return { assigned: changed.length, more };
+    return { assigned: page.assign_ids.length, more };
   } catch (error) {
     log_operation_error(
       span,

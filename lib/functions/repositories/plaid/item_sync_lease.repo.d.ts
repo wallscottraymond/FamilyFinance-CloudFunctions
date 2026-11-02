@@ -29,6 +29,14 @@ export declare const item_sync_lease_repo: {
      * request so the holder runs again; otherwise release and return null.
      */
     finish_round(item_doc_id: string, run_id: string): Promise<SyncRequest | null>;
+    /**
+     * The lease's current state (one read): whether a request is still waiting for a round, and
+     * when the lease runs out. Used by the lease watchdog (Code-Health-Review P2-M8).
+     */
+    get_state(item_doc_id: string): Promise<{
+        requested: boolean;
+        lease_until_ms: number;
+    }>;
     /** Release after a failure (the next request starts a fresh sync). */
     release(item_doc_id: string, run_id: string): Promise<void>;
 };

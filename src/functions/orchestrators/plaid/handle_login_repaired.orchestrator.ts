@@ -30,7 +30,8 @@ import {
   compute_login_repaired_update,
   should_trigger_refresh,
 } from "../../domain/plaid/item_status_webhook.service";
-import { mark_item_repaired, refresh_repaired_item } from "./reauth_recovery.orchestrator";
+import { mark_item_repaired } from "./reauth_recovery.orchestrator";
+import { create_job } from "../../infrastructure/job_queue";
 
 /**
  * Orchestrates handling of ITEM.LOGIN_REPAIRED webhooks.
@@ -95,18 +96,21 @@ export async function handle_login_repaired_orchestrator(
     // =========================================================================
     // 4. TRIGGER DATA REFRESH (if coming from error state)
     // =========================================================================
-    // Full refresh — balances, transactions and recurring — since syncs skipped
-    // this item while it was broken. Fire and forget so the webhook answers fast;
-    // the scheduled syncs are the backstop if this is cut short.
+    // Full refresh — balances, transactions and recurring — since syncs skipped this item while
+    // it was broken. QUEUED, never run here: this runs inside the 30 s webhook, and work after the
+    // response is throttled or killed (Code-Health-Review P2-M3; backend rule 1.2a.4 — webhooks
+    // only ACK + enqueue). The `refresh_repaired_item` job runs it with the job's own budget.
     let refresh_triggered = false;
 
     if (trigger_refresh) {
       console.log(
-        `[${ctx.trace_id}] Triggering data refresh after login repair for item ${deps.item_doc_id}`
+        `[${ctx.trace_id}] Queuing data refresh after login repair for item ${deps.item_doc_id}`
       );
-      fire_and_forget(async () => {
-        await refresh_repaired_item(ctx, target);
-      });
+      await create_job(
+        "refresh_repaired_item",
+        { ...target, deduplication_key: `refresh_repaired_item:${target.item_doc_id}` },
+        { trace_id: ctx.trace_id }
+      );
       refresh_triggered = true;
     }
 

@@ -15,6 +15,7 @@ import {
 } from "../../types/plaid/refresh_plaid_data.types";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { decryptAccessToken } from "../../../utils/encryption";
+import { plaid_item_repo } from "../../repositories/plaid";
 
 /** Rate limit window in seconds (5 minutes) */
 const RATE_LIMIT_SECONDS = 300;
@@ -42,19 +43,14 @@ export async function resolve_refresh_dependencies(
     `[${ctx.trace_id}] Resolving refresh dependencies for user ${input.user_id}`
   );
 
-  // 1. Fetch Plaid items
-  let items_query = db
-    .collection("plaid_items")
-    .where("userId", "==", input.user_id)
-    .where("status", "==", "active");
+  // 1. The user's ACTIVE Plaid items, whatever their status (Code-Health-Review P2-M1: the old
+  //    `status == "active"` matched no item — writers set "good", "item_login_required", …).
+  const all_items = await plaid_item_repo.get_by_user_id(ctx, input.user_id);
+  const selected = input.item_id
+    ? all_items.filter((i) => i.plaid_item_id === input.item_id)
+    : all_items;
 
-  if (input.item_id) {
-    items_query = items_query.where("plaidItemId", "==", input.item_id);
-  }
-
-  const items_snapshot = await items_query.get();
-
-  if (items_snapshot.empty) {
+  if (selected.length === 0) {
     console.log(`[${ctx.trace_id}] No Plaid items found for user`);
     return null;
   }
@@ -74,12 +70,11 @@ export async function resolve_refresh_dependencies(
   const items: RefreshPlaidDataDependencies["items"] = [];
   const rate_limited_items: string[] = [];
 
-  for (const doc of items_snapshot.docs) {
-    const data = doc.data();
-    const item_id = data.plaidItemId;
+  for (const item of selected) {
+    const item_id = item.plaid_item_id;
 
-    // Check rate limit
-    const last_sync = data.lastSyncAt as Timestamp | undefined;
+    // Rate limit on the field the sync actually writes (`lastSyncedAt`).
+    const last_sync = item.last_synced_at;
     if (last_sync) {
       const seconds_since = now.seconds - last_sync.seconds;
       if (seconds_since < RATE_LIMIT_SECONDS) {
@@ -91,14 +86,17 @@ export async function resolve_refresh_dependencies(
       }
     }
 
-    // Decrypt access token
+    // The stored, encrypted `accessToken`.
+    if (!item.access_token) {
+      console.warn(`[${ctx.trace_id}] Plaid item ${item.id} has no access token, skipping`);
+      continue;
+    }
     try {
-      const access_token = decryptAccessToken(data.encryptedAccessToken);
       items.push({
         item_id,
-        doc_id: doc.id,
-        access_token,
-        institution_name: data.institutionName || "Unknown",
+        doc_id: item.id,
+        access_token: decryptAccessToken(item.access_token),
+        institution_name: item.institution_name || "Unknown",
       });
     } catch (error) {
       console.error(

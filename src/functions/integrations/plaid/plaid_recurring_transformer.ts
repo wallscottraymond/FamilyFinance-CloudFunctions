@@ -250,7 +250,10 @@ export function map_plaid_frequency_to_app(
     return "yearly";
   case "UNKNOWN":
   default:
-    return "monthly"; // Default to monthly for unknown
+    // NEVER monthly (Code-Health-Review P1-M5; domain/recurring/frequency): an unknown cadence
+    // stored as monthly expects a payment every month. "unknown" steps by a year, and the sync
+    // keeps an existing record's cadence instead (keep_known_frequency).
+    return "unknown";
   }
 }
 

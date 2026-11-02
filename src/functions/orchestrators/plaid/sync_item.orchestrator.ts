@@ -67,6 +67,9 @@ const MAX_NOT_READY_ATTEMPTS = 10;
 const MAX_ROUNDS = 3;
 
 /** Enqueue a sync for an item — every entry point uses this (webhook, link, cron, retry). */
+/** `sync_item` reason of the run queued behind a busy lease (P2-M8). */
+export const LEASE_WATCHDOG_REASON = "lease_watchdog";
+
 export async function enqueue_item_sync(input: {
   item_doc_id: string;
   user_id: string;
@@ -117,8 +120,28 @@ export async function sync_item_orchestrator(
     return { ...result, status: "skipped", error: "user being deleted" };
   }
 
+  // Lease watchdog (Code-Health-Review P2-M8): it only runs if the request it was queued for is
+  // still unread — a holder that finished normally consumed it, so nothing to do.
+  if (input.reason === LEASE_WATCHDOG_REASON) {
+    const state = await item_sync_lease_repo.get_state(input.item_doc_id);
+    if (!state.requested) return { ...result, status: "skipped", error: "request already served" };
+  }
+
   if (!(await item_sync_lease_repo.claim(input.item_doc_id, run_id, { recurring: input.recurring }))) {
     console.log(`[${ctx.trace_id}] sync_item: ${input.item_doc_id} already syncing — it will run again`);
+    // The holder runs one more round for this request when it finishes. If it dies instead (a
+    // timeout, a crash) or fails, nobody reads the request until the next cron: queue ONE watchdog
+    // run for just after the lease runs out (coalesced; it skips if the request was served).
+    const state = await item_sync_lease_repo.get_state(input.item_doc_id);
+    const wait_s = Math.max(0, Math.ceil((state.lease_until_ms - Date.now()) / 1000)) + 30;
+    await enqueue_item_sync({
+      item_doc_id: input.item_doc_id,
+      user_id: input.user_id,
+      recurring: input.recurring,
+      reason: LEASE_WATCHDOG_REASON,
+      delay_seconds: wait_s,
+      trace_id: ctx.trace_id,
+    }).catch((e: unknown) => console.error(`[${ctx.trace_id}] lease watchdog enqueue failed:`, e));
     return { ...result, status: "already_running" };
   }
 

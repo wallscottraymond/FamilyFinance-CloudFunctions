@@ -191,6 +191,11 @@ function map_to_pending_info(doc: LegacyTransactionDoc): PendingTransactionInfo 
     internal_detailed_category: doc.internalDetailedCategory,
     description_override: doc.description !== doc.name ? doc.description : null,
     tags: doc.splits?.[0]?.tags || [],
+    // Transaction-level edits the posted copy must keep (Code-Health-Review P1-M2 / P3-M7).
+    user_notes: (doc as unknown as { userNotes?: string | null }).userNotes ?? null,
+    notes: (doc as unknown as { notes?: unknown }).notes ?? null,
+    needs_review: doc.needsReview === true,
+    needs_note: doc.needsNote === true,
   };
 }
 
@@ -235,7 +240,8 @@ function map_to_doc(
     createdBy: entity.user_id,
     updatedBy: entity.user_id,
     currency: entity.currency,
-    description: entity.name,
+    // A rename carried from the pending copy (P1-M2) stays; else Plaid's name.
+    description: entity.description_override || entity.name,
     internalDetailedCategory: entity.internal_detailed_category,
     internalPrimaryCategory: entity.internal_primary_category,
     plaidDetailedCategory: entity.plaid_detailed_category,
@@ -270,6 +276,9 @@ function map_to_doc(
     // queue query (needsReview == true) is consistent.
     needsReview: entity.needs_review ?? false,
     needsNote: entity.needs_note ?? false,
+    // Notes carried from the pending copy (P1-M2) — only when there are some.
+    ...(entity.user_notes ? { userNotes: entity.user_notes } : {}),
+    ...(entity.notes != null && entity.notes !== "" ? { notes: entity.notes } : {}),
     // Denormalized union of splits' tags → array-contains queryable (see LegacyTransactionDoc).
     tagIds: Array.from(new Set(entity.splits.flatMap(s => s.tags ?? []))),
   };
@@ -1283,6 +1292,7 @@ export const transaction_repo = {
      *  changed it since (a user edit, a sync) — never overwrite a newer write. */
     read_update_time?: Timestamp
   ): Promise<boolean> {
+    const now = Timestamp.now();
     /* eslint-disable @typescript-eslint/naming-convention */
     const data = {
       ...(extra_fields ?? {}),
@@ -1293,7 +1303,10 @@ export const transaction_repo = {
       // reconciliation without the stale Plaid stream transactionIds[].
       splitOutflowIds: split_outflow_ids,
       splitInflowIds: split_inflow_ids,
-      updatedAt: Timestamp.now(),
+      updatedAt: now,
+      // = updatedAt: the per-user assignment batch skips a row unchanged since it was assigned
+      // (Code-Health-Review A1-M1 b).
+      assignedAt: now,
     };
     /* eslint-enable @typescript-eslint/naming-convention */
     try {
@@ -1401,8 +1414,9 @@ export const transaction_repo = {
   async hide_for_account(
     ctx: TraceContext,
     account_id: string,
-    user_id: string
-  ): Promise<{ hidden: number; has_more: boolean }> {
+    user_id: string,
+    run_id: string
+  ): Promise<{ hidden: number; has_more: boolean; written: SyncWrittenDoc[] }> {
     const db = getFirestore();
     const now = Timestamp.now();
     const snapshot = await db
@@ -1414,10 +1428,14 @@ export const transaction_repo = {
       .get();
 
     if (snapshot.empty) {
-      return { hidden: 0, has_more: false };
+      return { hidden: 0, has_more: false, written: [] };
     }
 
+    // Stamped with the caller's run id: `on_transaction_written` skips stamped writes and the
+    // caller runs ONE follow-up pass for the page (rule 1.2a.3; Code-Health-Review P1-M3).
     let hidden = 0;
+    const written: SyncWrittenDoc[] = [];
+    const by_id = new Map(snapshot.docs.map((d) => [d.id, d.data()]));
     const chunks = chunk_for_batch(snapshot.docs.map((d) => d.id));
     for (const chunk of chunks) {
       const batch = db.batch();
@@ -1429,9 +1447,12 @@ export const transaction_repo = {
           hiddenAt: now,
           hiddenReason: "account_removed",
           updatedAt: now,
+          syncRunId: run_id,
         };
         /* eslint-enable @typescript-eslint/naming-convention */
         batch.update(doc_ref(id), update_data);
+        const before = by_id.get(id) ?? {};
+        written.push({ doc_id: id, before, after: { ...before, ...update_data } });
         hidden++;
       }
       await batch.commit();
@@ -1440,7 +1461,7 @@ export const transaction_repo = {
     console.log(
       `[${ctx.trace_id}] hide_for_account: account=${account_id}, hidden=${hidden}`
     );
-    return { hidden, has_more: snapshot.size === 500 };
+    return { hidden, has_more: snapshot.size === 500, written };
   },
 
   /**
@@ -1452,8 +1473,9 @@ export const transaction_repo = {
   async restore_for_account(
     ctx: TraceContext,
     account_id: string,
-    user_id: string
-  ): Promise<{ restored: number; has_more: boolean }> {
+    user_id: string,
+    run_id: string
+  ): Promise<{ restored: number; has_more: boolean; written: SyncWrittenDoc[] }> {
     const db = getFirestore();
     const now = Timestamp.now();
     const snapshot = await db
@@ -1462,27 +1484,35 @@ export const transaction_repo = {
       .where("ownerId", "==", user_id)
       .where("isActive", "==", false)
       .where("hiddenReason", "==", "account_removed")
-      .select()
+      // Only what the caller's follow-up pass needs (budgets, bills/income, date, transfer kind).
+      .select("transactionDate", "splits", "splitBudgetIds", "splitOutflowIds", "splitInflowIds", "plaidPrimaryCategory")
       .limit(500)
       .get();
 
     if (snapshot.empty) {
-      return { restored: 0, has_more: false };
+      return { restored: 0, has_more: false, written: [] };
     }
 
+    // Stamped with the caller's run id (see hide_for_account; Code-Health-Review P1-M3).
     let restored = 0;
+    const written: SyncWrittenDoc[] = [];
+    const by_id = new Map(snapshot.docs.map((d) => [d.id, d.data()]));
     for (const chunk of chunk_for_batch(snapshot.docs.map((d) => d.id))) {
       const batch = db.batch();
       for (const id of chunk) {
         /* eslint-disable @typescript-eslint/naming-convention */
-        batch.update(doc_ref(id), {
+        const update_data: Record<string, unknown> = {
           isActive: true,
           isHidden: false,
           hiddenReason: null,
           hiddenAt: null,
           updatedAt: now,
-        });
+          syncRunId: run_id,
+        };
         /* eslint-enable @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), update_data);
+        const before = by_id.get(id) ?? {};
+        written.push({ doc_id: id, before, after: { ...before, ...update_data } });
         restored++;
       }
       await batch.commit();
@@ -1491,7 +1521,7 @@ export const transaction_repo = {
     console.log(
       `[${ctx.trace_id}] restore_for_account: account=${account_id}, restored=${restored}`
     );
-    return { restored, has_more: snapshot.size === 500 };
+    return { restored, has_more: snapshot.size === 500, written };
   },
 
   /**
@@ -1593,19 +1623,23 @@ export const transaction_repo = {
     user_id: string,
     since_ms: number,
     limit: number
-  ): Promise<Array<{ id: string; updated_ms: number }>> {
+  ): Promise<Array<{ id: string; updated_ms: number; assigned_ms: number | null }>> {
     const snapshot = await getFirestore()
       .collection(COLLECTION)
       .where("userId", "==", user_id)
       .where("updatedAt", ">", Timestamp.fromMillis(since_ms))
       .orderBy("updatedAt", "asc")
-      .select("updatedAt") // ids + the cursor field only
+      .select("updatedAt", "assignedAt") // ids + the cursor + the last assignment's stamp
       .limit(limit)
       .get();
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      updated_ms: (doc.get("updatedAt") as Timestamp).toMillis(),
-    }));
+    return snapshot.docs.map((doc) => {
+      const assigned = doc.get("assignedAt") as Timestamp | undefined;
+      return {
+        id: doc.id,
+        updated_ms: (doc.get("updatedAt") as Timestamp).toMillis(),
+        assigned_ms: assigned instanceof Timestamp ? assigned.toMillis() : null,
+      };
+    });
   },
 
   /**

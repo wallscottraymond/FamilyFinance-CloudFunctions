@@ -29,7 +29,7 @@ export interface CompleteRelinkResult {
 /**
  * The item identity the repair/refresh steps need.
  */
-interface RepairTarget {
+export interface RepairTarget {
     item_doc_id: string;
     plaid_item_id: string;
     user_id: string;
@@ -67,5 +67,4 @@ export declare function complete_relink_orchestrator(ctx: OrchestratorContext<Co
  * @returns Counts for the run
  */
 export declare function self_heal_reauth_items_orchestrator(ctx: TraceContext): Promise<ReauthSelfHealResult>;
-export {};
 //# sourceMappingURL=reauth_recovery.orchestrator.d.ts.map

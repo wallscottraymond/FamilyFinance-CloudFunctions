@@ -22,4 +22,16 @@ export type CanonicalFrequency = "WEEKLY" | "BIWEEKLY" | "SEMIMONTHLY" | "MONTHL
  * Map any stored/Plaid frequency spelling to a canonical token. PURE.
  */
 export declare function normalize_frequency(frequency: string | null | undefined): CanonicalFrequency;
+/**
+ * Plaid reports some kept streams with frequency UNKNOWN (Code-Health-Review P1-M5). Such a stream
+ * is never stored as monthly (the fan-out bug above): an EXISTING record keeps the cadence it
+ * already has; a new one is stored as "unknown" (generation steps it by a year). Every other
+ * stream is returned unchanged (same object). PURE.
+ *
+ * @param stored_frequency - the record's currently stored frequency by id (undefined = new)
+ */
+export declare function keep_known_frequency<T extends {
+    id: string;
+    frequency: string;
+}>(entities: T[], stored_frequency: (id: string) => string | null | undefined): T[];
 //# sourceMappingURL=frequency.d.ts.map

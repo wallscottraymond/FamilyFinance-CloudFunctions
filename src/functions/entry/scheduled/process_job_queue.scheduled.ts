@@ -8,6 +8,7 @@
  */
 
 import { sync_item_orchestrator, SyncItemInput } from "../../orchestrators/plaid/sync_item.orchestrator";
+import { refresh_repaired_item, RepairTarget } from "../../orchestrators/plaid/reauth_recovery.orchestrator";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import {
@@ -278,6 +279,12 @@ const JOB_HANDLERS: Record<string, JobHandler<unknown>> = {
   // transaction written once, one follow-up pass. See orchestrators/plaid/sync_item.
   sync_item: async (ctx, payload) => {
     await sync_item_orchestrator(ctx, payload as SyncItemInput);
+  },
+
+  // A repaired login (ITEM LOGIN_REPAIRED webhook): balances + the item sync, queued by the webhook
+  // so it isn't cut off after the webhook replies (Code-Health-Review P2-M3).
+  refresh_repaired_item: async (ctx, payload) => {
+    await refresh_repaired_item(ctx, payload as RepairTarget);
   },
 };
 

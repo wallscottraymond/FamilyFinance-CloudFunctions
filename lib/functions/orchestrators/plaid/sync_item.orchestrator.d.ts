@@ -38,6 +38,8 @@ export interface SyncItemResult {
     error?: string;
 }
 /** Enqueue a sync for an item — every entry point uses this (webhook, link, cron, retry). */
+/** `sync_item` reason of the run queued behind a busy lease (P2-M8). */
+export declare const LEASE_WATCHDOG_REASON = "lease_watchdog";
 export declare function enqueue_item_sync(input: {
     item_doc_id: string;
     user_id: string;

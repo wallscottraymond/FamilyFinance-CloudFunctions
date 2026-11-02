@@ -221,15 +221,16 @@ export declare function purge_finished_jobs(options?: {
 export declare function build_dedup_key(job_type: string, deduplication_key: string): string;
 export declare function has_active_job(job_type: string, deduplication_key: string): Promise<boolean>;
 /**
- * Creates a job only if no active job (pending or processing) exists with the same deduplication key.
+ * Creates a job unless one with the same deduplication key is still PENDING (which covers it).
+ * If one is RUNNING, a single delayed follow-up is queued behind it instead of dropping the
+ * request (it read its state at start; Code-Health-Review E1-M1).
  *
- * This is the recommended way to enqueue jobs that may be triggered multiple times
- * for the same logical operation (e.g., summary updates from multiple trigger events).
+ * For jobs that recompute from CURRENT state when they run (rollover chain, recurring reconcile).
  *
  * @param job_type - Type of job
  * @param payload - Job payload (must include deduplication_key)
  * @param options - Job options
- * @returns The created job, or null if a duplicate exists
+ * @returns The created job, or null if a pending one covers it
  */
 export declare function create_job_if_not_exists<TPayload extends {
     deduplication_key: string;
@@ -238,6 +239,8 @@ export declare function create_job_if_not_exists<TPayload extends {
     delay_seconds?: number;
     trace_id?: string;
 }): Promise<Job<TPayload> | null>;
+/** Delay of the follow-up queued behind a running job of the same key (E1-M1). */
+export declare const FOLLOW_UP_DELAY_SECONDS = 60;
 /**
  * COALESCING enqueue (Read-Cost-Review-Round-3): create the job unless one with the same key is
  * still PENDING — so a burst of N writes (e.g. a Plaid sync landing 78 transactions) collapses into

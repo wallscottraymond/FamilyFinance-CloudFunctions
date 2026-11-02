@@ -86,7 +86,11 @@ describe("T1 — repeated syncs rewrite nothing (emulator)", () => {
     await o("SPOT").update({ captureRulesVersion: 2, plaidIsActive: true });
     await o("CCPAY").update({ captureRulesVersion: 2, plaidIsActive: true, plaidInactiveAckAt: ack });
     await o("XFER").update({ mergedIntoId: "some_other_bill" });
+    // AVANT's Plaid frequency is UNKNOWN. Every EXISTING record of such a stream was stored
+    // "monthly" by the old transformer (a new one is now stored "unknown" — P1-M5): model that
+    // legacy record, which the sync must keep (keep_known_frequency) and never rewrite.
     await o("AVANT").update({
+      frequency: "monthly",
       captureRulesVersion: 2, plaidIsActive: true, userFrequency: "monthly",
       removedByUser: true, removalIntervals: [{ fromMs: end_from, toMs: null, mode: "going_forward" }],
     });

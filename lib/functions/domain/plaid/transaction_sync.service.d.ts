@@ -64,6 +64,7 @@ export declare function calculate_proportional_splits(splits: TransactionSplitFo
  * - User's split allocations (budgets, outflows)
  * - User's tags
  * - Split structure (adjusted proportionally if amount changed)
+ * - Transaction-level edits: the rename, notes, needs-review / needs-note (P1-M2)
  *
  * @param posted_transaction - New transaction from Plaid (posted)
  * @param migration - Migration data with pending transaction info

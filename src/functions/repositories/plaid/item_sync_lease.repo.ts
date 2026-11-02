@@ -81,6 +81,19 @@ export const item_sync_lease_repo = {
     });
   },
 
+  /**
+   * The lease's current state (one read): whether a request is still waiting for a round, and
+   * when the lease runs out. Used by the lease watchdog (Code-Health-Review P2-M8).
+   */
+  async get_state(item_doc_id: string): Promise<{ requested: boolean; lease_until_ms: number }> {
+    const snap = await getFirestore().collection(COLLECTION).doc(item_doc_id).get();
+    const d = snap.exists ? (snap.data() as Record<string, unknown>) : {};
+    return {
+      requested: d.requested === true,
+      lease_until_ms: (d.lease_until as Timestamp | undefined | null)?.toMillis?.() ?? 0,
+    };
+  },
+
   /** Release after a failure (the next request starts a fresh sync). */
   async release(item_doc_id: string, run_id: string): Promise<void> {
     const db = getFirestore();

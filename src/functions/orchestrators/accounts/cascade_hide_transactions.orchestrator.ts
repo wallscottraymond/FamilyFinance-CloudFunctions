@@ -14,7 +14,8 @@ import {
 } from "../../types";
 import { transaction_repo } from "../../repositories/transaction.repo";
 import { account_repo } from "../../repositories/account.repo";
-import { bump_derive_version } from "../../repositories/derive_version.repo";
+import { run_sync_follow_ups, follow_ups_from_written } from "../plaid/sync_follow_ups";
+import { generate_id } from "../../observability/tracer";
 import { create_job } from "../../infrastructure/job_queue";
 import {
   create_span,
@@ -103,11 +104,14 @@ export async function cascade_hide_transactions_orchestrator(
     // 2026-10-05; the "Keep in Budgets" choice was dropped — it never worked,
     // since derive ignores inactive transactions). `removal_mode` stays on the
     // payload only for older app builds. One page of ≤500 per run.
-    const { hidden: total_hidden, has_more } =
+    // One stamped page + ONE follow-up pass (rule 1.2a.3; Code-Health-Review P1-M3): the
+    // per-transaction trigger skips these writes.
+    const { hidden: total_hidden, has_more, written } =
       await transaction_repo.hide_for_account(
         ctx,
         input.plaid_account_id,
-        input.user_id
+        input.user_id,
+        `account_hide:${generate_id()}`
       );
     perf.reads++;
     perf.writes += total_hidden;
@@ -121,9 +125,9 @@ export async function cascade_hide_transactions_orchestrator(
       };
     }
 
-    // Hidden txns drop out of derive — invalidate the cache (TR-2, trigger no longer bumps).
-    // One bump per page; a paginated cascade re-invokes this handler and bumps each page.
-    await bump_derive_version(input.user_id).catch(() => {});
+    // The page's follow-ups: recompute the budgets' spent for those dates, reconcile the bills /
+    // income they paid, and one derive bump (hidden txns drop out of derive).
+    await run_sync_follow_ups(ctx, input.user_id, follow_ups_from_written(written));
 
     // A full page means more may remain — continue in a follow-up job (the
     // account had 5k+ transactions; only the first 500 used to be hidden).

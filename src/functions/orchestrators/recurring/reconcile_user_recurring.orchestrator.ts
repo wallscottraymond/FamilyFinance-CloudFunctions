@@ -20,6 +20,7 @@
  * @module orchestrators/recurring/reconcile_user_recurring
  */
 
+import { coalesce_job } from "../../infrastructure/job_queue";
 import type { SyncWrittenDoc } from "../../repositories/transaction.repo";
 import { follow_ups_from_written, run_sync_follow_ups } from "../plaid/sync_follow_ups";
 import { TraceContext } from "../../types";
@@ -149,9 +150,22 @@ export async function reconcile_user_recurring_orchestrator(
         reconciled++;
       } catch (error) {
         console.error(
-          `[${ctx.trace_id}] reconcile_user_recurring: ${d.type} ${d.id} failed`,
+          `[${ctx.trace_id}] reconcile_user_recurring: ${d.type} ${d.id} failed; queued a retry`,
           error
         );
+        // The watermark below moves past this stream, so it would never be reconciled again
+        // until it changes (Code-Health-Review M3-M6): queue its own retried job instead.
+        await coalesce_job(
+          "reconcile_recurring_period",
+          {
+            deduplication_key: `reconcile:${d.type}:${d.id}`,
+            recurring_id: d.id,
+            recurring_type: d.type,
+            user_id: input.user_id,
+            trace_id: ctx.trace_id,
+          },
+          { delay_seconds: 30, trace_id: ctx.trace_id }
+        ).catch((e: unknown) => console.error(`[${ctx.trace_id}] retry enqueue failed:`, e));
       }
     };
     for (let k = 0; k < dirty.length; k += CONCURRENCY) {

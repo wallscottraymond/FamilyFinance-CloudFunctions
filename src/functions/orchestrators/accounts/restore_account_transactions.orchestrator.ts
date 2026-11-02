@@ -21,8 +21,9 @@ import {
   log_async_debug,
 } from "../../observability";
 import { transaction_repo, account_repo } from "../../repositories";
-import { bump_derive_version } from "../../repositories/derive_version.repo";
-import { create_job } from "../../infrastructure/job_queue";
+import { create_job, coalesce_job } from "../../infrastructure/job_queue";
+import { run_sync_follow_ups, follow_ups_from_written } from "../plaid/sync_follow_ups";
+import { generate_id } from "../../observability/tracer";
 
 /**
  * Performance budget for restore_account_transactions job.
@@ -94,11 +95,13 @@ export async function restore_account_transactions_orchestrator(
     // 1. Restore one page of the transactions the account removal hid. Only
     //    hiddenReason "account_removed" — rows soft-deleted for other reasons
     //    (superseded pendings, etc.) must stay deleted.
-    const { restored: restored_count, has_more } =
+    // One stamped page + ONE follow-up pass (rule 1.2a.3; Code-Health-Review P1-M3).
+    const { restored: restored_count, has_more, written } =
       await transaction_repo.restore_for_account(
         ctx,
         input.plaid_account_id,
-        input.user_id
+        input.user_id,
+        `account_restore:${generate_id()}`
       );
     perf.reads++;
     perf.writes += restored_count;
@@ -115,8 +118,15 @@ export async function restore_account_transactions_orchestrator(
       await create_job("restore_account_transactions", input, { trace_id: input.trace_id });
     }
 
-    // Restored txns re-enter derive — invalidate the cache (TR-2, trigger no longer bumps).
-    await bump_derive_version(input.user_id).catch(() => {});
+    // The page's follow-ups (spent, bills / income, one derive bump) — and, since budgets may have
+    // changed while the account was hidden, ONE debounced assignment batch for the user (what the
+    // per-transaction trigger used to queue once per write).
+    await run_sync_follow_ups(ctx, input.user_id, follow_ups_from_written(written));
+    await coalesce_job(
+      "assign_user_transactions",
+      { deduplication_key: `assign_user:${input.user_id}`, user_id: input.user_id },
+      { trace_id: ctx.trace_id, delay_seconds: 15 }
+    );
 
     log_operation_success(span, input.user_id);
 

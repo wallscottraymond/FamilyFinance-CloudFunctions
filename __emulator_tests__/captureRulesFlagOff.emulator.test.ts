@@ -125,6 +125,15 @@ async function withSyntheticPeriods<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Code-Health-Review P1-M5 (deliberate, 2026-11-02): a NEW stream Plaid reports with frequency
+ * UNKNOWN (AVANT here) is now stored "unknown" (never monthly — no expected payment every month);
+ * the base stored "monthly". Plaid reports AVANT as MONTHLY in this test — exactly what the base
+ * stored — so every other doc, period, page and count is still compared byte for byte. The UNKNOWN
+ * mapping itself is pinned by domain/recurring/__tests__/frequency_unknown.test.ts.
+ */
+const LEGACY_FREQ = { AVANT: { frequency: "MONTHLY" } } as const;
+
 async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   const ids = scenarioIds(tag);
   await seedScenario(db, ids);
@@ -132,7 +141,7 @@ async function runScenario(tag: string, opts: { counted?: boolean } = {}) {
   mockSync.mockReset();
   mockSync.mockImplementation(mocks.sync);
   mockRecurring.mockReset();
-  mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
+  mockRecurring.mockResolvedValue(scenarioRecurring(ids, LEGACY_FREQ, NOW_MS, { removals: true }));
   const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: "s" });
 
   // The flag is read through a per-instance 5-minute cache (not a per-user cost): prime it so the
@@ -415,7 +424,7 @@ describe("capture rules — flag off equals today (emulator)", () => {
     mockSync.mockReset();
     mockSync.mockImplementation(mocks.sync);
     mockRecurring.mockReset();
-    mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
+    mockRecurring.mockResolvedValue(scenarioRecurring(ids, LEGACY_FREQ, NOW_MS, { removals: true }));
     const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: "s" });
     const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test" });
     await sync("run1");
@@ -463,7 +472,7 @@ describe("capture rules — flag off equals today (emulator)", () => {
     mockSync.mockReset();
     mockSync.mockImplementation(mocks.sync);
     mockRecurring.mockReset();
-    mockRecurring.mockResolvedValue(scenarioRecurring(ids, {}, NOW_MS, { removals: true }));
+    mockRecurring.mockResolvedValue(scenarioRecurring(ids, LEGACY_FREQ, NOW_MS, { removals: true }));
     const ctx = (n: string) => ({ trace_id: `${tag}_${n}`, span_id: "s" });
     const sync = (n: string) => sync_item_orchestrator(ctx(n), { item_doc_id: ids.itemDocId, user_id: ids.userId, recurring: true, reason: "test" });
     await sync("run1");

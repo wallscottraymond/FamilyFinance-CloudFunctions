@@ -53,3 +53,22 @@ export function normalize_frequency(frequency: string | null | undefined): Canon
     return "UNKNOWN";
   }
 }
+
+/**
+ * Plaid reports some kept streams with frequency UNKNOWN (Code-Health-Review P1-M5). Such a stream
+ * is never stored as monthly (the fan-out bug above): an EXISTING record keeps the cadence it
+ * already has; a new one is stored as "unknown" (generation steps it by a year). Every other
+ * stream is returned unchanged (same object). PURE.
+ *
+ * @param stored_frequency - the record's currently stored frequency by id (undefined = new)
+ */
+export function keep_known_frequency<T extends { id: string; frequency: string }>(
+  entities: T[],
+  stored_frequency: (id: string) => string | null | undefined
+): T[] {
+  return entities.map((e) => {
+    if (normalize_frequency(e.frequency) !== "UNKNOWN") return e;
+    const stored = stored_frequency(e.id);
+    return stored && normalize_frequency(stored) !== "UNKNOWN" ? { ...e, frequency: stored } : e;
+  });
+}
