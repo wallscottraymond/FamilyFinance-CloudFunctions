@@ -940,15 +940,20 @@ service cloud.firestore {
     // 12-month transactions listener). The caches stay deny-all.
     // =======================
 
-    // Code-Health-Review batch 8 (M6-M2 / M8-M3): a GROUP view's change signal is `group:<id>`
-    // plus every member's doc, and a grouped user's Me view includes their co-members' docs — so a
-    // member may read the group's doc, and a connected person's doc (only a change counter).
+    // Code-Health-Review batch 8 (M6-M2 / M8-M3; verify V8-M1): a GROUP view's change signal is
+    // `group:<id>` plus every member's doc, and a grouped user's Me view includes their co-members'
+    // docs — so a member may read the group's doc, and a person they SHARE A GROUP with may read
+    // theirs (the users/{uid}.groupIds mirror; members need not be connected to each other). Only a
+    // change counter; never writable.
     match /user_data_versions/{userId} {
       allow read: if request.auth != null && (
         request.auth.uid == userId ||
         isGroupViewMember(userId) ||
-        (!userId.matches('group:.+') && exists(/databases/$(database)/documents/connections/$(
-          request.auth.uid < userId ? request.auth.uid + '__' + userId : userId + '__' + request.auth.uid)))
+        (!userId.matches('group:.+') &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.get('groupIds', []).hasAny(
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('groupIds', [])))
       );
       allow write: if false;
     }

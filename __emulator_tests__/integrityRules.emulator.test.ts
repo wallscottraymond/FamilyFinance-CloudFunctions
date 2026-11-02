@@ -93,20 +93,24 @@ it("a budget period's amount changes only through the callable; notes stay a cli
   await assertFails(updateDoc(bp(), { isActive: false }));
 });
 
-it("change signals: own doc; a group's doc for its members; a CONNECTED person's doc — nobody else's (batch 8)", async () => {
+it("change signals: own doc; a group's doc for its members; a CO-MEMBER's doc (even unconnected) — nobody else's (batch 8 + V8-M1)", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    for (const id of ["alex", "sam", "riley", "group:g1", "group:g2"]) await setDoc(doc(db, `user_data_versions/${id}`), { version: 1 });
-    await setDoc(doc(db, "groups/g1"), { memberIds: ["alex", "sam"] });
+    for (const id of ["alex", "sam", "riley", "casey", "group:g1", "group:g2"]) await setDoc(doc(db, `user_data_versions/${id}`), { version: 1 });
+    await setDoc(doc(db, "groups/g1"), { memberIds: ["alex", "sam", "casey"] });
     await setDoc(doc(db, "groups/g2"), { memberIds: ["sam", "riley"] });
-    await setDoc(doc(db, "connections/alex__sam"), { userIds: ["alex", "sam"] });
+    await setDoc(doc(db, "users/alex"), { groupIds: ["g1"] });
+    await setDoc(doc(db, "users/sam"), { groupIds: ["g1", "g2"] });
+    await setDoc(doc(db, "users/casey"), { groupIds: ["g1"] });
+    await setDoc(doc(db, "users/riley"), { groupIds: ["g2"] });
+    // alex is CONNECTED to riley but shares no group with them.
+    await setDoc(doc(db, "connections/alex__riley"), { userIds: ["alex", "riley"] });
   });
   await assertSucceeds(getDoc(doc(alex(), "user_data_versions/alex")));
   await assertSucceeds(getDoc(doc(alex(), "user_data_versions/group:g1"))); // a member
-  await assertSucceeds(getDoc(doc(alex(), "user_data_versions/sam")));      // connected
+  await assertSucceeds(getDoc(doc(alex(), "user_data_versions/sam")));      // co-member
+  await assertSucceeds(getDoc(doc(alex(), "user_data_versions/casey")));    // co-member, not connected
   await assertFails(getDoc(doc(alex(), "user_data_versions/group:g2")));    // not a member
-  await assertFails(getDoc(doc(alex(), "user_data_versions/riley")));       // not connected
-  const sam = env.authenticatedContext("sam").firestore();
-  await assertSucceeds(getDoc(doc(sam, "user_data_versions/alex")));        // the pair id is order-free
+  await assertFails(getDoc(doc(alex(), "user_data_versions/riley")));       // connected, no shared group
   await assertFails(setDoc(doc(alex(), "user_data_versions/alex"), { version: 9 })); // never writable
 });
