@@ -149,7 +149,12 @@ export async function answer_recurring_review_item_orchestrator(
 
     // 3. Record action first (so a failure leaves the question open, to be answered again).
     const item = context.item;
-    if (plan.record_action === "ack_still_a_bill" && item.record_id) {
+    if (plan.record_action === "set_frequency" && item.record_id && plan.record_frequency) {
+      // "How often?": the user's schedule, kept on every later sync (repo save prefers userFrequency).
+      const repo = item.direction === "outflow" ? outflow_repo : inflow_repo;
+      await repo.set_user_frequency(ctx, item.record_id, plan.record_frequency, user_id);
+      await bump_derive_version(user_id).catch(() => {});
+    } else if (plan.record_action === "ack_still_a_bill" && item.record_id) {
       const repo = item.direction === "outflow" ? outflow_repo : inflow_repo;
       await repo.set_plaid_inactive_ack(ctx, item.record_id, now_ms, user_id);
     } else if (plan.record_action === "end" && item.record_id) {

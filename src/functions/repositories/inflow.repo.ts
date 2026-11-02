@@ -934,6 +934,31 @@ export const inflow_repo = {
     return written;
   },
 
+  /**
+   * "How often?" answer: the user's schedule for this record. Stored as `userFrequency` (every
+   * later sync keeps it — save prefers it over Plaid's) and as `frequency` now.
+   */
+  async set_user_frequency(
+    ctx: TraceContext,
+    id: string,
+    frequency: string,
+    user_id: string
+  ): Promise<void> {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await doc_ref(id).update({ userFrequency: frequency, frequency, updatedAt: Timestamp.now() });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    record_audit_entry_async({
+      user_id,
+      action: "update",
+      entity_type: "recurring_inflow",
+      entity_id: id,
+      before: null,
+      after: { userFrequency: frequency },
+      trace_id: ctx.trace_id,
+      metadata: { source: "api", context: { operation: "how_often" } },
+    });
+  },
+
   /** "Still a bill" answer on a v2 record: remember it (preserved across syncs) so it isn't asked again. */
   async set_plaid_inactive_ack(
     ctx: TraceContext,

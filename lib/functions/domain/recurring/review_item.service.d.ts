@@ -20,12 +20,18 @@
  *
  * @module domain/recurring/review_item
  */
-export type ReviewKind = "suggested" | "still_a_bill" | "same_bill";
+/** `how_often` (Code-Health-Review P1-M5 follow-up): an EXISTING bill / income whose Plaid stream
+ *  reports frequency UNKNOWN — the user confirms how often it really is. */
+export type ReviewKind = "suggested" | "still_a_bill" | "same_bill" | "how_often";
 export type ReviewStatus = "open" | "resolved" | "dismissed";
 export type ReviewDirection = "outflow" | "inflow";
 export type ReviewSource = "plaid" | "detector";
 /** User answers + the system's own closes (matured / back active / account removed). */
 export type ReviewAnswer = "track" | "not_bill" | "still_a_bill" | "it_ended" | "keep_separate" | "same_bill"
+/** "How often?": the user picked the schedule (stored as the record's `userFrequency`). */
+ | "set_frequency"
+/** "How often?": keep the schedule it has (nothing written on the record). */
+ | "keep_frequency"
 /** The user made the vendor a bill / income by hand ("Make this a bill"): fulfils and creates
  *  NOTHING — a Plaid stream of the vendor on another account must not make a second bill. */
  | "converted" | "matured" | "auto_active" | "account_removed"

@@ -20,10 +20,18 @@ const CATS = ["LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT", "INCOME_WAGES", "TRANSFER_O
 
 type Expect = { saved: boolean; stamped: boolean; active?: boolean; hidden?: boolean; item: string | null; held: boolean };
 
+/** The review items' kinds, sorted, "+"-joined (null = none). */
+const kinds = (...ks: Array<string | null | false>): string | null => {
+  const xs = ks.filter((k): k is string => !!k).sort();
+  return xs.length ? xs.join("+") : null;
+};
+
 function oracle(flag: boolean, age: string, status: string, freq: string, dir: string, active: boolean, acct: string, cat: string): Expect {
-  if (age === "old") return { saved: true, stamped: false, active, item: null, held: false };
-  if (age === "v2") return { saved: true, stamped: false, active: true, item: active ? null : "still_a_bill", held: false };
-  if (!flag || !active) return { saved: true, stamped: false, active, item: null, held: false };
+  // "How often?" (P1-M5 follow-up): a record this sync leaves SHOWN whose Plaid frequency is UNKNOWN.
+  const how = freq === "UNKNOWN" && "how_often";
+  if (age === "old") return { saved: true, stamped: false, active, item: kinds(active && how), held: false };
+  if (age === "v2") return { saved: true, stamped: false, active: true, item: kinds(how, !active && "still_a_bill"), held: false };
+  if (!flag || !active) return { saved: true, stamped: false, active, item: kinds(active && how), held: false };
   if (status === "TOMBSTONED") return { saved: false, stamped: false, item: null, held: true };
   const low = status !== "MATURE" || freq === "UNKNOWN";
   if (low) {
@@ -65,7 +73,7 @@ describe("capture planner — configuration matrix (G)", () => {
           stamped: saved[0]?.capture_rules_version === 2,
           ...(saved.length ? { active: saved[0].is_active } : {}),
           ...(saved[0]?.capture_rules_version === 2 ? { hidden: saved[0].is_hidden } : {}),
-          item: plan.review_items[0]?.kind ?? null,
+          item: kinds(...plan.review_items.map((i) => i.kind)),
           held: (plan.state_change.add_suppressed ?? []).includes("t1"),
         };
         const want = oracle(flag, age, status, freq, dir, active, acct, cat);

@@ -167,6 +167,39 @@ describe("answering review items (emulator)", () => {
     expect(await h.bill(OCT, h.ids.streams.SPOT)).toBeDefined();
   }, 180000);
 
+  it("How often? (P1-M5 follow-up): an existing bill Plaid reports UNKNOWN is asked once; the pick sticks", async () => {
+    const h = await makeHarness(db, "qzhow", mocks, { flag: true });
+    await h.sync("link");
+    const uid = h.ids.userId;
+    const spot = () => db.collection("outflows").doc(h.ids.streams.SPOT).get().then((d) => d.data()!);
+    expect((await spot()).frequency).toBe("monthly");
+    // Plaid now can't tell how often SPOT and CCPAY are.
+    h.setRecurring(scenarioRecurring(h.ids, { SPOT: { frequency: "UNKNOWN" }, CCPAY: { frequency: "UNKNOWN" } }));
+    await h.sync("unknown");
+    expect((await spot()).frequency).toBe("monthly"); // kept — never re-guessed
+    const open = (await items_of(uid)).filter((i) => i.kind === "how_often" && i.status === "open");
+    expect(open.map((i) => i.recordId).sort()).toEqual([h.ids.streams.CCPAY, h.ids.streams.SPOT].sort());
+    expect(open.find((i) => i.recordId === h.ids.streams.SPOT)!.frequency).toBe("monthly"); // prefilled
+
+    const q_spot = open.find((i) => i.recordId === h.ids.streams.SPOT)!;
+    const q_cc = open.find((i) => i.recordId === h.ids.streams.CCPAY)!;
+    await answer(ctx(), uid, { item_id: q_spot.id, answer: "set_frequency", frequency: "yearly" }, NOW_MS);
+    expect((await spot())).toMatchObject({ userFrequency: "yearly", frequency: "yearly" });
+    const cc_before = (await db.collection("outflows").doc(h.ids.streams.CCPAY).get()).data()!;
+    await answer(ctx(), uid, { item_id: q_cc.id, answer: "keep_frequency" }, NOW_MS);
+    const cc_after = (await db.collection("outflows").doc(h.ids.streams.CCPAY).get()).data()!;
+    expect([cc_after.frequency, cc_after.userFrequency]).toEqual([cc_before.frequency, undefined]);
+
+    // Re-syncs (Plaid still UNKNOWN): never re-asked; the user's pick is kept.
+    for (let n = 0; n < 2; n++) await h.sync(`re${n}`);
+    expect((await items_of(uid)).filter((i) => i.kind === "how_often" && i.status === "open")).toEqual([]);
+    expect((await spot())).toMatchObject({ userFrequency: "yearly", frequency: "yearly" });
+    // Even when Plaid later says MONTHLY, the user's yearly stays.
+    h.setRecurring(scenarioRecurring(h.ids, {}));
+    await h.sync("known");
+    expect((await spot()).frequency).toBe("yearly");
+  }, 180000);
+
   it("D24 / G4 / flag: a member is denied on the owner's item; forged ids denied; own \"Not a bill\" is per person", async () => {
     const owner = await makeHarness(db, "qzowner", mocks, { flag: true });
     await owner.sync("link");

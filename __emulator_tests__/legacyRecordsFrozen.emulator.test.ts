@@ -115,18 +115,23 @@ async function twin(tag: string, flag_on_after_link: boolean) {
 }
 
 describe("legacy records are frozen with the flag on (emulator)", () => {
-  it("flag-on twin equals flag-off twin on every path; no review items about old records", async () => {
+  it("flag-on twin equals flag-off twin on every path; the only question about old records is "How often?"", async () => {
     const a = await twin("qzfrza", true);
     const b = await twin("qzfrzb", false);
     // The flag-on twin's ONLY extra is new-feature bookkeeping, not a record change: the
     // detector's throttle (the state doc; no detector job exists — X12). Every record, period and
     // transaction — and the derived page — is identical.
-    const { job_types: ja, review_state_exists: sa, ...ra } = a.dump;
-    const { job_types: jb, review_state_exists: sb, ...rb } = b.dump;
+    // ONE deliberate exception (user-approved 2026-11-02, Code-Health-Review P1-M5 follow-up): an
+    // old bill whose Plaid frequency turns UNKNOWN (Hulu here) gets a "How often?" QUESTION. It is a
+    // question only — the record itself is untouched, so every doc / period / page still matches.
+    const { job_types: ja, review_state_exists: sa, review_items: na, ...ra } = a.dump;
+    const { job_types: jb, review_state_exists: sb, review_items: nb, ...rb } = b.dump;
     expect(ra).toEqual(rb);
     expect(a.derive).toEqual(b.derive);
     expect([ja, sa, jb, sb]).toEqual([[], true, [], false]);
-    expect(a.dump.review_items).toBe(0);
+    expect([na, nb]).toEqual([1, 0]);
+    const qs = (await db.collection("recurring_review_items").where("userId", "==", a.ids.userId).get()).docs.map((d) => d.data());
+    expect(qs.map((q) => [q.kind, q.recordId, q.status])).toEqual([["how_often", a.ids.streams.TOMB, "open"]]);
     // Sanity: today's behavior really happened on both (the gym, saved inactive at link, isn't a
     // stale candidate; Spotify follows Plaid to inactive; rejected Avant is stale-marked; no v2
     // fields on any record).

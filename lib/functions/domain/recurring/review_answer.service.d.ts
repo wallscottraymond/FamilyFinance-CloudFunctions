@@ -16,7 +16,7 @@
  * @module domain/recurring/review_answer
  */
 import { ReviewItem, ReviewStateChange } from "./review_item.service";
-export type UserAnswer = "track" | "not_bill" | "still_a_bill" | "it_ended" | "keep_separate" | "same_bill";
+export type UserAnswer = "track" | "not_bill" | "still_a_bill" | "it_ended" | "keep_separate" | "same_bill" | "set_frequency" | "keep_frequency";
 export interface ReviewAnswerPlan {
     /** Already answered this way: nothing to write. */
     no_op: boolean;
@@ -24,7 +24,9 @@ export interface ReviewAnswerPlan {
     item: ReviewItem | null;
     state_change: ReviewStateChange;
     /** What happens to the record the question is about. */
-    record_action: "ack_still_a_bill" | "end" | null;
+    record_action: "ack_still_a_bill" | "end" | "set_frequency" | null;
+    /** "How often?" → the schedule to store as the record's `userFrequency`. */
+    record_frequency?: string | null;
     /** Re-sync the item so the planner creates the bill now ("track" / "keep separate"). */
     resync_item_doc_id: string | null;
     /** "Same bill": the old bill ends and is merged into the new stream's bill (D7 / D22). */

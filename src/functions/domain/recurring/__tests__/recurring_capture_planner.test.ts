@@ -58,7 +58,8 @@ describe("plan_recurring_capture", () => {
     const p = plan({ streams: [s], existing: new Map([["old", record("old")]]), stale_candidates: [record("gone")] });
     expect(p.save_outflows).toEqual([s.entity]); // identical object, no v2 fields
     expect(p.stale_outflow_ids).toEqual(["gone"]);
-    expect(p.review_items).toEqual([]);
+    // Its Plaid frequency is UNKNOWN: the only question is "How often?" (P1-M5 follow-up).
+    expect(p.review_items.map((i) => [i.kind, i.record_id])).toEqual([["how_often", "old"]]);
     expect(p.state_change.add_suppressed).toEqual([]);
   });
 
@@ -186,7 +187,10 @@ describe("plan_recurring_capture", () => {
         expect(p.save_outflows).toHaveLength(1);
         expect(p.save_outflows[0].is_active).toBe(true);
         expect(p.save_outflows[0].frequency).toBe(o.raw_frequency === "UNKNOWN" ? "biweekly" : "monthly");
-        expect(p.review_items).toEqual([]);
+        // UNKNOWN frequency → "How often?", prefilled with the cadence it keeps (P1-M5 follow-up).
+        expect(p.review_items.map((i) => [i.kind, i.frequency])).toEqual(
+          o.raw_frequency === "UNKNOWN" ? [["how_often", "biweekly"]] : []
+        );
       }
     });
 

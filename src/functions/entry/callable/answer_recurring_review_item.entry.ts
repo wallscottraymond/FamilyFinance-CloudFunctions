@@ -28,7 +28,10 @@ import {
 
 const schema = z.object({
   item_id: z.string().min(1, "item_id is required").max(300),
-  answer: z.enum(["track", "not_bill", "still_a_bill", "it_ended", "keep_separate", "same_bill"]),
+  answer: z.enum([
+    "track", "not_bill", "still_a_bill", "it_ended", "keep_separate", "same_bill",
+    "set_frequency", "keep_frequency",
+  ]),
   frequency: z.enum(["weekly", "biweekly", "semimonthly", "monthly", "quarterly", "yearly"]).nullable().optional(),
   name: z.string().trim().min(1).max(120).optional(),
   amount: z.number().positive().max(10_000_000).optional(),

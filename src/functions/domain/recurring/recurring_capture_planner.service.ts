@@ -33,6 +33,7 @@ import type {
   OutflowForPersistence,
 } from "../../integrations/plaid/plaid_recurring_transformer";
 import { vendor_key } from "../transactions/vendor_key.service";
+import { normalize_frequency } from "./frequency";
 import {
   CAPTURE_RULES_VERSION,
   is_card_payment_inflow,
@@ -253,6 +254,15 @@ export function review_ids_for_sync(
   // A "Still a bill?" item can exist only for a v2 record Plaid has (or now reports) off, or that
   // Plaid stopped returning — every other v2 record needs no lookup.
   const raw_active = new Map(streams.map((s) => [s.stream_id, s.raw_is_active]));
+  // "How often?" is looked up ONLY for a record whose stream reports frequency UNKNOWN (cost rule:
+  // no read per bill per sync). So an open question closes itself when its bill is removed while
+  // Plaid still says UNKNOWN; once Plaid knows the cadence again it simply stays until answered.
+  const unknown_freq = new Set(
+    streams.filter((s) => normalize_frequency(s.raw_frequency) === "UNKNOWN").map((s) => s.stream_id)
+  );
+  for (const r of records) {
+    if (unknown_freq.has(r.id)) ids.add(build_review_item_id(user_id, "how_often", r.id));
+  }
   for (const r of records) {
     if (!r.v2) continue;
     const in_response = raw_active.has(r.id);
@@ -362,6 +372,78 @@ function still_a_bill_item(
   );
 }
 
+/**
+ * The "How often?" question for an EXISTING record (Code-Health-Review P1-M5 follow-up): Plaid
+ * reports its stream's frequency as UNKNOWN, the record keeps its stored cadence (never monthly by
+ * default), and the user is asked ONCE — unless they already chose a schedule (`userFrequency`) or
+ * the record isn't shown. An open question closes by itself (`matured`) once Plaid knows the
+ * frequency again. Returns the item to write, or null. PURE.
+ */
+function how_often_change(
+  input: CapturePlanInput,
+  s: PlannerStream,
+  r: PlannerRecord,
+  existing: ReviewItem | undefined
+): ReviewItem | null {
+  const unknown = normalize_frequency(s.raw_frequency) === "UNKNOWN";
+  const open = existing && existing.status === "open" ? existing : undefined;
+  // Plaid knows the frequency again → the question answers itself; the user removed / paused /
+  // merged the bill → the question is moot (as "Still a bill?", defect 5).
+  if (open && !unknown) return resolve_review_item(open, "matured", input.now_ms);
+  if (open && !is_shown(r, input.now_ms)) return resolve_review_item(open, "not_shown", input.now_ms);
+  if (!unknown) return null;
+  if (existing || r.user_frequency || !is_shown(r, input.now_ms)) return null;
+  const stored = normalize_frequency(r.frequency) === "UNKNOWN" ? null : r.frequency;
+  return make_review_item(
+    {
+      user_id: input.user_id,
+      kind: "how_often",
+      direction: r.direction,
+      source: "plaid",
+      status: "open",
+      answer: null,
+      subject_key: r.id,
+      vendor_key: vendor_key({ merchant_name: r.merchant_name, name: r.description }),
+      account_id: r.account_id,
+      plaid_item_doc_id: input.plaid_item_doc_id,
+      stream_id: r.id,
+      record_id: r.id,
+      name: r.name,
+      amount: r.average_amount,
+      frequency: stored,
+      plaid_status: r.plaid_status,
+      category: r.plaid_detailed_category,
+      transaction_ids: [],
+      next_due_ms: null,
+      user_frequency: null,
+      resolved_at_ms: null,
+    },
+    input.now_ms,
+    undefined
+  );
+}
+
+/** The record a stream becomes when this sync creates it (for the "How often?" question). PURE. */
+function new_record_of(
+  input: CapturePlanInput,
+  s: PlannerStream,
+  e: OutflowForPersistence | InflowForPersistence
+): PlannerRecord {
+  const merchant = s.direction === "outflow"
+    ? (e as OutflowForPersistence).merchant_name ?? null
+    : (e as InflowForPersistence).payer_name ?? null;
+  return {
+    id: s.stream_id, direction: s.direction, is_active: e.is_active, is_hidden: false, v2: false,
+    plaid_is_active: null, plaid_inactive_ack_ms: null, merged_into_id: null, account_id: e.account_id,
+    plaid_item_id: input.plaid_item_doc_id, source: "plaid",
+    name: merchant || e.description || (s.direction === "outflow" ? "Bill" : "Income"),
+    merchant_name: merchant, description: e.description ?? null, average_amount: e.average_amount,
+    frequency: e.frequency, plaid_status: e.plaid_status ?? null,
+    plaid_detailed_category: e.plaid_detailed_category ?? null, first_date_ms: 0, last_date_ms: 0,
+    removal_intervals: [], transaction_ids: e.transaction_ids ?? [], user_frequency: null,
+  } as PlannerRecord;
+}
+
 function suggested_item(
   input: CapturePlanInput,
   s: PlannerStream,
@@ -461,6 +543,20 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
     const subject = suggested_subject(s.direction, stream_vendor(s));
     if (v2 && !saved_by_subject.has(subject)) saved_by_subject.set(subject, s);
     effect(s).release.push(...s.transaction_ids);
+    // "How often?" (P1-M5 follow-up): decided on the record AS THIS SAVE LEAVES IT (new or existing;
+    // a save can switch it off), so the next identical sync writes nothing (idempotent).
+    const ex = input.existing.get(s.stream_id);
+    const after: PlannerRecord = ex
+      ? {
+        ...as_saved(ex, s, e),
+        // The cadence the record keeps (the sync keeps a stored one over Plaid's UNKNOWN).
+        frequency: normalize_frequency(e.frequency) === "UNKNOWN" ? ex.frequency : e.frequency,
+        is_active: e.is_active,
+        user_frequency: ex.user_frequency ?? (e as { user_frequency?: string | null }).user_frequency ?? null,
+      }
+      : { ...new_record_of(input, s, e), user_frequency: (e as { user_frequency?: string | null }).user_frequency ?? null };
+    const how = how_often_change(input, s, after, item_at("how_often", s.stream_id));
+    if (how) plan.review_items.push(how);
   };
   const saved_ids = new Set<string>();
   /** The first stream of each (direction, vendor) saved as a v2 bill this round — fulfils that

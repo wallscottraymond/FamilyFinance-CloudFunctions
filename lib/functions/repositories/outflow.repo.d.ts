@@ -208,6 +208,11 @@ export declare const outflow_repo: {
      * sync run so the recurring trigger leaves the bump to the sync.
      */
     set_plaid_is_active(ctx: TraceContext, ids: string[], value: boolean, user_id: string, run_id?: string): Promise<number>;
+    /**
+     * "How often?" answer: the user's schedule for this record. Stored as `userFrequency` (every
+     * later sync keeps it — save prefers it over Plaid's) and as `frequency` now.
+     */
+    set_user_frequency(ctx: TraceContext, id: string, frequency: string, user_id: string): Promise<void>;
     /** "Still a bill" answer on a v2 record: remember it (preserved across syncs) so it isn't asked again. */
     set_plaid_inactive_ack(ctx: TraceContext, id: string, ack_ms: number, user_id: string): Promise<void>;
     /**

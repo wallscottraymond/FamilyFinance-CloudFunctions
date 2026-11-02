@@ -90,6 +90,8 @@ const record_from = (e: OutflowForPersistence, dir: "outflow" | "inflow", prev: 
   plaid_item_id: ITEM, source: "plaid", name: e.merchant_name ?? e.id, merchant_name: e.merchant_name, description: e.description,
   average_amount: e.average_amount, frequency: e.frequency, plaid_status: e.plaid_status, plaid_detailed_category: e.plaid_detailed_category,
   first_date_ms: 0, last_date_ms: 0, removal_intervals: prev?.removal_intervals ?? [], transaction_ids: e.transaction_ids,
+  // As the resolver maps it (the stored userFrequency survives every save).
+  user_frequency: (e as { user_frequency?: string | null }).user_frequency ?? prev?.user_frequency ?? null,
 });
 
 const STATUSES = ["MATURE", "MATURE", "MATURE", "EARLY_DETECTION", "UNKNOWN", "TOMBSTONED"];
@@ -254,9 +256,11 @@ describe("round 5 — multi-item ownership property (seeded): never stranded, on
         const existing = new Map([...records].filter(([id]) => valid.has(id)));
         const stale = [...records.values()].filter((r) => r.is_active && r.plaid_item_id === item && !valid.has(r.id));
         // The resolver's loading rule.
-        const load = (st: RecurringReviewState | null) => {
+        // (The records the resolver read for THAT sync — a replay passes its own, which include a
+        // bill the first plan just created: its "How often?" question is looked up then.)
+        const load = (st: RecurringReviewState | null, recs: PlannerRecord[] = [...existing.values(), ...stale]) => {
           const ids = new Set([
-            ...review_ids_for_sync(U, streams, [...existing.values(), ...stale]),
+            ...review_ids_for_sync(U, streams, recs),
             ...(st?.pending_tracks ?? []).filter((p) => p.plaid_item_doc_id === item || typeof p.handed_off_ms === "number").map((p) => p.item_id),
             ...(st?.suggested_owners ?? []).filter((o) => o.plaid_item_doc_id === item).map((o) => o.item_id),
           ]);
@@ -294,11 +298,13 @@ describe("round 5 — multi-item ownership property (seeded): never stranded, on
         expect({ ctx, dup: [...per_stream].filter(([, n]) => n > 1).map(([sid]) => sid) }).toEqual({ ctx, dup: [] });
 
         // Identical input again → nothing to write.
+        const again_existing = new Map([...records].filter(([id]) => valid.has(id)));
+        const again_stale = [...records.values()].filter((r) => r.is_active && r.plaid_item_id === item && !valid.has(r.id));
         const again_input = {
           ...input,
-          existing: new Map([...records].filter(([id]) => valid.has(id))),
-          stale_candidates: [...records.values()].filter((r) => r.is_active && r.plaid_item_id === item && !valid.has(r.id)),
-          review_items: load(state),
+          existing: again_existing,
+          stale_candidates: again_stale,
+          review_items: load(state, [...again_existing.values(), ...again_stale]),
           state,
         };
         const again = plan_recurring_capture(again_input);

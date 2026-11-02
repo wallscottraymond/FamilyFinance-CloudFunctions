@@ -23,7 +23,9 @@ import {
   resolve_review_item,
 } from "./review_item.service";
 
-export type UserAnswer = "track" | "not_bill" | "still_a_bill" | "it_ended" | "keep_separate" | "same_bill";
+export type UserAnswer =
+  | "track" | "not_bill" | "still_a_bill" | "it_ended" | "keep_separate" | "same_bill"
+  | "set_frequency" | "keep_frequency";
 
 const FREQUENCIES = new Set(["weekly", "biweekly", "semimonthly", "monthly", "yearly"]);
 
@@ -34,7 +36,9 @@ export interface ReviewAnswerPlan {
   item: ReviewItem | null;
   state_change: ReviewStateChange;
   /** What happens to the record the question is about. */
-  record_action: "ack_still_a_bill" | "end" | null;
+  record_action: "ack_still_a_bill" | "end" | "set_frequency" | null;
+  /** "How often?" → the schedule to store as the record's `userFrequency`. */
+  record_frequency?: string | null;
   /** Re-sync the item so the planner creates the bill now ("track" / "keep separate"). */
   resync_item_doc_id: string | null;
   /** "Same bill": the old bill ends and is merged into the new stream's bill (D7 / D22). */
@@ -50,6 +54,7 @@ const ALLOWED: Record<string, UserAnswer[]> = {
   "still_a_bill:plaid": ["still_a_bill", "it_ended"],
   "same_bill:plaid": ["keep_separate", "same_bill"],
   "suggested:detector": ["track", "not_bill"],
+  "how_often:plaid": ["set_frequency", "keep_frequency"],
 };
 
 /** Plan an answer. PURE. */
@@ -82,6 +87,14 @@ export function plan_review_answer(
   }
 
   let user_frequency: string | null = null;
+  if (answer === "set_frequency") {
+    // Every schedule generation steps (incl. quarterly) — the bill already exists.
+    if (!opts.frequency || !(FREQUENCIES.has(opts.frequency) || opts.frequency === "quarterly")) {
+      return { ok: false, error: "pick how often it is" };
+    }
+    if (!item.record_id) return { ok: false, error: "this question has no bill to update" };
+    user_frequency = opts.frequency;
+  }
   if (answer === "track") {
     const picked = opts.frequency ?? item.frequency;
     if (!picked || !FREQUENCIES.has(picked)) {
@@ -141,6 +154,13 @@ export function plan_review_answer(
     break;
   case "it_ended":
     plan.record_action = "end";
+    break;
+  case "set_frequency":
+    plan.record_action = "set_frequency";
+    plan.record_frequency = user_frequency;
+    break;
+  case "keep_frequency":
+    // Nothing on the record: it keeps the schedule it has (the question isn't asked again).
     break;
   default:
     break;
