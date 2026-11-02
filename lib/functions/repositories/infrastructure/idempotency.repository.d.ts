@@ -76,5 +76,7 @@ export declare function delete_record(ctx: TraceContext, key: string): Promise<v
  * @param ttl_ms - TTL in milliseconds
  * @returns true if claimed, false if already claimed
  */
+/** Longer than any function's timeout (540 s): an older "in_progress" claim was killed. */
+export declare const STALE_IN_PROGRESS_MS: number;
 export declare function claim_key(ctx: TraceContext, key: string, ttl_ms: number): Promise<boolean>;
 //# sourceMappingURL=idempotency.repository.d.ts.map

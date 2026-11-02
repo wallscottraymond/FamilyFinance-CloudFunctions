@@ -167,6 +167,9 @@ export async function delete_record(
  * @param ttl_ms - TTL in milliseconds
  * @returns true if claimed, false if already claimed
  */
+/** Longer than any function's timeout (540 s): an older "in_progress" claim was killed. */
+export const STALE_IN_PROGRESS_MS = 10 * 60 * 1000;
+
 export async function claim_key(
   ctx: TraceContext,
   key: string,
@@ -181,7 +184,15 @@ export async function claim_key(
 
       if (doc.exists) {
         const record = doc.data() as IdempotencyRecord;
-        if (record.expires_at.toMillis() >= Date.now()) {
+        const live = record.expires_at.toMillis() >= Date.now();
+        // A retry may take over a key whose attempt FAILED, or one stuck "in_progress" longer than
+        // any function can run (killed mid-call) — otherwise the client's retry under the same key
+        // is refused as "in progress" until the TTL ends (Code-Health-Review batch 9 verify M2).
+        // A COMPLETED key is never re-run (callers return its cached result before claiming).
+        const stale_in_progress =
+          record.status === "in_progress" &&
+          Date.now() - (record.created_at?.toMillis?.() ?? 0) > STALE_IN_PROGRESS_MS;
+        if (live && !(record.status === "failed" || stale_in_progress)) {
           throw new Error("Key already claimed");
         }
       }

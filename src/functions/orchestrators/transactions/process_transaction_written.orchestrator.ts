@@ -170,7 +170,9 @@ export async function process_transaction_written_orchestrator(
   // bump here, once for that single edit (Code-Health-Review P4-M9). Bulk writers are stamped
   // and returned above, so this never fans out per document.
   if (!assignment_relevant && !spend_relevant) {
-    if (before && after && (before.userNotes !== after.userNotes || before.notes !== after.notes)) {
+    // `?? ""`: an absent field and "" are the same note (no bump for a rewrite that only drops it).
+    const note = (d: Record<string, unknown>, f: string) => (d[f] ?? "") as unknown;
+    if (before && after && (note(before, "userNotes") !== note(after, "userNotes") || note(before, "notes") !== note(after, "notes"))) {
       await bump_derive_version(user_id);
     }
     log_operation_success(span, user_id);
