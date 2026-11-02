@@ -182,6 +182,15 @@ describe("restoring a removed account (batch 10 verify H1)", () => {
     expect(left.private_reason).toMatch(/no longer in that group/);
     expect(placement_on_restore(acct({ placement: p }), null, []).keep).toBe(false);
   });
+  it("verify2 M1: shared BEFORE the owner's current membership (left + rejoined) → private", () => {
+    const shared_before = { ...p, shared_at_ms: NOW - 1000 };
+    const r = placement_on_restore(acct({ placement: shared_before }), g(), []);
+    expect(r.keep).toBe(false);
+    expect(r.private_reason).toMatch(/left that group/);
+    // Shared during this membership (same instant included) keeps it.
+    expect(placement_on_restore(acct({ placement: { ...p, shared_at_ms: NOW } }), g(), []).keep)
+      .toBe(true);
+  });
 });
 
 describe("departures release accounts + requests (D13)", () => {

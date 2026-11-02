@@ -82,6 +82,15 @@ export declare function resolve_share_accept(ctx: TraceContext, request: Sharing
     pending: SharingRequest[];
     group: Group | null;
 }>;
+/**
+ * For a departure (leave / remove / delete / purge release): the accounts placed in the group,
+ * split. `active` count in the group now; `removed` keep their placement while removed, and must
+ * lose it with the membership or a later restore would re-share them (batch 10 verify #2 M1).
+ */
+export declare function resolve_group_departure_accounts(ctx: TraceContext, group_id: string): Promise<{
+    active: PlaceableAccount[];
+    removed: PlaceableAccount[];
+}>;
 /** For manage_group leave / remove / delete: accounts shared with the group. */
 export declare function resolve_group_accounts(ctx: TraceContext, group_id: string): Promise<PlaceableAccount[]>;
 //# sourceMappingURL=sharing.resolver.d.ts.map

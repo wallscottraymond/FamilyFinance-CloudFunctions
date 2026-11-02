@@ -23,7 +23,7 @@ import {
   resolve_request,
   resolve_group_pending_requests,
   resolve_share_accept,
-  resolve_group_accounts,
+  resolve_group_departure_accounts,
   to_placeable,
 } from "../../resolvers/sharing/sharing.resolver";
 import {
@@ -284,12 +284,13 @@ export async function manage_group_orchestrator(
   // 1. RESOLVER (the group itself is read inside the transaction below)
   const departs =
     input.action === "delete" || input.action === "leave" || input.action === "remove_member";
-  const [pending, group_accounts] = departs
+  const [pending, placed] = departs
     ? await Promise.all([
       resolve_group_pending_requests(ctx, input.group_id),
-      resolve_group_accounts(ctx, input.group_id),
+      resolve_group_departure_accounts(ctx, input.group_id),
     ])
-    : [[], []];
+    : [[], { active: [], removed: [] }];
+  const group_accounts = placed.active;
 
   // 2. DOMAIN rule (run on fresh data inside the transaction)
   const rule = (group: Group | null): DomainResult<GroupMutation> => {
@@ -312,7 +313,11 @@ export async function manage_group_orchestrator(
       ? "all"
       : result.entity.user_changes.filter((c) => c.remove).map((c) => c.user_id);
     const released = placements_released(group_accounts, input.group_id, leaving);
-    await account_repo.clear_placements(ctx, released, caller);
+    await account_repo.clear_placements(
+      ctx,
+      [...released, ...placements_released(placed.removed, input.group_id, leaving)],
+      caller
+    );
     await bump_owner_versions(
       group_accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
     );

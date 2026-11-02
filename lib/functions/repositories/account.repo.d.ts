@@ -201,7 +201,9 @@ export declare const account_repo: {
     /** Accounts by doc id (missing / deleted ones are skipped). */
     get_many(_ctx: TraceContext, ids: string[]): Promise<Account[]>;
     /** Active accounts shared with a group (any owner). */
-    get_shared_with_group(_ctx: TraceContext, group_id: string): Promise<Account[]>;
+    get_shared_with_group(ctx: TraceContext, group_id: string): Promise<Account[]>;
+    /** Every account placed in a group, removed ones too (a removed account keeps its placement). */
+    get_placed_any_status(_ctx: TraceContext, group_id: string): Promise<Account[]>;
     count_by_user_id(_ctx: TraceContext, user_id: string, include_deleted?: boolean): Promise<number>;
     /**
      * Checks if an account exists.

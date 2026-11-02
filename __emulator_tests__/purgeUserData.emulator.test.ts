@@ -42,7 +42,9 @@ import { remove_item } from "../src/functions/integrations/plaid";
 import { purge_user_data_orchestrator } from "../src/functions/orchestrators/users/purge_user_data.orchestrator";
 import { cancel_pending_jobs } from "../src/functions/repositories/purge.repo";
 import { seedAccountGraph } from "./helpers/seedAccountGraph";
-import { reassign_slot_id } from "../src/functions/repositories/reassign_run.repo";
+import { reassign_slot_id, reassign_run_repo, ReassignRun } from "../src/functions/repositories/reassign_run.repo";
+import { move_to_dlq, reprocess_dlq_job } from "../src/functions/infrastructure/job_queue";
+import { migration_report_repo } from "../src/functions/repositories/migration_report.repo";
 import { is_job_for_purging_user } from "../src/functions/infrastructure/purge_guard";
 
 const mockRemoveItem = remove_item as jest.Mock;
@@ -347,6 +349,71 @@ describe("purge_user_data_orchestrator — full erase", () => {
     expect((await db.collection("_reassign_locks").doc(dry_slot).get()).exists).toBe(false);
     expect((await db.collection("_reassign_runs").doc(`run_${other}`).get()).exists).toBe(true);
     expect((await db.collection("_reassign_locks").doc(other_slot).get()).exists).toBe(true);
+  });
+
+  it("verify2 M2: dead-lettered jobs expire in 30 days, go back to the queue without it, and are erased", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const me = seed.userId;
+    const other = `dlq_other_${me}`;
+    const job = (id: string, user_id: string) => db.collection("_jobs").doc(id).set({
+      job_id: id, job_type: "process_budget_updated", status: "failed", retry_count: 4, max_retries: 3,
+      payload: { user_id, budget_name: "Private Budget" }, created_at: Timestamp.now(), updated_at: Timestamp.now(),
+    });
+    const [mine, again, theirs] = [`dlq_a_${me}`, `dlq_b_${me}`, `dlq_c_${me}`];
+    await job(mine, me);
+    await job(again, other);
+    await job(theirs, other);
+    for (const id of [mine, again, theirs]) await move_to_dlq(id, "boom");
+
+    const dlq = (id: string) => db.collection("_dead_letter_queue").doc(id).get();
+    const left_days = ((await dlq(mine)).data()!.expire_at.toMillis() - Date.now()) / 86_400_000;
+    expect(left_days).toBeGreaterThan(29);
+    expect(left_days).toBeLessThanOrEqual(30);
+
+    // A TTL on _jobs must never reap a job that's back in the queue.
+    await reprocess_dlq_job(again);
+    const back = (await db.collection("_jobs").doc(again).get()).data()!;
+    expect(back.status).toBe("pending");
+    expect(back.expire_at).toBeUndefined();
+    await db.collection("_jobs").doc(again).delete();
+
+    await purge_user_data_orchestrator(ctx(), { user_id: me, initiated_by: me, trace_id: "t_dlq" });
+    expect((await dlq(mine)).exists).toBe(false);
+    expect((await dlq(theirs)).exists).toBe(true);
+  });
+
+  it("verify2 M3: reports expire; an erase strips the user from them, leaving other users' lines", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const me = seed.userId;
+    const line = (owner_key: string) => ({ budget_id: `b_${owner_key}`, owner_key, name: `${owner_key} Budget` });
+    const run = `report_${me}`;
+    await migration_report_repo.save_report(run, {
+      kind: "budget_categories_A2", dry_run: true,
+      changes: [line(me), line("someone_else")], flags: [line(me)],
+    });
+    const before = (await db.collection("_migration_reports").doc(run).get()).data()!;
+    const left_days = (before.expire_at.toMillis() - Date.now()) / 86_400_000;
+    expect(left_days).toBeGreaterThan(29);
+    expect(left_days).toBeLessThanOrEqual(30);
+
+    await purge_user_data_orchestrator(ctx(), { user_id: me, initiated_by: me, trace_id: "t_rep" });
+    const after = (await db.collection("_migration_reports").doc(run).get()).data()!;
+    expect(after.changes).toEqual([line("someone_else")]);
+    expect(after.flags).toEqual([]);
+    expect(JSON.stringify(after)).not.toContain(me);
+  });
+
+  it("verify2 M4: every run-doc write stamps expire_at, so a write after the sweep still ages out", async () => {
+    const id = `run_ttl_${Date.now()}`;
+    const run = { run_id: id, user_id: "u", status: "running" } as unknown as ReassignRun;
+    await reassign_run_repo.save(run);
+    const first = (await db.collection("_reassign_runs").doc(id).get()).data()!.expire_at.toMillis();
+    expect((first - Date.now()) / 86_400_000).toBeGreaterThan(29);
+    await new Promise((r) => setTimeout(r, 20));
+    await reassign_run_repo.save({ ...run, status: "done" } as ReassignRun);
+    const second = (await db.collection("_reassign_runs").doc(id).get()).data()!.expire_at.toMillis();
+    expect(second).toBeGreaterThan(first); // 30 days after the LAST write
+    await db.collection("_reassign_runs").doc(id).delete();
   });
 
   it("verify L7: a purge that died (stale running) stops silencing the user's jobs", async () => {

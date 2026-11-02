@@ -229,7 +229,7 @@ export function recheck_immediate_placement(
  * A removed account keeps its placement; restoring brings the placement back into effect, so it
  * passes the same rules as placing it (batch 10 verify H1). It stays shared only if the owner is
  * still in the group and no other copy of the real account went in meanwhile (I4); otherwise it
- * comes back private — the money counts once, and rejoining later can't silently re-share it.
+ * comes back private — the money counts once, and rejoining can't silently re-share it.
  *
  * `group_accounts` = accounts placed in the group NOW (read in the restore's transaction).
  */
@@ -243,6 +243,14 @@ export function placement_on_restore(
     return {
       keep: false,
       private_reason: "Restored as private: you're no longer in that group.",
+    };
+  }
+  // Shared before the owner's CURRENT membership: they left and rejoined since. No Accept is ever
+  // skipped (departures clear this too; this covers accounts removed before they did).
+  if (account.placement.shared_at_ms < group!.members[account.user_id].joined_at_ms) {
+    return {
+      keep: false,
+      private_reason: "Restored as private: you left that group after sharing this account.",
     };
   }
   if (find_duplicate(account, group_accounts)) {

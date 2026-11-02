@@ -19,6 +19,8 @@ import type { SyncFollowUps } from "../orchestrators/plaid/sync_follow_ups";
 const RUNS = "_reassign_runs";
 /** One doc per run slot: `{ run_id, heartbeat }` — the atomic single-flight lock. */
 const LOCKS = "_reassign_locks";
+/** A run doc (uid + sample transactions) is kept this long after its last write. */
+const RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const is_fresh = (snap: FirebaseFirestore.DocumentSnapshot, stale_ms: number): boolean =>
   Date.now() - ((snap.get("heartbeat") as Timestamp | undefined)?.toMillis() ?? 0) < stale_ms;
@@ -91,6 +93,8 @@ export interface ReassignRun {
   last_error?: string;
   started_at: Timestamp;
   updated_at: Timestamp;
+  /** TTL (Firestore policy on `_reassign_runs.expire_at`): 30 days after the last write. */
+  expire_at?: Timestamp;
 }
 
 export const reassign_run_repo = {
@@ -103,7 +107,13 @@ export const reassign_run_repo = {
     await getFirestore()
       .collection(RUNS)
       .doc(run.run_id)
-      .set({ ...run, updated_at: Timestamp.now() });
+      .set({
+        ...run,
+        updated_at: Timestamp.now(),
+        // Set on EVERY write: a run writing back after a purge's sweep still ages out, and the
+        // collection stays bounded (backend rule 9).
+        expire_at: Timestamp.fromMillis(Date.now() + RUN_RETENTION_MS),
+      });
   },
 
   /**

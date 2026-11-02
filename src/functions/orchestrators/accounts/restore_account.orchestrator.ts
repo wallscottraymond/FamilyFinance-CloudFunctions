@@ -97,6 +97,27 @@ export interface RestoreAccountResult {
   made_private_reason?: string;
 }
 
+/** Queues the requested restore jobs. @returns whether any was queued. */
+async function enqueue_restore_jobs(
+  ctx: TraceContext,
+  plaid_account_id: string,
+  user_id: string,
+  input: RestoreAccountInput
+): Promise<boolean> {
+  const types = [
+    ...(input.restore_transactions ? ["restore_account_transactions"] : []),
+    ...(input.restore_recurring ? ["restore_account_recurring"] : []),
+  ];
+  for (const type of types) {
+    await create_job(
+      type,
+      { plaid_account_id, user_id, trace_id: ctx.trace_id },
+      { trace_id: ctx.trace_id }
+    );
+  }
+  return types.length > 0;
+}
+
 /**
  * Orchestrates restoring a soft-deleted account.
  *
@@ -191,17 +212,26 @@ export async function restore_account_orchestrator(
       throw new PermissionDeniedError("restore_account", input.account_id);
     }
 
-    // 5. Check if already active (idempotent case)
+    // 5. Already active: nothing to restore — but a retry lands here after the first attempt's
+    //    restore committed and something after it threw (verify #2 L3), so do what may be left.
+    //    All of it is safe to repeat (the jobs restore only what's still hidden).
     if (account.is_active) {
       log_idempotent_return(span, user_id);
-      const result = { success: true, account_id: input.account_id };
-      await complete_key(ctx, input.idempotency_key, result);
+      if (account.item_id && (await plaid_item_repo.get_by_id(ctx, account.item_id))?.is_active) {
+        /* eslint-disable-next-line @typescript-eslint/naming-convention */
+        await plaid_item_repo.apply_field_update(ctx, account.item_id, { removalPending: false });
+      }
+      const enqueued = await enqueue_restore_jobs(ctx, account.account_id, user_id, input);
+      await complete_key(ctx, input.idempotency_key, {
+        success: true,
+        account_id: input.account_id,
+      });
       perf.writes++;
       return {
         success: true,
         account_id: input.account_id,
         was_idempotent: true,
-        restore_jobs_enqueued: false,
+        restore_jobs_enqueued: enqueued,
       };
     }
 
@@ -253,6 +283,13 @@ export async function restore_account_orchestrator(
     );
     perf.writes++;
 
+    // It came back private: its transactions count in Me now, and transfers across the group
+    // change for its members. First, so nothing below can lose it (both never throw).
+    if (private_reason) {
+      await reassign_accounts(ctx, [{ id: input.account_id, user_id: account.user_id }]);
+      await refresh_group_transfer_roles(ctx, placed_group_id, [account.user_id]);
+    }
+
     // If removing this (last) account flagged its bank connection for removal (Plaid's
     // itemRemove failed), the 4-hourly retry would still disconnect the bank after this
     // restore. The connection is wanted again: clear the flag (Code-Health-Review P1-M4).
@@ -271,46 +308,19 @@ export async function restore_account_orchestrator(
       account_id: input.account_id,
       ...(private_reason ? { made_private_reason: private_reason } : {}),
     };
-    await complete_key(ctx, input.idempotency_key, result);
+    // The restore landed: a failed key write can't undo it, and must not lose the reason or the
+    // jobs below (the key's stale in_progress is taken over by any retry).
+    await complete_key(ctx, input.idempotency_key, result).catch((error: unknown) =>
+      console.error(`[${ctx.trace_id}] restore_account: key completion failed (non-fatal):`, error)
+    );
     perf.writes++;
 
     log_operation_success(span, user_id);
 
     // 10. Enqueue restore jobs if requested
-    let restore_jobs_enqueued = false;
-
-    if (input.restore_transactions) {
-      await create_job(
-        "restore_account_transactions",
-        {
-          plaid_account_id: account.account_id,
-          user_id,
-          trace_id: ctx.trace_id,
-        },
-        { trace_id: ctx.trace_id }
-      );
-      restore_jobs_enqueued = true;
-    }
-
-    if (input.restore_recurring) {
-      await create_job(
-        "restore_account_recurring",
-        {
-          plaid_account_id: account.account_id,
-          user_id,
-          trace_id: ctx.trace_id,
-        },
-        { trace_id: ctx.trace_id }
-      );
-      restore_jobs_enqueued = true;
-    }
-
-    // 10b. It came back private: its transactions count in Me now, and transfers across the group
-    //      change for its members (both never throw; a miss is caught by the next edit / sync).
-    if (private_reason) {
-      await reassign_accounts(ctx, [{ id: input.account_id, user_id: account.user_id }]);
-      await refresh_group_transfer_roles(ctx, placed_group_id, [account.user_id]);
-    }
+    const restore_jobs_enqueued = await enqueue_restore_jobs(
+      ctx, account.account_id, user_id, input
+    );
 
     // 11. Emit domain event
     const event_payload: AccountRestoredPayload = {

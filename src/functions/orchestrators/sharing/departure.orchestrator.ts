@@ -19,7 +19,7 @@ import {
 } from "../../domain/sharing/placement.service";
 import { cancel_requests } from "../../domain/sharing/request.service";
 import {
-  resolve_group_accounts,
+  resolve_group_departure_accounts,
   resolve_group_pending_requests,
 } from "../../resolvers/sharing/sharing.resolver";
 import {
@@ -57,10 +57,11 @@ export async function release_user_from_sharing(
   const groups = await group_repo.get_for_user(ctx, user_id);
 
   for (const g of groups) {
-    const [accounts, pending] = await Promise.all([
-      resolve_group_accounts(ctx, g.id),
+    const [placed, pending] = await Promise.all([
+      resolve_group_departure_accounts(ctx, g.id),
       resolve_group_pending_requests(ctx, g.id),
     ]);
+    const accounts = placed.active;
 
     // 2. DOMAIN (on fresh data) + 3. REPOSITORY
     const applied = await group_repo.apply_mutation(
@@ -73,7 +74,11 @@ export async function release_user_from_sharing(
     const closed = applied.entity.group.deleted_at_ms !== null;
     const leaving: string[] | "all" = closed ? "all" : [user_id];
     const released = placements_released(accounts, g.id, leaving);
-    await account_repo.clear_placements(ctx, released, user_id);
+    await account_repo.clear_placements(
+      ctx,
+      [...released, ...placements_released(placed.removed, g.id, leaving)],
+      user_id
+    );
     await bump_owner_versions(
       accounts.filter((a) => released.includes(a.id)).map((a) => a.user_id)
     );

@@ -278,6 +278,20 @@ export async function resolve_share_accept(
   return { ...placement, group };
 }
 
+/**
+ * For a departure (leave / remove / delete / purge release): the accounts placed in the group,
+ * split. `active` count in the group now; `removed` keep their placement while removed, and must
+ * lose it with the membership or a later restore would re-share them (batch 10 verify #2 M1).
+ */
+export async function resolve_group_departure_accounts(
+  ctx: TraceContext,
+  group_id: string
+): Promise<{ active: PlaceableAccount[]; removed: PlaceableAccount[] }> {
+  const placed = await account_repo.get_placed_any_status(ctx, group_id);
+  const all = placed.map((a) => to_placeable(a)!);
+  return { active: all.filter((a) => a.is_active), removed: all.filter((a) => !a.is_active) };
+}
+
 /** For manage_group leave / remove / delete: accounts shared with the group. */
 export async function resolve_group_accounts(
   ctx: TraceContext,

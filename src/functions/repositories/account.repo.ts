@@ -264,6 +264,25 @@ function map_to_doc(entity: Account): LegacyAccountDoc {
  *  Server-only (deny-all rules); bounded by the number of groups. */
 const PLACEMENT_LOCKS = "_placement_locks";
 
+/**
+ * A placement transaction: retried when contention closed it under a read. Two placements into a
+ * group contend on the lock by design; the SDK retries ABORTED itself, but a read hitting an
+ * already-closed transaction surfaces as INVALID_ARGUMENT, which it doesn't.
+ */
+async function run_placement_transaction<T>(
+  update: (tx: FirebaseFirestore.Transaction) => Promise<T>
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await getFirestore().runTransaction(update);
+    } catch (error) {
+      const e = error as { code?: number; message?: string };
+      const closed = e.code === 3 && /Transaction is invalid or closed/.test(e.message ?? "");
+      if (!closed || attempt >= 5) throw error;
+    }
+  }
+}
+
 /** A placement as stored on the account doc. */
 function placement_value(placement: AccountPlacement | null): Record<string, unknown> | null {
   /* eslint-disable @typescript-eslint/naming-convention */
@@ -583,7 +602,7 @@ export const account_repo = {
     ) => { keep: boolean; private_reason: string | null }
   ): Promise<{ write: WriteResult; private_reason: string | null }> {
     const db = getFirestore();
-    const { before, after, private_reason } = await db.runTransaction(async (tx) => {
+    const { before, after, private_reason } = await run_placement_transaction(async (tx) => {
       const before_doc = await tx.get(doc_ref(id));
       if (!before_doc.exists) {
         throw new Error(`Account ${id} not found`);
@@ -748,7 +767,7 @@ export const account_repo = {
   ): Promise<{ entity?: AccountPlacement; validation_errors?: string[]; written: boolean }> {
     const db = getFirestore();
     const lock = db.collection(PLACEMENT_LOCKS).doc(group_id);
-    const result = await db.runTransaction(async (tx) => {
+    const result = await run_placement_transaction(async (tx) => {
       // Sequential reads, lock first (a read failing mid-abort must not race the others).
       await tx.get(lock);
       const snap = await tx.get(doc_ref(account_id));
@@ -820,14 +839,17 @@ export const account_repo = {
   },
 
   /** Active accounts shared with a group (any owner). */
-  async get_shared_with_group(_ctx: TraceContext, group_id: string): Promise<Account[]> {
+  async get_shared_with_group(ctx: TraceContext, group_id: string): Promise<Account[]> {
+    return (await this.get_placed_any_status(ctx, group_id)).filter((a) => a.is_active);
+  },
+
+  /** Every account placed in a group, removed ones too (a removed account keeps its placement). */
+  async get_placed_any_status(_ctx: TraceContext, group_id: string): Promise<Account[]> {
     const snapshot = await getFirestore()
       .collection(COLLECTION)
       .where("placement.groupId", "==", group_id)
       .get();
-    return snapshot.docs
-      .map((d) => map_to_entity({ ...(d.data() as LegacyAccountDoc), id: d.id }))
-      .filter((a) => a.is_active);
+    return snapshot.docs.map((d) => map_to_entity({ ...(d.data() as LegacyAccountDoc), id: d.id }));
   },
 
   async count_by_user_id(

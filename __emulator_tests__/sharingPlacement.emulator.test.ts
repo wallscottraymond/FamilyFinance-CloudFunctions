@@ -28,6 +28,7 @@ import {
   create_group_orchestrator,
   respond_to_request_orchestrator,
   manage_group_orchestrator,
+  add_to_group_orchestrator,
 } from "../src/functions/orchestrators/sharing/groups.orchestrator";
 import {
   share_account_orchestrator,
@@ -383,5 +384,76 @@ describe("sharing edges (batch 10, emulator)", () => {
     const res = await restore(PAT, acc("rd"));
     expect(reason(res)).toMatch(/no longer in that group/);
     expect(await placement_of(acc("rd"))).toBeNull();
+  });
+
+  // Batch 10 verify #2 M1: leave → rejoin → restore must never re-share without an Accept.
+  describe("a removed account's placement ends with the membership", () => {
+    async function group_with_pat(name: string) {
+      const g = (await create_group_orchestrator(ctx(QUINN, { name, invitee_ids: [PAT] }))).group_id!;
+      const q = await db.collection("requests").where("groupId", "==", g)
+        .where("toUserId", "==", PAT).where("status", "==", "pending").get();
+      expect((await respond_to_request_orchestrator(ctx(PAT, { request_id: q.docs[0].id, accept: true }))).success)
+        .toBe(true);
+      return g;
+    }
+
+    it.each([
+      ["leave", (g: string) => ctx(PAT, { group_id: g, action: "leave" as const })],
+      ["removed", (g: string) => ctx(QUINN, { group_id: g, action: "remove_member" as const, user_id: PAT })],
+      ["group deleted", (g: string) => ctx(QUINN, { group_id: g, action: "delete" as const })],
+    ])("%s: the removed account's placement is cleared; restoring it comes back private", async (label, action) => {
+      const g = await group_with_pat(`M1 ${label}`);
+      const id = acc(`m1_${label.replace(" ", "_")}`);
+      await seed_placed(id, PAT, `9${label.length}01`, g);
+      await remove(PAT, id);
+      expect((await placement_of(id)).groupId).toBe(g); // removing keeps it
+      expect((await manage_group_orchestrator(action(g))).success).toBe(true);
+      expect(await placement_of(id)).toBeNull();
+
+      const res = await restore(PAT, id);
+      expect(res.success).toBe(true);
+      expect(await placement_of(id)).toBeNull();
+      await manage_group_orchestrator(ctx(QUINN, { group_id: g, action: "delete" })); // group limit
+    });
+
+    it("the full path: leave, rejoin, restore → NOT shared", async () => {
+      const g = await group_with_pat("M1 rejoin");
+      const id = acc("m1_rejoin");
+      await seed_placed(id, PAT, "9777", g);
+      await remove(PAT, id);
+      await manage_group_orchestrator(ctx(PAT, { group_id: g, action: "leave" }));
+      await add_to_group_orchestrator(ctx(QUINN, { group_id: g, invitee_id: PAT }));
+      const q = await db.collection("requests").where("groupId", "==", g)
+        .where("toUserId", "==", PAT).where("status", "==", "pending").get();
+      await respond_to_request_orchestrator(ctx(PAT, { request_id: q.docs[0].id, accept: true }));
+      await restore(PAT, id);
+      expect(await placement_of(id)).toBeNull();
+      await manage_group_orchestrator(ctx(QUINN, { group_id: g, action: "delete" })); // group limit
+    });
+
+    it("an account removed before this fix (placement never cleared) is caught by the joined date", async () => {
+      const g = await group_with_pat("M1 legacy");
+      const id = acc("m1_legacy");
+      await seed_placed(id, PAT, "9888", g);
+      await db.collection("accounts").doc(id).update({
+        "placement.sharedAt": admin.firestore.Timestamp.fromMillis(Date.now() - 86_400_000),
+      });
+      await remove(PAT, id);
+      const res = await restore(PAT, id);
+      expect(reason(res)).toMatch(/left that group/);
+      expect(await placement_of(id)).toBeNull();
+      await manage_group_orchestrator(ctx(QUINN, { group_id: g, action: "delete" }));
+    });
+
+    it("another member's active + removed accounts survive someone else leaving", async () => {
+      const g = await group_with_pat("M1 others");
+      const id = acc("m1_others");
+      await seed_placed(id, QUINN, "9999", g);
+      await remove(QUINN, id);
+      await manage_group_orchestrator(ctx(PAT, { group_id: g, action: "leave" }));
+      expect((await placement_of(id)).groupId).toBe(g); // Quinn is still a member
+      await manage_group_orchestrator(ctx(QUINN, { group_id: g, action: "delete" }));
+      expect(await placement_of(id)).toBeNull();
+    });
   });
 });

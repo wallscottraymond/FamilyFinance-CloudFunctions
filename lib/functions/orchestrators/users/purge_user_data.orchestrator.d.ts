@@ -24,6 +24,10 @@
  * failure simply finds less to do. The `purge_status/{uid}` doc doubles as the
  * guard read (`is_user_purging`) that Plaid sync/webhook paths honor.
  *
+ * Accepted bounded retention after an erase (Code-Health-Review batch 10 verify #2 L6): these
+ * expire on their own and aren't swept. `_audit` and `_domain_events` 30 days, `_idempotency`
+ * about 48 hours, `_jobs` at most 7 days.
+ *
  * @module orchestrators/users/purge_user_data
  */
 import { TraceContext } from "../../types";

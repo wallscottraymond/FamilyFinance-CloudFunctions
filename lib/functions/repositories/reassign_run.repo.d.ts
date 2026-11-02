@@ -70,6 +70,8 @@ export interface ReassignRun {
     last_error?: string;
     started_at: Timestamp;
     updated_at: Timestamp;
+    /** TTL (Firestore policy on `_reassign_runs.expire_at`): 30 days after the last write. */
+    expire_at?: Timestamp;
 }
 export declare const reassign_run_repo: {
     get(run_id: string): Promise<ReassignRun | null>;

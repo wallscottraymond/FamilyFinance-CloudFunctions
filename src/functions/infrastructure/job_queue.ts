@@ -341,6 +341,9 @@ export async function mark_job_failed(
   return true;
 }
 
+/** How long a dead-lettered job is kept (Firestore TTL on `_dead_letter_queue.expire_at`). */
+const DLQ_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
  * Moves a job to the dead letter queue.
  *
@@ -361,13 +364,14 @@ export async function move_to_dlq(
 
   const job = job_doc.data() as Job;
 
-  // Write to DLQ
+  // Write to DLQ (the payload holds user data: it ages out, and a purge sweeps it by user).
   await db.collection(COLLECTIONS.DLQ).doc(job_id).set({
     ...job,
     status: "dlq",
     error_message,
     moved_to_dlq_at: now,
     updated_at: now,
+    expire_at: Timestamp.fromMillis(now.toMillis() + DLQ_RETENTION_MS),
   });
 
   // Delete from jobs collection
@@ -391,15 +395,15 @@ export async function reprocess_dlq_job<TPayload>(
     return null;
   }
 
-  const dlq_job = dlq_doc.data() as Job<TPayload>;
-
-  // Create new job with reset retry count
+  // Create new job with reset retry count. Back in the queue it's live work, so the DLQ's
+  // `expire_at` goes too (a TTL on `_jobs.expire_at` would reap it).
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  const { expire_at, error_message, scheduled_for, ...dlq_job } = dlq_doc.data() as Job<TPayload>;
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   const new_job: Job<TPayload> = {
     ...dlq_job,
     status: "pending",
     retry_count: 0,
-    error_message: undefined,
-    scheduled_for: undefined,
     updated_at: now,
   };
 

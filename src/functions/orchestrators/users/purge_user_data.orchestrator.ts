@@ -24,6 +24,10 @@
  * failure simply finds less to do. The `purge_status/{uid}` doc doubles as the
  * guard read (`is_user_purging`) that Plaid sync/webhook paths honor.
  *
+ * Accepted bounded retention after an erase (Code-Health-Review batch 10 verify #2 L6): these
+ * expire on their own and aren't swept. `_audit` and `_domain_events` 30 days, `_idempotency`
+ * about 48 hours, `_jobs` at most 7 days.
+ *
  * @module orchestrators/users/purge_user_data
  */
 
@@ -51,6 +55,7 @@ import {
   delete_user_reassign_slots,
 } from "../../repositories/purge.repo";
 import { widget_token_repo } from "../../repositories/widget_token.repo";
+import { migration_report_repo } from "../../repositories/migration_report.repo";
 import { release_user_from_sharing } from "../sharing/departure.orchestrator";
 import { set_purge_status } from "../../infrastructure/purge_guard";
 
@@ -296,12 +301,16 @@ export async function purge_user_data_orchestrator(
       ["idea_comments", ["userId"]],
       // Re-assign runs carry the uid + sample transactions (merchant, date).
       ["_reassign_runs", ["user_id"]],
+      // A job that failed for good keeps its whole payload (budget names, ids).
+      ["_dead_letter_queue", ["payload.user_id"]],
     ] as const) {
       await record(
         collection,
         await hard_delete_by_fields_union(collection, [...fields], user_id, writer, on_batch)
       );
     }
+    // One-time migration reports name the person's budgets: their lines come out.
+    await record("_migration_reports", await migration_report_repo.strip_user(user_id));
     for (const collection of [
       "derived_period_cache",
       "derived_budget_txn_cache",
