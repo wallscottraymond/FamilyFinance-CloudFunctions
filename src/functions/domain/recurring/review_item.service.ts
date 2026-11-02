@@ -112,7 +112,7 @@ export interface RecurringReviewState {
    */
   pending_tracks?: PendingTrack[];
   /**
-   * The OPEN Plaid suggested tiles each Plaid item owns (round 4 defect 2). A sync loads its own
+   * The OPEN Plaid suggested — and "How often?" — tiles each Plaid item owns (round 4 defect 2). A sync loads its own
    * item's tiles even when the vendor is gone from the response, so a tile whose stream vanished
    * is let go (`stream_gone`) instead of staying owned by a stream no sync will ever see again
    * (another item's live stream of the vendor could never take it over). Absent on old docs.

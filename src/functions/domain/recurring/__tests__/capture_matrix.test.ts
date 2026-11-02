@@ -28,7 +28,8 @@ const kinds = (...ks: Array<string | null | false>): string | null => {
 
 function oracle(flag: boolean, age: string, status: string, freq: string, dir: string, active: boolean, acct: string, cat: string): Expect {
   // "How often?" (P1-M5 follow-up): a record this sync leaves SHOWN whose Plaid frequency is UNKNOWN.
-  const how = freq === "UNKNOWN" && "how_often";
+  // …and never while Plaid has the stream off or tombstoned ("Still a bill?" first).
+  const how = freq === "UNKNOWN" && active && status !== "TOMBSTONED" && "how_often";
   if (age === "old") return { saved: true, stamped: false, active, item: kinds(active && how), held: false };
   if (age === "v2") return { saved: true, stamped: false, active: true, item: kinds(how, !active && "still_a_bill"), held: false };
   if (!flag || !active) return { saved: true, stamped: false, active, item: kinds(active && how), held: false };

@@ -58,8 +58,8 @@ describe("plan_recurring_capture", () => {
     const p = plan({ streams: [s], existing: new Map([["old", record("old")]]), stale_candidates: [record("gone")] });
     expect(p.save_outflows).toEqual([s.entity]); // identical object, no v2 fields
     expect(p.stale_outflow_ids).toEqual(["gone"]);
-    // Its Plaid frequency is UNKNOWN: the only question is "How often?" (P1-M5 follow-up).
-    expect(p.review_items.map((i) => [i.kind, i.record_id])).toEqual([["how_often", "old"]]);
+    // Plaid has it OFF (raw inactive): no "How often?" either (it isn't asked about a stopped stream).
+    expect(p.review_items).toEqual([]);
     expect(p.state_change.add_suppressed).toEqual([]);
   });
 

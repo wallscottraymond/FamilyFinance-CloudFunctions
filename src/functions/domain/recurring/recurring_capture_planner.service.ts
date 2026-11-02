@@ -261,7 +261,8 @@ export function review_ids_for_sync(
     streams.filter((s) => normalize_frequency(s.raw_frequency) === "UNKNOWN").map((s) => s.stream_id)
   );
   for (const r of records) {
-    if (unknown_freq.has(r.id)) ids.add(build_review_item_id(user_id, "how_often", r.id));
+    // Answered with a schedule → it can never be asked again: no lookup (verify L6).
+    if (unknown_freq.has(r.id) && !r.user_frequency) ids.add(build_review_item_id(user_id, "how_often", r.id));
   }
   for (const r of records) {
     if (!r.v2) continue;
@@ -392,7 +393,11 @@ function how_often_change(
   if (open && !unknown) return resolve_review_item(open, "matured", input.now_ms);
   if (open && !is_shown(r, input.now_ms)) return resolve_review_item(open, "not_shown", input.now_ms);
   if (!unknown) return null;
-  if (existing || r.user_frequency || !is_shown(r, input.now_ms)) return null;
+  // Plaid stopped it (inactive / tombstoned): "Still a bill?" comes first, not a schedule (L7).
+  if (s.raw_is_active === false || String(s.raw_status).toUpperCase() === "TOMBSTONED") return null;
+  // Asked once — but a question the SYSTEM closed only because the bill went out of sight is asked
+  // again once it's back (as "Still a bill?", Top-25 #16; verify L3).
+  if ((existing && !reopens(existing)) || r.user_frequency || !is_shown(r, input.now_ms)) return null;
   const stored = normalize_frequency(r.frequency) === "UNKNOWN" ? null : r.frequency;
   return make_review_item(
     {
@@ -419,7 +424,7 @@ function how_often_change(
       resolved_at_ms: null,
     },
     input.now_ms,
-    undefined
+    existing
   );
 }
 
@@ -433,7 +438,8 @@ function new_record_of(
     ? (e as OutflowForPersistence).merchant_name ?? null
     : (e as InflowForPersistence).payer_name ?? null;
   return {
-    id: s.stream_id, direction: s.direction, is_active: e.is_active, is_hidden: false, v2: false,
+    id: s.stream_id, direction: s.direction, is_active: e.is_active,
+    is_hidden: (e as { is_hidden?: boolean }).is_hidden === true, v2: false,
     plaid_is_active: null, plaid_inactive_ack_ms: null, merged_into_id: null, account_id: e.account_id,
     plaid_item_id: input.plaid_item_doc_id, source: "plaid",
     name: merchant || e.description || (s.direction === "outflow" ? "Bill" : "Income"),
@@ -926,8 +932,19 @@ export function plan_recurring_capture(input: CapturePlanInput): CapturePlan {
   //    item's next sync can always load it (close it / let it go) once its stream is gone.
   const final_view = new Map(input.review_items);
   for (const i of plan.review_items) final_view.set(i.id, i);
+  // An open "How often?" whose bill this sync did NOT save (its stream is gone from the response —
+  // the bill goes stale / out of sight) is moot: closed (`stream_gone`). The tile is owned by its
+  // Plaid item exactly like a suggested tile, so the item's next sync always loads it (verify M1).
+  for (const i of [...final_view.values()]) {
+    if (i.kind !== "how_often" || i.status !== "open" || i.plaid_item_doc_id !== input.plaid_item_doc_id) continue;
+    if (!i.record_id || saved_ids.has(i.record_id) || in_response_stream_ids.has(i.record_id)) continue;
+    const closed = resolve_review_item(i, "stream_gone", input.now_ms);
+    plan.review_items.push(closed);
+    final_view.set(i.id, closed);
+  }
   const owned_now = [...final_view.values()]
-    .filter((i) => i.kind === "suggested" && i.status === "open" && i.source === "plaid" && i.plaid_item_doc_id === input.plaid_item_doc_id)
+    .filter((i) => (i.kind === "suggested" || i.kind === "how_often") && i.status === "open" && i.source === "plaid" &&
+      i.plaid_item_doc_id === input.plaid_item_doc_id)
     .map((i) => i.id).sort();
   const owned_before = (input.state?.suggested_owners ?? [])
     .filter((o) => o.plaid_item_doc_id === input.plaid_item_doc_id).map((o) => o.item_id).sort();

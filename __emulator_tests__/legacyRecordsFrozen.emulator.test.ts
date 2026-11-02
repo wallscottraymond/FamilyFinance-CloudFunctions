@@ -115,7 +115,7 @@ async function twin(tag: string, flag_on_after_link: boolean) {
 }
 
 describe("legacy records are frozen with the flag on (emulator)", () => {
-  it("flag-on twin equals flag-off twin on every path; the only question about old records is "How often?"", async () => {
+  it("flag-on twin equals flag-off twin on every path; the only question about old records is How often?", async () => {
     const a = await twin("qzfrza", true);
     const b = await twin("qzfrzb", false);
     // The flag-on twin's ONLY extra is new-feature bookkeeping, not a record change: the

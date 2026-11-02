@@ -122,3 +122,41 @@ describe("How often? — answers", () => {
     expect(again.ok && again.plan.no_op).toBe(true);
   });
 });
+
+describe("How often? — verify #1 fixes", () => {
+  const base = () => plan_recurring_capture(input({ streams: [stream("avant")], existing: new Map([["avant", record("avant")]]) }));
+
+  it("M1: the open tile is owned by its Plaid item (loaded every sync) and closes when its stream is gone", () => {
+    const first = base();
+    const q = first.review_items[0];
+    expect(first.state_change.set_suggested_owners).toEqual({ plaid_item_doc_id: "item", item_ids: [q.id] });
+    // Next sync: Plaid no longer returns the stream → the bill goes stale; the loaded tile closes.
+    const p = plan_recurring_capture(input({
+      streams: [], existing: new Map(), stale_candidates: [record("avant")], review_items: new Map([[q.id, q]]),
+      state: { user_id: U, suppressed_txn_ids: [], dismissed_vendor_keys: [], detector_last_run_day: null,
+        suggested_owners: [{ item_id: q.id, plaid_item_doc_id: "item" }] },
+    }));
+    expect(how(p)[0]).toMatchObject({ status: "resolved", answer: "stream_gone" });
+    expect(p.state_change.set_suggested_owners).toEqual({ plaid_item_doc_id: "item", item_ids: [] });
+  });
+
+  it("L3: closed only because the bill went out of sight → asked again once it's back", () => {
+    const q = base().review_items[0];
+    const gone = plan_recurring_capture(input({
+      streams: [stream("avant")],
+      existing: new Map([["avant", record("avant", { removal_intervals: [{ from_ms: NOW - 1, to_ms: null, mode: "going_forward" }] })]]),
+      review_items: new Map([[q.id, q]]),
+    })).review_items.find((i) => i.kind === "how_often")!;
+    expect(gone).toMatchObject({ answer: "not_shown" });
+    const back = plan_recurring_capture(input({ streams: [stream("avant")], existing: new Map([["avant", record("avant")]]), review_items: new Map([[gone.id, gone]]) }));
+    expect(how(back)[0]).toMatchObject({ status: "open" });
+  });
+
+  it("L6: no lookup once the user picked a schedule; L7: no question while Plaid has it off", () => {
+    const id = build_review_item_id(U, "how_often", "avant");
+    expect(review_ids_for_sync(U, [stream("avant")], [record("avant", { user_frequency: "yearly" })])).not.toContain(id);
+    for (const o of [{ raw_is_active: false }, { raw_status: "TOMBSTONED" }]) {
+      expect(how(plan_recurring_capture(input({ streams: [stream("avant", o)], existing: new Map([["avant", record("avant")]]) })))).toHaveLength(0);
+    }
+  });
+});
