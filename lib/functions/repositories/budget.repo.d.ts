@@ -23,6 +23,12 @@ export declare const budget_repo: {
      */
     new_id(): string;
     /**
+     * The id a CREATE request writes, derived from (user, idempotency key): a retry that re-runs the
+     * create (the server may take over a FAILED key — e.g. a follow-up step threw AFTER the write)
+     * overwrites the same doc instead of making a duplicate (Code-Health-Review batch 9 verify V2-M1).
+     */
+    id_for_request(user_id: string, idempotency_key: string): string;
+    /**
      * Gets a budget by ID.
      */
     get_by_id(_ctx: TraceContext, id: string, options?: ReadOptions): Promise<BudgetEntity | null>;

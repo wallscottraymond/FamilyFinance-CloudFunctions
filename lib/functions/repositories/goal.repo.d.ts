@@ -12,6 +12,12 @@ import { TraceContext } from "../types";
 import { GoalEntity } from "../types/goals/goal_entity.types";
 export declare const goal_repo: {
     new_id(): string;
+    /**
+     * The id a CREATE request writes, derived from (user, idempotency key): a retry that re-runs the
+     * create (the server may take over a FAILED key — e.g. a follow-up step threw AFTER the write)
+     * overwrites the same doc instead of making a duplicate (Code-Health-Review batch 9 verify V2-M1).
+     */
+    id_for_request(user_id: string, idempotency_key: string): string;
     save(_ctx: TraceContext, entity: GoalEntity): Promise<void>;
     get_by_id(_ctx: TraceContext, id: string): Promise<GoalEntity | null>;
     /** All of the user's active goals (single-field query + in-memory active filter). */

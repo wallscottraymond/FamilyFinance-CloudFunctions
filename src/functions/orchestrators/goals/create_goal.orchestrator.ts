@@ -61,7 +61,8 @@ export async function create_goal_orchestrator(
     const deps = await resolve_create_goal_dependencies(ctx, user_id, input);
 
     // 2. Domain computation (pure)
-    const goal_id = goal_repo.new_id();
+    // Deterministic per request: a re-run after a taken-over FAILED key rewrites the same goal.
+    const goal_id = goal_repo.id_for_request(user_id, idempotency_key);
     const computed = compute_create_goal({
       goal_id,
       user_id,

@@ -45,3 +45,27 @@ describe("claim_key (verify M2)", () => {
     expect(await claim_key(ctx, `e_${RUN}`, TTL)).toBe(false);
   });
 });
+
+import { create_budget_orchestrator } from "../src/functions/orchestrators/budgets/create_budget.orchestrator";
+import { createEverythingElseBudget } from "../src/functions/budgets/utils/createEverythingElseBudget";
+
+describe("a create re-run after a FAILED key writes the SAME budget (verify V2-M1)", () => {
+  it("first attempt saved, then its key was marked failed → the retry rewrites it, no duplicate", async () => {
+    const U = `idem_u_${RUN}`;
+    await db.collection("users").doc(U).set({ email: `${U}@x.com`, preferences: { currency: "USD" } });
+    await createEverythingElseBudget(db, U);
+    const key = `idem_create_${RUN}`;
+    const input = {
+      name: "Coffee", amount: 50, category_ids: [`coffee_${RUN}`], period: "monthly" as never,
+      budget_type: "recurring" as never, start_date: "2031-01-01T00:00:00.000Z", alert_threshold: 80,
+      is_shared: false, is_ongoing: true,
+    };
+    const first = await create_budget_orchestrator(ctx, U, key, input);
+    // As if a follow-up step threw AFTER the save: the key ends "failed".
+    await coll().doc(key).update({ status: "failed" });
+    const retry = await create_budget_orchestrator(ctx, U, key, input);
+    expect(retry.budget_id).toBe(first.budget_id);
+    const mine = await db.collection("budgets").where("userId", "==", U).where("name", "==", "Coffee").get();
+    expect(mine.size).toBe(1);
+  });
+});

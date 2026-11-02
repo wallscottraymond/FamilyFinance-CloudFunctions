@@ -94,7 +94,8 @@ export async function create_budget_orchestrator(
     const dependencies = await resolve_create_budget_dependencies(ctx, owner_key, input);
 
     // 3. Domain computation (pure)
-    const budget_id = budget_repo.new_id();
+    // Deterministic per request: a re-run after a taken-over FAILED key rewrites the same budget.
+    const budget_id = budget_repo.id_for_request(user_id, idempotency_key);
     const computed = compute_create_budget({
       budget_id,
       user_id: owner_key,
