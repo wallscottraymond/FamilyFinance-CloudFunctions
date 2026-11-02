@@ -940,8 +940,16 @@ service cloud.firestore {
     // 12-month transactions listener). The caches stay deny-all.
     // =======================
 
+    // Code-Health-Review batch 8 (M6-M2 / M8-M3): a GROUP view's change signal is `group:<id>`
+    // plus every member's doc, and a grouped user's Me view includes their co-members' docs — so a
+    // member may read the group's doc, and a connected person's doc (only a change counter).
     match /user_data_versions/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        isGroupViewMember(userId) ||
+        (!userId.matches('group:.+') && exists(/databases/$(database)/documents/connections/$(
+          request.auth.uid < userId ? request.auth.uid + '__' + userId : userId + '__' + request.auth.uid)))
+      );
       allow write: if false;
     }
 
