@@ -225,6 +225,35 @@ export function recheck_immediate_placement(
   return success(placement);
 }
 
+/**
+ * A removed account keeps its placement; restoring brings the placement back into effect, so it
+ * passes the same rules as placing it (batch 10 verify H1). It stays shared only if the owner is
+ * still in the group and no other copy of the real account went in meanwhile (I4); otherwise it
+ * comes back private — the money counts once, and rejoining later can't silently re-share it.
+ *
+ * `group_accounts` = accounts placed in the group NOW (read in the restore's transaction).
+ */
+export function placement_on_restore(
+  account: PlaceableAccount | null,
+  group: Group | null,
+  group_accounts: PlaceableAccount[]
+): { keep: boolean; private_reason: string | null } {
+  if (!account?.placement) return { keep: true, private_reason: null };
+  if (!is_member(group, account.user_id)) {
+    return {
+      keep: false,
+      private_reason: "Restored as private: you're no longer in that group.",
+    };
+  }
+  if (find_duplicate(account, group_accounts)) {
+    return {
+      keep: false,
+      private_reason: "Restored as private: someone in that group already shares this account.",
+    };
+  }
+  return { keep: true, private_reason: null };
+}
+
 /** The owner makes an account private again. */
 export function plan_unshare_account(
   account: PlaceableAccount | null,

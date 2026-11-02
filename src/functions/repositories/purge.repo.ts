@@ -14,6 +14,7 @@
  * @module repositories/purge
  */
 
+import { reassign_slot_id } from "./reassign_run.repo";
 import { getFirestore, Timestamp, FieldPath } from "firebase-admin/firestore";
 import type { BulkWriter } from "firebase-admin/firestore";
 
@@ -234,6 +235,44 @@ export async function cancel_pending_jobs(
     );
     return await cancel_pending_jobs_scan(user_id, exclude_job_id);
   }
+}
+
+/**
+ * Deletes a user's re-assign run slots (`_reassign_locks`): the one per-user slot, and a dry-run
+ * slot per run (its id is a hash of the run's key, so it's found through the run docs — bounded
+ * by the user's runs, paged). The run docs themselves go with the main sweep.
+ */
+export async function delete_user_reassign_slots(user_id: string): Promise<number> {
+  const db = getFirestore();
+  const slots = new Set<string>([reassign_slot_id(user_id, "", false)]);
+  let last: string | undefined;
+  for (;;) {
+    let q = db
+      .collection("_reassign_runs")
+      .where("user_id", "==", user_id)
+      .orderBy(FieldPath.documentId())
+      .limit(READ_PAGE)
+      .select("dedup_key", "dry_run");
+    if (last !== undefined) q = q.startAfter(last);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      if (d.get("dry_run") === true) {
+        slots.add(reassign_slot_id(user_id, d.get("dedup_key") as string, true));
+      }
+    }
+    last = snap.docs[snap.docs.length - 1].id;
+    if (snap.size < READ_PAGE) break;
+  }
+  let deleted = 0;
+  for (const slot of slots) {
+    const ref = db.collection("_reassign_locks").doc(slot);
+    if ((await ref.get()).exists) {
+      await ref.delete();
+      deleted++;
+    }
+  }
+  return deleted;
 }
 
 /** Skip predicate shared by both strategies. */

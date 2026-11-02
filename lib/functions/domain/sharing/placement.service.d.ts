@@ -80,6 +80,18 @@ export declare function placement_on_accept(request: SharingRequest, account: Pl
  * account as one already placed in the group.
  */
 export declare function recheck_immediate_placement(placement: Placement, account: PlaceableAccount | null, caller_id: string, group_accounts: PlaceableAccount[]): DomainResult<Placement>;
+/**
+ * A removed account keeps its placement; restoring brings the placement back into effect, so it
+ * passes the same rules as placing it (batch 10 verify H1). It stays shared only if the owner is
+ * still in the group and no other copy of the real account went in meanwhile (I4); otherwise it
+ * comes back private — the money counts once, and rejoining later can't silently re-share it.
+ *
+ * `group_accounts` = accounts placed in the group NOW (read in the restore's transaction).
+ */
+export declare function placement_on_restore(account: PlaceableAccount | null, group: Group | null, group_accounts: PlaceableAccount[]): {
+    keep: boolean;
+    private_reason: string | null;
+};
 /** The owner makes an account private again. */
 export declare function plan_unshare_account(account: PlaceableAccount | null, caller_id: string): DomainResult<{
     was_group_id: string;

@@ -17,6 +17,7 @@ interface RestoreAccountResponseData {
     account_id: string;
     /** Whether this was a duplicate request */
     was_idempotent: boolean;
+    made_private_reason?: string;
     /** Whether restore jobs were enqueued */
     restore_jobs_enqueued: boolean;
 }

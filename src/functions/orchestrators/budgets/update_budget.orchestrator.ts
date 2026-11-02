@@ -29,11 +29,15 @@ import { bump_derive_version } from "../../repositories/derive_version.repo";
 import {
   iso_from_day,
   pause_recompute_dates,
+  resume_on_recategorize,
   utc_day,
 } from "../../domain/budgets/budget_pause.service";
+import { BudgetEntity } from "../../types/budgets/budget_entity.types";
 
 /** Stored-spent days recomputed after an auto-resume (≤ one period, as for a return). */
 const RESUME_RECOMPUTE_DAYS = 31;
+/** Compare-and-set retries for the auto-resume's pause write. */
+const MAX_RESUME_ATTEMPTS = 3;
 import { budget_repo } from "../../repositories/budget.repo";
 import { compute_update_budget } from "../../domain/budgets/update_budget.service";
 import {
@@ -47,6 +51,61 @@ import {
   UpdateBudgetResponse,
   ProcessBudgetUpdatedPayload,
 } from "../../types/budgets/update_budget.types";
+
+/** Clears the paused days from today on, compare-and-set; a concurrent change is re-read. */
+async function apply_auto_resume(
+  ctx: TraceContext,
+  existing: BudgetEntity,
+  entity: BudgetEntity,
+  user_id: string
+): Promise<void> {
+  let expected = existing.paused_ranges ?? [];
+  let next = entity.paused_ranges ?? [];
+  for (let attempt = 0; attempt < MAX_RESUME_ATTEMPTS; attempt++) {
+    const written = await budget_repo.replace_paused_ranges_if_unchanged(
+      ctx, entity.id, expected, next, user_id
+    );
+    if (written) return;
+    expected = (await budget_repo.get_by_id(ctx, entity.id))?.paused_ranges ?? [];
+    const again = resume_on_recategorize({
+      before_category_ids: [],
+      after_category_ids: entity.category_ids,
+      paused_ranges: expected,
+      now_ms: entity.updated_at.toMillis(),
+    });
+    if (!again) return; // nothing is paused from today on any more
+    next = again;
+  }
+  throw new Error("The budget kept changing — try again");
+}
+
+/** Derive bump (after the write) + stored spent, so rollover follows. Never throws. */
+async function auto_resume_follow_ups(ctx: TraceContext, entity: BudgetEntity): Promise<void> {
+  try {
+    await bump_derive_version(entity.user_id);
+  } catch (error) {
+    console.error(`[${ctx.trace_id}] auto-resume bump failed (non-fatal):`, error);
+  }
+  try {
+    const today = utc_day(Date.now());
+    await create_job(
+      "recompute_budget_spent",
+      {
+        user_id: entity.user_id,
+        budget_ids: [entity.id],
+        dates_ms_by_budget: {
+          [entity.id]: pause_recompute_dates(
+            iso_from_day(today), iso_from_day(today + RESUME_RECOMPUTE_DAYS)
+          ),
+        },
+        force_rollover: true,
+      },
+      { trace_id: ctx.trace_id }
+    );
+  } catch (error) {
+    console.error(`[${ctx.trace_id}] auto-resume recompute enqueue failed (non-fatal):`, error);
+  }
+}
 
 /**
  * Updates a budget.
@@ -111,31 +170,24 @@ export async function update_budget_orchestrator(
     );
 
     // 4. Persist the updated budget document
-    // Only the fields this edit changed: a concurrent change to the budget isn't overwritten (M3-M4).
-    await budget_repo.save_changes(ctx, dependencies.existing, entity);
+    // Auto-resume (S1-M4 follow-up): the domain cleared the paused days from today on. Written
+    // compare-and-set (a pause / resume racing this edit is kept — PZ5) and BEFORE the
+    // categories, so a retry after a failure in between still sees the empty → non-empty transition.
+    const existing = dependencies.existing;
+    const resumes =
+      JSON.stringify(entity.paused_ranges ?? []) !== JSON.stringify(existing.paused_ranges ?? []);
+    if (resumes) await apply_auto_resume(ctx, existing, entity, user_id);
+    // Only the fields this edit changed: a concurrent change to the budget isn't overwritten
+    // (M3-M4). The pause isn't one of them here: it was written above.
+    await budget_repo.save_changes(ctx, existing, {
+      ...entity,
+      paused_ranges: existing.paused_ranges,
+    });
 
-    // 4b. Auto-resume on re-categorize (S1-M4 follow-up): the domain cleared the paused days from
-    //     today on, written in the save above. Bump the derive caches AFTER that write, and
-    //     recompute the stored spent of today's period so rollover follows (as a pause does).
-    const pause_before = JSON.stringify(dependencies.existing.paused_ranges ?? []);
-    if (JSON.stringify(entity.paused_ranges ?? []) !== pause_before) {
-      await bump_derive_version(entity.user_id);
-      const today = utc_day(Date.now());
-      await create_job(
-        "recompute_budget_spent",
-        {
-          user_id: entity.user_id,
-          budget_ids: [entity.id],
-          dates_ms_by_budget: {
-            [entity.id]: pause_recompute_dates(
-              iso_from_day(today), iso_from_day(today + RESUME_RECOMPUTE_DAYS)
-            ),
-          },
-          force_rollover: true,
-        },
-        { trace_id: ctx.trace_id }
-      );
-    }
+    // 4b. The budget write landed, so these can't fail the request: a retry would find the
+    //     categories already saved and skip the claims / re-home below (verify L4). The on-write
+    //     trigger bumps too, and the next change / nightly job catches the recompute up.
+    if (resumes) await auto_resume_follow_ups(ctx, entity);
 
     // 5. Enqueue cascade (claims/releases + period reallocation + rename)
     const name_changed = entity.name !== dependencies.existing.name;

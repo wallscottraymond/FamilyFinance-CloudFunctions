@@ -99,6 +99,29 @@ export async function set_purge_status(
 }
 
 /**
+ * How long a `requested` / `running` purge may go without a status write before it counts as dead
+ * for the job guard. A live run writes progress at least per step and is killed at the 9-minute
+ * job timeout; a dead one is reclaimed and retried by the sweep after 15 minutes (+ up to 5 for
+ * the sweep), which stamps it fresh again. So past this window nothing is purging.
+ */
+export const PURGE_STALE_AFTER_MS = 30 * 60 * 1000;
+
+/**
+ * Does this purge status make a user's queued jobs no-ops? `done` always (the account is gone);
+ * `requested` / `running` while alive (batch 10 verify L7: a purge that died must not silently
+ * swallow the user's jobs forever); `blocked` / `failed` never. PURE.
+ */
+export function purge_blocks_jobs(
+  state: PurgeState | undefined,
+  updated_at_ms: number | null,
+  now_ms: number
+): boolean {
+  if (state === "done") return true;
+  if (state !== "requested" && state !== "running") return false;
+  return updated_at_ms === null || now_ms - updated_at_ms <= PURGE_STALE_AFTER_MS;
+}
+
+/**
  * The person a queued job works for, when the purge guard applies to it (Code-Health-Review
  * S1-M6). Every user job carries `payload.user_id`; the purge job itself and system / group-view
  * jobs (no uid, or a "group:<id>" owner key) are never guarded. PURE.
@@ -114,11 +137,16 @@ export function purge_guarded_user(job_type: string, payload: unknown): string |
  * it as a no-op instead of running it against a half-purged account. Covers jobs queued AFTER
  * the purge cancelled the user's pending ones (its own sharing release re-assigns, transfer
  * re-classifies, budget returns; triggers firing on its deletes). One doc read per user job.
+ * A purge that died stops counting after PURGE_STALE_AFTER_MS.
  */
 export async function is_job_for_purging_user(
   job_type: string,
   payload: unknown
 ): Promise<boolean> {
   const uid = purge_guarded_user(job_type, payload);
-  return uid ? is_user_purging(uid) : false;
+  if (!uid) return false;
+  const doc = await getFirestore().collection(PURGE_STATUS_COLLECTION).doc(uid).get();
+  if (!doc.exists) return false;
+  const status = doc.data() as PurgeStatus;
+  return purge_blocks_jobs(status.state, status.updated_at?.toMillis() ?? null, Date.now());
 }

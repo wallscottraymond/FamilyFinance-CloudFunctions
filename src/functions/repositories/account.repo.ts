@@ -561,35 +561,60 @@ export const account_repo = {
   },
 
   /**
-   * Restores a soft-deleted account.
+   * Restores a soft-deleted account. A removed account keeps its placement, so this is a placement
+   * coming back into effect (batch 10 verify H1): when it has one, the same transaction reads the
+   * group's placement lock and placed accounts, `decide` (the pure domain rule) says whether it
+   * stays, and either the lock is written (serialized with every other placement into the group)
+   * or the placement is cleared.
    *
    * @param ctx - Trace context
    * @param id - Account ID
    * @param user_id - User performing the restore
-   * @returns Write result
+   * @param decide - Whether the placement survives, given the account + the group's placed accounts
+   * @returns Write result, and why it came back private (null = it didn't change)
    */
   async restore(
     ctx: TraceContext,
     id: string,
-    user_id: string
-  ): Promise<WriteResult> {
-    const before_doc = await doc_ref(id).get();
-
-    if (!before_doc.exists) {
-      throw new Error(`Account ${id} not found`);
-    }
-
-    const before = before_doc.data() as LegacyAccountDoc;
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const after: LegacyAccountDoc = {
-      ...before,
-      isActive: true,
-      isDeleted: false,
-      updatedAt: Timestamp.now(),
-    };
-    /* eslint-enable @typescript-eslint/naming-convention */
-
-    await doc_ref(id).set(after);
+    user_id: string,
+    decide: (
+      account: Account,
+      group_accounts: Account[]
+    ) => { keep: boolean; private_reason: string | null }
+  ): Promise<{ write: WriteResult; private_reason: string | null }> {
+    const db = getFirestore();
+    const { before, after, private_reason } = await db.runTransaction(async (tx) => {
+      const before_doc = await tx.get(doc_ref(id));
+      if (!before_doc.exists) {
+        throw new Error(`Account ${id} not found`);
+      }
+      const before = before_doc.data() as LegacyAccountDoc;
+      const group_id = before.placement?.groupId ?? null;
+      const lock = group_id ? db.collection(PLACEMENT_LOCKS).doc(group_id) : null;
+      let group_accounts: Account[] = [];
+      if (group_id && lock) {
+        await tx.get(lock);
+        const placed = await tx.get(
+          db.collection(COLLECTION).where("placement.groupId", "==", group_id)
+        );
+        group_accounts = placed.docs
+          .map((d) => map_to_entity({ ...(d.data() as LegacyAccountDoc), id: d.id }))
+          .filter((a) => a.is_active && a.id !== id);
+      }
+      const decided = decide(map_to_entity({ ...before, id }), group_accounts);
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const after: LegacyAccountDoc = {
+        ...before,
+        isActive: true,
+        isDeleted: false,
+        updatedAt: Timestamp.now(),
+        ...(decided.keep ? {} : { placement: null }),
+      };
+      tx.set(doc_ref(id), after);
+      if (lock && decided.keep) tx.set(lock, { groupId: group_id, updatedAt: Timestamp.now() });
+      /* eslint-enable @typescript-eslint/naming-convention */
+      return { before, after, private_reason: decided.private_reason };
+    });
 
     // Audit entry (async)
     record_audit_entry_async({
@@ -603,7 +628,10 @@ export const account_repo = {
       metadata: { source: "api" },
     });
 
-    return create_write_result("account", id, "replace", before, after);
+    return {
+      write: create_write_result("account", id, "replace", before, after),
+      private_reason,
+    };
   },
 
   /**

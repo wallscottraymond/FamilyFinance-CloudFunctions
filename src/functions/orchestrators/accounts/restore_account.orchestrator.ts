@@ -46,6 +46,10 @@ import {
   AccountRestoredPayload,
 } from "../../events";
 import { create_job } from "../../infrastructure/job_queue";
+import { group_repo } from "../../repositories/sharing";
+import { to_placeable } from "../../resolvers/sharing/sharing.resolver";
+import { placement_on_restore } from "../../domain/sharing/placement.service";
+import { reassign_accounts, refresh_group_transfer_roles } from "../sharing/view_reassign";
 
 /**
  * Performance budget for restore_account.
@@ -88,6 +92,9 @@ export interface RestoreAccountResult {
 
   /** Whether restore jobs were enqueued */
   restore_jobs_enqueued: boolean;
+
+  /** Set when it came back private instead of shared (the app shows this; batch 10 verify H1). */
+  made_private_reason?: string;
 }
 
 /**
@@ -128,11 +135,17 @@ export async function restore_account_orchestrator(
     if (idempotency_result.is_duplicate) {
       if (idempotency_result.status === "completed") {
         log_idempotent_return(span, user_id);
+        const cached = idempotency_result.cached_result as
+          | { made_private_reason?: string }
+          | undefined;
         return {
           success: true,
           account_id: input.account_id,
           was_idempotent: true,
           restore_jobs_enqueued: false,
+          ...(cached?.made_private_reason
+            ? { made_private_reason: cached.made_private_reason }
+            : {}),
         };
       }
 
@@ -223,7 +236,21 @@ export async function restore_account_orchestrator(
     }
 
     // 8. Repository write: Restore the account
-    await account_repo.restore(ctx, input.account_id, user_id);
+    // Its placement comes back too, through the sharing rules (batch 10 verify H1). Membership is
+    // read outside the transaction (as an Accept does); the duplicate check is inside it.
+    const placed_group_id = account.placement?.group_id ?? null;
+    const group = placed_group_id ? await group_repo.get(ctx, placed_group_id) : null;
+    const { private_reason } = await account_repo.restore(
+      ctx,
+      input.account_id,
+      user_id,
+      (fresh, group_accounts) =>
+        placement_on_restore(
+          to_placeable(fresh),
+          group,
+          group_accounts.map((a) => to_placeable(a)!)
+        )
+    );
     perf.writes++;
 
     // If removing this (last) account flagged its bank connection for removal (Plaid's
@@ -239,7 +266,11 @@ export async function restore_account_orchestrator(
     await bump_derive_version(user_id).catch(() => {});
 
     // 9. Complete idempotency key
-    const result = { success: true, account_id: input.account_id };
+    const result = {
+      success: true,
+      account_id: input.account_id,
+      ...(private_reason ? { made_private_reason: private_reason } : {}),
+    };
     await complete_key(ctx, input.idempotency_key, result);
     perf.writes++;
 
@@ -272,6 +303,13 @@ export async function restore_account_orchestrator(
         { trace_id: ctx.trace_id }
       );
       restore_jobs_enqueued = true;
+    }
+
+    // 10b. It came back private: its transactions count in Me now, and transfers across the group
+    //      change for its members (both never throw; a miss is caught by the next edit / sync).
+    if (private_reason) {
+      await reassign_accounts(ctx, [{ id: input.account_id, user_id: account.user_id }]);
+      await refresh_group_transfer_roles(ctx, placed_group_id, [account.user_id]);
     }
 
     // 11. Emit domain event
@@ -313,6 +351,7 @@ export async function restore_account_orchestrator(
       account_id: input.account_id,
       was_idempotent: false,
       restore_jobs_enqueued,
+      ...(private_reason ? { made_private_reason: private_reason } : {}),
     };
   } catch (error) {
     log_operation_error(

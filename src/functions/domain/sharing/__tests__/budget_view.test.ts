@@ -183,3 +183,38 @@ describe("returning budgets meet the Me view (S1-M4, user decision 2026-11-02)",
     expect(r.end_day).toBe(Date.UTC(2099, 11, 31) / 86_400_000);
   });
 });
+
+describe("a budget with no categories can't go to a group (batch 10 verify M1)", () => {
+  const empty = b({ id: "empty", name: "Groceries 2", category_ids: [] });
+  it("copy: skipped with a reason BEFORE anything is created; the others still go", () => {
+    const plan = plan_copy_budgets(
+      walls, "alex",
+      [
+        { budget: b({ id: "gas", name: "Gas", category_ids: ["gas"] }), amount: 10 },
+        { budget: empty, amount: 10 },
+      ],
+      []
+    ).entity!;
+    expect(plan.creates.map((c) => c.source.id)).toEqual(["gas"]);
+    expect(plan.skipped).toEqual([
+      {
+        source_budget_id: "empty",
+        name: "Groceries 2",
+        reason: expect.stringMatching(/no categories/),
+      },
+    ]);
+  });
+  it("copy: skipped even with no amount; never reported as a conflict", () => {
+    const plan = plan_copy_budgets(walls, "alex", [{ budget: empty, amount: 0 }], []).entity!;
+    expect(plan.creates).toEqual([]);
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.skipped).toHaveLength(1);
+  });
+  it("move Me → group is refused; out of a group it stays allowed (so it can be rescued)", () => {
+    const refused = plan_move_budget(empty, "alex", null, { type: "group", group: walls }, []);
+    expect(refused.validation_errors?.[0]).toMatch(/no categories/);
+    const in_group = { ...empty, owner_key: KEY, brought_by: "alex" };
+    expect(plan_move_budget(in_group, "alex", walls, { type: "me" }, []).entity?.new_owner_key)
+      .toBe("alex");
+  });
+});

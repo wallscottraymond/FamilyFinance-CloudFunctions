@@ -130,14 +130,25 @@ export declare const account_repo: {
      */
     soft_delete(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;
     /**
-     * Restores a soft-deleted account.
+     * Restores a soft-deleted account. A removed account keeps its placement, so this is a placement
+     * coming back into effect (batch 10 verify H1): when it has one, the same transaction reads the
+     * group's placement lock and placed accounts, `decide` (the pure domain rule) says whether it
+     * stays, and either the lock is written (serialized with every other placement into the group)
+     * or the placement is cleared.
      *
      * @param ctx - Trace context
      * @param id - Account ID
      * @param user_id - User performing the restore
-     * @returns Write result
+     * @param decide - Whether the placement survives, given the account + the group's placed accounts
+     * @returns Write result, and why it came back private (null = it didn't change)
      */
-    restore(ctx: TraceContext, id: string, user_id: string): Promise<WriteResult>;
+    restore(ctx: TraceContext, id: string, user_id: string, decide: (account: Account, group_accounts: Account[]) => {
+        keep: boolean;
+        private_reason: string | null;
+    }): Promise<{
+        write: WriteResult;
+        private_reason: string | null;
+    }>;
     /**
      * Updates account balances.
      * Optimized update that only touches balance fields.

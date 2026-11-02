@@ -282,4 +282,27 @@ describe("budgets belong to a view (emulator)", () => {
     const next = (await month_page(SAM, 1)).r.budgets.find((b) => b.budget_id === sams)?.periods[0];
     expect(next).toMatchObject({ is_paused: true, allocated_amount: 0 });
   });
+
+  it("verify M1: copying a budget with no categories is skipped up front; the batch still goes", async () => {
+    const empty = await create(ALEX, "Emptied", ["FOOD_AND_DRINK_OTHER"]);
+    await db.collection("budgets").doc(empty).update({ categoryIds: [] });
+    const a = await create(ALEX, "Aaa Hobbies", ["ENTERTAINMENT_HOBBIES"]);
+    const z = await create(ALEX, "Zzz Pets", ["GENERAL_MERCHANDISE_PET_SUPPLIES"]);
+    const res = await copy_budgets_to_group_orchestrator(ctx(ALEX, {
+      group_id, remove_from_me: false,
+      items: [
+        { budget_id: a, amount: 10 }, { budget_id: empty, amount: 10 }, { budget_id: z, amount: 10 },
+      ],
+    }));
+    expect(res.success).toBe(true);
+    expect(res.budget_ids).toHaveLength(2);
+    expect((res as unknown as { skipped?: unknown[] }).skipped).toEqual([
+      { source_budget_id: empty, name: "Emptied", reason: expect.stringMatching(/no categories/) },
+    ]);
+    // And it can't be moved into the group either.
+    const move = await move_budget_orchestrator(ctx(ALEX, { budget_id: empty, to_group_id: group_id }));
+    expect(move.success).toBe(false);
+    expect(move.errors?.[0]).toMatch(/no categories/);
+    expect((await budget(empty)).userId).toBe(ALEX);
+  });
 });

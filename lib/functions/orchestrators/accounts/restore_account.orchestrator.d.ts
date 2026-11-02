@@ -32,6 +32,8 @@ export interface RestoreAccountResult {
     was_idempotent: boolean;
     /** Whether restore jobs were enqueued */
     restore_jobs_enqueued: boolean;
+    /** Set when it came back private instead of shared (the app shows this; batch 10 verify H1). */
+    made_private_reason?: string;
 }
 /**
  * Orchestrates restoring a soft-deleted account.

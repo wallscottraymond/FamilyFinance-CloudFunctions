@@ -69,6 +69,12 @@ export declare function hard_delete_by_parent_ids(collection: string, parent_fie
  */
 export declare function cancel_pending_jobs(user_id: string, exclude_job_id?: string): Promise<number>;
 /**
+ * Deletes a user's re-assign run slots (`_reassign_locks`): the one per-user slot, and a dry-run
+ * slot per run (its id is a hash of the run's key, so it's found through the run docs — bounded
+ * by the user's runs, paged). The run docs themselves go with the main sweep.
+ */
+export declare function delete_user_reassign_slots(user_id: string): Promise<number>;
+/**
  * Groups the user OWNS that still have other members — a purge must not orphan
  * these; the caller blocks until ownership is transferred. Defensive against
  * the in-flight sharing schema (`groups` uses `ownerId`+`members[]`; the legacy

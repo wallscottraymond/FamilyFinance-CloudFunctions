@@ -35,6 +35,7 @@ import {
 } from "../src/functions/orchestrators/sharing/placement.orchestrator";
 import { account_repo } from "../src/functions/repositories/account.repo";
 import { request_repo } from "../src/functions/repositories/sharing";
+import { restore_account_orchestrator } from "../src/functions/orchestrators/accounts/restore_account.orchestrator";
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const ALEX = `alex_${RUN}`;
@@ -316,5 +317,71 @@ describe("sharing edges (batch 10, emulator)", () => {
     expect(results.filter((r) => r.success)).toHaveLength(1);
     const placed = [await placement_of(acc("p2")), await placement_of(acc("q2"))].filter(Boolean);
     expect(placed).toHaveLength(1);
+  });
+
+  // Batch 10 verify H1: a restore is a placement coming back into effect.
+  const restore = (user: string, account_id: string) =>
+    restore_account_orchestrator(
+      { trace_id: `t_${Math.random()}`, span_id: "s" },
+      user,
+      {
+        account_id, idempotency_key: `rs_${Math.random()}`,
+        restore_transactions: false, restore_recurring: false,
+      }
+    );
+  const reason = (r: unknown) => (r as { made_private_reason?: string | null }).made_private_reason ?? null;
+  const remove = (user: string, id: string) =>
+    account_repo.soft_delete({ trace_id: `t_${Math.random()}`, span_id: "s" }, id, user);
+  async function seed_placed(id: string, owner: string, mask: string, group: string) {
+    const now = admin.firestore.Timestamp.now();
+    const item = `item_${owner}`;
+    await db.collection("plaid_items").doc(item).set({
+      id: item, plaidItemId: item, userId: owner, isActive: true, createdAt: now, updatedAt: now,
+    });
+    await db.collection("accounts").doc(id).set({
+      ...account_doc(id, owner, "Copy", mask, "savings"),
+      placement: { groupId: group, sharedFrom: null, sharedBy: owner, sharedAt: now },
+    });
+  }
+
+  it("verify H1: restoring a copy while another copy is in the group → back PRIVATE, with a reason", async () => {
+    await seed_placed(acc("ra"), PAT, "2468", gid); // Pat's copy, in the group
+    await remove(PAT, acc("ra")); // removed: placement kept, not counted
+    await seed_placed(acc("rb"), QUINN, "2468", gid); // meanwhile Quinn's copy joined
+    const clean = async () => {
+      const old = await db.collection("_jobs").where("job_type", "==", "reassign_user").get();
+      await Promise.all(old.docs.filter((d) => d.data().payload?.user_id === PAT).map((d) => d.ref.delete()));
+    };
+    await clean();
+
+    const res = await restore(PAT, acc("ra"));
+    expect(res.success).toBe(true);
+    expect(reason(res)).toMatch(/already shares this account/);
+    const doc = (await db.collection("accounts").doc(acc("ra")).get()).data()!;
+    expect(doc.isActive).toBe(true);
+    expect(doc.isDeleted).toBe(false);
+    expect(doc.placement).toBeNull();
+    expect((await placement_of(acc("rb"))).groupId).toBe(gid);
+    // Its transactions are re-assigned back to Pat's Me view.
+    const jobs = (await db.collection("_jobs").where("job_type", "==", "reassign_user").get()).docs
+      .map((d) => d.data().payload).filter((p) => p?.user_id === PAT);
+    expect(jobs.some((p) => (p.scope?.account_ids ?? []).includes(acc("ra")))).toBe(true);
+  });
+
+  it("verify H1: no other copy → it comes back still shared; a private one comes back private", async () => {
+    await seed_placed(acc("rc"), PAT, "1357", gid);
+    await remove(PAT, acc("rc"));
+    const res = await restore(PAT, acc("rc"));
+    expect(reason(res)).toBeNull();
+    expect((await placement_of(acc("rc"))).groupId).toBe(gid);
+    expect((await db.collection("accounts").doc(acc("rc")).get()).data()!.isActive).toBe(true);
+  });
+
+  it("verify H1: restored after leaving the group → private, so rejoining can't silently re-share", async () => {
+    await seed_placed(acc("rd"), PAT, "1122", "some_other_group");
+    await remove(PAT, acc("rd"));
+    const res = await restore(PAT, acc("rd"));
+    expect(reason(res)).toMatch(/no longer in that group/);
+    expect(await placement_of(acc("rd"))).toBeNull();
   });
 });

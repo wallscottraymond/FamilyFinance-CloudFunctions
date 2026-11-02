@@ -12,12 +12,14 @@
  * @module orchestrators/sharing/budget_view
  */
 import { OrchestratorContext, TraceContext } from "../../types";
-import { ReturnedBudget, CopyConflict } from "../../domain/sharing/budget_view.service";
+import { ReturnedBudget, CopyConflict, CopySkip } from "../../domain/sharing/budget_view.service";
 export interface BudgetViewResult {
     success: boolean;
     errors?: string[];
     budget_ids?: string[];
     conflicts?: CopyConflict[];
+    /** copy: budgets that can't go to a group as they are, with why. */
+    skipped?: CopySkip[];
 }
 /** Moves a budget between Me and a group. `to_group_id: null` = to Me. */
 export declare function move_budget_orchestrator(ctx: OrchestratorContext<{

@@ -6,6 +6,7 @@
 import {
   plan_share_account,
   placement_on_accept,
+  placement_on_restore,
   plan_unshare_account,
   account_fingerprint,
   placements_released,
@@ -155,6 +156,31 @@ describe("accepting a share (PD5) and unsharing", () => {
     expect(plan_unshare_account(placed, "alex").entity).toEqual({ was_group_id: "g1" });
     expect(plan_unshare_account(placed, "sam").validation_errors).toBeDefined();
     expect(plan_unshare_account(acct(), "alex").validation_errors).toBeDefined();
+  });
+});
+
+describe("restoring a removed account (batch 10 verify H1)", () => {
+  const p = { group_id: "g1", shared_from_ms: null, shared_by: "alex", shared_at_ms: NOW };
+  const g = () => group(["alex", "sam"]);
+  it("a private account just comes back", () => {
+    expect(placement_on_restore(acct(), null, [])).toEqual({ keep: true, private_reason: null });
+  });
+  it("still a member, no other copy in the group → keeps its placement", () => {
+    const other = acct({ id: "o", user_id: "sam", mask: "9999", placement: p });
+    expect(placement_on_restore(acct({ placement: p }), g(), [other]))
+      .toEqual({ keep: true, private_reason: null });
+  });
+  it("another copy of the real account in the group → back private, with a reason", () => {
+    const copy = acct({ id: "jc-s", user_id: "sam", placement: p });
+    const r = placement_on_restore(acct({ placement: p }), g(), [copy]);
+    expect(r.keep).toBe(false);
+    expect(r.private_reason).toMatch(/already shares this account/);
+  });
+  it("the owner left, or the group is gone → private (rejoining must not re-share it)", () => {
+    const left = placement_on_restore(acct({ placement: p }), group(["sam"]), []);
+    expect(left.keep).toBe(false);
+    expect(left.private_reason).toMatch(/no longer in that group/);
+    expect(placement_on_restore(acct({ placement: p }), null, []).keep).toBe(false);
   });
 });
 

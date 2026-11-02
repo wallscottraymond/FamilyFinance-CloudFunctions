@@ -42,6 +42,7 @@ import { remove_item } from "../src/functions/integrations/plaid";
 import { purge_user_data_orchestrator } from "../src/functions/orchestrators/users/purge_user_data.orchestrator";
 import { cancel_pending_jobs } from "../src/functions/repositories/purge.repo";
 import { seedAccountGraph } from "./helpers/seedAccountGraph";
+import { reassign_slot_id } from "../src/functions/repositories/reassign_run.repo";
 import { is_job_for_purging_user } from "../src/functions/infrastructure/purge_guard";
 
 const mockRemoveItem = remove_item as jest.Mock;
@@ -316,6 +317,45 @@ describe("purge_user_data_orchestrator — full erase", () => {
     expect(await is_job_for_purging_user("reassign_user", { user_id: me })).toBe(true);
     expect(await is_job_for_purging_user("purge_user_data", { user_id: me })).toBe(false);
     expect(await is_job_for_purging_user("reassign_user", { user_id: other })).toBe(false);
+  });
+
+  it("privacy: the user's re-assign run docs + slots are erased; another user's stay", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const me = seed.userId;
+    const other = `bystander_${me}`;
+    const now = Timestamp.now();
+    const run = (id: string, user_id: string, dry_run: boolean) => ({
+      run_id: id, user_id, dry_run, dedup_key: `reassign:${user_id}:${id}`, status: "done",
+      samples: [{ transaction_id: "t", merchant: "Corner Bar", date: "2026-01-01", before: "a", after: "b" }],
+      started_at: now, updated_at: now,
+    });
+    await db.collection("_reassign_runs").doc(`run_${me}`).set(run(`run_${me}`, me, false));
+    await db.collection("_reassign_runs").doc(`dry_${me}`).set(run(`dry_${me}`, me, true));
+    await db.collection("_reassign_runs").doc(`run_${other}`).set(run(`run_${other}`, other, false));
+    const dry_slot = reassign_slot_id(me, `reassign:${me}:dry_${me}`, true);
+    const other_slot = reassign_slot_id(other, "x", false);
+    for (const [slot, run_id] of [
+      [reassign_slot_id(me, "x", false), `run_${me}`], [dry_slot, `dry_${me}`], [other_slot, `run_${other}`],
+    ]) {
+      await db.collection("_reassign_locks").doc(slot).set({ run_id, heartbeat: now });
+    }
+
+    await purge_user_data_orchestrator(ctx(), { user_id: me, initiated_by: me, trace_id: "t_runs" });
+
+    expect((await db.collection("_reassign_runs").where("user_id", "==", me).get()).size).toBe(0);
+    expect((await db.collection("_reassign_locks").doc(`user_${me}`).get()).exists).toBe(false);
+    expect((await db.collection("_reassign_locks").doc(dry_slot).get()).exists).toBe(false);
+    expect((await db.collection("_reassign_runs").doc(`run_${other}`).get()).exists).toBe(true);
+    expect((await db.collection("_reassign_locks").doc(other_slot).get()).exists).toBe(true);
+  });
+
+  it("verify L7: a purge that died (stale running) stops silencing the user's jobs", async () => {
+    const me = `stale_${Date.now()}`;
+    const status = db.collection("purge_status").doc(me);
+    await status.set({ user_id: me, state: "running", updated_at: Timestamp.now() });
+    expect(await is_job_for_purging_user("reassign_user", { user_id: me })).toBe(true);
+    await status.set({ updated_at: Timestamp.fromMillis(Date.now() - 2 * 60 * 60 * 1000) }, { merge: true });
+    expect(await is_job_for_purging_user("reassign_user", { user_id: me })).toBe(false);
   });
 
   it("cancel_pending_jobs targets ONLY this user's pending/processing non-purge jobs", async () => {

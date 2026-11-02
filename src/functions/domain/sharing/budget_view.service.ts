@@ -79,6 +79,9 @@ function find_clash(b: ViewBudget, others: ViewBudget[], first_of: FirstOf): Vie
   );
 }
 
+const NO_CATEGORIES_MOVE = "This budget has no categories yet. Give it one first, then move it.";
+const NO_CATEGORIES_COPY = "It has no categories yet. Give it one first.";
+
 export type MoveTarget = { type: "me" } | { type: "group"; group: Group | null };
 
 export interface MovePlan {
@@ -122,6 +125,11 @@ export function plan_move_budget(
     new_owner_key = group_view_key(target.group.id);
     brought_by = actor_id;
   }
+  // A budget that came back empty (S1-M4) has nothing to count in a group; it can still LEAVE a
+  // group, so one stranded there can be rescued.
+  if (target.type === "group" && budget.category_ids.length === 0) {
+    return validation_failed([NO_CATEGORIES_MOVE]);
+  }
   const clash = find_clash(budget, target_view_budgets, first_of);
   if (clash) {
     return validation_failed([
@@ -146,12 +154,20 @@ export interface CopyConflict {
   copied_category_ids?: string[];
 }
 
+export interface CopySkip {
+  source_budget_id: string;
+  name: string;
+  reason: string;
+}
+
 export interface CopyPlan {
   /** New group budgets to create: settings from `source`, the chosen amount — and, for a partial
    *  overlap, only the categories the group doesn't already budget (`category_ids`). */
   creates: Array<{ source: ViewBudget; amount: number; category_ids?: string[] }>;
   /** Skipped: the group already has it ("Add mine" in the app). */
   conflicts: CopyConflict[];
+  /** Skipped: can't go to a group as it is (no categories — batch 10 verify M1). */
+  skipped: CopySkip[];
 }
 
 /**
@@ -172,6 +188,7 @@ export function plan_copy_budgets(
   const errors: string[] = [];
   const creates: CopyPlan["creates"] = [];
   const conflicts: CopyConflict[] = [];
+  const skipped: CopySkip[] = [];
   const planned: ViewBudget[] = [...group_budgets];
   for (const item of items) {
     const b = item.budget;
@@ -181,6 +198,11 @@ export function plan_copy_budgets(
     }
     if (b.is_everything_else) {
       errors.push("Everything Else can't be copied");
+      continue;
+    }
+    // Decided here, before anything is created: create_budget would refuse it mid-batch.
+    if (b.category_ids.length === 0) {
+      skipped.push({ source_budget_id: b.id, name: b.name, reason: NO_CATEGORIES_COPY });
       continue;
     }
     if (!(item.amount > 0)) {
@@ -221,7 +243,7 @@ export function plan_copy_budgets(
     planned.push({ ...b, id: `planned:${b.id}` });
   }
   if (errors.length) return validation_failed([...new Set(errors)]);
-  return success({ creates, conflicts });
+  return success({ creates, conflicts, skipped });
 }
 
 /**

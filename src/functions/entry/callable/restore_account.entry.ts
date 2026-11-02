@@ -54,6 +54,7 @@ interface RestoreAccountResponseData {
   account_id: string;
   /** Whether this was a duplicate request */
   was_idempotent: boolean;
+  made_private_reason?: string;
   /** Whether restore jobs were enqueued */
   restore_jobs_enqueued: boolean;
 }
@@ -125,6 +126,8 @@ export const restore_account = onCall(
         account_id: result.account_id,
         was_idempotent: result.was_idempotent,
         restore_jobs_enqueued: result.restore_jobs_enqueued,
+        // Older apps ignore it (the account simply shows as private).
+        ...(result.made_private_reason ? { made_private_reason: result.made_private_reason } : {}),
       };
 
       log_operation_success(span, user_id);

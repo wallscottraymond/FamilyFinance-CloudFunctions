@@ -48,6 +48,7 @@ import {
   hard_delete_doc,
   hard_delete_by_id_prefix,
   make_bulk_writer,
+  delete_user_reassign_slots,
 } from "../../repositories/purge.repo";
 import { widget_token_repo } from "../../repositories/widget_token.repo";
 import { release_user_from_sharing } from "../sharing/departure.orchestrator";
@@ -283,6 +284,8 @@ export async function purge_user_data_orchestrator(
     // Everything else the user made or the app keeps for them: goals, tags, rules, balance
     // history, Me ideas, and the derive caches (doc ids `${user_id}__…`).
     await step("Deleting goals, tags, rules and history…");
+    // Re-assign slots first: a dry run's slot id comes from its run doc, deleted just below.
+    await record("_reassign_locks", await delete_user_reassign_slots(user_id));
     for (const [collection, fields] of [
       ["goals", ["ownerId", "userId"]],
       ["tags", ["userId"]],
@@ -291,6 +294,8 @@ export async function purge_user_data_orchestrator(
       // Ideas: the person's own (Me) list and its comments. Group ideas stay with the group.
       ["ideas", ["userId"]],
       ["idea_comments", ["userId"]],
+      // Re-assign runs carry the uid + sample transactions (merchant, date).
+      ["_reassign_runs", ["user_id"]],
     ] as const) {
       await record(
         collection,

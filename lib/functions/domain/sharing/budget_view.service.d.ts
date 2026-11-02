@@ -65,6 +65,11 @@ export interface CopyConflict {
      *  overlapping ones stay with the group's existing budget. Absent = nothing copied. */
     copied_category_ids?: string[];
 }
+export interface CopySkip {
+    source_budget_id: string;
+    name: string;
+    reason: string;
+}
 export interface CopyPlan {
     /** New group budgets to create: settings from `source`, the chosen amount — and, for a partial
      *  overlap, only the categories the group doesn't already budget (`category_ids`). */
@@ -75,6 +80,8 @@ export interface CopyPlan {
     }>;
     /** Skipped: the group already has it ("Add mine" in the app). */
     conflicts: CopyConflict[];
+    /** Skipped: can't go to a group as it is (no categories — batch 10 verify M1). */
+    skipped: CopySkip[];
 }
 /**
  * Copy the caller's Me budgets into a group (D32). Each copy is a new group

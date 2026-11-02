@@ -33,6 +33,7 @@ import {
   group_view_key,
   ViewBudget,
   CopyConflict,
+  CopySkip,
 } from "../../domain/sharing/budget_view.service";
 import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
@@ -102,6 +103,8 @@ export interface BudgetViewResult {
   errors?: string[];
   budget_ids?: string[];
   conflicts?: CopyConflict[];
+  /** copy: budgets that can't go to a group as they are, with why. */
+  skipped?: CopySkip[];
 }
 
 /** Moves a budget between Me and a group. `to_group_id: null` = to Me. */
@@ -214,7 +217,12 @@ export async function copy_budgets_to_group_orchestrator(
   }
 
   log_operation_success(span, ctx.user_id);
-  return { success: true, budget_ids: created, conflicts: plan.entity.conflicts };
+  return {
+    success: true,
+    budget_ids: created,
+    conflicts: plan.entity.conflicts,
+    skipped: plan.entity.skipped,
+  };
 }
 
 /** Stored-spent days to recompute after an emptied budget is paused from today (≤ one period). */
