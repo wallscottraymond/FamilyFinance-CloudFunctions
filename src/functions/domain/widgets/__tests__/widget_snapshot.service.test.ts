@@ -192,3 +192,18 @@ describe("compute_budget_lines — budget pause (Code-Health-Review PZ3)", () =>
     expect(out.map((l: { id: string }) => l.id)).toEqual(["d", "ee"]);
   });
 });
+
+describe("compute_period_summary — Other Income is received, never planned (M8-H1)", () => {
+  const { compute_period_summary: summary } = jest.requireActual("../widget_snapshot.service");
+  const { OTHER_INCOME_ID } = jest.requireActual("../../periods/period_view.service");
+  const group = (amount: number) => ({ period_id: "2026M11", is_due_period: true, count_in_period: 1, total_due: amount, total_paid: amount,
+    occurrences: [{ due_date_ms: Date.UTC(2026, 10, 5), amount, paid: true, is_paid: true, amount_paid: amount }] });
+  it("planned income counts recurring streams only; actual includes Other Income", () => {
+    const s = summary({ budgets: [], bills: [], income: [
+      { recurring_id: "pay", name: "Paycheck", groups: [group(2000)] },
+      { recurring_id: OTHER_INCOME_ID, name: "Other Income", groups: [group(300)] },
+    ] }, "2026M11", []);
+    expect(s.income.planned).toBe(2000);
+    expect(s.income.actual).toBe(2300);
+  });
+});

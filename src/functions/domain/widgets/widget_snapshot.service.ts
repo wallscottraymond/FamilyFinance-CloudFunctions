@@ -20,6 +20,8 @@
  * @module domain/widgets/widget_snapshot
  */
 
+import { OTHER_INCOME_ID } from "../periods/period_view.service";
+
 /* eslint-disable @typescript-eslint/naming-convention */
 // Widget payloads are a camelCase WIRE FORMAT shared with the Swift widget (mapper-style
 // exception to the snake_case rule).
@@ -36,7 +38,7 @@ export const WIDGET_DATA_VERSION = 2;
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  */
 export const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>> = {
-  recent: 2, left: 2, summary: 1, bills: 1,
+  recent: 2, left: 2, summary: 2, bills: 1,
 };
 
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
@@ -493,9 +495,12 @@ export function compute_period_summary(
     for (const r of items) {
       const g = due_group(r, period_id);
       if (!g) continue;
+      // "Other Income" (surprise credits) is received, never PLANNED — the app's Period Summary and
+      // the Everything-Else leftover leave it out of expected income (Code-Health-Review M8-H1).
+      const unplanned = r.recurring_id === OTHER_INCOME_ID;
       for (const o of occurrences_of(g)) {
         entries += 1;
-        planned += o.amount;
+        if (!unplanned) planned += o.amount;
         actual += o.paid ? o.amount : 0;
       }
     }
