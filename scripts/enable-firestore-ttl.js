@@ -10,11 +10,11 @@
  * Uses the same service-account key as scripts/inspect-firestore.js — it must have Firestore
  * admin permission (roles/datastore.owner or datastore.indexes.update).
  *
- * Policies to enable with the Code-Health-Review batch 10 deploy (all future-dated `expire_at`, so
- * enabling deletes nothing today; docs written before the deploy have no field and never expire):
- *   node scripts/enable-firestore-ttl.js _dead_letter_queue expire_at --confirm
- *   node scripts/enable-firestore-ttl.js _reassign_runs expire_at --confirm
- *   node scripts/enable-firestore-ttl.js _migration_reports expire_at --confirm
+ * NOTE (2026-11-02): the service account currently gets 403 here. The batch 10 policies
+ * (_dead_letter_queue, _reassign_runs, _migration_reports .expire_at) were enabled with the Firebase
+ * CLI instead: a temporary firebase.json + index file declaring ONLY those fieldOverrides
+ * (`"ttl": true`), `firebase deploy --only firestore:indexes` (never with --force; never deploy the
+ * repo's firestore.indexes.json as-is). All ACTIVE.
  *
  * WARNING: enabling TTL on a CREATION-time field deletes ALL existing docs (their timestamp is
  * already in the past). Only do that for disposable collections (old logs).
