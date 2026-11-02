@@ -90,6 +90,19 @@ describe("share an account (P1, D25)", () => {
     expect(r.entity!.duplicate_owner_id).toBe("sam");
     expect(account_fingerprint(acct({ mask: null }))).toBeNull();
   });
+  it("S1-H1 the same real account WAITING for an Accept in the group is a duplicate too", () => {
+    const sams_copy = acct({ id: "jc-s", user_id: "sam" });
+    const r = plan_share_account(input({ pending_group_accounts: [sams_copy] }));
+    expect(r.validation_errors?.[0]).toMatch(/waiting for an Accept/);
+    expect(r.entity!.duplicate_owner_id).toBe("sam");
+    // A different real account waiting is fine; no mask = no fingerprint = no duplicate.
+    expect(plan_share_account(input({
+      pending_group_accounts: [acct({ id: "x", user_id: "sam", mask: "9999" })],
+    })).validation_errors).toBeUndefined();
+    expect(plan_share_account(input({
+      account: acct({ mask: null }), pending_group_accounts: [acct({ id: "x", mask: null })],
+    })).validation_errors).toBeUndefined();
+  });
   it("no double request; daily limit counts the other members (D26)", () => {
     const pending = plan_share_account(input()).entity!.requests;
     expect(plan_share_account(input({ pending_for_account: pending })).validation_errors)
@@ -122,6 +135,18 @@ describe("accepting a share (PD5) and unsharing", () => {
       .toBeDefined();
     expect(placement_on_accept(req(), acct(), group(["alex", "riley"]), NOW).validation_errors)
       .toBeDefined();
+  });
+  it("S1-H1 accept re-checks I4: the same real account placed meanwhile → refused", () => {
+    const g = group(["alex", "sam", "riley"]);
+    const sams_placed = acct({
+      id: "jc-s", user_id: "sam",
+      placement: { group_id: "g1", shared_from_ms: NOW, shared_by: "sam", shared_at_ms: NOW },
+    });
+    const r = placement_on_accept(req(), acct(), g, NOW, [sams_placed]);
+    expect(r.validation_errors?.[0]).toMatch(/already shares this account/);
+    // Another real account placed → fine.
+    expect(placement_on_accept(req(), acct(), g, NOW, [acct({ id: "o", user_id: "sam", mask: "5555" })])
+      .entity).toBeDefined();
   });
   it("unshare: owner only, must be shared", () => {
     const placed = acct({

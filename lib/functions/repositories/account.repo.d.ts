@@ -166,8 +166,29 @@ export declare const account_repo: {
      * Only the sharing orchestrators call this.
      */
     set_placement(ctx: TraceContext, account_id: string, placement: AccountPlacement | null, user_id: string): Promise<void>;
+    /**
+     * Places an account in a group ATOMICALLY with the "same real account" re-check (I4,
+     * Code-Health-Review S1-H1). In one transaction: the group's placement lock, the account, and
+     * every account placed in the group are read; `decide` (the pure domain rule) runs on that
+     * fresh data; on success the placement and the lock are written. Two placements into one group
+     * both read + write the lock, so they serialize — the second re-reads and sees the first
+     * (an account entering the group's query result can't be locked by a plain query read).
+     *
+     * `written` is false when `decide` returned the account's existing placement (another member's
+     * Accept already applied it) or refused.
+     */
+    place_in_group_checked(ctx: TraceContext, account_id: string, group_id: string, decide: (account: Account | null, group_accounts: Account[]) => {
+        entity?: AccountPlacement;
+        validation_errors?: string[];
+    }, user_id: string): Promise<{
+        entity?: AccountPlacement;
+        validation_errors?: string[];
+        written: boolean;
+    }>;
     /** Makes several accounts private in one batch (leaving / deleting a group). */
     clear_placements(ctx: TraceContext, account_ids: string[], user_id: string): Promise<void>;
+    /** Accounts by doc id (missing / deleted ones are skipped). */
+    get_many(_ctx: TraceContext, ids: string[]): Promise<Account[]>;
     /** Active accounts shared with a group (any owner). */
     get_shared_with_group(_ctx: TraceContext, group_id: string): Promise<Account[]>;
     count_by_user_id(_ctx: TraceContext, user_id: string, include_deleted?: boolean): Promise<number>;

@@ -97,3 +97,28 @@ export async function set_purge_status(
       { merge: true }
     );
 }
+
+/**
+ * The person a queued job works for, when the purge guard applies to it (Code-Health-Review
+ * S1-M6). Every user job carries `payload.user_id`; the purge job itself and system / group-view
+ * jobs (no uid, or a "group:<id>" owner key) are never guarded. PURE.
+ */
+export function purge_guarded_user(job_type: string, payload: unknown): string | null {
+  if (job_type === "purge_user_data") return null;
+  const uid = (payload as { user_id?: unknown } | null | undefined)?.user_id;
+  return typeof uid === "string" && uid.length > 0 && !uid.startsWith("group:") ? uid : null;
+}
+
+/**
+ * True when a claimed job is for a user who is being (or has been) erased: the runner completes
+ * it as a no-op instead of running it against a half-purged account. Covers jobs queued AFTER
+ * the purge cancelled the user's pending ones (its own sharing release re-assigns, transfer
+ * re-classifies, budget returns; triggers firing on its deletes). One doc read per user job.
+ */
+export async function is_job_for_purging_user(
+  job_type: string,
+  payload: unknown
+): Promise<boolean> {
+  const uid = purge_guarded_user(job_type, payload);
+  return uid ? is_user_purging(uid) : false;
+}

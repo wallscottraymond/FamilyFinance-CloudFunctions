@@ -26,6 +26,9 @@ import {
   plan_move_budget,
   plan_copy_budgets,
   budgets_returned,
+  plan_budget_returns,
+  return_pause_range,
+  ReturnedBudget,
   group_id_of_key,
   group_view_key,
   ViewBudget,
@@ -38,6 +41,14 @@ import { create_budget_orchestrator } from "../budgets/create_budget.orchestrato
 import { ensure_group_everything_else } from "./group_everything_else";
 import { bump_owner_versions } from "./versions";
 import { reassign_view } from "./view_reassign";
+import { create_job } from "../../infrastructure/job_queue";
+import {
+  PausedDayRange,
+  apply_pause_change,
+  iso_from_day,
+  pause_recompute_dates,
+  utc_day,
+} from "../../domain/budgets/budget_pause.service";
 
 /** Repo budget → the fields the view rules need. */
 function to_view_budget(b: BudgetEntity | null): ViewBudget | null {
@@ -206,29 +217,91 @@ export async function copy_budgets_to_group_orchestrator(
   return { success: true, budget_ids: created, conflicts: plan.entity.conflicts };
 }
 
+/** Stored-spent days to recompute after an emptied budget is paused from today (≤ one period). */
+const RETURN_RECOMPUTE_DAYS = 31;
+
+/** Pauses a returned, emptied budget from today on (compare-and-set, retried on a race). */
+async function pause_returned_budget(
+  ctx: TraceContext,
+  budget_id: string,
+  range: PausedDayRange,
+  actor_id: string
+): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = (await budget_repo.get_by_id(ctx, budget_id))?.paused_ranges ?? [];
+    const next = apply_pause_change(current, range.start_day, range.end_day, true);
+    if (await budget_repo.replace_paused_ranges_if_unchanged(ctx, budget_id, current, next, actor_id)) {
+      return;
+    }
+  }
+  throw new Error(`pause_returned_budget(${budget_id}): the budget kept changing`);
+}
+
 /**
  * D13: budgets the leaving people moved in go back to their Me view. Called by
  * manage_group (leave / remove / delete) and account purge. Never throws.
+ *
+ * S1-M4 (user decision 2026-11-02): each lands in a Me view that may already budget some of its
+ * categories (made while it sat in the group). The Me budget keeps them; the returning budget
+ * comes back without them (category_ownership.plan_view_arrival, canon A3) — and PAUSED from
+ * today when nothing is left, so it takes nothing from Everything Else. Nothing is deleted.
+ * Categories / pause are written BEFORE the move, whose final derive bump covers them.
+ *
+ * @returns every return, with what changed (the caller tells the person concerned)
  */
 export async function return_moved_in_budgets(
   ctx: TraceContext,
   group_id: string,
   leaving: string[] | "all",
   actor_id: string
-): Promise<number> {
+): Promise<ReturnedBudget[]> {
+  const done: ReturnedBudget[] = [];
   try {
     const group_budgets = await load_view_budgets(ctx, group_view_key(group_id));
-    const returns = budgets_returned(group_budgets, leaving);
+    const owners = [...new Set(budgets_returned(group_budgets, leaving).map((r) => r.to_owner_key))];
+    if (owners.length === 0) return done;
+    const me_views = await Promise.all(owners.map((o) => load_view_budgets(ctx, o)));
+    const me_budgets: Record<string, ViewBudget[]> = {};
+    owners.forEach((o, i) => (me_budgets[o] = me_views[i]));
+    const returns = plan_budget_returns(group_budgets, leaving, me_budgets, await first_of_fn(ctx));
+    const now_ms = Date.now();
     for (const r of returns) {
-      const b = group_budgets.find((x) => x.id === r.budget_id)!;
-      await apply_move(ctx, b, r.to_owner_key, null, actor_id);
+      try {
+        const b = group_budgets.find((x) => x.id === r.budget_id)!;
+        if (r.removed_category_ids.length > 0) {
+          await budget_repo.set_category_ids(ctx, r.budget_id, r.category_ids, actor_id);
+        }
+        if (r.paused) await pause_returned_budget(ctx, r.budget_id, return_pause_range(now_ms), actor_id);
+        await apply_move(ctx, { ...b, category_ids: r.category_ids }, r.to_owner_key, null, actor_id);
+        if (r.paused) {
+          // The stored spent of the period holding today leaves the paused days out (PZ6).
+          const today = iso_from_day(utc_day(now_ms));
+          const until = iso_from_day(utc_day(now_ms) + RETURN_RECOMPUTE_DAYS);
+          await create_job(
+            "recompute_budget_spent",
+            {
+              user_id: r.to_owner_key,
+              budget_ids: [r.budget_id],
+              dates_ms_by_budget: { [r.budget_id]: pause_recompute_dates(today, until) },
+              force_rollover: true,
+            },
+            { trace_id: ctx.trace_id }
+          ).catch((e) => console.error(`[${ctx.trace_id}] return recompute enqueue failed:`, e));
+        }
+        done.push(r);
+      } catch (error) {
+        console.error(
+          `[${ctx.trace_id}] return_moved_in_budgets(${group_id}) budget ${r.budget_id} failed:`,
+          error instanceof Error ? error.message : error
+        );
+      }
     }
-    return returns.length;
+    return done;
   } catch (error) {
     console.error(
       `[${ctx.trace_id}] return_moved_in_budgets(${group_id}) failed:`,
       error instanceof Error ? error.message : error
     );
-    return 0;
+    return done;
   }
 }

@@ -64,6 +64,8 @@ export interface ShareAccountDeps {
     account: PlaceableAccount | null;
     group: Group | null;
     group_accounts: PlaceableAccount[];
+    /** Accounts waiting for an Accept into this group (open share requests) — S1-H1. */
+    pending_group_accounts: PlaceableAccount[];
     pending_for_account: SharingRequest[];
     sent_today: SharingRequest[];
 }

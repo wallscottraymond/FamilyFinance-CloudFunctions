@@ -14,6 +14,8 @@
  *   → hard-delete top-level user-keyed collections
  *   → (after the group check) leave every group (D13), close solo groups,
  *     return moved-in budgets, drop connections + code
+ *   → cancel the jobs that departure queued for the user (S1-M6; the runners
+ *     also no-op any job of a purging user)
  *   → delete users/{uid} doc
  *   → delete the Firebase Auth user
  *   → status → done
@@ -158,6 +160,14 @@ export async function purge_user_data_orchestrator(
     );
     await sharing_writer.close();
     await record("requests", requests_deleted);
+    // Leaving the groups queued jobs for THIS user (re-assign of the released accounts, transfer
+    // re-classify, returned budgets' re-assign / recompute) AFTER step 1 cancelled theirs: cancel
+    // those too (S1-M6). Anything queued later still can't run — the job runners complete every
+    // job of a purging user as a no-op (is_job_for_purging_user). Other members' jobs stay.
+    const late_cancelled = await cancel_pending_jobs(user_id, input.job_id);
+    if (late_cancelled > 0) {
+      counts["_jobs_cancelled"] = (counts["_jobs_cancelled"] ?? 0) + late_cancelled;
+    }
 
     // 3. One shared BulkWriter parallelizes every delete in this run (much faster
     //    than sequential batch commits). The `*_periods` collections all carry a

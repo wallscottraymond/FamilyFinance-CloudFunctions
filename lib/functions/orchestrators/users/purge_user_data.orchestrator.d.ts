@@ -14,6 +14,8 @@
  *   → hard-delete top-level user-keyed collections
  *   → (after the group check) leave every group (D13), close solo groups,
  *     return moved-in budgets, drop connections + code
+ *   → cancel the jobs that departure queued for the user (S1-M6; the runners
+ *     also no-op any job of a purging user)
  *   → delete users/{uid} doc
  *   → delete the Firebase Auth user
  *   → status → done

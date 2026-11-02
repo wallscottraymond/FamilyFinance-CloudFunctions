@@ -19,6 +19,7 @@ import {
   reclaim_stuck_jobs,
   Job,
 } from "../../infrastructure/job_queue";
+import { is_job_for_purging_user } from "../../infrastructure/purge_guard";
 import {
   purge_user_data_orchestrator,
   PurgeUserDataInput,
@@ -365,6 +366,14 @@ export const process_job_queue = onSchedule(
             );
             await mark_job_failed(job.job_id, `Unknown job type: ${job.job_type}`);
             failed++;
+            return;
+          }
+
+          // A job for a user being erased is a no-op (S1-M6).
+          if (await is_job_for_purging_user(claimed_job.job_type, claimed_job.payload)) {
+            console.log(`[${ctx.trace_id}] Job ${job.job_id} skipped: its user is being erased`);
+            await mark_job_completed(job.job_id);
+            processed++;
             return;
           }
 

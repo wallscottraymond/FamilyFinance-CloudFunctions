@@ -43,6 +43,9 @@ export interface SharePlanInput {
     share_from_ms?: number | null;
     /** Active accounts already shared with the group (any owner). */
     group_accounts: PlaceableAccount[];
+    /** Accounts with an OPEN share request into this group (not accepted yet — S1-H1): the same
+     *  real account waiting for an Accept is a duplicate too. Absent = none. */
+    pending_group_accounts?: PlaceableAccount[];
     /** Pending share requests for this account (to avoid duplicates). */
     pending_for_account: SharingRequest[];
     /** Requests the caller sent in the last 24h (D26). */
@@ -62,10 +65,21 @@ export interface SharePlan {
 export declare function plan_share_account(input: SharePlanInput): DomainResult<SharePlan>;
 /**
  * A member accepted a share request: the placement to apply, if the account is
- * still the sender's, still active, still private, and the group still includes
- * both people.
+ * still the sender's, still active, still private, the group still includes
+ * both people, and nobody placed the same real account in the group meanwhile
+ * (I4 re-checked at accept — S1-H1: two copies of one joint account can both be
+ * waiting for an Accept; the second to be accepted is refused).
+ *
+ * `group_accounts` = accounts placed in the group NOW (read in the same
+ * transaction as the placement write, so two accepts can't both pass).
  */
-export declare function placement_on_accept(request: SharingRequest, account: PlaceableAccount | null, group: Group | null, now_ms: number): DomainResult<Placement>;
+export declare function placement_on_accept(request: SharingRequest, account: PlaceableAccount | null, group: Group | null, now_ms: number, group_accounts?: PlaceableAccount[]): DomainResult<Placement>;
+/**
+ * A share that applies at once (group of one) re-checked on the fresh data read in the
+ * placement transaction (S1-H1): still the caller's, still private, and not the same real
+ * account as one already placed in the group.
+ */
+export declare function recheck_immediate_placement(placement: Placement, account: PlaceableAccount | null, caller_id: string, group_accounts: PlaceableAccount[]): DomainResult<Placement>;
 /** The owner makes an account private again. */
 export declare function plan_unshare_account(account: PlaceableAccount | null, caller_id: string): DomainResult<{
     was_group_id: string;

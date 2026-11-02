@@ -21,6 +21,7 @@ import {
   check_daily_recipient_limit,
   build_join_request,
   answer_request,
+  accept_authority_errors,
   build_report,
   REQUEST_TTL_MS,
   build_group,
@@ -180,6 +181,13 @@ describe("requests (D25, D26)", () => {
     expect(answer_request(r, "sam", true, NOW).entity!.status).toBe("accepted");
     expect(answer_request(r, "sam", false, NOW).entity!.status).toBe("declined");
     expect(answer_request(r, "sam", true, NOW + REQUEST_TTL_MS).validation_errors).toBeDefined();
+  });
+  it("S1-M3 a join needs the inviter's connection; a share to the group needs only membership", () => {
+    const join = build_join_request("r1", "alex", "sam", "g1", NOW);
+    expect(accept_authority_errors(join, true)).toEqual([]);
+    expect(accept_authority_errors(join, false)).toHaveLength(1);
+    const share = { ...join, type: "share_account" as const, target_id: "acct" };
+    expect(accept_authority_errors(share, false)).toEqual([]);
   });
   it("reports: no self-reports, reason bounded", () => {
     expect(build_report("x", "a", "a", "", NOW).validation_errors).toBeDefined();

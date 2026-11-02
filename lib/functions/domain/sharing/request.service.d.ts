@@ -29,6 +29,14 @@ export declare function is_open(request: SharingRequest, now_ms: number): boolea
  * answer applied. Group-side checks (limits, membership) happen separately.
  */
 export declare function answer_request(request: SharingRequest | null, caller_id: string, accept: boolean, now_ms: number): DomainResult<SharingRequest>;
+/**
+ * Who may accept (S1-M3). A join request is person-to-person: the inviter must
+ * still be connected with the invitee. A share request is addressed to the
+ * GROUP (every other member gets a copy, connected to the sharer or not), so
+ * membership in that group is the authority — checked against the group itself
+ * when the share is applied (placement_on_accept), not a connection.
+ */
+export declare function accept_authority_errors(request: SharingRequest, sender_connected: boolean): string[];
 /** Marks requests cancelled (e.g. the group was deleted, or the pair got blocked). */
 export declare function cancel_requests(requests: SharingRequest[], now_ms: number): SharingRequest[];
 /** A report of another person (D27). */

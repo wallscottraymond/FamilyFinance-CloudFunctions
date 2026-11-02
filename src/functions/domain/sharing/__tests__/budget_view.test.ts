@@ -10,6 +10,8 @@ import {
   plan_move_budget,
   plan_copy_budgets,
   budgets_returned,
+  plan_budget_returns,
+  return_pause_range,
   ViewBudget,
 } from "../budget_view.service";
 import { build_group, accept_join } from "../group.service";
@@ -120,5 +122,64 @@ describe("leaving returns moved-in budgets (D13)", () => {
     expect(budgets_returned(budgets, ["sam"])).toEqual([{ budget_id: "moved_by_sam", to_owner_key: "sam" }]);
     expect(budgets_returned(budgets, "all").map((r) => r.budget_id))
       .toEqual(["moved_by_sam", "moved_by_alex"]);
+  });
+});
+
+describe("returning budgets meet the Me view (S1-M4, user decision 2026-11-02)", () => {
+  const first_of = (c: string) => (c === "FOOD_AND_DRINK_GROCERIES" ? "groceries" : c);
+  const moved = (over: Partial<ViewBudget>) =>
+    b({ owner_key: KEY, brought_by: "sam", ...over });
+  it("a clashing category stays with the Me budget; the returning one keeps the rest", () => {
+    const out = plan_budget_returns(
+      [moved({ id: "food", name: "Food", category_ids: ["FOOD_AND_DRINK_GROCERIES", "coffee"] })],
+      ["sam"],
+      { sam: [b({ id: "mine", owner_key: "sam", category_ids: ["groceries"] })] },
+      first_of
+    );
+    expect(out).toEqual([{
+      budget_id: "food", name: "Food", to_owner_key: "sam",
+      category_ids: ["coffee"], removed_category_ids: ["FOOD_AND_DRINK_GROCERIES"], paused: false,
+    }]);
+  });
+  it("nothing left → comes back paused; no clash → unchanged", () => {
+    const out = plan_budget_returns(
+      [
+        moved({ id: "g2", name: "Groceries 2", category_ids: ["groceries"] }),
+        moved({ id: "gas", name: "Gas", category_ids: ["gas"] }),
+      ],
+      ["sam"],
+      { sam: [b({ id: "mine", owner_key: "sam", category_ids: ["FOOD_AND_DRINK_GROCERIES"] })] },
+      first_of
+    );
+    expect(out.map((r) => [r.budget_id, r.category_ids, r.paused])).toEqual([
+      ["g2", [], true],
+      ["gas", ["gas"], false],
+    ]);
+  });
+  it("Everything Else owns nothing; two returns to one person see each other; others untouched", () => {
+    const out = plan_budget_returns(
+      [
+        moved({ id: "a", name: "A", category_ids: ["x", "y"] }),
+        moved({ id: "b", name: "B", category_ids: ["y"] }),
+        moved({ id: "c", name: "C", category_ids: ["y"], brought_by: "alex" }),
+      ],
+      "all",
+      { sam: [b({ id: "ee", owner_key: "sam", category_ids: ["x"], is_everything_else: true })] },
+      first_of
+    );
+    expect(out.map((r) => [r.budget_id, r.to_owner_key, r.category_ids, r.paused])).toEqual([
+      ["a", "sam", ["x", "y"], false],
+      ["b", "sam", [], true],
+      ["c", "alex", ["y"], false],
+    ]);
+  });
+  it("a budget that never had categories isn't paused by a return", () => {
+    const out = plan_budget_returns([moved({ id: "e", category_ids: [] })], ["sam"], {}, first_of);
+    expect(out[0]).toMatchObject({ category_ids: [], removed_category_ids: [], paused: false });
+  });
+  it("the pause runs from today's UTC day to far in the future", () => {
+    const r = return_pause_range(Date.UTC(2026, 10, 2, 23, 59));
+    expect(r.start_day).toBe(Date.UTC(2026, 10, 2) / 86_400_000);
+    expect(r.end_day).toBe(Date.UTC(2099, 11, 31) / 86_400_000);
   });
 });

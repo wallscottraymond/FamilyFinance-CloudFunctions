@@ -46,6 +46,18 @@ export function account_label(a: PlaceableAccount): string {
   return a.mask ? `${a.name} ••${a.mask}` : a.name;
 }
 
+const ALREADY_SHARED = "Someone in this group already shares this account";
+
+/** Another account in `others` that is the same real account (I4), if any. */
+function find_duplicate(
+  account: PlaceableAccount,
+  others: PlaceableAccount[]
+): PlaceableAccount | undefined {
+  const fp = account_fingerprint(account);
+  if (!fp) return undefined;
+  return others.find((g) => g.id !== account.id && account_fingerprint(g) === fp);
+}
+
 export interface SharePlanInput {
   account: PlaceableAccount | null;
   caller_id: string;
@@ -56,6 +68,9 @@ export interface SharePlanInput {
   share_from_ms?: number | null;
   /** Active accounts already shared with the group (any owner). */
   group_accounts: PlaceableAccount[];
+  /** Accounts with an OPEN share request into this group (not accepted yet — S1-H1): the same
+   *  real account waiting for an Accept is a duplicate too. Absent = none. */
+  pending_group_accounts?: PlaceableAccount[];
   /** Pending share requests for this account (to avoid duplicates). */
   pending_for_account: SharingRequest[];
   /** Requests the caller sent in the last 24h (D26). */
@@ -87,14 +102,20 @@ export function plan_share_account(input: SharePlanInput): DomainResult<SharePla
         : "This account is shared with another group. Make it private first.",
     ]);
   }
-  const fp = account_fingerprint(account);
-  const dup = fp
-    ? input.group_accounts.find((g) => g.id !== account.id && account_fingerprint(g) === fp)
-    : undefined;
+  const dup = find_duplicate(account, input.group_accounts);
   if (dup) {
     return {
       entity: { placement: null, requests: [], duplicate_owner_id: dup.user_id },
-      validation_errors: ["Someone in this group already shares this account"],
+      validation_errors: [ALREADY_SHARED],
+    };
+  }
+  const waiting = find_duplicate(account, input.pending_group_accounts ?? []);
+  if (waiting) {
+    return {
+      entity: { placement: null, requests: [], duplicate_owner_id: waiting.user_id },
+      validation_errors: [
+        "Someone in this group is already sharing this account (it's waiting for an Accept)",
+      ],
     };
   }
   if (input.pending_for_account.some((r) => is_open(r, now_ms))) {
@@ -145,14 +166,20 @@ export function plan_share_account(input: SharePlanInput): DomainResult<SharePla
 
 /**
  * A member accepted a share request: the placement to apply, if the account is
- * still the sender's, still active, still private, and the group still includes
- * both people.
+ * still the sender's, still active, still private, the group still includes
+ * both people, and nobody placed the same real account in the group meanwhile
+ * (I4 re-checked at accept — S1-H1: two copies of one joint account can both be
+ * waiting for an Accept; the second to be accepted is refused).
+ *
+ * `group_accounts` = accounts placed in the group NOW (read in the same
+ * transaction as the placement write, so two accepts can't both pass).
  */
 export function placement_on_accept(
   request: SharingRequest,
   account: PlaceableAccount | null,
   group: Group | null,
-  now_ms: number
+  now_ms: number,
+  group_accounts: PlaceableAccount[] = []
 ): DomainResult<Placement> {
   if (request.type !== "share_account") return validation_failed(["Not a share request"]);
   if (
@@ -171,12 +198,31 @@ export function placement_on_accept(
       ? success(account.placement) // another member accepted first
       : validation_failed(["This account is now shared somewhere else"]);
   }
+  if (find_duplicate(account, group_accounts)) return validation_failed([ALREADY_SHARED]);
   return success({
     group_id: request.group_id,
     shared_from_ms: request.shared_from_ms,
     shared_by: request.from_user_id,
     shared_at_ms: now_ms,
   });
+}
+
+/**
+ * A share that applies at once (group of one) re-checked on the fresh data read in the
+ * placement transaction (S1-H1): still the caller's, still private, and not the same real
+ * account as one already placed in the group.
+ */
+export function recheck_immediate_placement(
+  placement: Placement,
+  account: PlaceableAccount | null,
+  caller_id: string,
+  group_accounts: PlaceableAccount[]
+): DomainResult<Placement> {
+  if (!account || !account.is_active || account.user_id !== caller_id || account.placement) {
+    return validation_failed(["This account changed. Try again."]);
+  }
+  if (find_duplicate(account, group_accounts)) return validation_failed([ALREADY_SHARED]);
+  return success(placement);
 }
 
 /** The owner makes an account private again. */

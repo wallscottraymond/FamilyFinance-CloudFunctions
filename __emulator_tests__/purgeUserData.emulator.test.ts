@@ -42,6 +42,7 @@ import { remove_item } from "../src/functions/integrations/plaid";
 import { purge_user_data_orchestrator } from "../src/functions/orchestrators/users/purge_user_data.orchestrator";
 import { cancel_pending_jobs } from "../src/functions/repositories/purge.repo";
 import { seedAccountGraph } from "./helpers/seedAccountGraph";
+import { is_job_for_purging_user } from "../src/functions/infrastructure/purge_guard";
 
 const mockRemoveItem = remove_item as jest.Mock;
 
@@ -278,6 +279,43 @@ describe("purge_user_data_orchestrator — full erase", () => {
     expect((await db.collection("requests").doc(`req_${me}`).get()).exists).toBe(false);
     expect((await db.collection("users").doc("owner_x").get()).data()?.groupIds)
       .toEqual([`theirs_${me}`]);
+  });
+
+  it("S1-M6 the jobs leaving the groups queues for the purged user never run; others' do", async () => {
+    const seed = await seedAccountGraph(db, { accounts: 1, txnsPerAccount: 1 });
+    const me = seed.userId;
+    const other = `other_${me}`;
+    const gid = `m6_${me}`;
+    const now = Timestamp.now();
+    await db.collection("users").doc(other).set({ groupIds: [gid] });
+    await db.collection("users").doc(me).set({ groupIds: [gid] }, { merge: true });
+    await db.collection("groups").doc(gid).set({
+      name: "Shared", ownerId: other,
+      members: { [other]: { role: "owner", joinedAt: now }, [me]: { role: "full", joinedAt: now } },
+      memberIds: [other, me], createdAt: now, deletedAt: null,
+    });
+    // My account is shared with the group (leaving re-assigns it + re-classifies my transfers).
+    await db.collection("accounts").doc(seed.target.id).update({
+      placement: { groupId: gid, sharedFrom: null, sharedBy: me, sharedAt: now },
+    });
+
+    const started_ms = Date.now();
+    const result = await purge_user_data_orchestrator(ctx(), {
+      user_id: me, initiated_by: me, trace_id: "t_m6",
+    });
+    expect(result.blocked).toBe(false);
+
+    const jobs = (await db.collection("_jobs").where("created_at", ">=", Timestamp.fromMillis(started_ms)).get())
+      .docs.map((d) => d.data());
+    const mine = jobs.filter((j) => j.payload?.user_id === me && j.job_type !== "purge_user_data");
+    expect(mine.length).toBeGreaterThan(0); // the departure did queue some…
+    expect(mine.filter((j) => ["pending", "processing"].includes(j.status))).toEqual([]); // …all cancelled
+    // The other member's re-classify still runs.
+    expect(jobs.some((j) => j.payload?.user_id === other && j.status === "pending")).toBe(true);
+    // And the runners no-op anything queued for me from now on; never the purge, never others.
+    expect(await is_job_for_purging_user("reassign_user", { user_id: me })).toBe(true);
+    expect(await is_job_for_purging_user("purge_user_data", { user_id: me })).toBe(false);
+    expect(await is_job_for_purging_user("reassign_user", { user_id: other })).toBe(false);
   });
 
   it("cancel_pending_jobs targets ONLY this user's pending/processing non-purge jobs", async () => {

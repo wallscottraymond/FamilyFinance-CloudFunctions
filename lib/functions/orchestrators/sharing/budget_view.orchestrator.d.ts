@@ -12,7 +12,7 @@
  * @module orchestrators/sharing/budget_view
  */
 import { OrchestratorContext, TraceContext } from "../../types";
-import { CopyConflict } from "../../domain/sharing/budget_view.service";
+import { ReturnedBudget, CopyConflict } from "../../domain/sharing/budget_view.service";
 export interface BudgetViewResult {
     success: boolean;
     errors?: string[];
@@ -37,6 +37,14 @@ export declare function copy_budgets_to_group_orchestrator(ctx: OrchestratorCont
 /**
  * D13: budgets the leaving people moved in go back to their Me view. Called by
  * manage_group (leave / remove / delete) and account purge. Never throws.
+ *
+ * S1-M4 (user decision 2026-11-02): each lands in a Me view that may already budget some of its
+ * categories (made while it sat in the group). The Me budget keeps them; the returning budget
+ * comes back without them (category_ownership.plan_view_arrival, canon A3) — and PAUSED from
+ * today when nothing is left, so it takes nothing from Everything Else. Nothing is deleted.
+ * Categories / pause are written BEFORE the move, whose final derive bump covers them.
+ *
+ * @returns every return, with what changed (the caller tells the person concerned)
  */
-export declare function return_moved_in_budgets(ctx: TraceContext, group_id: string, leaving: string[] | "all", actor_id: string): Promise<number>;
+export declare function return_moved_in_budgets(ctx: TraceContext, group_id: string, leaving: string[] | "all", actor_id: string): Promise<ReturnedBudget[]>;
 //# sourceMappingURL=budget_view.orchestrator.d.ts.map

@@ -18,6 +18,7 @@ import {
   mark_job_failed,
   Job,
 } from "../../infrastructure/job_queue";
+import { is_job_for_purging_user } from "../../infrastructure/purge_guard";
 import {
   purge_user_data_orchestrator,
   PurgeUserDataInput,
@@ -339,6 +340,13 @@ export const on_job_created = onDocumentCreated(
           `[on_job_created] Unknown job type: ${job_data.job_type}`
         );
         await mark_job_failed(job_id, `Unknown job type: ${job_data.job_type}`);
+        return;
+      }
+
+      // A job for a user being erased is a no-op (S1-M6): never run it on a half-purged account.
+      if (await is_job_for_purging_user(claimed_job.job_type, claimed_job.payload)) {
+        console.log(`[on_job_created] Job ${job_id} skipped: its user is being erased`);
+        await mark_job_completed(job_id);
         return;
       }
 

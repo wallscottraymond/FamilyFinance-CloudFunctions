@@ -91,6 +91,21 @@ export function answer_request(
   });
 }
 
+/**
+ * Who may accept (S1-M3). A join request is person-to-person: the inviter must
+ * still be connected with the invitee. A share request is addressed to the
+ * GROUP (every other member gets a copy, connected to the sharer or not), so
+ * membership in that group is the authority — checked against the group itself
+ * when the share is applied (placement_on_accept), not a connection.
+ */
+export function accept_authority_errors(
+  request: SharingRequest,
+  sender_connected: boolean
+): string[] {
+  if (request.type === "share_account") return [];
+  return sender_connected ? [] : ["This request isn't available"];
+}
+
 /** Marks requests cancelled (e.g. the group was deleted, or the pair got blocked). */
 export function cancel_requests(
   requests: SharingRequest[],

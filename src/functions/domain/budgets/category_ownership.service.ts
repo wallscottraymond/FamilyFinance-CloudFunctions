@@ -81,3 +81,31 @@ export function plan_view_claims(input: {
   }
   return { entity: { claims } };
 }
+
+/**
+ * A budget ARRIVES in a view it didn't choose (it comes back to its owner's Me view when they
+ * leave a group — Code-Health-Review S1-M4): the budget ALREADY in the view keeps any category
+ * both budget (canon A3 / A3b: one owner per category per view, compared by FIRST category,
+ * Everything Else is never an owner). Returns the arriving budget's categories split into the
+ * ones it keeps and the ones it gives up (the ids it actually stores). It may keep none — the
+ * caller decides what an empty budget becomes (paused).
+ *
+ * PURE FUNCTION.
+ */
+export function plan_view_arrival(input: {
+  budget_id: string;
+  category_ids: string[];
+  view_budgets: ViewBudgetForClaims[];
+  first_of: (category_id: string) => string | null;
+}): { kept_category_ids: string[]; removed_category_ids: string[] } {
+  const key = (id: string) => input.first_of(id) ?? id;
+  const owned = new Set(
+    input.view_budgets
+      .filter((b) => b.id !== input.budget_id && !b.is_everything_else)
+      .flatMap((b) => b.category_ids.map(key))
+  );
+  const kept: string[] = [];
+  const removed: string[] = [];
+  for (const id of unique(input.category_ids)) (owned.has(key(id)) ? removed : kept).push(id);
+  return { kept_category_ids: kept, removed_category_ids: removed };
+}

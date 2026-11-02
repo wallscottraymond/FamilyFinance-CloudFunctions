@@ -14,6 +14,8 @@
 import { DomainResult, success, validation_failed } from "../../types";
 import { Group } from "../../types/sharing.types";
 import { is_member } from "./group.service";
+import { plan_view_arrival } from "../budgets/category_ownership.service";
+import { PausedDayRange, day_from_iso, utc_day } from "../budgets/budget_pause.service";
 
 export const GROUP_KEY_PREFIX = "group:";
 
@@ -234,4 +236,91 @@ export function budgets_returned(
   return group_budgets
     .filter((b) => b.brought_by && (leaving === "all" || leaving.includes(b.brought_by)))
     .map((b) => ({ budget_id: b.id, to_owner_key: b.brought_by! }));
+}
+
+/** What happened to one budget that came back to its owner's Me view (shown to them — S1-M4). */
+export interface ReturnedBudget {
+  budget_id: string;
+  name: string;
+  to_owner_key: string;
+  /** The categories it keeps (the ids it stores). */
+  category_ids: string[];
+  /** Categories the owner's Me view already budgets: they stay with that budget. */
+  removed_category_ids: string[];
+  /** It has no categories left, so it comes back paused (takes nothing from Everything Else). */
+  paused: boolean;
+}
+
+/** The last day a returned, emptied budget stays paused ("until the user changes it"). */
+export const RETURN_PAUSE_END_ISO = "2099-12-31";
+
+/** The pause an emptied returned budget gets: from today's UTC day on. PURE. */
+export function return_pause_range(now_ms: number): PausedDayRange {
+  return { start_day: utc_day(now_ms), end_day: day_from_iso(RETURN_PAUSE_END_ISO)! };
+}
+
+/**
+ * Budgets going back to the people leaving (D13), checked against the Me view each lands in
+ * (Code-Health-Review S1-M4; user decision 2026-11-02): the budget ALREADY in Me keeps any
+ * clashing category (canon A3, compared by first category); the returning budget comes back
+ * WITHOUT those categories, and PAUSED if none are left. Nothing is deleted. A budget that
+ * already returned counts for the next one going to the same person.
+ *
+ * `me_budgets`: owner key → the budgets currently in that person's Me view.
+ * PURE.
+ */
+export function plan_budget_returns(
+  group_budgets: ViewBudget[],
+  leaving: string[] | "all",
+  me_budgets: Record<string, ViewBudget[]>,
+  first_of: FirstOf = identity
+): ReturnedBudget[] {
+  const planned: Record<string, ViewBudget[]> = {};
+  const out: ReturnedBudget[] = [];
+  for (const r of budgets_returned(group_budgets, leaving)) {
+    const b = group_budgets.find((x) => x.id === r.budget_id)!;
+    const view = (planned[r.to_owner_key] ??= [...(me_budgets[r.to_owner_key] ?? [])]);
+    const { kept_category_ids, removed_category_ids } = plan_view_arrival({
+      budget_id: b.id,
+      category_ids: b.category_ids,
+      view_budgets: view,
+      first_of,
+    });
+    view.push({ ...b, owner_key: r.to_owner_key, category_ids: kept_category_ids });
+    out.push({
+      budget_id: b.id,
+      name: b.name,
+      to_owner_key: r.to_owner_key,
+      category_ids: kept_category_ids,
+      removed_category_ids,
+      // Only a budget THIS return emptied (one that never had categories isn't touched).
+      paused: kept_category_ids.length === 0 && removed_category_ids.length > 0,
+    });
+  }
+  return out;
+}
+
+/** What the person who left is told about one budget that came back changed (S1-M4). */
+export interface ReturnedBudgetNote {
+  budget_id: string;
+  name: string;
+  /** Categories their Me view already budgets — they stayed with that budget. */
+  removed_category_ids: string[];
+  /** Nothing was left, so it came back paused. */
+  paused: boolean;
+}
+
+/** The changed returns that landed in `user_id`'s Me view — what that person is told. PURE. */
+export function returned_budget_notes(
+  returns: ReturnedBudget[],
+  user_id: string
+): ReturnedBudgetNote[] {
+  return returns
+    .filter((r) => r.to_owner_key === user_id && r.removed_category_ids.length > 0)
+    .map((r) => ({
+      budget_id: r.budget_id,
+      name: r.name,
+      removed_category_ids: r.removed_category_ids,
+      paused: r.paused,
+    }));
 }

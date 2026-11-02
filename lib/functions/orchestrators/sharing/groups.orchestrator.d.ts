@@ -11,10 +11,13 @@
  * @module orchestrators/sharing/groups
  */
 import { OrchestratorContext } from "../../types";
+import { ReturnedBudgetNote } from "../../domain/sharing/budget_view.service";
 export interface SharingWriteResult {
     success: boolean;
     errors?: string[];
     group_id?: string;
+    /** leave / remove / delete: the caller's budgets that came back to Me CHANGED (S1-M4). */
+    returned_budgets?: ReturnedBudgetNote[];
 }
 /** Creates a group and invites connected people. */
 export declare function create_group_orchestrator(ctx: OrchestratorContext<{

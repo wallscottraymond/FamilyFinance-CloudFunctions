@@ -19,10 +19,12 @@ import {
 import {
   resolve_share_account,
   resolve_account_placement,
+  to_placeable,
 } from "../../resolvers/sharing/sharing.resolver";
 import {
   plan_share_account,
   plan_unshare_account,
+  recheck_immediate_placement,
 } from "../../domain/sharing/placement.service";
 import { cancel_requests } from "../../domain/sharing/request.service";
 import { person_view } from "../../domain/sharing/names.service";
@@ -68,6 +70,7 @@ export async function share_account_orchestrator(
     include_history: ctx.input.include_history,
     share_from_ms: ctx.input.share_from_ms ?? null,
     group_accounts: deps.group_accounts,
+    pending_group_accounts: deps.pending_group_accounts,
     pending_for_account: deps.pending_for_account,
     sent_today: deps.sent_today,
     now_ms,
@@ -84,9 +87,24 @@ export async function share_account_orchestrator(
 
   // 3. REPOSITORY
   if (plan.entity.placement) {
-    await account_repo.set_placement(
-      ctx, ctx.input.account_id, plan.entity.placement, ctx.user_id
+    // Group of one: applied now — atomically with the I4 re-check (S1-H1), like an Accept.
+    const placement = plan.entity.placement;
+    const placed = await account_repo.place_in_group_checked(
+      ctx,
+      ctx.input.account_id,
+      placement.group_id,
+      (account, group_accounts) =>
+        recheck_immediate_placement(
+          placement,
+          to_placeable(account),
+          ctx.user_id,
+          group_accounts.map((a) => to_placeable(a)!)
+        ),
+      ctx.user_id
     );
+    if (placed.validation_errors?.length || !placed.written) {
+      return { success: false, errors: placed.validation_errors ?? ["This account changed. Try again."] };
+    }
     await bump_owner_versions([ctx.user_id]);
     await reassign_accounts(ctx, [{ id: ctx.input.account_id, user_id: ctx.user_id }]);
     await refresh_group_transfer_roles(ctx, plan.entity.placement.group_id);

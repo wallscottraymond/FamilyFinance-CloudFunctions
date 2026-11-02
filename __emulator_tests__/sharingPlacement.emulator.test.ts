@@ -34,6 +34,7 @@ import {
   unshare_account_orchestrator,
 } from "../src/functions/orchestrators/sharing/placement.orchestrator";
 import { account_repo } from "../src/functions/repositories/account.repo";
+import { request_repo } from "../src/functions/repositories/sharing";
 
 const RUN = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 const ALEX = `alex_${RUN}`;
@@ -193,5 +194,127 @@ describe("departures (D13, emulator)", () => {
     expect((await manage_group_orchestrator(ctx(ALEX, { group_id, action: "delete" }))).success)
       .toBe(true);
     expect(await placement_of(JC_A)).toBeNull();
+  });
+});
+
+/**
+ * Code-Health-Review batch 10 (sharing edges).
+ *   S1-H1: the same real account (bank + last 4 + subtype) can't end up placed twice in a group —
+ *          refused at send when a copy is WAITING for an Accept, and re-checked at accept (inside
+ *          the placement transaction) for copies sent before either was accepted.
+ *   S1-M3: a share request goes to every member; a member NOT connected to the sharer can accept
+ *          (membership in the group is the authority).
+ * Quinn owns the group and is connected to Pat and Remy; Pat and Remy are NOT connected.
+ */
+describe("sharing edges (batch 10, emulator)", () => {
+  const PAT = `pat_${RUN}`;
+  const QUINN = `quinn_${RUN}`;
+  const REMY = `remy_${RUN}`;
+  const acc = (k: string) => `${k}_${RUN}`;
+  let gid = "";
+
+  const connect = async (a: string, b: string) => {
+    const ca = (await get_my_connect_code_orchestrator(ctx(a, { refresh: true }))).code;
+    const cb = (await get_my_connect_code_orchestrator(ctx(b, { refresh: true }))).code;
+    await enter_connect_code_orchestrator(ctx(a, { code: cb }));
+    await enter_connect_code_orchestrator(ctx(b, { code: ca }));
+  };
+  const share_request = async (to: string, account_id: string) => {
+    const q = await db.collection("requests").where("targetId", "==", account_id)
+      .where("status", "==", "pending").get();
+    const doc = q.docs.find((d) => d.data().toUserId === to);
+    // Also listed in the recipient's overview (what the app shows).
+    if (doc) expect((await overview(to)).requests.some((r) => r.id === doc.id)).toBe(true);
+    return { id: doc!.id };
+  };
+
+  beforeAll(async () => {
+    const b = db.batch();
+    for (const u of [PAT, QUINN, REMY]) b.set(db.collection("users").doc(u), { email: `${u}@x.com` });
+    // Two copies of one joint account (Pat's + Quinn's), twice (mask 4321 / 8765), and one of
+    // Pat's own accounts for the not-connected accept.
+    b.set(db.collection("accounts").doc(acc("p1")), account_doc(acc("p1"), PAT, "Joint", "4321", "checking"));
+    b.set(db.collection("accounts").doc(acc("q1")), account_doc(acc("q1"), QUINN, "Joint", "4321", "checking"));
+    b.set(db.collection("accounts").doc(acc("p2")), account_doc(acc("p2"), PAT, "Joint 2", "8765", "checking"));
+    b.set(db.collection("accounts").doc(acc("q2")), account_doc(acc("q2"), QUINN, "Joint 2", "8765", "checking"));
+    b.set(db.collection("accounts").doc(acc("p3")), account_doc(acc("p3"), PAT, "Pat Visa", "1111", "credit card"));
+    await b.commit();
+    await connect(QUINN, PAT);
+    await connect(QUINN, REMY);
+    gid = (await create_group_orchestrator(ctx(QUINN, { name: "Edges", invitee_ids: [PAT, REMY] })))
+      .group_id!;
+    for (const u of [PAT, REMY]) {
+      const r = (await overview(u)).requests.find((x) => x.type === "join_group")!;
+      expect((await respond_to_request_orchestrator(ctx(u, { request_id: r.id, accept: true }))).success)
+        .toBe(true);
+    }
+  });
+
+  it("S1-M3 Remy (not connected to Pat) accepts Pat's share — membership is the authority", async () => {
+    expect((await share_account_orchestrator(
+      ctx(PAT, { account_id: acc("p3"), group_id: gid, include_history: false })
+    )).success).toBe(true);
+    const req = await share_request(REMY, acc("p3"));
+    expect(req).toBeDefined();
+    const res = await respond_to_request_orchestrator(ctx(REMY, { request_id: req.id, accept: true }));
+    expect(res).toMatchObject({ success: true });
+    expect((await placement_of(acc("p3"))).groupId).toBe(gid);
+  });
+
+  it("S1-H1 send: a copy of an account that's WAITING for an Accept is refused, naming the sender", async () => {
+    expect((await share_account_orchestrator(
+      ctx(PAT, { account_id: acc("p1"), group_id: gid, include_history: false })
+    ))).toMatchObject({ success: true, status: "requested" });
+    const res = await share_account_orchestrator(
+      ctx(QUINN, { account_id: acc("q1"), group_id: gid, include_history: false })
+    );
+    expect(res.success).toBe(false);
+    expect(res.errors?.[0]).toMatch(/waiting for an Accept/);
+    expect(res.already_shared_by?.user_id).toBe(PAT);
+    expect((await db.collection("requests").where("targetId", "==", acc("q1")).get()).size).toBe(0);
+  });
+
+  it("S1-H1 accept: two copies sent before either was accepted → the second accept is refused", async () => {
+    // Quinn's copy was sent in the race window (both sends passed the check before either landed).
+    const now = Date.now();
+    await request_repo.save_many(ctx(QUINN, {}), [PAT, REMY].map((to, i) => ({
+      id: `race_${i}_${RUN}`, type: "share_account" as const, from_user_id: QUINN, to_user_id: to,
+      group_id: gid, target_id: acc("q1"), target_label: "Joint ••4321", shared_from_ms: null,
+      status: "pending" as const, created_at_ms: now, expires_at_ms: now + 86_400_000,
+      responded_at_ms: null,
+    })));
+    const pats = await share_request(QUINN, acc("p1"));
+    expect((await respond_to_request_orchestrator(ctx(QUINN, { request_id: pats.id, accept: true })))
+      .success).toBe(true);
+    const res = await respond_to_request_orchestrator(ctx(PAT, { request_id: `race_0_${RUN}`, accept: true }));
+    expect(res.success).toBe(false);
+    expect(res.errors?.[0]).toMatch(/already shares this account/);
+    expect(await placement_of(acc("q1"))).toBeNull();
+    // The refused copy's requests are closed, so nobody else can try it either.
+    const left = await db.collection("requests").where("targetId", "==", acc("q1"))
+      .where("status", "==", "pending").get();
+    expect(left.size).toBe(0);
+  });
+
+  it("S1-H1 accept race: both copies accepted AT ONCE → exactly one is placed", async () => {
+    const now = Date.now();
+    const seed = (id: string, from: string, to: string, target: string) => ({
+      id, type: "share_account" as const, from_user_id: from, to_user_id: to, group_id: gid,
+      target_id: target, target_label: "Joint 2 ••8765", shared_from_ms: null,
+      status: "pending" as const, created_at_ms: now, expires_at_ms: now + 86_400_000,
+      responded_at_ms: null,
+    });
+    // Accepted by people connected to the senders (so only the duplicate rule can refuse).
+    await request_repo.save_many(ctx(PAT, {}), [
+      seed(`rp2_${RUN}`, PAT, QUINN, acc("p2")),
+      seed(`rq2_${RUN}`, QUINN, PAT, acc("q2")),
+    ]);
+    const results = await Promise.all([
+      respond_to_request_orchestrator(ctx(QUINN, { request_id: `rp2_${RUN}`, accept: true })),
+      respond_to_request_orchestrator(ctx(PAT, { request_id: `rq2_${RUN}`, accept: true })),
+    ]);
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    const placed = [await placement_of(acc("p2")), await placement_of(acc("q2"))].filter(Boolean);
+    expect(placed).toHaveLength(1);
   });
 });

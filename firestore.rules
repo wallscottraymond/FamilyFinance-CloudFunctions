@@ -1491,6 +1491,10 @@ service cloud.firestore {
     match /_reassign_locks/{slotId} {
       allow read, write: if false;
     }
+    // One per group: serializes account placements into it (Code-Health-Review S1-H1).
+    match /_placement_locks/{groupId} {
+      allow read, write: if false;
+    }
     match /_migration_reports/{runId} {
       allow read, write: if false;
     }

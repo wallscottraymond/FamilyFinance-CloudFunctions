@@ -260,6 +260,26 @@ function map_to_doc(entity: Account): LegacyAccountDoc {
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
+/** One doc per group, `{ groupId, updatedAt }`: serializes placements into that group (S1-H1).
+ *  Server-only (deny-all rules); bounded by the number of groups. */
+const PLACEMENT_LOCKS = "_placement_locks";
+
+/** A placement as stored on the account doc. */
+function placement_value(placement: AccountPlacement | null): Record<string, unknown> | null {
+  /* eslint-disable @typescript-eslint/naming-convention */
+  return placement
+    ? {
+      groupId: placement.group_id,
+      sharedFrom: placement.shared_from_ms !== null
+        ? Timestamp.fromMillis(placement.shared_from_ms)
+        : null,
+      sharedBy: placement.shared_by,
+      sharedAt: Timestamp.fromMillis(placement.shared_at_ms),
+    }
+    : null;
+  /* eslint-enable @typescript-eslint/naming-convention */
+}
+
 /**
  * Gets Firestore document reference.
  */
@@ -662,19 +682,9 @@ export const account_repo = {
     placement: AccountPlacement | null,
     user_id: string
   ): Promise<void> {
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const value = placement
-      ? {
-        groupId: placement.group_id,
-        sharedFrom: placement.shared_from_ms !== null
-          ? Timestamp.fromMillis(placement.shared_from_ms)
-          : null,
-        sharedBy: placement.shared_by,
-        sharedAt: Timestamp.fromMillis(placement.shared_at_ms),
-      }
-      : null;
+    const value = placement_value(placement);
+    /* eslint-disable-next-line @typescript-eslint/naming-convention */
     await doc_ref(account_id).update({ placement: value, updatedAt: Timestamp.now() });
-    /* eslint-enable @typescript-eslint/naming-convention */
     record_audit_entry_async({
       user_id,
       action: "update",
@@ -685,6 +695,70 @@ export const account_repo = {
       trace_id: ctx.trace_id,
       metadata: { source: "api", context: { placement: true } },
     });
+  },
+
+  /**
+   * Places an account in a group ATOMICALLY with the "same real account" re-check (I4,
+   * Code-Health-Review S1-H1). In one transaction: the group's placement lock, the account, and
+   * every account placed in the group are read; `decide` (the pure domain rule) runs on that
+   * fresh data; on success the placement and the lock are written. Two placements into one group
+   * both read + write the lock, so they serialize — the second re-reads and sees the first
+   * (an account entering the group's query result can't be locked by a plain query read).
+   *
+   * `written` is false when `decide` returned the account's existing placement (another member's
+   * Accept already applied it) or refused.
+   */
+  async place_in_group_checked(
+    ctx: TraceContext,
+    account_id: string,
+    group_id: string,
+    decide: (
+      account: Account | null,
+      group_accounts: Account[]
+    ) => { entity?: AccountPlacement; validation_errors?: string[] },
+    user_id: string
+  ): Promise<{ entity?: AccountPlacement; validation_errors?: string[]; written: boolean }> {
+    const db = getFirestore();
+    const lock = db.collection(PLACEMENT_LOCKS).doc(group_id);
+    const result = await db.runTransaction(async (tx) => {
+      // Sequential reads, lock first (a read failing mid-abort must not race the others).
+      await tx.get(lock);
+      const snap = await tx.get(doc_ref(account_id));
+      const placed = await tx.get(
+        db.collection(COLLECTION).where("placement.groupId", "==", group_id)
+      );
+      const data = snap.exists ? (snap.data() as LegacyAccountDoc) : null;
+      const account = data && !data.isDeleted ? map_to_entity({ ...data, id: snap.id }) : null;
+      const group_accounts = placed.docs
+        .map((d) => map_to_entity({ ...(d.data() as LegacyAccountDoc), id: d.id }))
+        .filter((a) => a.is_active);
+      const decided = decide(account, group_accounts);
+      if (decided.validation_errors?.length || !decided.entity) {
+        return { ...decided, written: false };
+      }
+      if (account?.placement) return { ...decided, written: false };
+      /* eslint-disable @typescript-eslint/naming-convention */
+      tx.update(doc_ref(account_id), {
+        placement: placement_value(decided.entity),
+        updatedAt: Timestamp.now(),
+      });
+      tx.set(lock, { groupId: group_id, updatedAt: Timestamp.now() });
+      /* eslint-enable @typescript-eslint/naming-convention */
+      return { ...decided, written: true };
+    });
+    if (result.written) {
+      record_audit_entry_async({
+        user_id,
+        action: "update",
+        entity_type: "account",
+        entity_id: account_id,
+        before: {},
+        after: { placement: placement_value(result.entity ?? null) },
+        trace_id: ctx.trace_id,
+        metadata: { source: "api", context: { placement: true } },
+      });
+    }
+    return result;
   },
 
   /** Makes several accounts private in one batch (leaving / deleting a group). */
@@ -705,6 +779,16 @@ export const account_repo = {
     console.log(
       `[${ctx.trace_id}] account_repo.clear_placements: ${account_ids.length} by ${user_id}`
     );
+  },
+
+  /** Accounts by doc id (missing / deleted ones are skipped). */
+  async get_many(_ctx: TraceContext, ids: string[]): Promise<Account[]> {
+    const unique = [...new Set(ids)].filter(Boolean);
+    if (unique.length === 0) return [];
+    const snaps = await getFirestore().getAll(...unique.map((id) => doc_ref(id)));
+    return snaps
+      .filter((s) => s.exists && !(s.data() as LegacyAccountDoc).isDeleted)
+      .map((s) => map_to_entity({ ...(s.data() as LegacyAccountDoc), id: s.id }));
   },
 
   /** Active accounts shared with a group (any owner). */

@@ -24,6 +24,7 @@ import {
   resolve_group_pending_requests,
   resolve_share_accept,
   resolve_group_accounts,
+  to_placeable,
 } from "../../resolvers/sharing/sharing.resolver";
 import {
   placement_on_accept,
@@ -47,6 +48,7 @@ import {
   answer_request,
   cancel_requests,
   is_open,
+  accept_authority_errors,
 } from "../../domain/sharing/request.service";
 import { is_connected } from "../../domain/sharing/connection.service";
 import { group_repo, request_repo } from "../../repositories/sharing";
@@ -56,12 +58,18 @@ import { return_moved_in_budgets } from "./budget_view.orchestrator";
 import { bump_owner_versions } from "./versions";
 import { reassign_accounts, refresh_group_transfer_roles } from "./view_reassign";
 import { idea_repo } from "../../repositories/idea.repo";
-import { group_view_key } from "../../domain/sharing/budget_view.service";
+import {
+  group_view_key,
+  returned_budget_notes,
+  ReturnedBudgetNote,
+} from "../../domain/sharing/budget_view.service";
 
 export interface SharingWriteResult {
   success: boolean;
   errors?: string[];
   group_id?: string;
+  /** leave / remove / delete: the caller's budgets that came back to Me CHANGED (S1-M4). */
+  returned_budgets?: ReturnedBudgetNote[];
 }
 
 const fail = (errors?: string[]): SharingWriteResult => ({
@@ -181,8 +189,13 @@ export async function respond_to_request_orchestrator(
     return fail(answered.validation_errors);
   }
   const answer = answered.entity;
-  if (ctx.input.accept && !is_connected(inviter_connection?.status ?? null)) {
-    return fail(["This request isn't available"]);
+  // A join is person-to-person (the inviter must still be connected); a share request is
+  // addressed to the group — membership is checked when it's applied (S1-M3).
+  if (ctx.input.accept) {
+    const authority = accept_authority_errors(
+      answer, is_connected(inviter_connection?.status ?? null)
+    );
+    if (authority.length) return fail(authority);
   }
 
   // 3. REPOSITORY
@@ -193,22 +206,40 @@ export async function respond_to_request_orchestrator(
   }
   if (answer.type === "share_account") {
     // First Accept from any member applies the share (PD5); the other members'
-    // copies of the request are cancelled.
+    // copies of the request are cancelled. The placement is decided and written in ONE
+    // transaction with the group's placed accounts, so the same real account can't be placed
+    // twice by two accepts (I4 re-checked at accept — S1-H1).
     const deps = await resolve_share_accept(ctx, answer);
-    const placement = placement_on_accept(answer, deps.account, deps.group, now_ms);
-    if (placement.validation_errors?.length || !placement.entity) {
-      return fail(placement.validation_errors);
-    }
+    const placement = await account_repo.place_in_group_checked(
+      ctx,
+      answer.target_id ?? "",
+      answer.group_id,
+      (account, group_accounts) =>
+        placement_on_accept(
+          answer,
+          to_placeable(account),
+          deps.group,
+          now_ms,
+          group_accounts.map((a) => to_placeable(a)!)
+        ),
+      answer.from_user_id
+    );
     const siblings = cancel_requests(
       deps.pending.filter((r) => r.id !== answer.id),
       now_ms
     );
-    if (!deps.account!.placement) {
-      await account_repo.set_placement(
-        ctx, deps.account!.id, placement.entity, answer.from_user_id
-      );
+    if (placement.validation_errors?.length || !placement.entity) {
+      // Refused for good (the same account is already in the group, it's gone, or the group
+      // changed): close every copy of this request so nobody else is offered a dead one.
+      await request_repo.save_many(ctx, [
+        { ...answer, status: "cancelled" as const },
+        ...siblings,
+      ]);
+      return fail(placement.validation_errors);
+    }
+    if (placement.written) {
       await bump_owner_versions([answer.from_user_id]);
-      await reassign_accounts(ctx, [{ id: deps.account!.id, user_id: answer.from_user_id }]);
+      await reassign_accounts(ctx, [{ id: answer.target_id!, user_id: answer.from_user_id }]);
       await refresh_group_transfer_roles(ctx, placement.entity.group_id);
     }
     await request_repo.save_many(ctx, [answer, ...siblings]);
@@ -295,9 +326,15 @@ export async function manage_group_orchestrator(
     await request_repo.save_many(
       ctx, cancel_requests(requests_released(pending, leaving), now_ms)
     );
-    await return_moved_in_budgets(ctx, input.group_id, leaving, caller);
+    const returned = await return_moved_in_budgets(ctx, input.group_id, leaving, caller);
     // A closed group's ideas have nobody left to read them (Planning-Module v1).
     if (deleted) await idea_repo.delete_list(ctx, group_view_key(input.group_id));
+    log_operation_success(span, ctx.user_id);
+    return {
+      success: true,
+      group_id: input.group_id,
+      returned_budgets: returned_budget_notes(returned, caller),
+    };
   }
 
   log_operation_success(span, ctx.user_id);

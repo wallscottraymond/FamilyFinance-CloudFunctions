@@ -41,4 +41,23 @@ export declare function plan_view_claims(input: {
 }): DomainResult<{
     claims: ViewClaim[];
 }>;
+/**
+ * A budget ARRIVES in a view it didn't choose (it comes back to its owner's Me view when they
+ * leave a group — Code-Health-Review S1-M4): the budget ALREADY in the view keeps any category
+ * both budget (canon A3 / A3b: one owner per category per view, compared by FIRST category,
+ * Everything Else is never an owner). Returns the arriving budget's categories split into the
+ * ones it keeps and the ones it gives up (the ids it actually stores). It may keep none — the
+ * caller decides what an empty budget becomes (paused).
+ *
+ * PURE FUNCTION.
+ */
+export declare function plan_view_arrival(input: {
+    budget_id: string;
+    category_ids: string[];
+    view_budgets: ViewBudgetForClaims[];
+    first_of: (category_id: string) => string | null;
+}): {
+    kept_category_ids: string[];
+    removed_category_ids: string[];
+};
 //# sourceMappingURL=category_ownership.service.d.ts.map

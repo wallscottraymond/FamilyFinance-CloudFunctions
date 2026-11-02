@@ -21,7 +21,7 @@ import {
   request_repo,
 } from "../../repositories/sharing";
 import { pair_id } from "../../domain/sharing/connection.service";
-import { DAY_MS } from "../../domain/sharing/request.service";
+import { DAY_MS, is_open } from "../../domain/sharing/request.service";
 import { PlaceableAccount } from "../../domain/sharing/placement.service";
 import { account_repo, Account } from "../../repositories/account.repo";
 
@@ -216,6 +216,8 @@ export interface ShareAccountDeps {
   account: PlaceableAccount | null;
   group: Group | null;
   group_accounts: PlaceableAccount[];
+  /** Accounts waiting for an Accept into this group (open share requests) — S1-H1. */
+  pending_group_accounts: PlaceableAccount[];
   pending_for_account: SharingRequest[];
   sent_today: SharingRequest[];
 }
@@ -228,17 +230,25 @@ export async function resolve_share_account(
   group_id: string,
   now_ms: number
 ): Promise<ShareAccountDeps> {
-  const [account, group, shared, pending_for_account, sent_today] = await Promise.all([
-    account_repo.get_by_id(ctx, account_id),
-    group_repo.get(ctx, group_id),
-    account_repo.get_shared_with_group(ctx, group_id),
-    request_repo.get_pending_for_target(ctx, account_id),
-    request_repo.get_sent_since(ctx, user_id, now_ms - DAY_MS),
-  ]);
+  const [account, group, shared, pending_for_account, sent_today, group_pending] =
+    await Promise.all([
+      account_repo.get_by_id(ctx, account_id),
+      group_repo.get(ctx, group_id),
+      account_repo.get_shared_with_group(ctx, group_id),
+      request_repo.get_pending_for_target(ctx, account_id),
+      request_repo.get_sent_since(ctx, user_id, now_ms - DAY_MS),
+      request_repo.get_pending_for_group(ctx, group_id),
+    ]);
+  const waiting_ids = group_pending
+    .filter((r) => r.type === "share_account" && is_open(r, now_ms) && r.target_id !== account_id)
+    .map((r) => r.target_id!)
+    .filter(Boolean);
+  const waiting = (await account_repo.get_many(ctx, waiting_ids)).filter((a) => a.is_active);
   return {
     account: to_placeable(account),
     group,
     group_accounts: shared.map((a) => to_placeable(a)!),
+    pending_group_accounts: waiting.map((a) => to_placeable(a)!),
     pending_for_account,
     sent_today,
   };
