@@ -17,6 +17,14 @@
  * excluded from budget totals. PURE.
  */
 export declare function is_transfer_category(category: string | null | undefined): boolean;
+/** Plaid's code for a credit card payment. Both sides carry it: the debit leaving the paying
+ *  account and the credit arriving on the card. */
+export declare const CARD_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
+/**
+ * A card payment moves money, it isn't spending: the purchases on a linked card already count.
+ * Decided per split, on read — see `map_raw_split_to_on_read_match` (Trustworthy-Numbers D1). PURE.
+ */
+export declare function is_card_payment_category(category: string | null | undefined): boolean;
 /**
  * A Plaid `INCOME_*` detailed category = real income (salary, wages, dividends).
  * It belongs to the recurring-income (inflow) system, never a spending budget —

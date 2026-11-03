@@ -18,6 +18,7 @@
  */
 import { TraceContext } from "../../types";
 import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
+import { PeriodInstanceType } from "../../domain/budgets";
 import { CardTransaction } from "../../domain/transactions/transaction_card.service";
 export type DerivedSpendStatus = "counted" | "ignored" | "refund";
 export type IgnoredReason = "transfer" | "income" | "manual" | null;
@@ -34,5 +35,11 @@ export interface DerivedBudgetTransaction {
      *  groups a transaction's rows into one tile). */
     card: CardTransaction;
 }
+/**
+ * The view a period window belongs to, from its length: weekly is up to 7 days, bi-monthly up to
+ * 16, otherwise monthly. Pairing depends on the view's span, so Detail must shape as that view for
+ * its list to equal that view's card. Needs no new input, so older app builds get it too. PURE.
+ */
+export declare function view_cadence_of_window(start_ms: number, end_ms: number): PeriodInstanceType;
 export declare function derive_budget_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, force?: boolean, scope_request?: DeriveScopeRequest): Promise<DerivedBudgetTransaction[]>;
 //# sourceMappingURL=derive_budget_transactions.orchestrator.d.ts.map

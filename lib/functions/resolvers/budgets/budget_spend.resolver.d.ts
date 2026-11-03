@@ -54,5 +54,6 @@ export declare function stored_split_for_spend(s: Record<string, unknown>, txn: 
     is_pending: boolean;
     is_transfer: boolean;
     is_income: boolean;
+    is_paired_card_payment?: boolean;
 }): SplitForSpend | null;
 //# sourceMappingURL=budget_spend.resolver.d.ts.map

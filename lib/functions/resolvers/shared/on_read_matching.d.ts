@@ -21,6 +21,9 @@ export interface TxnMatchContext {
     is_pending: boolean;
     /** INTERNAL (matched-pair own-account) transfer — NOT the blanket category. */
     is_transfer: boolean;
+    /** Both sides of this card payment are in the view (`detect_card_payment_pairs_from_txns`).
+     *  Optional; defaults false. */
+    is_paired_card_payment?: boolean;
     /** Transaction `type === "income"` (a credit). */
     is_income: boolean;
     /** Txn belongs to a recurring bill/income Plaid stream (by `transactionIds`) — even if
@@ -31,6 +34,16 @@ export interface TxnMatchContext {
     merchant_name?: string | null;
     name?: string | null;
 }
+/**
+ * Whether a card-payment split is money movement rather than spending (Trustworthy-Numbers D1):
+ * the card-side credit always is, so a payment can never reduce spending; the paying side is only
+ * when the card's side is in the view too. Otherwise the payment is the only record of that
+ * spending here, so it counts. PURE.
+ */
+export declare function card_payment_is_money_movement(semantic_code: string, ctx: {
+    is_income: boolean;
+    is_paired_card_payment?: boolean;
+}): boolean;
 /**
  * Map a raw Firestore split (+ its transaction context) into the on-read matcher's
  * shape. The single source of truth for how a split's spendStatus, categories, and
@@ -44,6 +57,17 @@ export declare function map_raw_split_to_on_read_match(raw_split: Record<string,
  * with any transfer split pairs, whichever split comes first.
  */
 export declare function txn_effective_category(data: Record<string, unknown>, catalog: CategoryCatalog): string;
+/**
+ * The card payments whose two sides are both in `txns`: the same matched-pair rule as transfers
+ * (opposite direction, same amount, different account, a few days apart; canon A7). Kept apart
+ * from `internal_ids` on purpose: a stream with an internal transfer gets hidden as a bill, and a
+ * card payment the user tracks as a bill must stay one. Decided regardless of a side's status, so
+ * ignoring one side changes nothing. PURE.
+ */
+export declare function detect_card_payment_pairs_from_txns(txns: Array<{
+    id: string;
+    data: Record<string, unknown>;
+}>, catalog: CategoryCatalog): Set<string>;
 /**
  * Detect INTERNAL (own-account matched-pair) transfers over a set of already-loaded
  * transactions. Builds the pure matcher's input from the raw docs, then runs

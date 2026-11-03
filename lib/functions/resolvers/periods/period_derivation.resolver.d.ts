@@ -109,7 +109,12 @@ export interface DerivationWindow {
  * fallback, which already looks only at span-overlapping periods).
  */
 export declare function monthly_period_load_bounds(range_start_ms: number, range_end_ms: number): [number, number];
-export declare function load_period_derivation_raw(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, windows: DerivationWindow[], scope_request?: DeriveScopeRequest): Promise<PeriodDerivationRaw>;
+export declare function load_period_derivation_raw(ctx: TraceContext, user_id: string, view_cadence: PeriodInstanceType, windows: DerivationWindow[], scope_request?: DeriveScopeRequest, 
+/** Only what decides which transactions count (a budget's transaction list): skips the period
+ *  docs, goals and income history, which feed the page's other numbers. Same decision. */
+options?: {
+    counting_only?: boolean;
+}): Promise<PeriodDerivationRaw>;
 export declare function shape_period_derivation_deps(raw: PeriodDerivationRaw, view_cadence: PeriodInstanceType, window_start_ms: number, window_end_ms: number): PeriodDerivationDeps;
 /**
  * Load + shape for a SINGLE window — the `derive_period` path. Identical output to deriving any
