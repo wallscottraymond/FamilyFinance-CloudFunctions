@@ -51,6 +51,7 @@ import {
   split_spend_status,
 } from "../../domain/budgets/budget_spend.service";
 import {
+  detect_card_payment_pairs_from_txns,
   detect_internal_transfers_from_txns,
   txn_effective_category,
   map_raw_split_to_on_read_match,
@@ -256,7 +257,10 @@ export async function load_period_derivation_raw(
   user_id: string,
   view_cadence: PeriodInstanceType,
   windows: DerivationWindow[],
-  scope_request?: DeriveScopeRequest
+  scope_request?: DeriveScopeRequest,
+  /** Only what decides which transactions count (a budget's transaction list): skips the period
+   *  docs, goals and income history, which feed the page's other numbers. Same decision. */
+  options: { counting_only?: boolean } = {}
 ): Promise<PeriodDerivationRaw> {
   const range_start_ms = Math.min(...windows.map((w) => w.start_ms));
   const range_end_ms = Math.max(...windows.map((w) => w.end_ms));
@@ -281,12 +285,14 @@ export async function load_period_derivation_raw(
       Timestamp.fromMillis(range_end_ms)
     ),
     budget_repo.get_by_user_id(ctx, scope.budget_owner_key),
-    budget_period_repo.get_by_user_and_type_starting_between(
-      ctx,
-      scope.budget_owner_key,
-      "monthly",
-      ...monthly_period_load_bounds(range_start_ms, range_end_ms)
-    ),
+    options.counting_only
+      ? Promise.resolve([])
+      : budget_period_repo.get_by_user_and_type_starting_between(
+        ctx,
+        scope.budget_owner_key,
+        "monthly",
+        ...monthly_period_load_bounds(range_start_ms, range_end_ms)
+      ),
     // Per member: bills + income, then — chained, only if the member is flag-on or has a v2
     // record — their review state (the fuzzy hold-out). X11: no extra read otherwise.
     per_member(scope, async (m) => {
@@ -300,7 +306,7 @@ export async function load_period_derivation_raw(
       const st = await load_review_state_if_relevant(ctx, m, [...outs, ...ins], flag_on);
       return [{ member_id: m, outs, ins, st, pins }];
     }),
-    per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
+    options.counting_only ? Promise.resolve([]) : per_member(scope, (m) => goal_repo.get_by_user(ctx, m)),
     load_category_catalog(ctx),
   ]);
   const all_outflows = member_recurring.flatMap((r) => r.outs);
@@ -368,7 +374,10 @@ export async function load_period_derivation_raw(
     ),
     load_pairing_extra_txns(ctx, scope, txn_start_ms, txn_end_ms),
     Promise.all(
-      pinned_bills.map((o) => transaction_repo.get_by_split_recurring_link(ctx, o.user_id, "outflow", o.id))
+      // Only bill payments read these, never the counting decision.
+      (options.counting_only ? [] : pinned_bills).map((o) =>
+        transaction_repo.get_by_split_recurring_link(ctx, o.user_id, "outflow", o.id)
+      )
     ),
   ]);
   const pinned_seen = new Set<string>();
@@ -414,9 +423,11 @@ export async function load_period_derivation_raw(
     ),
   ];
   const inflow_history_docs = (
-    await per_member(scope, (m) =>
-      transaction_repo.get_by_plaid_transaction_ids(ctx, m, history_ids)
-    )
+    options.counting_only
+      ? []
+      : await per_member(scope, (m) =>
+        transaction_repo.get_by_plaid_transaction_ids(ctx, m, history_ids)
+      )
   ).filter((d) =>
     transaction_in_scope(
       scope,
@@ -643,6 +654,9 @@ export function shape_period_derivation_deps(
     view_pool,
     catalog
   );
+  // Card payments with both sides in the view move money and aren't spending (D1). Over the same
+  // pool, so a payment whose sides fall either side of a period boundary still pairs.
+  const paired_card_payments = detect_card_payment_pairs_from_txns(view_pool, catalog);
   // A recurring stream is an internal transfer when any of its transactions are.
   const is_internal_stream = (transaction_ids: string[] | undefined): boolean =>
     (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
@@ -895,6 +909,7 @@ export function shape_period_derivation_deps(
           txn_date_ms,
           is_pending,
           is_transfer: txn_is_internal_transfer,
+          is_paired_card_payment: paired_card_payments.has(id),
           is_income: txn_is_income,
           // Txn belongs to a recurring bill/income Plaid stream → not discretionary spend,
           // so it never counts toward a budget even if its split link was never set (S5).
@@ -904,6 +919,9 @@ export function shape_period_derivation_deps(
         }, catalog)
       );
       const matched = splits_for_match[splits_for_match.length - 1];
+      // Which row this is, for the budget's transaction list (one counting decision, two views).
+      matched.source_txn_id = id;
+      matched.source_split_id = (s.splitId as string) ?? (s.id as string) ?? null;
       if (is_edge && crossing.out_ids.has(id)) {
         matched.is_edge_out = true;
       }

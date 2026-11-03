@@ -21,7 +21,10 @@ import {
   InternalTransferResult,
   TransferForPairing,
 } from "../../domain/transactions/internal_transfer.service";
-import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
+import {
+  is_card_payment_category,
+  is_transfer_category,
+} from "../../domain/transactions/category_semantics.service";
 import {
   resolve_split_category,
   CategoryCatalog,
@@ -34,6 +37,9 @@ export interface TxnMatchContext {
   is_pending: boolean;
   /** INTERNAL (matched-pair own-account) transfer — NOT the blanket category. */
   is_transfer: boolean;
+  /** Both sides of this card payment are in the view (`detect_card_payment_pairs_from_txns`).
+   *  Optional; defaults false. */
+  is_paired_card_payment?: boolean;
   /** Transaction `type === "income"` (a credit). */
   is_income: boolean;
   /** Txn belongs to a recurring bill/income Plaid stream (by `transactionIds`) — even if
@@ -43,6 +49,22 @@ export interface TxnMatchContext {
   /** For the category function's merchant / keyword rules. */
   merchant_name?: string | null;
   name?: string | null;
+}
+
+/**
+ * Whether a card-payment split is money movement rather than spending (Trustworthy-Numbers D1):
+ * the card-side credit always is, so a payment can never reduce spending; the paying side is only
+ * when the card's side is in the view too. Otherwise the payment is the only record of that
+ * spending here, so it counts. PURE.
+ */
+export function card_payment_is_money_movement(
+  semantic_code: string,
+  ctx: { is_income: boolean; is_paired_card_payment?: boolean }
+): boolean {
+  return (
+    is_card_payment_category(semantic_code) &&
+    (ctx.is_income || ctx.is_paired_card_payment === true)
+  );
 }
 
 /**
@@ -72,7 +94,10 @@ export function map_raw_split_to_on_read_match(
     // The transaction's internal-transfer flag applies to a split only while ITS category is a
     // transfer (a split the user re-categorized to spending counts as spending — as the engine
     // decides per split).
-    is_transfer: ctx.is_transfer && is_transfer_category(category.semantic_code),
+    // Same per-split rule for a card payment (`card_payment_is_money_movement`).
+    is_transfer:
+      (ctx.is_transfer && is_transfer_category(category.semantic_code)) ||
+      card_payment_is_money_movement(category.semantic_code, ctx),
     is_income: ctx.is_income,
     spend_status: split_spend_status(raw_split),
     outflow_id: (raw_split.outflowId as string | null) ?? null,
@@ -103,6 +128,38 @@ export function txn_effective_category(
       .semantic_code
   );
   return codes.find((c) => is_transfer_category(c)) ?? codes[0];
+}
+
+/**
+ * The card payments whose two sides are both in `txns`: the same matched-pair rule as transfers
+ * (opposite direction, same amount, different account, a few days apart; canon A7). Kept apart
+ * from `internal_ids` on purpose: a stream with an internal transfer gets hidden as a bill, and a
+ * card payment the user tracks as a bill must stay one. Decided regardless of a side's status, so
+ * ignoring one side changes nothing. PURE.
+ */
+export function detect_card_payment_pairs_from_txns(
+  txns: Array<{ id: string; data: Record<string, unknown> }>,
+  catalog: CategoryCatalog
+): Set<string> {
+  const payments: TransferForPairing[] = [];
+  for (const { id, data } of txns) {
+    const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
+    const is_card_payment = (raw.length ? raw : [{}]).some((s) =>
+      is_card_payment_category(
+        resolve_split_category(split_category_input_from_raw(s, data, catalog), catalog).semantic_code
+      )
+    );
+    if (!is_card_payment) continue;
+    payments.push({
+      id,
+      plaid_id: (data.transactionId as string | null) ?? null,
+      account_id: (data.accountId as string) ?? "",
+      amount: raw.reduce((s, sp) => s + Math.abs((sp.amount as number) ?? 0), 0),
+      date_ms: (data.transactionDate as Timestamp).toMillis(),
+      direction: data.type === "income" ? "in" : "out",
+    });
+  }
+  return payments.length ? detect_internal_transfers(payments).internal_ids : new Set();
 }
 
 /**

@@ -62,6 +62,10 @@ export interface SplitForOnReadMatch {
    *  member's account in another view → it counts as spending here even though it's a
    *  transfer. Optional; defaults false (always false with nothing shared). */
   is_edge_out?: boolean;
+  /** The transaction and split this came from, so a list can show exactly what was counted.
+   *  Not used in any decision. */
+  source_txn_id?: string;
+  source_split_id?: string | null;
 }
 
 /**

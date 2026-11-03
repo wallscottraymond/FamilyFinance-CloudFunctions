@@ -12,6 +12,8 @@
  * @module domain/recurring/capture_rules
  */
 
+import { CARD_PAYMENT_CATEGORY } from "../transactions/category_semantics.service";
+
 /** The stamp written on records created under the new capture rules. */
 export const CAPTURE_RULES_VERSION = 2;
 
@@ -19,7 +21,7 @@ export const CAPTURE_RULES_VERSION = 2;
 export const CONVERT_TO_RECURRING_FLAG = "convert_to_recurring_v1";
 
 /** Credit-card "payment" category: a real bill on the paying account; on the card it is not income. */
-export const CARD_PAYMENT_CATEGORY = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
+export { CARD_PAYMENT_CATEGORY };
 
 /** True when a record (doc or entity) carries the v2 stamp. */
 export function is_v2_record(

@@ -22,10 +22,15 @@ import {
   split_spend_status,
 } from "../../domain/budgets/budget_spend.service";
 import {
+  card_payment_is_money_movement,
+  detect_card_payment_pairs_from_txns,
   detect_internal_transfers_from_txns,
   txn_effective_category,
 } from "../shared/on_read_matching";
-import { is_transfer_category } from "../../domain/transactions/category_semantics.service";
+import {
+  is_card_payment_category,
+  is_transfer_category,
+} from "../../domain/transactions/category_semantics.service";
 import { load_category_catalog } from "../shared/category_catalog.resolver";
 import { resolve_split_category } from "../../domain/transactions/split_category.service";
 import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
@@ -98,9 +103,20 @@ export async function resolve_spend_splits(
   // Internal transfers are excluded as on the period page: the stored matched-pair role when the
   // classifier has decided it (it decides per VIEW — an edge_out contribution counts), else live
   // pairing over the period ± the shared slack (as the page pairs). The wider read happens only
-  // when a transfer hasn't been classified yet (rare: the classifier runs right after a sync).
+  // when a transfer hasn't been classified yet (rare: the classifier runs right after a sync), or
+  // a card payment's paying side is stored in THIS budget (usually only Everything Else): whether
+  // it counts depends on its card side. A credit never counts, so it needs no pair.
   const catalog = await load_category_catalog(ctx);
-  const needs_live = txns.some(
+  const has_card_payment = txns.some((t) =>
+    t.data.type !== "income" &&
+    ((t.data.splits as Array<Record<string, unknown>>) ?? []).some((s) =>
+      stored_budget_in_lens(s, cadence) === budget_id &&
+      is_card_payment_category(
+        resolve_split_category(split_category_input_from_raw(s, t.data, catalog), catalog).semantic_code
+      )
+    )
+  );
+  const needs_live = has_card_payment || txns.some(
     (t) =>
       t.data.transferRole === undefined &&
       is_transfer_category(txn_effective_category(t.data, catalog))
@@ -109,6 +125,9 @@ export async function resolve_spend_splits(
     ? await load(start_ms - TRANSFER_PAIRING_BUFFER_MS, end_ms + TRANSFER_PAIRING_BUFFER_MS)
     : txns;
   const { internal_ids } = detect_internal_transfers_from_txns(pool, catalog);
+  const paired_card_payments = has_card_payment
+    ? detect_card_payment_pairs_from_txns(pool, catalog)
+    : new Set<string>();
 
   const out: SplitForSpend[] = [];
   for (const { id, data: d } of txns) {
@@ -124,12 +143,20 @@ export async function resolve_spend_splits(
         txn_date_ms,
         is_pending,
         is_transfer: txn_is_internal_transfer,
+        is_paired_card_payment: paired_card_payments.has(id),
         is_income: txn_is_income,
       });
       if (spend) out.push(spend);
     }
   }
   return out;
+}
+
+/** The split's assignment in a lens; monthly falls back to the legacy `budgetId` for pre-migration
+ *  docs. PURE. */
+function stored_budget_in_lens(s: Record<string, unknown>, cadence: PeriodInstanceType): string | undefined {
+  const assigned = s[LENS_FIELD[cadence]] as string | undefined;
+  return assigned === undefined && cadence === "monthly" ? (s.budgetId as string | undefined) : assigned;
 }
 
 /**
@@ -143,15 +170,15 @@ export function stored_split_for_spend(
   budget_id: string,
   cadence: PeriodInstanceType,
   catalog: Awaited<ReturnType<typeof load_category_catalog>>,
-  t: { txn_date_ms: number; is_pending: boolean; is_transfer: boolean; is_income: boolean }
-): SplitForSpend | null {
-  // The split's assignment in this budget's lens; monthly falls back to the legacy `budgetId`
-  // for pre-migration docs.
-  let assigned = s[LENS_FIELD[cadence]] as string | undefined;
-  if (assigned === undefined && cadence === "monthly") {
-    assigned = s.budgetId as string | undefined;
+  t: {
+    txn_date_ms: number;
+    is_pending: boolean;
+    is_transfer: boolean;
+    is_income: boolean;
+    is_paired_card_payment?: boolean;
   }
-  if (assigned !== budget_id) return null;
+): SplitForSpend | null {
+  if (stored_budget_in_lens(s, cadence) !== budget_id) return null;
   // The category's meaning from the ONE category function (a user pick away from income makes
   // it spending).
   const effective_category = resolve_split_category(
@@ -169,7 +196,10 @@ export function stored_split_for_spend(
     is_pending: t.is_pending,
     // The internal-transfer flag applies only while this split's category is a transfer (as the
     // engine and the page decide per split).
-    is_transfer: !pinned && t.is_transfer && is_transfer_category(effective_category),
+    is_transfer:
+      !pinned &&
+      ((t.is_transfer && is_transfer_category(effective_category)) ||
+        card_payment_is_money_movement(effective_category, t)),
     is_income: t.is_income,
     is_income_category: !pinned && is_income_category(effective_category),
     // Derive on read (no migration): explicit spendStatus wins, else fall back to the legacy

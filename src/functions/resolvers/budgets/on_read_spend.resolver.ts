@@ -36,6 +36,7 @@ import {
   BudgetForMatch,
 } from "../../domain/transactions/match_budget.service";
 import {
+  detect_card_payment_pairs_from_txns,
   detect_internal_transfers_from_txns,
   map_raw_split_to_on_read_match,
 } from "../shared/on_read_matching";
@@ -82,6 +83,7 @@ export async function resolve_on_read_spend_splits(
   // Only INTERNAL (matched-pair own-account) transfers are excluded from spend —
   // external ACH bills Plaid tags TRANSFER stay countable. Same rule everywhere.
   const { internal_ids } = detect_internal_transfers_from_txns(pool, catalog);
+  const paired_card_payments = detect_card_payment_pairs_from_txns(pool, catalog);
   const splits: SplitForOnReadMatch[] = [];
   for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
@@ -95,6 +97,7 @@ export async function resolve_on_read_spend_splits(
           txn_date_ms,
           is_pending,
           is_transfer: txn_is_internal_transfer,
+          is_paired_card_payment: paired_card_payments.has(id),
           is_income: txn_is_income,
           merchant_name: (d.merchantName as string | null) ?? null,
           name: (d.name as string | null) ?? null,

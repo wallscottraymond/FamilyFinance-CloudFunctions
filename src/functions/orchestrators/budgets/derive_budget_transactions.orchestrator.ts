@@ -17,11 +17,8 @@
  * @module orchestrators/budgets/derive_budget_transactions
  */
 
-import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { fire_and_forget } from "../../observability";
-import { budget_repo } from "../../repositories/budget.repo";
-import { transaction_repo } from "../../repositories/transaction.repo";
 import {
   resolve_view_version,
   view_key_for,
@@ -31,47 +28,24 @@ import {
   put_cached_result,
   DERIVED_CACHE_TTL_MS,
 } from "../../repositories/derived_result_cache.repo";
+import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 import {
-  resolve_derive_scope,
-  load_pairing_extra_txns,
-} from "../../resolvers/periods/derive_scope.resolver";
-import {
-  find_crossing_transfers,
-  TRANSFER_PAIRING_BUFFER_MS,
-} from "../../domain/periods/edge_transfers.service";
-import { outflow_repo } from "../../repositories/outflow.repo";
-import { inflow_repo } from "../../repositories/inflow.repo";
-import {
-  DeriveScopeRequest,
-  account_in_scope,
-  transaction_in_scope,
-} from "../../domain/periods/derive_scope.service";
+  load_period_derivation_raw,
+  shape_period_derivation_deps,
+} from "../../resolvers/periods/period_derivation.resolver";
 import { owned_splits_for_budget } from "../../domain/budgets/budget_spend_match.service";
-import {
-  budget_to_match_input,
-  build_match_budgets,
-} from "../../domain/budgets/match_budgets.service";
-import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
-import { BudgetForMatch } from "../../domain/transactions/match_budget.service";
+import { PeriodInstanceType } from "../../domain/budgets";
 import {
   CardTransaction,
   to_card_transaction,
 } from "../../domain/transactions/transaction_card.service";
-import {
-  detect_internal_transfers_from_txns,
-  txn_effective_category,
-  map_raw_split_to_on_read_match,
-} from "../../resolvers/shared/on_read_matching";
-
-// widen the window so cross-day transfer pairs match — THE shared slack (as the period page and
-// the stored transfer roles pair)
-const PAIRING_BUFFER_MS = TRANSFER_PAIRING_BUFFER_MS;
 
 /** L2 cache collection for this callable ([[Firestore-Read-Cost-Reduction]] B′). */
 const BUDGET_TXN_CACHE = "derived_budget_txn_cache";
 /** Result SHAPE version, part of the cache key: bump whenever the row shape changes so a cached
- *  result in the old shape (24h TTL) is never served. v2 = rows carry `card`. */
-const BUDGET_TXN_CACHE_SHAPE = "v2";
+ *  result in the old shape (24h TTL) is never served. v2 = rows carry `card`. v3 = one counting
+ *  decision with the period page, card payments are money movement (Trustworthy-Numbers). */
+const BUDGET_TXN_CACHE_SHAPE = "v3";
 
 export type DerivedSpendStatus = "counted" | "ignored" | "refund";
 export type IgnoredReason = "transfer" | "income" | "manual" | null;
@@ -88,6 +62,17 @@ export interface DerivedBudgetTransaction {
   /** The whole transaction, for the app's shared transaction row (one per split row; the app
    *  groups a transaction's rows into one tile). */
   card: CardTransaction;
+}
+
+/**
+ * The view a period window belongs to, from its length: weekly is up to 7 days, bi-monthly up to
+ * 16, otherwise monthly. Pairing depends on the view's span, so Detail must shape as that view for
+ * its list to equal that view's card. Needs no new input, so older app builds get it too. PURE.
+ */
+export function view_cadence_of_window(start_ms: number, end_ms: number): PeriodInstanceType {
+  const days = Math.ceil((end_ms - start_ms) / (24 * 60 * 60 * 1000));
+  if (days <= 7) return "weekly";
+  return days <= 16 ? "bi_monthly" : "monthly";
 }
 
 export async function derive_budget_transactions_orchestrator(
@@ -125,157 +110,69 @@ export async function derive_budget_transactions_orchestrator(
     }
   }
 
-  // The view's scope (only on a miss): Me minus the user's shared accounts, or the group.
-  const scope = await resolve_derive_scope(ctx, user_id, scope_request);
-
-  // 1. Budgets → real budgets (category ownership) + the EE id + is-target-EE.
-  const budgets = await budget_repo.get_by_user_id(ctx, scope.budget_owner_key);
-  // THE budget set (domain/budgets/match_budgets) — same as the period page and the engine.
-  const catalog = await load_category_catalog(ctx);
-  const budget_match = build_match_budgets(budgets.map(budget_to_match_input));
-  const real_budgets: BudgetForMatch[] = budget_match.real_budgets;
-  const target_is_ee = budgets.some((b) => b.id === budget_id && b.is_system_everything_else);
-  const ee_id = target_is_ee ? budget_id : budget_match.primary_everything_else_id;
-
-  // 2. Load the window's transactions (+ a small buffer for transfer pairing). All members'
-  //    transactions are kept server-side for cross-view pairing (D12); the view's are filtered.
-  const all_member_txns = (
-    await Promise.all(
-      scope.member_ids.map((m) =>
-        transaction_repo.get_active_in_date_range(
-          ctx,
-          m,
-          start_ms - PAIRING_BUFFER_MS,
-          end_ms + PAIRING_BUFFER_MS
-        )
-      )
-    )
-  ).flat();
-  // The VIEW comes only from the members' own transactions…
-  const txns = all_member_txns.filter((t) =>
-    transaction_in_scope(
-      scope,
-      t.data.accountId as string | undefined,
-      (t.data.transactionDate as Timestamp).toMillis()
-    )
+  // ONE counting decision (Trustworthy-Numbers AF-07): the same load and shape as the period page,
+  // so this list can't disagree with the card, the charts or the widgets about which transactions
+  // count. Everything the page decides per split comes from here: the view, transfer and card
+  // payment pairing, edge money, released payments of a removed bill, bill and income streams.
+  const cadence = view_cadence_of_window(start_ms, end_ms);
+  const raw_load = await load_period_derivation_raw(
+    ctx,
+    user_id,
+    cadence,
+    [{ start_ms, end_ms }],
+    scope_request,
+    { counting_only: true }
   );
-  // …the pairing pool also covers known group accounts (D12; never counted, added AFTER the
-  // view filter so they can't leak into it).
-  all_member_txns.push(
-    ...(await load_pairing_extra_txns(
-      ctx,
-      scope,
-      start_ms - PAIRING_BUFFER_MS,
-      end_ms + PAIRING_BUFFER_MS
-    ))
+  const deps = shape_period_derivation_deps(raw_load, cadence, start_ms, end_ms);
+  const target_is_ee = raw_load.budget_entities.some(
+    (b) => b.id === budget_id && b.is_system_everything_else
   );
+  const ee_id = target_is_ee ? budget_id : deps.any_ee_id;
+  const txn_by_id = new Map(raw_load.txns.map((t) => [t.id, t.data]));
 
-  // 2b. Live bills / income that live in ANOTHER view: a split linked to one of them is this
-  //     view's ordinary money (same rule as the period page). Skipped entirely when nothing is
-  //     shared, so Me with nothing shared does no extra reads.
-  const scoped = scope.include_account_ids !== null || scope.exclude_account_ids.size > 0;
-  const out_of_view_ids = new Set<string>();
-  if (scoped) {
-    const lists = await Promise.all(
-      scope.member_ids.flatMap((m) => [
-        outflow_repo.get_by_user_id(ctx, m),
-        inflow_repo.get_by_user_id(ctx, m),
-      ])
-    );
-    for (const r of lists.flat()) {
-      if (r.is_active && !r.is_hidden && !account_in_scope(scope, r.account_id)) {
-        out_of_view_ids.add(r.id);
-      }
-    }
-  }
-
-  // 3. Matched-pair internal-transfer detection over the buffered window, then (two-stage, as
-  //    on the period page) the view's leftovers against the members' other accounts → edge money.
-  const { internal_ids } = detect_internal_transfers_from_txns(txns, catalog);
-  const crossing = find_crossing_transfers(
-    detect_internal_transfers_from_txns(
-      all_member_txns.filter((t) => !internal_ids.has(t.id)),
-      catalog
-    ),
-    internal_ids,
-    txns,
-    (d) => txn_effective_category(d, catalog)
-  );
-
-  // 4. Resolve ownership on read; keep only splits owned by the target budget, in-window.
   const out: DerivedBudgetTransaction[] = [];
-  for (const { id, data } of txns) {
-    const date_ms = (data.transactionDate as Timestamp).toMillis();
-    if (date_ms < start_ms || date_ms > end_ms) continue;
-    const is_pending = data.isPending === true;
-    const txn_is_internal_transfer = internal_ids.has(id);
-    const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
-    const name =
-      (data.merchantName as string) ||
-      (data.name as string) ||
-      (data.description as string) ||
-      "Transaction";
+  for (const match of deps.splits_for_match) {
+    if (match.txn_date_ms < start_ms || match.txn_date_ms > end_ms) continue;
+    const [owned] = owned_splits_for_budget(
+      budget_id,
+      deps.real_budgets,
+      ee_id,
+      [match],
+      deps.ee_alias_ids
+    );
+    if (!owned) continue;
+    // Bill and income money is tracked there, not as a budget line. A stream member the user
+    // ignored stays visible here (uncounted): no bill shows it.
+    if (owned.outflow_id || owned.inflow_id) continue;
+    if (owned.is_recurring_member && match.spend_status !== "ignored") continue;
+    const id = match.source_txn_id as string;
+    const data = txn_by_id.get(id) as Record<string, unknown>;
 
-    const is_edge = crossing.ids.has(id);
-    const card = to_card_transaction(id, data as Record<string, unknown>);
-    for (const s of raw) {
-      const outflow_id = (s.outflowId as string | null) ?? null;
-      const inflow_id = (s.inflowId as string | null) ?? null;
-      // Recurring-linked splits are tracked as bills/income, not budget lines — unless the link
-      // points to a bill / income in another view, or this is edge money (D12).
-      const linked_here =
-        (outflow_id && !out_of_view_ids.has(outflow_id)) ||
-        (inflow_id && !out_of_view_ids.has(inflow_id));
-      if (linked_here && !is_edge) continue;
-
-      const match = map_raw_split_to_on_read_match(s, {
-        txn_date_ms: date_ms,
-        is_pending,
-        is_transfer: txn_is_internal_transfer,
-        is_income: data.type === "income",
-        merchant_name: (data.merchantName as string | null) ?? null,
-        name: (data.name as string | null) ?? null,
-      }, catalog);
-      if (is_edge && crossing.out_ids.has(id)) match.is_edge_out = true;
-
-      // Ownership + counting from the period page's own calls (owned_splits_for_budget →
-      // is_countable's flags), so the list agrees with the page: a manually pinned transfer /
-      // income-category split counts; an unpaired transfer-category split doesn't.
-      const [owned] = owned_splits_for_budget(
-        budget_id,
-        real_budgets,
-        ee_id,
-        [match],
-        budget_match.everything_else_id_set
-      );
-      if (!owned) continue;
-
-      // Display status: why it doesn't count (transfer / income / the user's ignore), else the
-      // stored status.
-      let spend_status: DerivedSpendStatus = match.spend_status;
-      let ignored_reason: IgnoredReason = null;
-      if (owned.is_transfer || owned.is_transfer_category) {
-        spend_status = "ignored";
-        ignored_reason = "transfer";
-      } else if (owned.is_income_category) {
-        spend_status = "ignored";
-        ignored_reason = "income";
-      } else if (match.spend_status === "ignored") {
-        ignored_reason = "manual";
-      }
-
-      out.push({
-        transaction_id: id,
-        split_id: (s.splitId as string) ?? (s.id as string) ?? null,
-        date_ms,
-        name,
-        amount: Math.abs((s.amount as number) ?? 0),
-        is_pending,
-        spend_status,
-        ignored_reason,
-        card,
-      });
+    // Display status: why it doesn't count (transfer / income / the user's ignore), else the
+    // stored status.
+    let spend_status: DerivedSpendStatus = match.spend_status;
+    let ignored_reason: IgnoredReason = null;
+    if (owned.is_transfer || owned.is_transfer_category) {
+      spend_status = "ignored";
+      ignored_reason = "transfer";
+    } else if (owned.is_income_category) {
+      spend_status = "ignored";
+      ignored_reason = "income";
+    } else if (match.spend_status === "ignored") {
+      ignored_reason = "manual";
     }
+
+    out.push({
+      transaction_id: id,
+      split_id: match.source_split_id ?? null,
+      date_ms: match.txn_date_ms,
+      name: (data.merchantName as string) || (data.name as string) || (data.description as string) || "Transaction",
+      amount: Math.abs(match.amount),
+      is_pending: match.is_pending,
+      spend_status,
+      ignored_reason,
+      card: to_card_transaction(id, data),
+    });
   }
 
   // Newest first.
