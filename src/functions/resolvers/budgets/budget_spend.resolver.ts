@@ -125,9 +125,10 @@ export async function resolve_spend_splits(
     ? await load(start_ms - TRANSFER_PAIRING_BUFFER_MS, end_ms + TRANSFER_PAIRING_BUFFER_MS)
     : txns;
   const { internal_ids } = detect_internal_transfers_from_txns(pool, catalog);
-  const paired_card_payments = has_card_payment
-    ? detect_card_payment_pairs_from_txns(pool, catalog)
-    : new Set<string>();
+  // Over whatever is loaded, even with no paying side in this budget: a look-alike credit stored
+  // here may pair with a debit stored in another budget (no extra read).
+  const paired_card_payments = detect_card_payment_pairs_from_txns(pool, catalog);
+  const card_clock_ms = Date.now();
 
   const out: SplitForSpend[] = [];
   for (const { id, data: d } of txns) {
@@ -144,6 +145,7 @@ export async function resolve_spend_splits(
         is_pending,
         is_transfer: txn_is_internal_transfer,
         is_paired_card_payment: paired_card_payments.has(id),
+        now_ms: card_clock_ms,
         is_income: txn_is_income,
       });
       if (spend) out.push(spend);
@@ -176,15 +178,17 @@ export function stored_split_for_spend(
     is_transfer: boolean;
     is_income: boolean;
     is_paired_card_payment?: boolean;
+    now_ms?: number;
   }
 ): SplitForSpend | null {
   if (stored_budget_in_lens(s, cadence) !== budget_id) return null;
   // The category's meaning from the ONE category function (a user pick away from income makes
   // it spending).
-  const effective_category = resolve_split_category(
+  const resolved_category = resolve_split_category(
     split_category_input_from_raw(s, txn, catalog),
     catalog
-  ).semantic_code;
+  );
+  const effective_category = resolved_category.semantic_code;
   // A manual pin counts in its budget whatever the money is (canon A4) — as on the page. The
   // engine stores a pin per lens (an Everything Else pin → each lens's own EE), so the pin is
   // "here" when this lens's stored budget is this budget.
@@ -199,7 +203,7 @@ export function stored_split_for_spend(
     is_transfer:
       !pinned &&
       ((t.is_transfer && is_transfer_category(effective_category)) ||
-        card_payment_is_money_movement(effective_category, t)),
+        card_payment_is_money_movement(effective_category, t, resolved_category.category_source === "user")),
     is_income: t.is_income,
     is_income_category: !pinned && is_income_category(effective_category),
     // Derive on read (no migration): explicit spendStatus wins, else fall back to the legacy

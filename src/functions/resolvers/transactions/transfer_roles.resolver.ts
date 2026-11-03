@@ -27,6 +27,7 @@ import {
 } from "../../domain/periods/edge_transfers.service";
 import { transaction_in_scope, DeriveScope } from "../../domain/periods/derive_scope.service";
 import {
+  detect_card_payment_pairs_from_txns,
   detect_internal_transfers_from_txns,
   txn_effective_category,
 } from "../shared/on_read_matching";
@@ -83,6 +84,52 @@ function roles_in_view(
             : "external"
     );
   }
+}
+
+/**
+ * The user's own transactions in [from, to] whose card payment has both sides in its view (D6),
+ * decided exactly as the page decides: each view's transactions, the same pairing. The caller
+ * passes its loaded transactions; a group's members are read only when the user has a card payment
+ * or a credit on a shared account in the window.
+ */
+export async function resolve_card_payment_pairs(
+  ctx: TraceContext,
+  user_id: string,
+  from_ms: number,
+  to_ms: number,
+  catalog: CategoryCatalog,
+  own_txns: Txn[]
+): Promise<Set<string>> {
+  const date = (t: Txn) => (t.data.transactionDate as Timestamp).toMillis();
+  const out = new Set<string>();
+  const add_view = (scope: DeriveScope, members: Txn[]) => {
+    const view = members.filter((t) =>
+      transaction_in_scope(scope, t.data.accountId as string | undefined, date(t))
+    );
+    for (const id of detect_card_payment_pairs_from_txns(view, catalog)) out.add(id);
+  };
+  const me = await resolve_derive_scope(ctx, user_id, { kind: "me" });
+  add_view(me, own_txns);
+  if (own_txns.some((t) => me.exclude_account_ids.has((t.data.accountId as string) ?? ""))) {
+    const lo = from_ms - PAIRING_BUFFER_MS;
+    const hi = to_ms + PAIRING_BUFFER_MS;
+    for (const g of await group_repo.get_for_user(ctx, user_id)) {
+      const scope = await resolve_derive_scope(ctx, user_id, { kind: "group", group_id: g.id });
+      const members = (
+        await Promise.all(
+          scope.member_ids.map((m) =>
+            m === user_id ? Promise.resolve(own_txns) : transaction_repo.get_active_in_date_range(ctx, m, lo, hi)
+          )
+        )
+      ).flat();
+      add_view(scope, members);
+    }
+  }
+  return new Set(
+    own_txns
+      .filter((t) => out.has(t.id) && t.data.userId === user_id && date(t) >= from_ms && date(t) <= to_ms)
+      .map((t) => t.id)
+  );
 }
 
 /**

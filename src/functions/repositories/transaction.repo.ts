@@ -1807,6 +1807,35 @@ export const transaction_repo = {
   },
 
   /**
+   * Mark which card payments have both sides in their view, only for the ones that changed, so the
+   * phone's rows and lists agree with the page (Trustworthy-Numbers D6). The page decides on read,
+   * so this isn't an assignment input: nothing is re-assigned and no derive version moves.
+   */
+  async set_card_payment_paired(
+    _ctx: TraceContext,
+    paired: Map<string, boolean>,
+    run_id: string
+  ): Promise<number> {
+    const db = getFirestore();
+    const entries = [...paired.entries()];
+    for (let i = 0; i < entries.length; i += 450) {
+      const batch = db.batch();
+      for (const [id, value] of entries.slice(i, i + 450)) {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        batch.update(doc_ref(id), {
+          cardPaymentPaired: value,
+          assignRunId: run_id,
+          lastWriteSource: "card_payment_pairs",
+          updatedAt: Timestamp.now(),
+        });
+        /* eslint-enable @typescript-eslint/naming-convention */
+      }
+      await batch.commit();
+    }
+    return entries.length;
+  },
+
+  /**
    * One page of a user's transactions in DATE order (then doc id), starting after `cursor` —
    * the bounded re-assign engine's walk (3-R): each page's dates are contiguous, so its
    * recurring-candidate preload stays narrow. Inactive docs are dropped after the read (they still

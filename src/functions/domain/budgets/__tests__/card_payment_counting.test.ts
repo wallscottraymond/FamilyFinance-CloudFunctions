@@ -146,3 +146,92 @@ describe("view_cadence_of_window", () => {
     expect(cad(Date.UTC(2026, 9, 1), end(2026, 9, 31))).toBe("monthly");
   });
 });
+
+describe("D7: a card side labeled differently (Chase)", () => {
+  const OTHER = "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT";
+  const chase = (id: string, amount: number, day: number, extra: Record<string, unknown> = {}) => {
+    const t = txn(id, "chase_card", amount, OCT(day), "income", { plaidDetailedCategory: OTHER, ...extra });
+    t.data.plaidDetailedCategory = OTHER;
+    return t;
+  };
+  it("a same-amount credit on another account pairs, and neither side counts", () => {
+    const view = [txn("o", "chk", 1283.71, OCT(9), "expense"), chase("i", 1283.71, 10)];
+    expect([...detect_card_payment_pairs_from_txns(view, catalog)].sort()).toEqual(["i", "o"]);
+    expect(spent(view)).toBe(0);
+  });
+  it("October's bug can't repeat: ignoring one side changes nothing", () => {
+    expect(spent([
+      txn("o", "chk", 1283.71, OCT(9), "expense", { spendStatus: "ignored", isIgnored: true }),
+      chase("i", 1283.71, 10),
+    ])).toBe(0);
+  });
+  it("a real card credit wins over a look-alike", () => {
+    const paired = detect_card_payment_pairs_from_txns([
+      txn("o", "chk", 50, OCT(9), "expense"),
+      txn("i", "card", 50, OCT(11), "income"),
+      chase("refund", 50, 10),
+    ], catalog);
+    expect([...paired].sort()).toEqual(["i", "o"]);
+  });
+  it("never a transfer, income, a user's pick, the same account, or a different amount", () => {
+    const debit = txn("o", "chk", 75, OCT(9), "expense");
+    const pool = (c: ReturnType<typeof txn>) => detect_card_payment_pairs_from_txns([debit, c], catalog).size;
+    const coded = (code: string) => {
+      const t = chase("c", 75, 10, { plaidDetailedCategory: code });
+      t.data.plaidDetailedCategory = code;
+      return t;
+    };
+    expect(pool(coded("TRANSFER_IN_ACCOUNT_TRANSFER"))).toBe(0);
+    expect(pool(coded("INCOME_WAGES"))).toBe(0);
+    expect(pool(chase("c", 75, 10, { categorySource: "user", firstCategoryId: "other" }))).toBe(0);
+    const same = chase("c", 75, 10);
+    same.data.accountId = "chk";
+    expect(pool(same)).toBe(0);
+    expect(pool(chase("c", 76, 10))).toBe(0);
+  });
+  it("needs a paying card payment: a lone credit stays an ordinary refund", () => {
+    expect(detect_card_payment_pairs_from_txns([chase("c", 75, 10)], catalog).size).toBe(0);
+  });
+});
+
+describe("D8: a payment waits for its card side", () => {
+  const map = (ms: number, now_ms: number, extra: Record<string, unknown> = {}, income = false) =>
+    map_raw_split_to_on_read_match(
+      { amount: 900, plaidDetailedCategory: CARD, ...extra },
+      { txn_date_ms: ms, is_pending: false, is_transfer: false, is_income: income, now_ms },
+      catalog
+    );
+  const counted = (m: ReturnType<typeof map>) =>
+    compute_budget_spent(EE, 0, Number.MAX_SAFE_INTEGER, owned_splits_for_budget(EE, [], EE, [m])).spent;
+  const DAY = 24 * 60 * 60 * 1000;
+  it("held for 5 days, then it counts", () => {
+    const paid = OCT(10);
+    expect(counted(map(paid, paid))).toBe(0);
+    expect(counted(map(paid, paid + 5 * DAY - 1))).toBe(0);
+    expect(counted(map(paid, paid + 5 * DAY))).toBe(900);
+  });
+  it("a date in the future isn't held, and a pin isn't held", () => {
+    expect(counted(map(OCT(10), OCT(1)))).toBe(900);
+    expect(counted(map(OCT(10), OCT(10), { budgetAssignmentSource: "manual", budgetId: EE }))).toBe(900);
+  });
+  it("only card payments are held", () => {
+    expect(counted(map(OCT(10), OCT(10), { plaidDetailedCategory: "OTHER_EXPENSE" }))).toBe(900);
+  });
+});
+
+describe("a user's pick wins over the pairing", () => {
+  it("a paired look-alike credit re-picked as spending nets as a refund", () => {
+    const m = map_raw_split_to_on_read_match(
+      { amount: 40, plaidDetailedCategory: "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT", categorySource: "user", firstCategoryId: "other" },
+      { txn_date_ms: OCT(2), is_pending: false, is_transfer: false, is_paired_card_payment: true, is_income: true },
+      catalog
+    );
+    expect(m.is_transfer).toBe(false);
+  });
+  it("a credit tracked as income can't be a look-alike", () => {
+    const debit = txn("o", "chk", 75, OCT(9), "expense");
+    const credit = txn("c", "card", 75, OCT(10), "income", { plaidDetailedCategory: "OTHER_EXPENSE", inflowId: "paycheck" });
+    credit.data.plaidDetailedCategory = "OTHER_EXPENSE";
+    expect(detect_card_payment_pairs_from_txns([debit, credit], catalog).size).toBe(0);
+  });
+});

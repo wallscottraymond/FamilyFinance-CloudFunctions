@@ -17,6 +17,7 @@
  * so 500 counts (824.03); the week of Oct 28 can't see Oct 21, pairs the last two, so 0 counts. The page's own
  * greedy pairing differs by view, and Detail must equal the view it's opened from.
  * Gift 25 is pinned to a real budget, which owns it on both.
+ * Chase payment 64 with its card side labeled LOAN_DISBURSEMENTS: neither side (D7).
  *
  * Prereq: firebase emulators:exec --only firestore \
  *   "npx jest --selectProjects emulator --testPathPattern budgetDetailMatchesPage"
@@ -86,6 +87,8 @@ async function seed() {
   txn("dp_leg_q", "LEG Q", 500, 21, "expense", "chk", CARD);
   txn("dp_leg_p", "LEG P", 500, 24, "income", "visa", CARD);
   txn("dp_leg_x", "LEG X", 500, 28, "expense", "chk", CARD);
+  txn("dp_ch_o", "PAYMENT TO CHASE", 64, 17, "expense", "chk", CARD);
+  txn("dp_ch_i", "PAYMENT THANK YOU", 64, 18, "income", "chase", "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT");
   txn("dp_gift", "Gift", 25, 6, "expense", "chk", "OTHER_EXPENSE", { budgetAssignmentSource: "manual", budgetId: "dp_real" });
   await batch.commit();
 }

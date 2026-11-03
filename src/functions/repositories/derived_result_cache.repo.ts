@@ -31,10 +31,17 @@ const CACHE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  * `derive_budget_transactions`, `derive_recurring_view`): serve a version-matched entry only
  * within this age. Correctness comes from the version match — every derive-input writer bumps
  * the version (audited 2026-10-08, [[Performance-Review-4]]); this only bounds staleness if a
- * future writer forgets. Cached results are clock-free (no today/overdue/isCurrent), so age
- * alone never makes one wrong. Was 10 min, which made most app opens a full ~4.5K-read miss.
+ * future writer forgets. Cached results are clock-free (no today/overdue/isCurrent) except a card
+ * payment's wait ending at UTC midnight, which the cache ids cover (`utc_day_key`), so age alone
+ * never makes one wrong. Was 10 min, which made most app opens a full ~4.5K-read miss.
  */
 export const DERIVED_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** The current UTC day, for a cache id. Results computed before and after a card payment's wait
+ *  ends must not share an entry (Trustworthy-Numbers D8). */
+export function utc_day_key(now_ms: number = Date.now()): number {
+  return Math.floor(now_ms / (24 * 60 * 60 * 1000));
+}
 
 export interface CachedDerivedResult<TResult> {
   data_version: number;

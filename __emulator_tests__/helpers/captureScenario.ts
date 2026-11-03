@@ -395,6 +395,9 @@ export function scenarioMocks(ids: ScenarioIds, now_ms = NOW_MS, opts: { removal
 /** Normalize a doc for golden comparison: drop volatile bookkeeping, tag → "TAG". */
 export function normalizeDoc(value: unknown, tag: string): unknown {
   const VOLATILE = new Set([
+    // Trustworthy-Numbers D6 (deliberate, 2026-11-03): the classifier marks paired card payments
+    // for the phone's lists. It changes no stored or derived number, which this suite still pins.
+    "cardPaymentPaired",
     "createdAt", "updatedAt", "lastSyncedAt", "syncRunId", "assignRunId", "lastWriteSource",
     "lastCalculated", "lastUpdated", "lastModified", "lastReconciledAt", "reconciledAt", "trace_id",
     "traceId", "computedAt", "generatedAt", "restoredAt", "lastAssignedAt", "assignedAt", "processedAt",

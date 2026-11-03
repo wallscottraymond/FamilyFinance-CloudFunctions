@@ -19,6 +19,7 @@
  */
 
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { utc_day_key } from "./derived_result_cache.repo";
 
 const COLLECTION = "derived_period_cache";
 
@@ -44,19 +45,21 @@ export interface CachedDerivedPeriod<TResult> {
  *  `transaction_id` (Tappable-Transaction-Rows). v3 = Code-Health-Review batch 6 (partial-month
  *  pricing, quarterly/yearly per-month amounts): drop results computed with the old numbers. v4 =
  *  budget pause (isPaused / pausedDays on budget periods, PZ3). v5 = card payments are money
- *  movement, drop results that counted them (Trustworthy-Numbers D1).
+ *  movement, drop results that counted them (Trustworthy-Numbers D1). v6 = look-alike card sides,
+ *  the 5-day wait (D7, D8).
  *  Every function bundling this repo (derive_period, derive_period_range, derive_budget_view,
  *  widget_snapshot) deploys together. */
-const CACHE_SHAPE = "v5";
+const CACHE_SHAPE = "v6";
 
-/** Deterministic doc id for a derive call. Windows are ms epoch ints — safe in an id. */
+/** Deterministic doc id for a derive call, per UTC day: a result depends on the day only through a
+ *  card payment's wait ending, which happens at UTC midnight and isn't a data change (D8). Windows are ms epoch ints — safe in an id. */
 function cache_doc_id(
   user_id: string,
   view_cadence: string,
   window_start_ms: number,
   window_end_ms: number
 ): string {
-  return `${user_id}__${view_cadence}__${window_start_ms}__${window_end_ms}__${CACHE_SHAPE}`;
+  return `${user_id}__${view_cadence}__${window_start_ms}__${window_end_ms}__${CACHE_SHAPE}__${utc_day_key()}`;
 }
 
 /** Read the cached derived period for this exact call, or null. 1 read. */

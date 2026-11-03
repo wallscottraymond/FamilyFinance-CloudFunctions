@@ -26,6 +26,7 @@ jest.mock("../../../repositories/category.repo", () => ({
 }));
 // Transfer roles (3d) are covered by their own tests; here: none change.
 jest.mock("../../../resolvers/transactions/transfer_roles.resolver", () => ({
+  resolve_card_payment_pairs: jest.fn(async () => new Set()),
   resolve_transfer_roles: jest.fn(async () => new Map()),
 }));
 jest.mock("../../../repositories/transaction.repo", () => ({

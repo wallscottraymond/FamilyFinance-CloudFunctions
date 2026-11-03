@@ -36,10 +36,10 @@ export const WIDGET_DATA_VERSION = 2;
  * then refreshes those widgets. Kinds not listed are 0 (their versions are unchanged).
  * recent: 2 = Me shows every transaction on your own accounts (was the period page's Me scope).
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
- * left / summary: 3 = card payments are money movement (Trustworthy-Numbers D1).
+ * left / summary: 3 = card payments are money movement (Trustworthy-Numbers D1). 4 = D7, D8.
  */
 export const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>> = {
-  recent: 2, left: 3, summary: 3, bills: 1,
+  recent: 2, left: 4, summary: 4, bills: 1,
 };
 
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */

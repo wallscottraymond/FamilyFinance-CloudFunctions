@@ -22,6 +22,13 @@ type Txn = {
     data: Record<string, unknown>;
 };
 /**
+ * The user's own transactions in [from, to] whose card payment has both sides in its view (D6),
+ * decided exactly as the page decides: each view's transactions, the same pairing. The caller
+ * passes its loaded transactions; a group's members are read only when the user has a card payment
+ * or a credit on a shared account in the window.
+ */
+export declare function resolve_card_payment_pairs(ctx: TraceContext, user_id: string, from_ms: number, to_ms: number, catalog: CategoryCatalog, own_txns: Txn[]): Promise<Set<string>>;
+/**
  * @param own_txns - The user's active transactions over [from − buffer, to + buffer] when the
  *   caller already has them (the classifier does) — saves that read.
  */

@@ -27,6 +27,7 @@ import {
   get_cached_result,
   put_cached_result,
   DERIVED_CACHE_TTL_MS,
+  utc_day_key,
 } from "../../repositories/derived_result_cache.repo";
 import { DeriveScopeRequest } from "../../domain/periods/derive_scope.service";
 import {
@@ -44,8 +45,8 @@ import {
 const BUDGET_TXN_CACHE = "derived_budget_txn_cache";
 /** Result SHAPE version, part of the cache key: bump whenever the row shape changes so a cached
  *  result in the old shape (24h TTL) is never served. v2 = rows carry `card`. v3 = one counting
- *  decision with the period page, card payments are money movement (Trustworthy-Numbers). */
-const BUDGET_TXN_CACHE_SHAPE = "v3";
+ *  decision with the period page, card payments are money movement (Trustworthy-Numbers). v4 = D7, D8. */
+const BUDGET_TXN_CACHE_SHAPE = "v4";
 
 export type DerivedSpendStatus = "counted" | "ignored" | "refund";
 export type IgnoredReason = "transfer" | "income" | "manual" | null;
@@ -91,7 +92,7 @@ export async function derive_budget_transactions_orchestrator(
   // L2 CACHE: serve the version-matched result (2 reads) instead of the ~348-doc window read
   // + derivation. Correctness = version match (bumped on every budget/txn write); the cache
   // stamp uses the version read BEFORE compute so a mid-compute bump forces the next miss.
-  const cache_id = `${view_key}__${budget_id}__${start_ms}__${end_ms}__${BUDGET_TXN_CACHE_SHAPE}`;
+  const cache_id = `${view_key}__${budget_id}__${start_ms}__${end_ms}__${BUDGET_TXN_CACHE_SHAPE}__${utc_day_key()}`;
   let data_version: number;
   if (force) {
     data_version = (await resolve_view_version(ctx, user_id, scope_request)).version;

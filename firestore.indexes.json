@@ -3055,6 +3055,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "derived_budget_txn_cache",
+      "fieldPath": "expire_at",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "requests",
       "fieldPath": "expireAt",
       "ttl": true,

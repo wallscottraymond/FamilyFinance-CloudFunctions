@@ -23,6 +23,7 @@ import {
 } from "../../domain/transactions/internal_transfer.service";
 import {
   is_card_payment_category,
+  is_income_category,
   is_transfer_category,
 } from "../../domain/transactions/category_semantics.service";
 import {
@@ -40,6 +41,8 @@ export interface TxnMatchContext {
   /** Both sides of this card payment are in the view (`detect_card_payment_pairs_from_txns`).
    *  Optional; defaults false. */
   is_paired_card_payment?: boolean;
+  /** The clock, for the wait on a card side (`CARD_SIDE_WAIT_MS`). Omitted = no wait. */
+  now_ms?: number;
   /** Transaction `type === "income"` (a credit). */
   is_income: boolean;
   /** Txn belongs to a recurring bill/income Plaid stream (by `transactionIds`) — even if
@@ -51,20 +54,30 @@ export interface TxnMatchContext {
   name?: string | null;
 }
 
+/** How long a paying side waits for its card side before counting as spending (D8): the pairing
+ *  tolerance, so a payment that could still pair never counts first. */
+export const CARD_SIDE_WAIT_MS = 5 * 24 * 60 * 60 * 1000;
+
 /**
  * Whether a card-payment split is money movement rather than spending (Trustworthy-Numbers D1):
  * the card-side credit always is, so a payment can never reduce spending; the paying side is only
- * when the card's side is in the view too. Otherwise the payment is the only record of that
- * spending here, so it counts. PURE.
+ * when the card's side is in the view too, or may still be on its way. Otherwise the payment is the
+ * only record of that spending here, so it counts. PURE.
  */
 export function card_payment_is_money_movement(
   semantic_code: string,
-  ctx: { is_income: boolean; is_paired_card_payment?: boolean }
+  ctx: { is_income: boolean; is_paired_card_payment?: boolean; txn_date_ms?: number; now_ms?: number },
+  /** The user chose this split's category: only a card-payment pick means a card payment. */
+  is_user_pick = false
 ): boolean {
-  return (
-    is_card_payment_category(semantic_code) &&
-    (ctx.is_income || ctx.is_paired_card_payment === true)
-  );
+  // A credit paired as a card side, whatever its code (D7: Chase labels its side differently).
+  if (ctx.is_paired_card_payment && ctx.is_income && !is_user_pick) return true;
+  if (!is_card_payment_category(semantic_code)) return false;
+  if (ctx.is_income || ctx.is_paired_card_payment === true) return true;
+  // D8: the card side usually arrives in 1–3 days. Until then a big payment must not swing Spent.
+  if (ctx.now_ms === undefined || ctx.txn_date_ms === undefined) return false;
+  const age_ms = ctx.now_ms - ctx.txn_date_ms;
+  return age_ms >= 0 && age_ms < CARD_SIDE_WAIT_MS;
 }
 
 /**
@@ -97,7 +110,7 @@ export function map_raw_split_to_on_read_match(
     // Same per-split rule for a card payment (`card_payment_is_money_movement`).
     is_transfer:
       (ctx.is_transfer && is_transfer_category(category.semantic_code)) ||
-      card_payment_is_money_movement(category.semantic_code, ctx),
+      card_payment_is_money_movement(category.semantic_code, ctx, category.category_source === "user"),
     is_income: ctx.is_income,
     spend_status: split_spend_status(raw_split),
     outflow_id: (raw_split.outflowId as string | null) ?? null,
@@ -142,6 +155,7 @@ export function detect_card_payment_pairs_from_txns(
   catalog: CategoryCatalog
 ): Set<string> {
   const payments: TransferForPairing[] = [];
+  const look_alike_credits: TransferForPairing[] = [];
   for (const { id, data } of txns) {
     const raw = (data.splits as Array<Record<string, unknown>>) ?? [];
     const is_card_payment = (raw.length ? raw : [{}]).some((s) =>
@@ -149,17 +163,46 @@ export function detect_card_payment_pairs_from_txns(
         resolve_split_category(split_category_input_from_raw(s, data, catalog), catalog).semantic_code
       )
     );
-    if (!is_card_payment) continue;
-    payments.push({
+    const entry: TransferForPairing = {
       id,
       plaid_id: (data.transactionId as string | null) ?? null,
       account_id: (data.accountId as string) ?? "",
       amount: raw.reduce((s, sp) => s + Math.abs((sp.amount as number) ?? 0), 0),
       date_ms: (data.transactionDate as Timestamp).toMillis(),
       direction: data.type === "income" ? "in" : "out",
-    });
+    };
+    if (is_card_payment) {
+      payments.push(entry);
+    } else if (data.type === "income" && can_be_card_side(raw, data, catalog)) {
+      look_alike_credits.push(entry);
+    }
   }
-  return payments.length ? detect_internal_transfers(payments).internal_ids : new Set();
+  if (payments.length === 0) return new Set();
+  const paired = detect_internal_transfers(payments).internal_ids;
+  // D7: some banks label the card side differently (Chase: LOAN_DISBURSEMENTS_*). Debits a real
+  // card side didn't take may pair with a same-amount credit on another account.
+  const leftover = payments.filter((p) => p.direction === "out" && !paired.has(p.id));
+  if (leftover.length && look_alike_credits.length) {
+    for (const id of detect_internal_transfers([...leftover, ...look_alike_credits]).internal_ids) {
+      paired.add(id);
+    }
+  }
+  return paired;
+}
+
+/** Could this credit be a card side labeled differently? Never money that already means something
+ *  else (a transfer, income, a linked bill or income line) or a category the user chose. */
+function can_be_card_side(
+  raw: Array<Record<string, unknown>>,
+  data: Record<string, unknown>,
+  catalog: CategoryCatalog
+): boolean {
+  return raw.length > 0 && raw.every((s) => {
+    if (s.categorySource === "user" || s.budgetAssignmentSource === "manual") return false;
+    if (s.inflowId || s.outflowId) return false; // already tracked as income or a bill
+    const code = resolve_split_category(split_category_input_from_raw(s, data, catalog), catalog).semantic_code;
+    return !is_transfer_category(code) && !is_income_category(code);
+  });
 }
 
 /**

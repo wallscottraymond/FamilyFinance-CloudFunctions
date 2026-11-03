@@ -24,6 +24,8 @@ export interface TxnMatchContext {
     /** Both sides of this card payment are in the view (`detect_card_payment_pairs_from_txns`).
      *  Optional; defaults false. */
     is_paired_card_payment?: boolean;
+    /** The clock, for the wait on a card side (`CARD_SIDE_WAIT_MS`). Omitted = no wait. */
+    now_ms?: number;
     /** Transaction `type === "income"` (a credit). */
     is_income: boolean;
     /** Txn belongs to a recurring bill/income Plaid stream (by `transactionIds`) — even if
@@ -34,16 +36,23 @@ export interface TxnMatchContext {
     merchant_name?: string | null;
     name?: string | null;
 }
+/** How long a paying side waits for its card side before counting as spending (D8): the pairing
+ *  tolerance, so a payment that could still pair never counts first. */
+export declare const CARD_SIDE_WAIT_MS: number;
 /**
  * Whether a card-payment split is money movement rather than spending (Trustworthy-Numbers D1):
  * the card-side credit always is, so a payment can never reduce spending; the paying side is only
- * when the card's side is in the view too. Otherwise the payment is the only record of that
- * spending here, so it counts. PURE.
+ * when the card's side is in the view too, or may still be on its way. Otherwise the payment is the
+ * only record of that spending here, so it counts. PURE.
  */
 export declare function card_payment_is_money_movement(semantic_code: string, ctx: {
     is_income: boolean;
     is_paired_card_payment?: boolean;
-}): boolean;
+    txn_date_ms?: number;
+    now_ms?: number;
+}, 
+/** The user chose this split's category: only a card-payment pick means a card payment. */
+is_user_pick?: boolean): boolean;
 /**
  * Map a raw Firestore split (+ its transaction context) into the on-read matcher's
  * shape. The single source of truth for how a split's spendStatus, categories, and

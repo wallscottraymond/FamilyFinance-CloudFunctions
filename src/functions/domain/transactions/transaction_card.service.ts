@@ -36,6 +36,7 @@ const CARD_FIELDS = [
   "description",
   "type",
   "transferRole",
+  "cardPaymentPaired",
   "tagIds",
   "userNotes",
   "categories",

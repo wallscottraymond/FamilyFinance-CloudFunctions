@@ -31,7 +31,7 @@ import { CAPTURE_RULES_VERSION } from "../../domain/recurring/capture_rules";
 import { target_hidden } from "../../domain/recurring/transfer_hiding.service";
 import { detect_internal_transfers_from_txns } from "../../resolvers/shared/on_read_matching";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
-import { resolve_transfer_roles } from "../../resolvers/transactions/transfer_roles.resolver";
+import { resolve_card_payment_pairs, resolve_transfer_roles } from "../../resolvers/transactions/transfer_roles.resolver";
 import { Timestamp } from "firebase-admin/firestore";
 import { generate_id } from "../../observability";
 import type { SyncWrittenDoc } from "../../repositories/transaction.repo";
@@ -231,6 +231,20 @@ export async function classify_internal_transfers_orchestrator(
     if ([...changed.values()].some((r) => r === "edge_in" || r === "edge_out")) {
       await enqueue_partner_classification(ctx, user_id);
     }
+  }
+
+  // 3c. Which card payments have both sides in their view, for the phone's rows and lists (D6).
+  //     The page decides on read, so nothing re-assigns. Only changed marks are written.
+  const paired = await resolve_card_payment_pairs(ctx, user_id, role_from_ms, now_ms, catalog, txns);
+  const changed_pairs = new Map<string, boolean>();
+  for (const t of txns) {
+    const ms = (t.data.transactionDate as Timestamp).toMillis();
+    if (ms < role_from_ms || t.data.userId !== user_id) continue;
+    const next = paired.has(t.id);
+    if (next !== (t.data.cardPaymentPaired === true)) changed_pairs.set(t.id, next);
+  }
+  if (changed_pairs.size > 0) {
+    await transaction_repo.set_card_payment_paired(ctx, changed_pairs, generate_id());
   }
 
   // 4. Remember what we classified (hashing the flags as they are NOW, after the writes),

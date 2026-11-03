@@ -382,7 +382,8 @@ describe("capture rules — flag off equals today (emulator)", () => {
     expectGoldenWithA2(out, golden_all);
     // R4 / X11: identical writes AND reads to the base — a flag-off user with no v2 records never
     // reads the review state doc (the hold-out loads only for flag-on / v2 users), and the capture
-    // planner doesn't run.
+    // planner doesn't run. Deliberate (Trustworthy-Numbers D6, 2026-11-03): +2 writes marking the
+    // scenario's paired card payments, +1 read resolving the view for that mark.
     const state_reads = counts.map((c) => c!.reads_by._recurring_review_state ?? 0);
     expect(state_reads).toEqual(counts.map(() => 0));
     expect(counts.map((c, i) => c && { reads: c.reads - state_reads[i], writes: c.writes, audit: c.audit_writes })).toEqual(

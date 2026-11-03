@@ -657,6 +657,7 @@ export function shape_period_derivation_deps(
   // Card payments with both sides in the view move money and aren't spending (D1). Over the same
   // pool, so a payment whose sides fall either side of a period boundary still pairs.
   const paired_card_payments = detect_card_payment_pairs_from_txns(view_pool, catalog);
+  const card_clock_ms = Date.now();
   // A recurring stream is an internal transfer when any of its transactions are.
   const is_internal_stream = (transaction_ids: string[] | undefined): boolean =>
     (transaction_ids ?? []).some((t) => internal_plaid_ids.has(t));
@@ -910,6 +911,7 @@ export function shape_period_derivation_deps(
           is_pending,
           is_transfer: txn_is_internal_transfer,
           is_paired_card_payment: paired_card_payments.has(id),
+          now_ms: card_clock_ms,
           is_income: txn_is_income,
           // Txn belongs to a recurring bill/income Plaid stream → not discretionary spend,
           // so it never counts toward a budget even if its split link was never set (S5).

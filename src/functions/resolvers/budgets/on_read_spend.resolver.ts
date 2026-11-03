@@ -84,6 +84,7 @@ export async function resolve_on_read_spend_splits(
   // external ACH bills Plaid tags TRANSFER stay countable. Same rule everywhere.
   const { internal_ids } = detect_internal_transfers_from_txns(pool, catalog);
   const paired_card_payments = detect_card_payment_pairs_from_txns(pool, catalog);
+  const card_clock_ms = Date.now();
   const splits: SplitForOnReadMatch[] = [];
   for (const { id, data: d } of txns) {
     const txn_date_ms = (d.transactionDate as Timestamp).toMillis();
@@ -98,6 +99,7 @@ export async function resolve_on_read_spend_splits(
           is_pending,
           is_transfer: txn_is_internal_transfer,
           is_paired_card_payment: paired_card_payments.has(id),
+          now_ms: card_clock_ms,
           is_income: txn_is_income,
           merchant_name: (d.merchantName as string | null) ?? null,
           name: (d.name as string | null) ?? null,

@@ -69,7 +69,10 @@ export function follow_ups_from_written(written: SyncWrittenDoc[]): SyncFollowUp
   let transfers_changed = false;
   for (const w of written) {
     const primary = String(w.after.plaidPrimaryCategory ?? "");
-    if (primary.startsWith("TRANSFER") || primary === "LOAN_PAYMENTS") transfers_changed = true;
+    // LOAN_DISBURSEMENTS: Chase's label for a card side (D7), so its mark isn't a day late.
+    if (primary.startsWith("TRANSFER") || primary === "LOAN_PAYMENTS" || primary === "LOAN_DISBURSEMENTS") {
+      transfers_changed = true;
+    }
     for (const doc of [w.before, w.after]) {
       const ms = date_of(doc);
       if (ms !== null) {
