@@ -46,6 +46,8 @@ const schema = z.object({
   // D43 (honoured only with the feature on): where the bill is paid from / which transaction it came from.
   account_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
   source_transaction_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
+  /** The caller's local calendar day (AF-12). Optional: older builds use the server clock. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   debug_mode: z.boolean().optional(),
 });
 
@@ -85,6 +87,7 @@ export const create_manual_outflow = onCall(
       const result = await create_manual_outflow_orchestrator({
         ...trace,
         input: {
+          day: data.day,
           name: data.name,
           merchant_name: data.merchant_name ?? null,
           amount: data.amount,

@@ -16,6 +16,7 @@ const ONLY_USER = userArg > 0 ? process.argv[userArg + 1] : null;
 const key = [process.env.GOOGLE_APPLICATION_CREDENTIALS, path.join(os.homedir(), 'google-service-account-key.json')]
   .filter(Boolean).find((p) => fs.existsSync(p));
 admin.initializeApp({ credential: admin.credential.cert(require(key)), projectId: 'family-budget-app-cb59b' });
+admin.firestore().settings({ ignoreUndefinedProperties: true }); // as the deployed functions
 const L = (rel) => require(path.join(__dirname, '..', 'lib', 'functions', rel));
 
 (async () => {
@@ -56,7 +57,11 @@ const L = (rel) => require(path.join(__dirname, '..', 'lib', 'functions', rel));
         console.log(`  ${d.transactionDate.toDate().toISOString().slice(0, 10)} ${Number(d.amount).toFixed(2).padStart(10)} ${String(d.name).slice(0, 44)} → ${line.slice(0, 8)}`);
       }
     }
-    if (COMMIT && count) {
+    // An earlier run may have stopped between the line and the transaction: this finishes it.
+    const unfinished = docs.filter((d) => lines.some((l) => (l.payer_matched_transaction_ids ?? []).includes(d.transactionId))
+      && (d.splits ?? []).every((sp) => !sp.inflowId));
+    for (const d of unfinished) console.log(`  unfinished: ${d.transactionDate.toDate().toISOString().slice(0, 10)} ${Number(d.amount).toFixed(2)} ${String(d.name).slice(0, 44)}`);
+    if (COMMIT && (count || unfinished.length)) {
       const r = await link_income_by_payer_orchestrator(ctx, uid, `backfill_${Date.now()}`, docs);
       await run_sync_follow_ups(ctx, uid, r.follow_ups);
     }

@@ -57,6 +57,8 @@ export interface Inflow {
     is_hidden: boolean;
     is_user_modified: boolean;
     transaction_ids: string[];
+    /** Deposits linked by their exact payer, kept through Plaid's refresh (AF-08). */
+    payer_matched_transaction_ids?: string[];
     tags: string[];
     rules: unknown[];
     removed_by_user: boolean;

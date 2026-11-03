@@ -13,6 +13,8 @@ import { ManualBillFrequency } from "../../domain/recurring/manual_outflow.servi
  * Input for creating a bill.
  */
 export interface CreateManualOutflowInput {
+    /** The caller's local calendar day, YYYY-MM-DD (AF-12). */
+    day?: string;
     name: string;
     merchant_name: string | null;
     amount: number;

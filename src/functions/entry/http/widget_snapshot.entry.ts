@@ -51,27 +51,9 @@ export function parse_widget_query(query: unknown): WidgetQuery | null {
   return { ...q, lookahead: q.kind === "bills" ? lookahead : 14 };
 }
 
-const DAY_MS = 86_400_000;
 
-/**
- * The instant the widget's period / bills window / daily version are chosen at: noon UTC of the
- * caller's LOCAL calendar day (`day`), so its UTC day index IS that local day (batch 6 verify #3:
- * on a US evening the server's UTC clock is already tomorrow, which flipped Left to Spend and
- * Period Summary to the next period on a period's last evening). Accepted only within a day of
- * the server's UTC day (every real time zone is); otherwise — or absent (older widget builds) —
- * the server clock, as before.
- */
-export function widget_day_ms(day: string | undefined, now_ms: number): number {
-  if (!day) return now_ms;
-  const [y, m, d] = day.split("-").map(Number);
-  const day_start = Date.UTC(y, m - 1, d);
-  const check = new Date(day_start);
-  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) {
-    return now_ms;
-  }
-  const diff = Math.floor(day_start / DAY_MS) - Math.floor(now_ms / DAY_MS);
-  return Math.abs(diff) <= 1 ? day_start + DAY_MS / 2 : now_ms;
-}
+export { caller_day_ms as widget_day_ms } from "../../domain/periods/caller_day.service";
+import { caller_day_ms as widget_day_ms } from "../../domain/periods/caller_day.service";
 
 export const widget_snapshot = onRequest(
   /* eslint-disable-next-line @typescript-eslint/naming-convention */

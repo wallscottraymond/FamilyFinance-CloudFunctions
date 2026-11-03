@@ -43,15 +43,6 @@ type WidgetQuery = z.infer<typeof query_schema> & {
  *  soon (7 / 14 / 30 days); every other kind ignores it, so it never fails their request
  *  (Recent transactions sends 0: a strict check rejected every one of its requests). */
 export declare function parse_widget_query(query: unknown): WidgetQuery | null;
-/**
- * The instant the widget's period / bills window / daily version are chosen at: noon UTC of the
- * caller's LOCAL calendar day (`day`), so its UTC day index IS that local day (batch 6 verify #3:
- * on a US evening the server's UTC clock is already tomorrow, which flipped Left to Spend and
- * Period Summary to the next period on a period's last evening). Accepted only within a day of
- * the server's UTC day (every real time zone is); otherwise — or absent (older widget builds) —
- * the server clock, as before.
- */
-export declare function widget_day_ms(day: string | undefined, now_ms: number): number;
+export { caller_day_ms as widget_day_ms } from "../../domain/periods/caller_day.service";
 export declare const widget_snapshot: import("firebase-functions/v2/https").HttpsFunction;
-export {};
 //# sourceMappingURL=widget_snapshot.entry.d.ts.map

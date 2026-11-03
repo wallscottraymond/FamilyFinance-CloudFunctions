@@ -118,6 +118,8 @@ export interface Inflow {
 
   // References
   transaction_ids: string[];
+  /** Deposits linked by their exact payer, kept through Plaid's refresh (AF-08). */
+  payer_matched_transaction_ids?: string[];
   tags: string[];
   rules: unknown[];
 
@@ -320,6 +322,7 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
     is_user_modified: doc.isUserModified,
 
     transaction_ids: doc.transactionIds,
+    payer_matched_transaction_ids: doc.payerMatchedTransactionIds ?? [],
     tags: doc.tags,
     rules: doc.rules,
 

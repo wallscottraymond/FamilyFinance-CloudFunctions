@@ -82,10 +82,20 @@ export async function link_income_by_payer_orchestrator(
       removal_intervals: l.removal_intervals ?? [],
     }))
   );
-  if (linked.size === 0) return none;
+  // Linked on the line by an earlier run that stopped before re-assigning: finish them, since the
+  // matcher now sees them as already on a stream. Candidates only: a split carrying its link isn't.
+  const unfinished = new Map<string, string[]>();
+  for (const l of lines) {
+    const ids = deposits
+      .filter((d) => (l.payer_matched_transaction_ids ?? []).includes(d.plaid_id))
+      .map((d) => d.plaid_id);
+    if (ids.length) unfinished.set(l.id, ids);
+  }
+  if (linked.size === 0 && unfinished.size === 0) return none;
 
-  await inflow_repo.add_payer_matched_transactions(ctx, linked, run_id);
-  const stored = await transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, [...linked.values()].flat());
+  if (linked.size > 0) await inflow_repo.add_payer_matched_transactions(ctx, linked, run_id);
+  const all_ids = [...linked.values(), ...unfinished.values()].flat();
+  const stored = await transaction_repo.get_by_plaid_transaction_ids(ctx, user_id, all_ids);
   const written: SyncWrittenDoc[] = [];
   await assign_transactions_batch_orchestrator(ctx, {
     user_id,
@@ -96,7 +106,7 @@ export async function link_income_by_payer_orchestrator(
   return {
     linked,
     follow_ups: merge_follow_ups(follow_ups_from_written(written), {
-      inflow_ids: [...linked.keys()],
+      inflow_ids: [...new Set([...linked.keys(), ...unfinished.keys()])],
       recurring_changed: true,
     }),
   };

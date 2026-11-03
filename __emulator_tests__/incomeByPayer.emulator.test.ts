@@ -85,6 +85,18 @@ describe("AF-08: income by exact payer", () => {
     expect((await link_income_by_payer_orchestrator(ctx, U, "run2", docs)).linked.size).toBe(0);
   });
 
+  it("a run that stopped before the transaction is finished by the next", async () => {
+    await db.collection("transactions").doc("p_big").update({
+      splits: [{ splitId: "p_big_s", amount: 100236.72, plaidDetailedCategory: "INCOME_SALARY", outflowId: null, inflowId: null }],
+    });
+    const docs = (await db.collection("transactions").where("userId", "==", U).get()).docs.map((x) => x.data());
+    const r = await link_income_by_payer_orchestrator(ctx, U, "run3", docs);
+    expect(r.linked.size).toBe(0);
+    expect(r.follow_ups.inflow_ids).toEqual(["pay_line"]);
+    const split = (await db.collection("transactions").doc("p_big").get()).data()!.splits[0];
+    expect(split.inflowId).toBe("pay_line");
+  });
+
   it("Plaid's stream refresh doesn't drop it", async () => {
     const entity = (await inflow_repo.get_by_user_id(ctx, U)).find((l) => l.id === "pay_line")!;
     const plain = {

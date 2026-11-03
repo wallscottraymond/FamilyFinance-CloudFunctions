@@ -8,6 +8,7 @@
  * @module orchestrators/recurring/create_manual_outflow
  */
 
+import { caller_day_ms } from "../../domain/periods/caller_day.service";
 import { randomUUID } from "crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { OrchestratorContext } from "../../types";
@@ -36,6 +37,8 @@ import { ConvertRefusedError } from "../../types";
  * Input for creating a bill.
  */
 export interface CreateManualOutflowInput {
+  /** The caller's local calendar day, YYYY-MM-DD (AF-12). */
+  day?: string;
   name: string;
   merchant_name: string | null;
   amount: number;
@@ -86,7 +89,7 @@ export async function create_manual_outflow_orchestrator(
       expense_type: ctx.input.expense_type,
       is_essential: ctx.input.is_essential,
       due_day: ctx.input.due_day,
-      now_ms: Timestamp.now().toMillis(),
+      now_ms: caller_day_ms(ctx.input.day, Timestamp.now().toMillis()),
     });
 
     if (result.validation_errors || !result.entity) {
