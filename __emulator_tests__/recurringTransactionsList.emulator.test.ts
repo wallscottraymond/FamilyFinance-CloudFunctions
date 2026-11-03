@@ -115,6 +115,14 @@ describe("bill / income detail transaction list (emulator)", () => {
     expect(rows.map((r) => r.transaction_id).sort()).toEqual([id("A"), id("B"), id("C"), id("E")].sort());
   });
 
+  it("AF-11: a fully ignored payment stays listed at its amount, and nothing else moves", async () => {
+    await txn("ign", { splits: [{ splitId: "sign", amount: 77, outflowId: BILL, spendStatus: "ignored", isIgnored: true }] });
+    const rows = await derive_recurring_transactions_orchestrator(t() as never, U, BILL, "outflow", W.start, W.end);
+    const row = rows.find((r) => r.transaction_id === id("ign"));
+    expect(row?.amount).toBe(77);
+    await db.collection("transactions").doc(id("ign")).delete();
+  });
+
   it("a transaction in the stream AND split-linked appears once (C)", async () => {
     const rows = await list(BILL);
     expect(rows.filter((r) => r.transaction_id === id("C"))).toHaveLength(1);

@@ -16,6 +16,7 @@
  * @module orchestrators/recurring/derive_recurring_transactions
  */
 
+import { split_spend_status } from "../../domain/budgets/budget_spend.service";
 import { bill_release_schedule, is_payment_released } from "../../domain/recurring/late_payment.service";
 import {
   compute_countable_split_net,
@@ -84,7 +85,7 @@ export async function derive_recurring_transactions_orchestrator(
   const txns = Array.from(by_doc_id.values());
 
   // 3. Map + flag in-period.
-  const paying_rows = txns
+  const candidate_rows = txns
     .filter((data) => (data as { isActive?: boolean }).isActive !== false)
     // Per SPLIT (the period page's rule): the splits paying this recurring — a "remove from bill"
     // or a budget pin takes only THAT split off; no paying split → not one of its payments. A
@@ -109,7 +110,13 @@ export async function derive_recurring_transactions_orchestrator(
       ...row,
       net: compute_countable_split_net(row.splits as CountableSplitInput[], "").amount,
     }))
-    .filter(({ splits, net }) => splits.length > 0 && net > 0);
+    .filter(({ splits }) => splits.length > 0);
+  const paying_rows = candidate_rows.filter(({ net }) => net > 0);
+  // Ignored stays visible in its list and counts toward nothing (AF-11): shown beside the payments,
+  // never one of them. Its amount is what it would have been, for the row.
+  const is_all_ignored = ({ splits }: { splits: unknown[] }): boolean =>
+    (splits as Array<Record<string, unknown>>).every((s) => split_spend_status(s) === "ignored");
+  const ignored_rows = candidate_rows.filter((r) => r.net <= 0 && is_all_ignored(r));
   const date_of = (data: unknown): number =>
     (data as Record<string, Timestamp | undefined>).transactionDate?.toMillis?.() ?? 0;
   const id_of = (data: unknown): string => ((data as Record<string, unknown>).id as string) ?? "";
@@ -117,7 +124,7 @@ export async function derive_recurring_transactions_orchestrator(
   const release_bill = release_schedule
     ? { schedule: release_schedule, payments: paying_rows.map((r) => ({ id: id_of(r.data), date_ms: date_of(r.data), amount: r.net })) }
     : null;
-  const rows: DerivedRecurringTransaction[] = paying_rows
+  const rows: DerivedRecurringTransaction[] = [...paying_rows, ...ignored_rows]
     // A payment in a month this bill / income is removed / paused for pays nothing (X9 — as the
     // period page, the engine and reconcile). D31 / D37: except a bill's LATE payment of its last
     // occurrence before the cut-off while that occurrence is still unpaid.
@@ -138,7 +145,10 @@ export async function derive_recurring_transactions_orchestrator(
           (d.name as string) ||
           (d.description as string) ||
           "Transaction",
-        amount: net,
+        amount: net > 0
+          ? net
+          : (splits as Array<Record<string, unknown>>)
+            .reduce((a, s) => a + Math.abs((s.amount as number) ?? 0), 0),
         is_pending: d.isPending === true,
         in_period: date_ms >= window_start_ms && date_ms <= window_end_ms,
         card: to_card_transaction(doc_id, d),

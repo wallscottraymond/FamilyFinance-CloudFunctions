@@ -19,6 +19,9 @@ export interface SyncAllTransactionsResult {
     modified_total: number;
     removed_total: number;
     balances_updated_total: number;
+    /** One per connection refreshed, the number AF-15 measures. */
+    balance_calls_total: number;
 }
-export declare function sync_all_transactions_orchestrator(ctx: TraceContext): Promise<SyncAllTransactionsResult>;
+export declare function is_daily_balance_run(now_ms: number): boolean;
+export declare function sync_all_transactions_orchestrator(ctx: TraceContext, now_ms?: number): Promise<SyncAllTransactionsResult>;
 //# sourceMappingURL=sync_all_transactions.orchestrator.d.ts.map

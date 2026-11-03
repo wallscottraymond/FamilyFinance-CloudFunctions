@@ -25,10 +25,20 @@ export interface SyncAllTransactionsResult {
   modified_total: number;
   removed_total: number;
   balances_updated_total: number;
+  /** One per connection refreshed, the number AF-15 measures. */
+  balance_calls_total: number;
+}
+
+/** The 6-hourly run that refreshes balances: 12:00 UTC, early morning across the US. */
+const DAILY_BALANCE_HOUR_UTC = 12;
+
+export function is_daily_balance_run(now_ms: number): boolean {
+  return new Date(now_ms).getUTCHours() === DAILY_BALANCE_HOUR_UTC;
 }
 
 export async function sync_all_transactions_orchestrator(
-  ctx: TraceContext
+  ctx: TraceContext,
+  now_ms: number = Date.now()
 ): Promise<SyncAllTransactionsResult> {
   const items = await plaid_item_repo.get_all_active(ctx);
 
@@ -40,6 +50,7 @@ export async function sync_all_transactions_orchestrator(
     modified_total: 0,
     removed_total: 0,
     balances_updated_total: 0,
+    balance_calls_total: 0,
   };
 
   for (const item of items) {
@@ -64,10 +75,14 @@ export async function sync_all_transactions_orchestrator(
       console.error(`[${ctx.trace_id}] failed to queue sync for item ${item.plaid_item_id}:`, error);
     }
 
+    // Balances once a day (AF-15): they rarely change between syncs, and pull to refresh stays live.
+    if (!is_daily_balance_run(now_ms)) continue;
+
     // Refresh balances independently — a transaction-sync failure above must not
     // skip the balance refresh, and vice versa. The balance resolver looks up by
     // `plaidItemId`, so pass the external id. Best-effort per item.
     try {
+      result.balance_calls_total++;
       const balance = await sync_balances_orchestrator({
         trace_id: ctx.trace_id,
         span_id: generate_id(),
