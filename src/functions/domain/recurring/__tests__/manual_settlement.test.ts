@@ -57,7 +57,7 @@ describe("period page: apply_manual_settlements after reconcile", () => {
       apply_manual_settlements(reconciled, { "2026-08-15": mark(50) }), [AUG]
     );
     expect(g).toMatchObject({ count_paid: 1, total_paid: 50, total_due: 50, status: "paid" });
-    expect(g.occurrences).toEqual([{ due_ms: D("2026-08-15"), paid: true, amount: 50, manual: true }]);
+    expect(g.occurrences).toEqual([expect.objectContaining({ due_ms: D("2026-08-15"), paid: true, amount: 50, manual: true })]);
   });
 
   it("a real payment for a marked occurrence pays it ONCE, by the transaction (not doubled)", () => {

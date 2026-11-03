@@ -198,6 +198,8 @@ interface LegacyInflowDoc extends ConvertDocFields {
   currency: string;
   // User-set expected-amount override (see Inflow.expected_amount_override).
   expectedAmountOverride?: number | null;
+  // Deposits linked by their exact payer description, kept through Plaid's refresh (AF-08).
+  payerMatchedTransactionIds?: string[];
   // Per-occurrence expected overrides keyed by due-date (see Inflow.occurrence_amount_overrides).
   occurrenceAmountOverrides?: Record<string, number>;
 
@@ -396,7 +398,14 @@ function map_persistence_to_doc(
     isHidden: existing?.isHidden ?? entity.is_hidden,
     isUserModified: existing?.isUserModified ?? entity.is_user_modified,
 
-    transactionIds: entity.transaction_ids,
+    // Plaid's stream list, plus deposits linked by their exact payer (AF-08), which Plaid's refresh
+    // must not drop.
+    transactionIds: [
+      ...new Set([...(entity.transaction_ids ?? []), ...(existing?.payerMatchedTransactionIds ?? [])]),
+    ],
+    ...(existing?.payerMatchedTransactionIds
+      ? { payerMatchedTransactionIds: existing.payerMatchedTransactionIds }
+      : {}),
     tags: existing?.tags ?? entity.tags,
     rules: existing?.rules ?? entity.rules,
 
@@ -889,6 +898,30 @@ export const inflow_repo = {
    * the user is asked "Still a bill?"). Writes only docs whose value changes. Stamped with the
    * sync run so the recurring trigger leaves the bump to the sync.
    */
+  /**
+   * Link deposits to income lines by their exact payer (AF-08): onto `transactionIds`, the one list
+   * every reader uses, and `payerMatchedTransactionIds`, so Plaid's refresh keeps them.
+   */
+  async add_payer_matched_transactions(
+    _ctx: TraceContext,
+    linked: Map<string, string[]>,
+    run_id: string
+  ): Promise<void> {
+    const db = getFirestore();
+    const batch = db.batch();
+    for (const [id, plaid_ids] of linked) {
+      /* eslint-disable @typescript-eslint/naming-convention */
+      batch.update(doc_ref(id), {
+        transactionIds: FieldValue.arrayUnion(...plaid_ids),
+        payerMatchedTransactionIds: FieldValue.arrayUnion(...plaid_ids),
+        syncRunId: run_id,
+        updatedAt: Timestamp.now(),
+      });
+      /* eslint-enable @typescript-eslint/naming-convention */
+    }
+    await batch.commit();
+  },
+
   async set_plaid_is_active(
     ctx: TraceContext,
     ids: string[],

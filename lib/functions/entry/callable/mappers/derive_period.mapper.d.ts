@@ -44,6 +44,7 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             occurrences: {
                 transactionId?: string | undefined;
                 manual?: boolean | undefined;
+                expectedAmount?: number | undefined;
                 dueMs: number;
                 paid: boolean;
                 amount: number;
@@ -69,6 +70,7 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             occurrences: {
                 transactionId?: string | undefined;
                 manual?: boolean | undefined;
+                expectedAmount?: number | undefined;
                 dueMs: number;
                 paid: boolean;
                 amount: number;

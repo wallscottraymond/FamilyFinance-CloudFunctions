@@ -84,6 +84,8 @@ export interface TransactionSyncResult extends TransactionSyncResponse {
   /** An account in this pull isn't saved yet — nothing was written; save accounts and re-sync. */
   needs_accounts?: boolean;
   follow_ups: SyncFollowUps;
+  /** What this sync wrote (the current docs), for steps that follow it. */
+  written_docs?: Array<Record<string, unknown>>;
 }
 
 interface FetchedPages {
@@ -357,6 +359,7 @@ export async function sync_transactions_orchestrator(
     ),
     update_status: fetched.update_status,
     follow_ups,
+    written_docs: written.map((w) => w.after),
   };
 }
 

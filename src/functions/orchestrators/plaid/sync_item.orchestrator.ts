@@ -18,6 +18,7 @@
  * @module orchestrators/plaid/sync_item
  */
 
+import { link_income_by_payer_orchestrator } from "./link_income_by_payer.orchestrator";
 import { TraceContext } from "../../types";
 import { create_child_span } from "../../observability";
 import { item_sync_lease_repo, SyncRequest } from "../../repositories/plaid/item_sync_lease.repo";
@@ -282,6 +283,17 @@ async function run_round(
       outflow_ids: [...absorbing].filter(([, d]) => d === "outflow").map(([id]) => id),
       inflow_ids: [...absorbing].filter(([, d]) => d === "inflow").map(([id]) => id),
     });
+  }
+
+  // 4d. Posted deposits Plaid hasn't listed on their income line yet, by exact payer (AF-08).
+  if (tx.written_docs?.length) {
+    // Never blocks the round: a failure here must not drop the follow-ups of what it wrote.
+    try {
+      const by_payer = await link_income_by_payer_orchestrator(ctx, input.user_id, run_id, tx.written_docs);
+      follow_ups = merge_follow_ups(follow_ups, by_payer.follow_ups);
+    } catch (error) {
+      console.error("[sync_item] income by payer failed", input.user_id, error);
+    }
   }
 
   // 5. ONE follow-up pass for everything this round wrote.

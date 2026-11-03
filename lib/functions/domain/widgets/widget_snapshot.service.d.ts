@@ -29,6 +29,7 @@ export declare const WIDGET_DATA_VERSION = 2;
  * recent: 2 = Me shows every transaction on your own accounts (was the period page's Me scope).
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  * left / summary: 3 = card payments are money movement (Trustworthy-Numbers D1). 4 = D7, D8.
+ * summary: 5 = income planned at what was expected, not the real deposit (AF-08).
  */
 export declare const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>>;
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
@@ -58,6 +59,7 @@ export interface WidgetOccurrenceGroupInput {
         due_ms: number;
         paid: boolean;
         amount: number;
+        expected_amount?: number;
     }>;
 }
 export interface WidgetRecurringInput {
@@ -201,6 +203,7 @@ export declare function occurrences_of(g: WidgetOccurrenceGroupInput): Array<{
     due_ms: number;
     paid: boolean;
     amount: number;
+    expected_amount?: number;
 }>;
 /** Home Budgets card totals (`computeBudgetSectionTotals`). PURE. */
 export declare function compute_left_to_spend(budgets: WidgetBudgetInput[], period_id: string, include_everything_else?: boolean): WidgetLeftToSpend;

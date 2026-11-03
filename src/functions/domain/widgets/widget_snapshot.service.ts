@@ -37,9 +37,10 @@ export const WIDGET_DATA_VERSION = 2;
  * recent: 2 = Me shows every transaction on your own accounts (was the period page's Me scope).
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  * left / summary: 3 = card payments are money movement (Trustworthy-Numbers D1). 4 = D7, D8.
+ * summary: 5 = income planned at what was expected, not the real deposit (AF-08).
  */
 export const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>> = {
-  recent: 2, left: 4, summary: 4, bills: 1,
+  recent: 2, left: 4, summary: 5, bills: 1,
 };
 
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
@@ -76,7 +77,7 @@ export interface WidgetOccurrenceGroupInput {
   total_due: number;
   first_due_ms: number | null;
   next_unpaid_due_ms: number | null;
-  occurrences?: Array<{ due_ms: number; paid: boolean; amount: number }>;
+  occurrences?: Array<{ due_ms: number; paid: boolean; amount: number; expected_amount?: number }>;
 }
 
 export interface WidgetRecurringInput {
@@ -247,7 +248,7 @@ export function short_period_label(cadence: string, start_ms: number, end_ms: nu
 /** Mobile `occurrencesOf`: placed occurrences, else one aggregate row from the group. */
 export function occurrences_of(
   g: WidgetOccurrenceGroupInput
-): Array<{ due_ms: number; paid: boolean; amount: number }> {
+): Array<{ due_ms: number; paid: boolean; amount: number; expected_amount?: number }> {
   if (g.occurrences && g.occurrences.length > 0) return g.occurrences;
   const count = g.count_in_period ?? 0;
   if (count <= 0) return [];
@@ -501,7 +502,8 @@ export function compute_period_summary(
       const unplanned = r.recurring_id === OTHER_INCOME_ID;
       for (const o of occurrences_of(g)) {
         entries += 1;
-        if (!unplanned) planned += o.amount;
+        // Planned at what was expected, as the app (AF-08); `amount` is what really came or went.
+        if (!unplanned) planned += o.expected_amount ?? o.amount;
         actual += o.paid ? o.amount : 0;
       }
     }

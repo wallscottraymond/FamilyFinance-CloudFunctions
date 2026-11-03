@@ -78,6 +78,7 @@ export interface PlacedOccurrenceGroup {
     due_ms: number;
     paid: boolean;
     amount: number;
+    expected_amount?: number;
     manual?: true;
     transaction_id?: string;
   }>;
@@ -142,6 +143,8 @@ export function place_occurrences(
         due_ms: o.due_date_ms,
         paid: o.is_paid,
         amount: o.is_paid ? o.amount_paid : o.amount_due,
+        // What was expected, kept apart from a paid occurrence's real amount (AF-08).
+        expected_amount: o.amount_due,
         ...(o.is_manual ? { manual: true as const } : {}),
         ...(o.is_paid && !o.is_manual && o.matched_transaction_id
           ? { transaction_id: o.matched_transaction_id }

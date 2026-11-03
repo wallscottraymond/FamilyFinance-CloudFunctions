@@ -56,6 +56,7 @@ function map_recurring(r: DerivedRecurringResult) {
         dueMs: o.due_ms,
         paid: o.paid,
         amount: o.amount,
+        ...(o.expected_amount !== undefined ? { expectedAmount: o.expected_amount } : {}),
         // Settled by "Mark as paid / received" (no transaction) — the detail screen's undo.
         ...(o.manual ? { manual: true } : {}),
         // The transaction that paid it (doc id) — the detail screen opens it.

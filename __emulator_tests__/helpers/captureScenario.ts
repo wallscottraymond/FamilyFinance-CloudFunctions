@@ -398,6 +398,9 @@ export function normalizeDoc(value: unknown, tag: string): unknown {
     // Trustworthy-Numbers D6 (deliberate, 2026-11-03): the classifier marks paired card payments
     // for the phone's lists. It changes no stored or derived number, which this suite still pins.
     "cardPaymentPaired",
+    // AF-08 (deliberate, 2026-11-03): the expected amount, newly sent beside each occurrence's
+    // existing amount. Nothing this suite pins changes.
+    "expected_amount",
     "createdAt", "updatedAt", "lastSyncedAt", "syncRunId", "assignRunId", "lastWriteSource",
     "lastCalculated", "lastUpdated", "lastModified", "lastReconciledAt", "reconciledAt", "trace_id",
     "traceId", "computedAt", "generatedAt", "restoredAt", "lastAssignedAt", "assignedAt", "processedAt",

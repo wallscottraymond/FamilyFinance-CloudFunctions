@@ -205,6 +205,11 @@ export declare const inflow_repo: {
      * the user is asked "Still a bill?"). Writes only docs whose value changes. Stamped with the
      * sync run so the recurring trigger leaves the bump to the sync.
      */
+    /**
+     * Link deposits to income lines by their exact payer (AF-08): onto `transactionIds`, the one list
+     * every reader uses, and `payerMatchedTransactionIds`, so Plaid's refresh keeps them.
+     */
+    add_payer_matched_transactions(_ctx: TraceContext, linked: Map<string, string[]>, run_id: string): Promise<void>;
     set_plaid_is_active(ctx: TraceContext, ids: string[], value: boolean, user_id: string, run_id?: string): Promise<number>;
     /**
      * "How often?" answer: the user's schedule for this record. Stored as `userFrequency` (every

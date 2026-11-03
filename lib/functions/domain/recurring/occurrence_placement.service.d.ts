@@ -74,6 +74,7 @@ export interface PlacedOccurrenceGroup {
         due_ms: number;
         paid: boolean;
         amount: number;
+        expected_amount?: number;
         manual?: true;
         transaction_id?: string;
     }>;

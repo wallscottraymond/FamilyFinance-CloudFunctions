@@ -68,8 +68,8 @@ describe("place_occurrences", () => {
     ];
     const [g] = place_occurrences(occs, [junMonthBucket]);
     expect(g.occurrences).toEqual([
-      { due_ms: Date.UTC(2026, 5, 3), paid: true, amount: 2000 },
-      { due_ms: Date.UTC(2026, 5, 17), paid: false, amount: 1500 },
+      expect.objectContaining({ due_ms: Date.UTC(2026, 5, 3), paid: true, amount: 2000 }),
+      expect.objectContaining({ due_ms: Date.UTC(2026, 5, 17), paid: false, amount: 1500 }),
     ]);
   });
 
@@ -81,8 +81,8 @@ describe("place_occurrences", () => {
     ];
     const [g] = place_occurrences(occs, [junMonthBucket]);
     expect(g.occurrences).toEqual([
-      { due_ms: Date.UTC(2026, 5, 15), paid: true, amount: 22681 }, // ACTUAL, not the 10000 estimate
-      { due_ms: Date.UTC(2026, 5, 30), paid: false, amount: 10000 }, // expected/estimate
+      { due_ms: Date.UTC(2026, 5, 15), paid: true, amount: 22681, expected_amount: 10000 }, // ACTUAL, and what was expected
+      { due_ms: Date.UTC(2026, 5, 30), paid: false, amount: 10000, expected_amount: 10000 }, // expected/estimate
     ]);
   });
 
@@ -190,7 +190,7 @@ describe("place_occurrences — the transaction that paid each occurrence (Tappa
 
   it("a paid occurrence carries its paying transaction's doc id", () => {
     const placed = place(occ("o1", JUN_15, { is_paid: true, amount_paid: 2000, matched_transaction_id: "txn_doc_1" }));
-    expect(placed).toEqual({ due_ms: JUN_15, paid: true, amount: 2000, transaction_id: "txn_doc_1" });
+    expect(placed).toMatchObject({ due_ms: JUN_15, paid: true, amount: 2000, transaction_id: "txn_doc_1" });
   });
 
   it("an unpaid occurrence has none (even with a stale id)", () => {
@@ -199,7 +199,8 @@ describe("place_occurrences — the transaction that paid each occurrence (Tappa
 
   it("a manual mark (Mark as paid) has none: no transaction paid it", () => {
     const placed = place(occ("o1", JUN_15, { is_paid: true, is_manual: true, amount_paid: 2000 }));
-    expect(placed).toEqual({ due_ms: JUN_15, paid: true, amount: 2000, manual: true });
+    expect(placed).toMatchObject({ due_ms: JUN_15, paid: true, amount: 2000, manual: true });
+    expect(placed).not.toHaveProperty("transaction_id");
   });
 
   it("a paid occurrence without a known transaction just omits it", () => {
