@@ -36,6 +36,7 @@ import {
   EARLY_CARRY_MAX_MS,
   carried_early_payment_ms,
   is_payment_suppressed,
+  paused_until_for_due,
   is_suppressed_in_period,
 } from "../recurring/recurring_suppression.service";
 import type { ReconciledOccurrence } from "../recurring/reconcile_occurrences.service";
@@ -145,13 +146,23 @@ export function compute_period_view(
       : settled;
     const groups = place_occurrences(kept, deps.placement_buckets);
     // A suppressed period shows the item only for the occurrences it kept (none → hidden).
-    const visible_groups = groups.filter((g) => {
+    // A PAUSED one stays listed at $0, marked, with its resume date, in the periods it would have
+    // been due: pausing a monthly bill must not add it to the other weeks of a weekly view (AF-03).
+    const paused_until_by_period = new Map<string, number>();
+    if (r.removal_intervals?.length) {
+      for (const g of place_occurrences(settled, deps.placement_buckets)) {
+        for (const o of g.occurrences) {
+          const until = paused_until_for_due(r.removal_intervals, o.due_ms);
+          if (until !== null) paused_until_by_period.set(g.period_id, until);
+        }
+      }
+    }
+    const visible_groups = groups.flatMap((g) => {
+      if (g.count_in_period > 0) return [g];
+      const paused_until_ms = paused_until_by_period.get(g.period_id);
+      if (paused_until_ms !== undefined) return [{ ...g, paused_until_ms }];
       const end_ms = period_end_by_id.get(g.period_id);
-      return (
-        end_ms === undefined ||
-        !is_suppressed_in_period(r.removal_intervals, end_ms) ||
-        g.count_in_period > 0
-      );
+      return end_ms === undefined || !is_suppressed_in_period(r.removal_intervals, end_ms) ? [g] : [];
     });
     (r.kind === "outflow" ? bills : income).push({
       recurring_id: r.id,

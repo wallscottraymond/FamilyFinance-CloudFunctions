@@ -292,4 +292,18 @@ describe("Mark as paid / received (emulator)", () => {
     const bill = (await page()).bills.find((b) => b.recurring_id === BILL);
     expect(bill?.groups.find((g) => g.period_id === SP)).toBeUndefined();
   });
+
+  it("a paused or removed month can't be marked settled; clearing a mark there still works (AF-03)", async () => {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    await db.collection("outflows").doc(BILL).update({
+      removalIntervals: [{ fromMs: AUG.start, toMs: Date.UTC(2033, 9, 1), mode: "paused" }],
+    });
+    /* eslint-enable @typescript-eslint/naming-convention */
+    await expect(
+      settle({ kind: "outflow", recurring_id: BILL, due_date: "2033-08-15", settled: true })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      settle({ kind: "outflow", recurring_id: BILL, due_date: "2033-08-15", settled: false })
+    ).resolves.toBeDefined();
+  });
 });

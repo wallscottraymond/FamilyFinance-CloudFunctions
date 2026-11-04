@@ -9,6 +9,7 @@
  * @module resolvers/recurring/occurrence_settlement
  */
 
+import type { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
 import { TraceContext } from "../../types";
 import { outflow_repo } from "../../repositories/outflow.repo";
 import { inflow_repo } from "../../repositories/inflow.repo";
@@ -26,6 +27,8 @@ export interface OccurrenceSettlementContext {
   owner_id: string;
   group_ids: string[];
   marks: ManualSettledOccurrences;
+  /** Removed / paused / ended spans: a suppressed month can't be marked settled. */
+  removal_intervals: RemovalInterval[];
   /** The item's expected-amount inputs (the period page's shape). */
   item: RecurringForExpected;
 }
@@ -49,6 +52,7 @@ export async function resolve_occurrence_settlement_context(
       owner_id: o.user_id,
       group_ids: o.group_ids ?? [],
       marks: o.manual_settled_occurrences ?? {},
+      removal_intervals: o.removal_intervals ?? [],
       item: {
         id: o.id,
         kind: "outflow",
@@ -83,6 +87,7 @@ export async function resolve_occurrence_settlement_context(
     owner_id: i.user_id,
     group_ids: i.group_ids ?? [],
     marks: i.manual_settled_occurrences ?? {},
+    removal_intervals: i.removal_intervals ?? [],
     item: {
       id: i.id,
       kind: "inflow",

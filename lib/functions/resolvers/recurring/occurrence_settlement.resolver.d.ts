@@ -8,6 +8,7 @@
  *
  * @module resolvers/recurring/occurrence_settlement
  */
+import type { RemovalInterval } from "../../domain/recurring/recurring_suppression.service";
 import { TraceContext } from "../../types";
 import { RecurringForExpected } from "../../domain/recurring/expected_occurrences.service";
 import { ManualSettledOccurrences } from "../../domain/recurring/manual_settlement.service";
@@ -16,6 +17,8 @@ export interface OccurrenceSettlementContext {
     owner_id: string;
     group_ids: string[];
     marks: ManualSettledOccurrences;
+    /** Removed / paused / ended spans: a suppressed month can't be marked settled. */
+    removal_intervals: RemovalInterval[];
     /** The item's expected-amount inputs (the period page's shape). */
     item: RecurringForExpected;
 }

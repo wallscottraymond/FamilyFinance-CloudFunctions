@@ -66,6 +66,35 @@ export function is_suppressed_in_period(
   );
 }
 
+/**
+ * The resume date when this period is paused, else null: a paused bill stays listed, at $0, with
+ * Resume right there (AF-03). Removed spans stay hidden. PURE.
+ */
+export function paused_until_in_period(
+  intervals: RemovalInterval[] | undefined,
+  period_end_ms: number
+): number | null {
+  const hit = (intervals ?? []).find(
+    (i) => i.mode === "paused" && period_end_ms > i.from_ms && (i.to_ms === null || period_end_ms <= i.to_ms)
+  );
+  if (!hit) return null;
+  // Still removed, as of this period: removed stays hidden. An end still to come doesn't count.
+  const removed_since = (intervals ?? []).some(
+    (i) => i.mode !== "paused" && i.to_ms === null && i.from_ms <= period_end_ms
+  );
+  return removed_since ? null : hit.to_ms;
+}
+
+/**
+ * The resume date when an occurrence due on `due_ms` is dropped by a pause, else null. Snaps to the
+ * occurrence's (UTC) month, as `is_payment_suppressed` does, so a week running past the resume date
+ * still shows the bill it dropped. PURE.
+ */
+export function paused_until_for_due(intervals: RemovalInterval[] | undefined, due_ms: number): number | null {
+  const d = new Date(due_ms);
+  return paused_until_in_period(intervals, Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) - 1);
+}
+
 /** Is the item suppressed right now? (Any interval currently covering `now_ms`.) */
 export function is_currently_suppressed(intervals: RemovalInterval[], now_ms: number): boolean {
   return intervals.some((i) => interval_covers_now(i, now_ms));

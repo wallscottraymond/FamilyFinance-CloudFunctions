@@ -48,6 +48,17 @@ export declare const EPOCH_MS = 0;
  * full — cadence-agnostic (uses whatever `period_end_ms` the viewing cadence gives).
  */
 export declare function is_suppressed_in_period(intervals: RemovalInterval[], period_end_ms: number): boolean;
+/**
+ * The resume date when this period is paused, else null: a paused bill stays listed, at $0, with
+ * Resume right there (AF-03). Removed spans stay hidden. PURE.
+ */
+export declare function paused_until_in_period(intervals: RemovalInterval[] | undefined, period_end_ms: number): number | null;
+/**
+ * The resume date when an occurrence due on `due_ms` is dropped by a pause, else null. Snaps to the
+ * occurrence's (UTC) month, as `is_payment_suppressed` does, so a week running past the resume date
+ * still shows the bill it dropped. PURE.
+ */
+export declare function paused_until_for_due(intervals: RemovalInterval[] | undefined, due_ms: number): number | null;
 /** Is the item suppressed right now? (Any interval currently covering `now_ms`.) */
 export declare function is_currently_suppressed(intervals: RemovalInterval[], now_ms: number): boolean;
 /** The item's current state — the interval covering `now_ms` (if any) decides it. */

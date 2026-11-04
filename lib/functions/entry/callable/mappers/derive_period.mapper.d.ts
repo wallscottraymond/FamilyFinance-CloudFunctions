@@ -32,13 +32,6 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         recurringId: string;
         name: string;
         groups: {
-            periodId: string;
-            countInPeriod: number;
-            countPaid: number;
-            totalDue: number;
-            totalPaid: number;
-            totalUnpaid: number;
-            isDuePeriod: boolean;
             isFullyPaid: boolean;
             status: import("../../../domain/recurring/occurrence_placement.service").OccurrenceReconStatus;
             occurrences: {
@@ -51,6 +44,14 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             }[];
             firstDueMs: number | null;
             nextUnpaidDueMs: number | null;
+            pausedUntilMs?: number | undefined;
+            periodId: string;
+            countInPeriod: number;
+            countPaid: number;
+            totalDue: number;
+            totalPaid: number;
+            totalUnpaid: number;
+            isDuePeriod: boolean;
         }[];
     }[];
     income: {
@@ -58,13 +59,6 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         recurringId: string;
         name: string;
         groups: {
-            periodId: string;
-            countInPeriod: number;
-            countPaid: number;
-            totalDue: number;
-            totalPaid: number;
-            totalUnpaid: number;
-            isDuePeriod: boolean;
             isFullyPaid: boolean;
             status: import("../../../domain/recurring/occurrence_placement.service").OccurrenceReconStatus;
             occurrences: {
@@ -77,6 +71,14 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             }[];
             firstDueMs: number | null;
             nextUnpaidDueMs: number | null;
+            pausedUntilMs?: number | undefined;
+            periodId: string;
+            countInPeriod: number;
+            countPaid: number;
+            totalDue: number;
+            totalPaid: number;
+            totalUnpaid: number;
+            isDuePeriod: boolean;
         }[];
     }[];
 };

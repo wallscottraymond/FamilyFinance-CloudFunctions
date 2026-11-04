@@ -50,6 +50,7 @@ function map_recurring(r: DerivedRecurringResult) {
       totalPaid: g.total_paid,
       totalUnpaid: g.total_unpaid,
       isDuePeriod: g.is_due_period,
+      ...(g.paused_until_ms !== undefined ? { pausedUntilMs: g.paused_until_ms } : {}),
       isFullyPaid: g.is_fully_paid,
       status: g.status,
       occurrences: g.occurrences.map((o) => ({

@@ -14,6 +14,7 @@
  * @module orchestrators/recurring/set_occurrence_settled
  */
 
+import { is_payment_suppressed } from "../../domain/recurring/recurring_suppression.service";
 import {
   TraceContext,
   WriteResult,
@@ -127,6 +128,11 @@ export async function set_occurrence_settled_orchestrator(
     const occurrence = build_expected_occurrences(context.item, month.start_ms, month.end_ms).find(
       (e) => occurrence_date_key(e.due_date_ms) === input.due_date
     );
+    // A paused or removed month has nothing due: a mark there would count nowhere now, then read
+    // as paid with no payment on Resume (AF-03). Clearing one stays allowed.
+    if (input.settled && is_payment_suppressed(context.removal_intervals, due_ms)) {
+      throw new ValidationError(["This is paused or removed for that month. Resume it first."]);
+    }
     // Clearing a mark the schedule has since moved away from is still allowed (cleanup).
     const clearing_stale = !input.settled && input.due_date in context.marks;
     if (!occurrence && !clearing_stale) {

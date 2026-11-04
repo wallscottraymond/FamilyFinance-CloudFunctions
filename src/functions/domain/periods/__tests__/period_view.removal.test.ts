@@ -72,7 +72,9 @@ describe("derive month rule — A2 cases (pure)", () => {
     expect([g.count_in_period, g.total_due]).toEqual([0, 0]);
     // Monthly: September is hidden, October shows its Oct 29 occurrence.
     const m = derive([bill], "monthly", SEP_OCT);
-    expect(visible(m, "c", "M_2026_8")).toBe(false);
+    // AF-03: a paused month lists the bill, marked, with nothing due.
+    expect(visible(m, "c", "M_2026_8")).toBe(true);
+    expect(occ(m, "c", "M_2026_8")).toEqual([]);
     expect(occ(m, "c", "M_2026_9")).toEqual([["2026-10-29", false]]);
   });
 
@@ -95,6 +97,32 @@ describe("derive month rule — A2 cases (pure)", () => {
   });
 });
 
+describe("AF-03 — a paused bill lists only where it would have been due (pure)", () => {
+  const paused = (over: Partial<BillSpec>): BillSpec => ({
+    id: "p", frequency: "monthly", amount: 45, anchor_ms: U(9, 29), first_ms: U(1, 29),
+    removal_intervals: [{ from_ms: Date.UTC(2026, 8, 1), to_ms: U(10, 2), mode: "paused" }],
+    payments: [],
+    ...over,
+  });
+  it("weekly: only the due week of the pause, at $0 with the resume date", () => {
+    const wk = derive([paused({})], "weekly", SEP_OCT);
+    const groups = wk.bills.find((b) => b.recurring_id === "p")!.groups.filter((g) => g.paused_until_ms !== undefined);
+    expect(groups.map((g) => g.period_id)).toEqual([W_SEP27]);
+    expect([groups[0].paused_until_ms, groups[0].occurrences, groups[0].total_due]).toEqual([U(10, 2), [], 0]);
+    expect(visible(wk, "p", `W_${Date.UTC(2026, 8, 6)}`)).toBe(false);
+  });
+  it("monthly: a quarterly bill not due in a paused month is not added to it", () => {
+    const q = paused({
+      frequency: "quarterly", anchor_ms: U(7, 15), first_ms: U(1, 15),
+      removal_intervals: [{ from_ms: Date.UTC(2026, 6, 1), to_ms: U(10, 2), mode: "paused" }],
+    });
+    const m = derive([q], "monthly", { start: Date.UTC(2026, 6, 1), end: SEP_OCT.end });
+    expect(visible(m, "p", "M_2026_6")).toBe(true); // Jul: due
+    expect(visible(m, "p", "M_2026_7")).toBe(false); // Aug: not due
+    expect(visible(m, "p", "M_2026_8")).toBe(false); // Sep: not due
+  });
+});
+
 describe("D28 — an early payment before a removal / end cut-off counts (pure)", () => {
   // Due the 1st; paid Sep 1 on time and Sep 29 EARLY for Oct 1; removed (or ended / paused) from Oct 1.
   const make = (mode: "going_forward" | "paused"): BillSpec => ({
@@ -109,7 +137,9 @@ describe("D28 — an early payment before a removal / end cut-off counts (pure)"
       for (const w of [SEP, SEP_OCT]) {
         const m = derive([bill], "monthly", w);
         expect(occ(m, "e", "M_2026_8")).toEqual([["2026-09-01", true], ["2026-09-29", true]]);
-        expect(visible(m, "e", "M_2026_9")).toBe(false);
+        // AF-03: a paused month lists it, marked, with nothing due. A removed month hides it.
+        // (A Sep-only window has no Oct group at all.)
+        expect(visible(m, "e", "M_2026_9")).toBe(mode === "paused" && w === SEP_OCT);
         expect(payment_counts(m, [bill]).get("p_sep29")).toBe(1);
         expect(by_bucket(m, "e").get("M_2026_8")?.ee).toBe(0);
         const bm = derive([bill], "bi_monthly", w);
@@ -120,9 +150,9 @@ describe("D28 — an early payment before a removal / end cut-off counts (pure)"
       expect(occ(wk, "e", W_SEP27)).toEqual([["2026-09-29", true]]);
       expect(payment_counts(wk, [bill]).get("p_sep29")).toBe(1);
       expect(by_bucket(wk, "e").get(W_SEP27)?.ee).toBe(0);
-      // The Oct view alone: hidden, nothing counted there.
+      // The Oct view alone: nothing due there. Removed is hidden; paused is listed, marked (AF-03).
       const oct = derive([bill], "monthly", { start: Date.UTC(2026, 9, 1), end: Date.UTC(2026, 10, 1) - 1 });
-      expect(visible(oct, "e", "M_2026_9")).toBe(false);
+      expect(visible(oct, "e", "M_2026_9")).toBe(mode === "paused");
     });
   }
 
@@ -161,7 +191,7 @@ describe("D31 — a late payment after a removal / pause / end cut-off pays the 
         expect(occ(bm, "l", "BM_2026_8_B")).toEqual([["2026-09-29", true]]);
       }
       const m = derive([bill], "monthly", SEP_OCT);
-      expect(visible(m, "l", "M_2026_9")).toBe(false);
+      expect(visible(m, "l", "M_2026_9")).toBe(mode === "paused"); // AF-03
       expect(by_bucket(m, "l").get("M_2026_9")?.ee).toBe(0); // not also budget spend (was 100)
       const wk = derive([bill], "weekly", SEP_OCT);
       expect(occ(wk, "l", W_SEP27)).toEqual([["2026-09-29", true]]);

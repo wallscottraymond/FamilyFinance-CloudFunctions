@@ -92,8 +92,13 @@ describe("It ended / Still a bill? on an already-handled bill (emulator, defect 
       expect(is_payment_suppressed(after, NOW_MS)).toBe(true);
       expect(is_payment_suppressed(after, Date.UTC(2037, 9, 31, 23))).toBe(true);
       expect(is_payment_suppressed(after, Date.UTC(2038, 2, 20))).toBe(true); // a pause never resumes
-      // The period page for October is unchanged by the answer (no bill came back).
-      expect(await h.bill(OCT, SPOT)).toEqual(bill_before);
+      // No bill came back in October. A removed bill is unchanged; a paused one was listed at $0
+      // (AF-03) and, now it has ended, leaves the list.
+      const bill_after = await h.bill(OCT, SPOT);
+      const occurrences = (b: any) => (b?.groups ?? []).flatMap((g: any) => g.occurrences);
+      expect(occurrences(bill_after)).toEqual([]);
+      if (label.startsWith("removed")) expect(bill_after).toEqual(bill_before);
+      else expect(bill_after?.groups ?? []).toEqual([]);
       expect((await h.bill(NOV, SPOT))?.groups?.flatMap((g: any) => g.occurrences) ?? []).toEqual([]);
       const item = (await recurring_review_repo.get_item(ctx(), q.id))!;
       expect([item.status, item.answer]).toEqual(["resolved", "it_ended"]);

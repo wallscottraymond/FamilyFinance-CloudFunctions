@@ -301,7 +301,10 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
   expect(strip(got_removed.monthly_sep)).toEqual(strip(base_removed.monthly_sep));
   expect(strip(got_removed.monthly_oct)).toEqual(strip(base_removed.monthly_oct));
   expect(diff_keys(got_removed.monthly_sep, base_removed.monthly_sep))
-    .toEqual([`bill:TAG_S_ERL@${M_SEP}`, `bill:TAG_S_LTE@${M_SEP}`, `budget:${ee_m}@${M_SEP}`].sort());
+    .toEqual([`bill:TAG_S_ERL@${M_SEP}`, `bill:TAG_S_LTE@${M_SEP}`, `bill:TAG_S_PSE@${M_SEP}`, `budget:${ee_m}@${M_SEP}`].sort());
+  // AF-03 (deliberate, 2026-11-03): the paused month now lists the bill, marked, at $0 and nothing due.
+  const pse_sep = (got_removed.monthly_sep.bills as any[]).find((b) => b.recurring_id === "TAG_S_PSE")?.groups.find((g: any) => g.period_id === M_SEP);
+  expect([pse_sep.paused_until_ms, pse_sep.occurrences, pse_sep.total_due, pse_sep.total_paid]).toEqual([Date.UTC(2037, 9, 2), [], 0, 0]);
   expect(diff_keys(got_removed.monthly_oct, base_removed.monthly_oct)).toEqual([`budget:${ee_m}@${M_OCT}`]);
   const ee_cell = (v: any, pid: string) => (v.budgets as any[]).find((b) => b.budget_id === ee_m).periods.find((p: any) => p.period_id === pid);
   const { spent: s_got, remaining: r_got, ...oct_got } = ee_cell(got_removed.monthly_oct, M_OCT);
@@ -323,7 +326,7 @@ function expectGoldenWithA2(out: any, golden_all: any): void {
     `bill:TAG_S_XTR@${W_SEP27}`, // D37 #2: the same (a) cell as RMV — removed from Oct 1, its kept Sep 29 shows in the week
   ].sort());
   const bm_diff = diff_keys(got_removed.bi_monthly, base_removed.bi_monthly);
-  expect(allowed(bm_diff, [BM_OCT_A, BM_SEP_B])).toEqual([`bill:TAG_S_ERL@${BM_SEP_B}`, `bill:TAG_S_LTE@${BM_SEP_B}`, `bill:TAG_S_RST@${BM_OCT_A}`].sort()); // D28 + D31 + (b)
+  expect(allowed(bm_diff, [BM_OCT_A, BM_SEP_B])).toEqual([`bill:TAG_S_ERL@${BM_SEP_B}`, `bill:TAG_S_LTE@${BM_SEP_B}`, `bill:TAG_S_PSE@${BM_SEP_B}`, `bill:TAG_S_RST@${BM_OCT_A}`].sort()); // D28 + D31 + AF-03 + (b)
   // …and each case went the right way.
   const group = (view: any, bill: string, pid: string) =>
     (view.bills as any[]).find((b) => b.recurring_id === bill)?.groups.find((g: any) => g.period_id === pid);

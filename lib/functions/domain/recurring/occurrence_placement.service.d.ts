@@ -57,6 +57,8 @@ export interface PlacedOccurrenceGroup {
     total_unpaid: number;
     /** True if ANY occurrence is due in this period. */
     is_due_period: boolean;
+    /** Set when this period is paused: the resume date. The group holds no occurrences (AF-03). */
+    paused_until_ms?: number;
     /** count > 0 AND every occurrence paid. */
     is_fully_paid: boolean;
     /** Some but not all paid. */
