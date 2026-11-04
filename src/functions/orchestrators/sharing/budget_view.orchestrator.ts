@@ -12,6 +12,7 @@
  * @module orchestrators/sharing/budget_view
  */
 
+import { budget_checklist_repo } from "../../repositories/budget_checklist.repo";
 import { load_category_catalog } from "../../resolvers/shared/category_catalog.resolver";
 import { randomUUID } from "crypto";
 import { OrchestratorContext, TraceContext } from "../../types";
@@ -62,6 +63,7 @@ function to_view_budget(b: BudgetEntity | null): ViewBudget | null {
     category_ids: b.category_ids ?? [],
     is_everything_else: b.is_system_everything_else === true,
     brought_by: b.brought_by ?? null,
+    is_manual: b.is_manual === true,
   };
 }
 
@@ -87,6 +89,7 @@ async function apply_move(
   const old_owner_key = budget.owner_key;
   await budget_repo.set_owner(ctx, budget.id, new_owner_key, brought_by, actor_id);
   await budget_period_repo.set_owner_for_budget(ctx, budget.id, new_owner_key);
+  await budget_checklist_repo.set_owner(budget.id, new_owner_key);
   // The budget write bumped both keys BEFORE its periods were re-keyed; a derive in between
   // cached the budget without its stored periods (rollover / edited amounts). Bump again.
   await bump_owner_versions([old_owner_key, new_owner_key]);
@@ -202,6 +205,7 @@ export async function copy_budgets_to_group_orchestrator(
       description: original.description,
       amount,
       category_ids: category_ids ?? original.category_ids,
+      is_manual: original.is_manual === true,
       period: original.period,
       budget_type: original.budget_type,
       start_date: original.start_date.toDate().toISOString(),

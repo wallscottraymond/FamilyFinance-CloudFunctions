@@ -27,6 +27,8 @@ export interface ViewBudget {
     category_ids: string[];
     is_everything_else: boolean;
     brought_by: string | null;
+    /** Has no categories on purpose (AF-02). */
+    is_manual?: boolean;
 }
 /**
  * Can `actor` edit / delete this budget? Me budgets: only their owner. Group

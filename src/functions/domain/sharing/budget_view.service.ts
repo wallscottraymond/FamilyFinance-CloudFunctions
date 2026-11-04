@@ -40,6 +40,8 @@ export interface ViewBudget {
   category_ids: string[];
   is_everything_else: boolean;
   brought_by: string | null;
+  /** Has no categories on purpose (AF-02). */
+  is_manual?: boolean;
 }
 
 /**
@@ -127,7 +129,7 @@ export function plan_move_budget(
   }
   // A budget that came back empty (S1-M4) has nothing to count in a group; it can still LEAVE a
   // group, so one stranded there can be rescued.
-  if (target.type === "group" && budget.category_ids.length === 0) {
+  if (target.type === "group" && budget.category_ids.length === 0 && !budget.is_manual) {
     return validation_failed([NO_CATEGORIES_MOVE]);
   }
   const clash = find_clash(budget, target_view_budgets, first_of);
@@ -201,7 +203,7 @@ export function plan_copy_budgets(
       continue;
     }
     // Decided here, before anything is created: create_budget would refuse it mid-batch.
-    if (b.category_ids.length === 0) {
+    if (b.category_ids.length === 0 && !b.is_manual) {
       skipped.push({ source_budget_id: b.id, name: b.name, reason: NO_CATEGORIES_COPY });
       continue;
     }

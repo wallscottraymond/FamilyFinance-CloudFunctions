@@ -224,6 +224,10 @@ export async function purge_user_data_orchestrator(
       "budget_periods",
       await hard_delete_by_fields_union("budget_periods", ["ownerId", "userId"], user_id, writer, on_batch)
     );
+    await record(
+      "budget_checklists",
+      await hard_delete_by_fields_union("budget_checklists", ["userId"], user_id, writer, on_batch)
+    );
     await step("Deleting income history…");
     await record(
       "inflow_periods",

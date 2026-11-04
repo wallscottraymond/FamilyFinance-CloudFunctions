@@ -76,3 +76,7 @@ remaining = effectiveAmount - spent
 - [ ] Permission validation in functions
 
 See `Architecture/RBAC-System.md` for details.
+
+## Manual Budgets
+
+A budget with `isManual` has no categories on purpose: it receives only manual pins. Its checklist lives in `budget_checklists/{budgetId}`, never on the budget doc, because a budget write bumps the derive version and the phone's budget listener re-derives. See canon and vault `Manual-Budgets`.

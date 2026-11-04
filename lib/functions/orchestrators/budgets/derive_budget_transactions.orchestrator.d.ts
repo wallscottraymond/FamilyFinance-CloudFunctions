@@ -42,4 +42,21 @@ export interface DerivedBudgetTransaction {
  */
 export declare function view_cadence_of_window(start_ms: number, end_ms: number): PeriodInstanceType;
 export declare function derive_budget_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, force?: boolean, scope_request?: DeriveScopeRequest): Promise<DerivedBudgetTransaction[]>;
+export interface AddableTransaction {
+    transaction_id: string;
+    split_id: string;
+    date_ms: number;
+    name: string;
+    amount: number;
+    /** Where it counts now, so moving it is never silent. */
+    current_budget_name: string;
+}
+/**
+ * What can be added to a budget by hand in a window (Manual-Budgets): the view's own money-out splits
+ * a pin would actually land on. Decided by the same load and shape as the page, so the list holds
+ * nothing the engine would drop: only the budget's own view, only dates inside its range and not
+ * paused, only the caller's own transactions, and never a bill or income payment, a transfer, or
+ * income. READ-ONLY.
+ */
+export declare function derive_addable_transactions_orchestrator(ctx: TraceContext, user_id: string, budget_id: string, start_ms: number, end_ms: number, scope_request?: DeriveScopeRequest): Promise<AddableTransaction[]>;
 //# sourceMappingURL=derive_budget_transactions.orchestrator.d.ts.map

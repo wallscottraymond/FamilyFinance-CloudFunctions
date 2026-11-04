@@ -8,6 +8,7 @@
  * @module orchestrators/budgets/delete_budget
  */
 
+import { budget_checklist_repo } from "../../repositories/budget_checklist.repo";
 import { Timestamp } from "firebase-admin/firestore";
 import { TraceContext } from "../../types";
 import { ValidationError } from "../../types/errors";
@@ -82,6 +83,8 @@ export async function delete_budget_orchestrator(
 
     // 3. Delete the budget document (cascade cleans up the rest)
     await budget_repo.hard_delete(ctx, budget_id, user_id);
+    // Best effort: a leftover list holds nothing, and must not stop the cascade below.
+    await budget_checklist_repo.delete(budget_id).catch((e) => console.error("checklist delete failed", budget_id, e));
 
     // 4. Enqueue the cascade job
     if (plan.requires_cascade) {

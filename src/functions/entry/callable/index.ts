@@ -83,6 +83,8 @@ export { list_tags } from "./list_tags.entry";
 export { set_transaction_tags } from "./set_transaction_tags.entry";
 export { set_budget_tags } from "./set_budget_tags.entry";
 export { set_budget_pause } from "./set_budget_pause.entry";
+export { get_budget_checklist, edit_budget_checklist } from "./set_budget_checklist.entry";
+export { derive_addable_transactions } from "./derive_addable_transactions.entry";
 
 // Transaction Assignment Engine: one-shot post-cutover backfill
 export {

@@ -41,9 +41,9 @@ export const create_budget_input_schema = z
     name: z.string().min(1, "name is required").max(100),
     description: z.string().max(500).optional(),
     amount: z.number().positive("amount must be positive"),
-    category_ids: z
-      .array(z.string().min(1))
-      .min(1, "at least one category is required"),
+    category_ids: z.array(z.string().min(1)),
+    /** Manual Transaction Adding (AF-02): no categories; only what the user puts in it counts. */
+    is_manual: z.boolean().optional(),
     period: z.enum(BUDGET_PERIOD_VALUES),
     budget_type: z.enum(["recurring", "limited"]).optional(),
     /** ISO 8601 start date */
@@ -61,6 +61,10 @@ export const create_budget_input_schema = z
     /** ISO 8601 fixed end date; required when is_ongoing is false */
     budget_end_date: z.string().optional(),
     debug_mode: z.boolean().optional(),
+  })
+  .refine((data) => data.is_manual === true || data.category_ids.length > 0, {
+    message: "at least one category is required",
+    path: ["category_ids"],
   })
   .refine(
     (data) => data.is_ongoing !== false || !!data.budget_end_date,
@@ -89,6 +93,7 @@ export interface CreateBudgetInput {
   description?: string;
   amount: number;
   category_ids: string[];
+  is_manual?: boolean;
   period: BudgetPeriodType;
   budget_type: BudgetType;
   start_date: string;

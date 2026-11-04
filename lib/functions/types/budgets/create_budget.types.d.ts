@@ -22,6 +22,7 @@ export declare const create_budget_input_schema: z.ZodObject<{
     description: z.ZodOptional<z.ZodString>;
     amount: z.ZodNumber;
     category_ids: z.ZodArray<z.ZodString>;
+    is_manual: z.ZodOptional<z.ZodBoolean>;
     period: z.ZodEnum<{
         weekly: "weekly";
         monthly: "monthly";
@@ -58,6 +59,7 @@ export interface CreateBudgetInput {
     description?: string;
     amount: number;
     category_ids: string[];
+    is_manual?: boolean;
     period: BudgetPeriodType;
     budget_type: BudgetType;
     start_date: string;

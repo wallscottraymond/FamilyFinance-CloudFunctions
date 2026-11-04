@@ -73,6 +73,7 @@ interface LegacyBudgetDoc {
   categoryIds?: string[];
   period: string;
   budgetType?: string;
+  isManual?: boolean;
   startDate: Timestamp;
   endDate: Timestamp;
   spent?: number;
@@ -152,6 +153,7 @@ function map_to_entity(doc: LegacyBudgetDoc): BudgetEntity {
     amount: doc.amount,
     currency: doc.currency ?? "USD",
     category_ids: doc.categoryIds ?? [],
+    is_manual: doc.isManual === true,
     period: (doc.period as BudgetEntity["period"]) ?? "monthly",
     budget_type: (doc.budgetType as BudgetEntity["budget_type"]) ?? "recurring",
     start_date: doc.startDate,
@@ -211,6 +213,7 @@ function map_to_doc(entity: BudgetEntity): LegacyBudgetDoc {
     categoryIds: entity.category_ids,
     period: entity.period,
     budgetType: entity.budget_type,
+    ...(entity.is_manual ? { isManual: true } : {}),
     startDate: entity.start_date,
     endDate: entity.end_date,
     spent: entity.spent,

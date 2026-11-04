@@ -34,7 +34,10 @@ import {
   load_period_derivation_raw,
   shape_period_derivation_deps,
 } from "../../resolvers/periods/period_derivation.resolver";
-import { owned_splits_for_budget } from "../../domain/budgets/budget_spend_match.service";
+import { owned_splits_for_budget, resolve_split_owner } from "../../domain/budgets/budget_spend_match.service";
+import { is_within_budget_range } from "../../domain/transactions/match_budget.service";
+import { is_paused_on } from "../../domain/budgets/budget_pause.service";
+import { is_income_category, is_transfer_category } from "../../domain/transactions/category_semantics.service";
 import { PeriodInstanceType } from "../../domain/budgets";
 import {
   CardTransaction,
@@ -183,4 +186,64 @@ export async function derive_budget_transactions_orchestrator(
   // budget's list exceeds the size guard, in which case that call just stays uncached).
   fire_and_forget(() => put_cached_result(BUDGET_TXN_CACHE, cache_id, data_version, out));
   return out;
+}
+
+export interface AddableTransaction {
+  transaction_id: string;
+  split_id: string;
+  date_ms: number;
+  name: string;
+  amount: number;
+  /** Where it counts now, so moving it is never silent. */
+  current_budget_name: string;
+}
+
+/**
+ * What can be added to a budget by hand in a window (Manual-Budgets): the view's own money-out splits
+ * a pin would actually land on. Decided by the same load and shape as the page, so the list holds
+ * nothing the engine would drop: only the budget's own view, only dates inside its range and not
+ * paused, only the caller's own transactions, and never a bill or income payment, a transfer, or
+ * income. READ-ONLY.
+ */
+export async function derive_addable_transactions_orchestrator(
+  ctx: TraceContext,
+  user_id: string,
+  budget_id: string,
+  start_ms: number,
+  end_ms: number,
+  scope_request?: DeriveScopeRequest
+): Promise<AddableTransaction[]> {
+  const cadence = view_cadence_of_window(start_ms, end_ms);
+  const raw_load = await load_period_derivation_raw(ctx, user_id, cadence, [{ start_ms, end_ms }], scope_request, {
+    counting_only: true,
+  });
+  const deps = shape_period_derivation_deps(raw_load, cadence, start_ms, end_ms);
+  const target = deps.real_budgets.find((b) => b.id === budget_id);
+  if (!target) return [];
+  const ee_id = deps.any_ee_id;
+  const name_of = new Map(raw_load.budget_entities.map((b) => [b.id, b.name]));
+  const txn_by_id = new Map(raw_load.txns.map((t) => [t.id, t.data]));
+  const out: AddableTransaction[] = [];
+  for (const m of deps.splits_for_match) {
+    if (m.txn_date_ms < start_ms || m.txn_date_ms > end_ms) continue;
+    if (!m.source_txn_id || !m.source_split_id || !is_within_budget_range(m.txn_date_ms, target)) continue;
+    if (m.is_income || m.is_transfer || m.outflow_id || m.inflow_id || m.is_recurring_member) continue;
+    // A paused day's spending stays in Everything Else, so a pin wouldn't land.
+    if (is_paused_on(target.paused_ranges, m.txn_date_ms)) continue;
+    if (is_transfer_category(m.semantic_code) || is_income_category(m.semantic_code)) continue;
+    const owner = resolve_split_owner(m, deps.real_budgets, ee_id, deps.ee_alias_ids);
+    if (owner === budget_id) continue;
+    const data = txn_by_id.get(m.source_txn_id) as Record<string, unknown>;
+    // Only a transaction's owner can edit it, so in a group each member adds their own.
+    if (data.userId !== user_id) continue;
+    out.push({
+      transaction_id: m.source_txn_id,
+      split_id: m.source_split_id,
+      date_ms: m.txn_date_ms,
+      name: (data.merchantName as string) || (data.name as string) || (data.description as string) || "Transaction",
+      amount: Math.abs(m.amount),
+      current_budget_name: name_of.get(owner) ?? "Everything Else",
+    });
+  }
+  return out.sort((a, b) => b.date_ms - a.date_ms);
 }

@@ -92,6 +92,8 @@ export interface BudgetEntity {
   amount: number;
   currency: string;
   category_ids: string[];
+  /** Manual Transaction Adding: no categories, only what the user puts in it counts (AF-02). */
+  is_manual?: boolean;
   period: BudgetPeriodType;
   budget_type: BudgetType;
 

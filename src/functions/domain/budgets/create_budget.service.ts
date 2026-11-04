@@ -46,7 +46,7 @@ export function compute_create_budget(
   if (input.amount <= 0) {
     validation_errors.push("amount must be positive");
   }
-  if (!input.category_ids || input.category_ids.length === 0) {
+  if (!input.is_manual && (!input.category_ids || input.category_ids.length === 0)) {
     validation_errors.push("at least one category is required");
   }
   if (dependencies.existing_budget_count >= MAX_BUDGETS_PER_USER) {
@@ -106,7 +106,8 @@ export function compute_create_budget(
     description: input.description,
     amount: input.amount,
     currency: dependencies.currency,
-    category_ids: input.category_ids,
+    category_ids: input.is_manual ? [] : input.category_ids,
+    is_manual: input.is_manual === true,
     period: input.period,
     budget_type: input.budget_type,
 
