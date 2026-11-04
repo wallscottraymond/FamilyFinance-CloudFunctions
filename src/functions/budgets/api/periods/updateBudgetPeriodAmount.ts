@@ -261,6 +261,9 @@ export const updateBudgetPeriodAmount = onCall<
     if (period.budgetId !== budget.id || !can_manage_budget(owner_key, user.uid, owner_group)) {
       throw new HttpsError("not-found", "Budget period not found");
     }
+    if ((budget as unknown as { isFund?: boolean }).isFund === true) {
+      throw new HttpsError("failed-precondition", "A fund has one total. Change the total instead.");
+    }
 
     if (is_past_period(period.periodEnd)) {
       throw new HttpsError(

@@ -100,6 +100,7 @@ export function compute_period_generation_end(
  */
 export function build_self_provision_budget_created_payload(args: {
   budget_id: string;
+  is_fund?: boolean;
   user_id: string;
   group_ids: string[];
   budget_name: string;
@@ -120,6 +121,7 @@ export function build_self_provision_budget_created_payload(args: {
   const window_start = args.coverage_start ?? args.start;
   return {
     budget_id: args.budget_id,
+    ...(args.is_fund ? { is_fund: true } : {}),
     user_id: args.user_id,
     group_ids: args.group_ids,
     budget_name: args.budget_name,
@@ -169,6 +171,9 @@ export interface SourcePeriodForGeneration {
  */
 export interface ComputeBudgetPeriodsInput {
   budget_id: string;
+  /** A Fund's dates, stamped on its periods for the pickers. */
+  fund_range?: { start_ms: number; end_ms: number };
+  is_fund?: boolean;
   user_id: string;
   group_ids: string[];
   budget_amount: number;
@@ -227,6 +232,9 @@ export function compute_budget_periods(
     daily_rate: number
   ): BudgetPeriodEntity => ({
     id: `${input.budget_id}_${source.id}`,
+    ...(input.fund_range
+      ? { is_fund: true, fund_start_ms: input.fund_range.start_ms, fund_end_ms: input.fund_range.end_ms }
+      : {}),
     budget_id: input.budget_id,
     user_id: input.user_id,
     group_ids: input.group_ids,

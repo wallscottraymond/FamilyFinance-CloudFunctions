@@ -43,6 +43,9 @@ interface LegacyBudgetPeriodDoc {
   categoryIds?: string[];
   periodId: string;
   periodType: string;
+  isFund?: boolean;
+  fundStartMs?: number;
+  fundEndMs?: number;
   periodStart: Timestamp;
   periodEnd: Timestamp;
   allocatedAmount: number;
@@ -131,6 +134,7 @@ function map_to_entity(doc: LegacyBudgetPeriodDoc): BudgetPeriodEntity {
     start_date: doc.periodStart,
     end_date: doc.periodEnd,
     is_active: doc.isActive ?? true,
+    ...(doc.isFund === true ? { is_fund: true, fund_start_ms: doc.fundStartMs, fund_end_ms: doc.fundEndMs } : {}),
     created_at: doc.createdAt ?? doc.updatedAt ?? Timestamp.now(),
     updated_at: doc.updatedAt ?? Timestamp.now(),
   };
@@ -460,6 +464,7 @@ export const budget_period_repo = {
           periodId: period.period_id,
           sourcePeriodId: period.period_id,
           periodType: period.period_type,
+          ...(period.is_fund ? { isFund: true, fundStartMs: period.fund_start_ms, fundEndMs: period.fund_end_ms } : {}),
           periodStart: period.start_date,
           periodEnd: period.end_date,
           allocatedAmount: period.allocated_amount,

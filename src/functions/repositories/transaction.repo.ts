@@ -1689,6 +1689,25 @@ export const transaction_repo = {
   },
 
   /**
+   * The owner's active transactions with a split in this budget, any date (a Fund's running total).
+   * Same index as `get_ids_referencing_budget`; only the fields counting needs.
+   */
+  async get_active_by_budget_link(
+    _ctx: TraceContext,
+    user_id: string,
+    budget_id: string
+  ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const snap = await getFirestore()
+      .collection(COLLECTION)
+      .where("ownerId", "==", user_id)
+      .where("isActive", "==", true)
+      .where("splitBudgetIds", "array-contains", budget_id)
+      .select("transactionDate", "splits", "accountId", "isPending", "type", "merchantName", "name")
+      .get();
+    return snap.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+  },
+
+  /**
    * Clears the Rules Engine review flags on a transaction (the "Needs review" queue action).
    * `updatedAt` is bumped; nothing assignment/spend-relevant changes so the write is cheap.
    */

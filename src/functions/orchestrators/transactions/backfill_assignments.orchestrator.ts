@@ -122,6 +122,7 @@ export async function backfill_assignments_orchestrator(
       }
       const heal_payload = build_self_provision_budget_created_payload({
         budget_id: b.id,
+        ...(b.is_fund ? { is_fund: true } : {}),
         user_id: input.user_id,
         group_ids: b.group_ids,
         budget_name: b.name,

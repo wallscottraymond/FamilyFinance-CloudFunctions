@@ -30,6 +30,7 @@ export declare const WIDGET_DATA_VERSION = 2;
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  * left / summary: 3 = card payments are money movement (Trustworthy-Numbers D1). 4 = D7, D8.
  * summary: 5 = income planned at what was expected, not the real deposit (AF-08).
+ * left: 5, summary: 6 = Funds stay out of left to spend and the budget rows, with a summary row.
  */
 export declare const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>>;
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
@@ -38,6 +39,8 @@ export interface WidgetBudgetInput {
     budget_id?: string;
     name?: string;
     is_everything_else: boolean;
+    /** A Fund: not part of left to spend or the budget rows, and a row of its own on the summary. */
+    is_fund?: boolean;
     periods: Array<{
         period_id: string;
         allocated_amount: number;
@@ -92,6 +95,7 @@ export interface WidgetSummary {
     income: PlannedActual;
     bills: PlannedActual;
     budgets: PlannedActual;
+    funds: PlannedActual;
     goals: PlannedActual;
     isEmpty: boolean;
 }

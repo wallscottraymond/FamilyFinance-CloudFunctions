@@ -45,6 +45,15 @@ export type ChecklistOp = {
     carry: boolean;
     period_key: string;
 };
+/** The list a new budget starts with, from the items entered while creating it. PURE. */
+export declare function compute_initial_checklist(items: Array<{
+    id: string;
+    name: string;
+    estimate: number;
+}>): {
+    checklist?: BudgetChecklist;
+    errors?: string[];
+};
 /** Apply one edit to the stored list. An edit to an item someone else just removed does nothing. PURE. */
 export declare function apply_checklist_op(current: BudgetChecklist, op: ChecklistOp): {
     checklist?: BudgetChecklist;

@@ -108,6 +108,7 @@ export function compute_create_budget(
     currency: dependencies.currency,
     category_ids: input.is_manual ? [] : input.category_ids,
     is_manual: input.is_manual === true,
+    ...(input.is_fund ? { is_fund: true, rollover_enabled: false } : {}),
     period: input.period,
     budget_type: input.budget_type,
 

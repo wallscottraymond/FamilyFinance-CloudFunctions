@@ -35,6 +35,8 @@ export interface BudgetForDerivation {
   priced?: { from_ms: number; to_ms: number | null };
   /** Paused UTC-day ranges (Code-Health-Review PZ1); absent = not paused (EE is never paused). */
   paused_ranges?: PausedDayRange[];
+  /** A Fund: its total. `monthly_periods` hold the monthly share. */
+  fund_total?: number;
 }
 
 export interface RecurringForDerivation {
@@ -73,6 +75,8 @@ export interface PeriodDerivationDeps {
   /** Every Everything Else id (any lens) — a pin to one means "Everything Else". */
   ee_alias_ids?: ReadonlySet<string>;
   splits_for_match: SplitForOnReadMatch[];
+  /** Funds only: their transactions dated BEFORE the span, for what's left in the fund. */
+  fund_prior_splits?: SplitForOnReadMatch[];
   recurring: RecurringForDerivation[];
   /** Active income-drawing goals' planned set-aside (for the EE leftover). */
   goals: GoalForLeftover[];

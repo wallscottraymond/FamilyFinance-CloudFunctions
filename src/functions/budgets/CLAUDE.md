@@ -80,3 +80,5 @@ See `Architecture/RBAC-System.md` for details.
 ## Manual Budgets
 
 A budget with `isManual` has no categories on purpose: it receives only manual pins. Its checklist lives in `budget_checklists/{budgetId}`, never on the budget doc, because a budget write bumps the derive version and the phone's budget listener re-derives. See canon and vault `Manual-Budgets`.
+
+`isFund`: `amount` is one total that doesn't reset; its monthly `budget_periods` hold the even share. Never read a fund's `amount` as a monthly figure (`fund_monthly_share`, `fund_forward_share`). Always no-category, no rollover, no pause, fixed end date. Funds stay out of left to spend and the Budgets summary row. See vault `Manual-Budgets`.

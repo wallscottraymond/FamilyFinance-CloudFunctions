@@ -66,6 +66,9 @@ export interface DerivedBudgetViewPeriod {
      * negative leftover. See Everything-Else-Leftover-Limit.
      */
     no_income?: boolean;
+    /** A Fund: its total and spending so far, through this period. `remaining` is what's left. */
+    fund_total?: number;
+    fund_spent_to_date?: number;
 }
 /**
  * Derive the view periods for a budget in one view cadence + visible window.

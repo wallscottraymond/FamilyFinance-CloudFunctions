@@ -74,6 +74,11 @@ export interface PeriodDerivationRaw {
     }>;
     /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
     inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
+    /** Funds' transactions, any date, in the view: for what's left in each fund. */
+    fund_txns?: Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>;
     /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
     scope: DeriveScope;
     /**

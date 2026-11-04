@@ -94,6 +94,8 @@ export interface BudgetEntity {
   category_ids: string[];
   /** Manual Transaction Adding: no categories, only what the user puts in it counts (AF-02). */
   is_manual?: boolean;
+  /** A Fund: `amount` is one total that doesn't reset; its budget periods hold the monthly share. */
+  is_fund?: boolean;
   period: BudgetPeriodType;
   budget_type: BudgetType;
 
@@ -164,6 +166,10 @@ export interface PrimePeriodBreakdownEntry {
  * Mapped to/from the `budget_periods` collection by the period repository.
  */
 export interface BudgetPeriodEntity {
+  /** A Fund's period, so pickers can list it apart from budgets and offer it only inside its dates. */
+  is_fund?: boolean;
+  fund_start_ms?: number;
+  fund_end_ms?: number;
   id: string;
   budget_id: string;
   user_id: string;

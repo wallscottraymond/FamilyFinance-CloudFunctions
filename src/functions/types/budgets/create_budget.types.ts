@@ -17,6 +17,7 @@ import {
   BudgetPeriodType,
   BudgetType,
 } from "./budget_entity.types";
+import { CHECKLIST_MAX_ITEMS } from "../../domain/budgets/budget_checklist.service";
 
 // ============================================================================
 // Input Schema (wire format)
@@ -44,6 +45,19 @@ export const create_budget_input_schema = z
     category_ids: z.array(z.string().min(1)),
     /** Manual Transaction Adding (AF-02): no categories; only what the user puts in it counts. */
     is_manual: z.boolean().optional(),
+    /** A Fund: one total until it ends. Needs an end date; only what's assigned to it counts. */
+    is_fund: z.boolean().optional(),
+    /** Checklist items entered while creating the budget. */
+    checklist_items: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(64),
+          name: z.string().trim().min(1, "Give each list item a name").max(100),
+          estimate: z.number().min(0).max(100_000_000),
+        })
+      )
+      .max(CHECKLIST_MAX_ITEMS, `A checklist can hold up to ${CHECKLIST_MAX_ITEMS} items`)
+      .optional(),
     period: z.enum(BUDGET_PERIOD_VALUES),
     budget_type: z.enum(["recurring", "limited"]).optional(),
     /** ISO 8601 start date */
@@ -65,6 +79,10 @@ export const create_budget_input_schema = z
   .refine((data) => data.is_manual === true || data.category_ids.length > 0, {
     message: "at least one category is required",
     path: ["category_ids"],
+  })
+  .refine((data) => data.is_fund !== true || !!data.budget_end_date, {
+    message: "A fund needs an end date",
+    path: ["budget_end_date"],
   })
   .refine(
     (data) => data.is_ongoing !== false || !!data.budget_end_date,
@@ -94,6 +112,8 @@ export interface CreateBudgetInput {
   amount: number;
   category_ids: string[];
   is_manual?: boolean;
+  is_fund?: boolean;
+  checklist_items?: Array<{ id: string; name: string; estimate: number }>;
   period: BudgetPeriodType;
   budget_type: BudgetType;
   start_date: string;
@@ -172,6 +192,7 @@ export interface CategoryClaim {
  */
 export interface ProcessBudgetCreatedPayload {
   budget_id: string;
+  is_fund?: boolean;
   user_id: string;
   group_ids: string[];
   budget_name: string;

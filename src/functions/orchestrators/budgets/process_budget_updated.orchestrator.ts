@@ -27,6 +27,7 @@ import {
   compute_reallocated_periods,
 } from "../../domain/budgets/period_generation.service";
 import { rebase_reallocated_periods } from "../../domain/budgets/period_allocation_view.service";
+import { fund_forward_share, fund_monthly_share } from "../../domain/budgets/fund.service";
 import { reassign_view, REHOME_BACK_MS } from "../sharing/view_reassign";
 import { ProcessBudgetUpdatedPayload } from "../../types/budgets/update_budget.types";
 
@@ -145,8 +146,19 @@ async function reallocate_periods(
     return;
   }
 
+  // A Fund: what's still to set aside over the months left; past months keep theirs (F2).
+  const today_ms = start_of_today_utc().toMillis();
+  const monthly = existing.filter((p) => p.period_type === "monthly");
+  const new_amount = payload.fund_total === undefined
+    ? payload.amount
+    : fund_forward_share(
+      payload.fund_total,
+      monthly.filter((p) => p.end_date.toMillis() < today_ms).map((p) => p.allocated_amount),
+      monthly.filter((p) => p.end_date.toMillis() >= today_ms).length
+    );
+
   const computed = compute_reallocated_periods({
-    new_amount: payload.amount,
+    new_amount,
     fill_after_last_prime: payload.is_recurring,
     budget_cadence: payload.cadence,
     cutoff: start_of_today_utc(),
@@ -216,7 +228,10 @@ async function generate_fresh_periods(
     budget_id: payload.budget_id,
     user_id: payload.user_id,
     group_ids: payload.group_ids,
-    budget_amount: payload.amount,
+    ...(payload.fund_total === undefined ? {} : { fund_range: { start_ms: payload.start_ms, end_ms: payload.generation_end_ms } }),
+    budget_amount: payload.fund_total === undefined
+      ? payload.amount
+      : fund_monthly_share(payload.fund_total, payload.start_ms, payload.generation_end_ms),
     fill_after_last_prime: payload.is_recurring,
     budget_cadence: payload.cadence,
     category_ids: payload.category_ids,

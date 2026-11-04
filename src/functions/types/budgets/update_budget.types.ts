@@ -133,6 +133,8 @@ export interface UpdateBudgetComputeInput {
  */
 export interface ProcessBudgetUpdatedPayload {
   budget_id: string;
+  /** A Fund's new total: the monthly share is worked out from it and the past months (F2). */
+  fund_total?: number;
   user_id: string;
   group_ids: string[];
   budget_name: string;

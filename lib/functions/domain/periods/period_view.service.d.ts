@@ -23,6 +23,7 @@ export interface DerivedBudgetResult {
     budget_id: string;
     name: string;
     is_everything_else: boolean;
+    is_fund?: boolean;
     periods: DerivedBudgetViewPeriod[];
 }
 export interface DerivedRecurringResult {

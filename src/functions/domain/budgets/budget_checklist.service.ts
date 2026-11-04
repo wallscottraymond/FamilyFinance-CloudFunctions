@@ -37,6 +37,19 @@ export type ChecklistOp =
   | { op: "tick"; id: string; period_key: string; ticked: boolean }
   | { op: "carry"; carry: boolean; period_key: string };
 
+/** The list a new budget starts with, from the items entered while creating it. PURE. */
+export function compute_initial_checklist(
+  items: Array<{ id: string; name: string; estimate: number }>
+): { checklist?: BudgetChecklist; errors?: string[] } {
+  let checklist = EMPTY_CHECKLIST;
+  for (const item of items) {
+    const result = apply_checklist_op(checklist, { op: "add", ...item, period_key: "" });
+    if (!result.checklist) return { errors: result.errors };
+    checklist = result.checklist;
+  }
+  return { checklist };
+}
+
 /** Apply one edit to the stored list. An edit to an item someone else just removed does nothing. PURE. */
 export function apply_checklist_op(
   current: BudgetChecklist,

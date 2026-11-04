@@ -23,6 +23,12 @@ export declare const create_budget_input_schema: z.ZodObject<{
     amount: z.ZodNumber;
     category_ids: z.ZodArray<z.ZodString>;
     is_manual: z.ZodOptional<z.ZodBoolean>;
+    is_fund: z.ZodOptional<z.ZodBoolean>;
+    checklist_items: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        name: z.ZodString;
+        estimate: z.ZodNumber;
+    }, z.core.$strip>>>;
     period: z.ZodEnum<{
         weekly: "weekly";
         monthly: "monthly";
@@ -60,6 +66,12 @@ export interface CreateBudgetInput {
     amount: number;
     category_ids: string[];
     is_manual?: boolean;
+    is_fund?: boolean;
+    checklist_items?: Array<{
+        id: string;
+        name: string;
+        estimate: number;
+    }>;
     period: BudgetPeriodType;
     budget_type: BudgetType;
     start_date: string;
@@ -122,6 +134,7 @@ export interface CategoryClaim {
  */
 export interface ProcessBudgetCreatedPayload {
     budget_id: string;
+    is_fund?: boolean;
     user_id: string;
     group_ids: string[];
     budget_name: string;

@@ -50,7 +50,7 @@ export interface CachedDerivedPeriod<TResult> {
  *  v8 = a paused period's group carries its resume date (AF-03).
  *  Every function bundling this repo (derive_period, derive_period_range, derive_budget_view,
  *  widget_snapshot) deploys together. */
-const CACHE_SHAPE = "v8";
+const CACHE_SHAPE = "v9";
 
 /** Deterministic doc id for a derive call, per UTC day: a result depends on the day only through a
  *  card payment's wait ending, which happens at UTC midnight and isn't a data change (D8). Windows are ms epoch ints — safe in an id. */

@@ -28,6 +28,7 @@ import {
   CountableSplitInput,
 } from "../../domain/recurring/period_reconciliation.service";
 import { Timestamp } from "firebase-admin/firestore";
+import { fund_monthly_share } from "../../domain/budgets/fund.service";
 import { TraceContext } from "../../types";
 import {
   budget_repo,
@@ -150,6 +151,8 @@ export interface PeriodDerivationRaw {
   pinned_bill_txns?: Array<{ id: string; data: Record<string, unknown> }>;
   /** Historical deposits for a SUPERSET of every window's inflow stream ids. */
   inflow_history_docs: Awaited2<ReturnType<typeof transaction_repo.get_by_plaid_transaction_ids>>;
+  /** Funds' transactions, any date, in the view: for what's left in each fund. */
+  fund_txns?: Array<{ id: string; data: Record<string, unknown> }>;
   /** The resolved view this load was scoped to (Account-Rooted-Sharing). */
   scope: DeriveScope;
   /**
@@ -368,6 +371,29 @@ export async function load_period_derivation_raw(
     (o) => o.is_active && !o.is_hidden &&
       (pinned_by_member.get(o.user_id)?.get(o.id) ?? []).some((id) => loaded_period_ids.has(id))
   );
+  const fund_ids = options.counting_only
+    ? []
+    // A fund well clear of this load has no periods in it. 31 days of slack: a fund owns its whole
+    // first month, whatever day it starts, and a view can run past its last.
+    : budget_entities
+      .filter((b) => b.is_fund && b.is_active !== false &&
+        b.start_date.toMillis() - 31 * 86_400_000 <= range_end_ms &&
+        (b.budget_end_date?.toMillis() ?? Infinity) >= range_start_ms - 31 * 86_400_000)
+      .map((b) => b.id);
+  const fund_docs = fund_ids.length === 0
+    ? []
+    : (await Promise.all(fund_ids.map((id) =>
+      per_member(scope, (m) => transaction_repo.get_active_by_budget_link(ctx, m, id))
+    ))).flat();
+  const fund_seen = new Set<string>();
+  const fund_txns = fund_docs
+    .filter((d) => {
+      if (fund_seen.has(d.id)) return false;
+      fund_seen.add(d.id);
+      const date = d.data.transactionDate as Timestamp | undefined;
+      return typeof date?.toMillis === "function" &&
+        transaction_in_scope(scope, d.data.accountId as string | undefined, date.toMillis());
+    });
   const [member_txns_read, pairing_extra, pinned_bill_docs] = await Promise.all([
     per_member(scope, (m) =>
       transaction_repo.get_active_in_date_range(ctx, m, lookback_start_ms, txn_end_ms)
@@ -445,6 +471,7 @@ export async function load_period_derivation_raw(
     all_goals,
     txns,
     all_member_txns,
+    fund_txns,
     ...(release_lookback_txns.length ? { release_lookback_txns } : {}),
     ...(pinned_bill_txns.length ? { pinned_bill_txns } : {}),
     inflow_history_docs,
@@ -511,6 +538,13 @@ function without_out_of_view_links(
     }
     return s;
   });
+}
+
+/** What one month is priced from: a Fund's monthly share, else the budget's amount. */
+function fund_or_budget_amount(b: PeriodDerivationRaw["budget_entities"][number]): number {
+  return b.is_fund && b.budget_end_date
+    ? fund_monthly_share(b.amount, b.start_date.toMillis(), b.budget_end_date.toMillis())
+    : b.amount;
 }
 
 export function shape_period_derivation_deps(
@@ -608,10 +642,10 @@ export function shape_period_derivation_deps(
     const materialized = monthly_by_budget.get(b.id) ?? [];
     const monthly_periods: MonthlyPeriodForDerivation[] =
       materialized.length > 0
-        ? materialized
+        ? (b.is_fund ? materialized.map((m) => ({ ...m, effective_amount: m.allocated_amount })) : materialized)
         : monthly_source_periods.map((sp) => {
           const amt = priced
-            ? synthesize_monthly_allocation(b.amount, b.period, sp.start_ms, sp.end_ms, priced)
+            ? synthesize_monthly_allocation(fund_or_budget_amount(b), b.period, sp.start_ms, sp.end_ms, priced)
             : synthesize_monthly_allocation(b.amount, b.period, sp.start_ms, sp.end_ms, { from_ms: 0, to_ms: null });
           return {
             allocated_amount: amt,
@@ -629,6 +663,7 @@ export function shape_period_derivation_deps(
       active_end_ms,
       priced,
       ...(!is_ee && mi.paused_ranges?.length ? { paused_ranges: mi.paused_ranges } : {}),
+      ...(b.is_fund ? { fund_total: b.amount } : {}),
     });
   }
 
@@ -1121,6 +1156,29 @@ export function shape_period_derivation_deps(
   const canonical_ee_id = monthly_ee_id ?? any_ee_id;
   const budgets_out = budgets.filter((b) => !b.is_ee || b.id === canonical_ee_id);
 
+  // A fund's earlier transactions, through the same mapping. Only a pin puts a split in a fund, and
+  // a pin counts whatever the transaction is, so the page's transfer and bill checks don't apply.
+  const fund_prior_splits: SplitForOnReadMatch[] = [];
+  for (const { data } of raw.fund_txns ?? []) {
+    const txn_date_ms = (data.transactionDate as Timestamp).toMillis();
+    if (txn_date_ms >= span_start_ms) continue;
+    for (const s of (data.splits as Array<Record<string, unknown>>) ?? []) {
+      fund_prior_splits.push(
+        map_raw_split_to_on_read_match(s, {
+          txn_date_ms,
+          is_pending: data.isPending === true,
+          is_transfer: false,
+          is_paired_card_payment: false,
+          now_ms: card_clock_ms,
+          is_income: data.type === "income",
+          is_recurring_member: false,
+          merchant_name: (data.merchantName as string | null) ?? null,
+          name: (data.name as string | null) ?? null,
+        }, catalog)
+      );
+    }
+  }
+
   return {
     view_buckets,
     placement_buckets,
@@ -1130,6 +1188,7 @@ export function shape_period_derivation_deps(
     any_ee_id,
     ee_alias_ids: match.everything_else_id_set,
     splits_for_match,
+    fund_prior_splits,
     recurring,
     goals,
     other_income_credits,

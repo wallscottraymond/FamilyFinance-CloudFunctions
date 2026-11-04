@@ -392,6 +392,14 @@ export declare const transaction_repo: {
      */
     get_ids_referencing_budget(ctx: TraceContext, user_id: string, budget_id: string): Promise<string[]>;
     /**
+     * The owner's active transactions with a split in this budget, any date (a Fund's running total).
+     * Same index as `get_ids_referencing_budget`; only the fields counting needs.
+     */
+    get_active_by_budget_link(_ctx: TraceContext, user_id: string, budget_id: string): Promise<Array<{
+        id: string;
+        data: Record<string, unknown>;
+    }>>;
+    /**
      * Clears the Rules Engine review flags on a transaction (the "Needs review" queue action).
      * `updatedAt` is bumped; nothing assignment/spend-relevant changes so the write is cheap.
      */

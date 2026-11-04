@@ -206,6 +206,7 @@ export async function copy_budgets_to_group_orchestrator(
       amount,
       category_ids: category_ids ?? original.category_ids,
       is_manual: original.is_manual === true,
+      is_fund: original.is_fund === true,
       period: original.period,
       budget_type: original.budget_type,
       start_date: original.start_date.toDate().toISOString(),

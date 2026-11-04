@@ -50,6 +50,7 @@ export async function set_budget_pause_orchestrator(
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       // 1. Resolve (the budget, access-checked)
       const { existing } = await resolve_set_budget_pause_dependencies(ctx, user_id, input.budget_id);
+      if (existing.is_fund) throw new ValidationError(["A fund can't be paused"]);
       const current = existing.paused_ranges ?? [];
 
       // 2. Domain (pure)

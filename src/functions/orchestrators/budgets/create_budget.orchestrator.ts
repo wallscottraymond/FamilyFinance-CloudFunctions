@@ -25,6 +25,9 @@ import {
 } from "../../infrastructure/idempotency_store";
 import { create_job } from "../../infrastructure/job_queue";
 import { budget_repo } from "../../repositories/budget.repo";
+import { budget_checklist_repo } from "../../repositories/budget_checklist.repo";
+import { compute_initial_checklist } from "../../domain/budgets/budget_checklist.service";
+import { fund_monthly_share } from "../../domain/budgets/fund.service";
 import { compute_create_budget } from "../../domain/budgets/create_budget.service";
 import { plan_view_claims } from "../../domain/budgets/category_ownership.service";
 import {
@@ -126,8 +129,13 @@ export async function create_budget_orchestrator(
       ...dependencies.view_budgets.filter((b) => sources.has(b.id)).map((b) => b.start_ms)
     );
 
-    // 5. Persist the budget document
+    const items = input.checklist_items ?? [];
+    const initial = compute_initial_checklist(items);
+    if (!initial.checklist) throw new ValidationError(initial.errors ?? ["checklist failed"]);
+
+    // 5. Persist the budget document, then its starting list
     await budget_repo.save(ctx, entity);
+    if (items.length > 0) await budget_checklist_repo.create(budget_id, owner_key, initial.checklist);
 
     // 6. Enqueue the cascade job (category transfer + period generation).
     // Generation spans the full horizon (12mo ahead for ongoing budgets), NOT
@@ -139,11 +147,14 @@ export async function create_budget_orchestrator(
     );
     const payload: ProcessBudgetCreatedPayload = {
       budget_id,
+      ...(entity.is_fund ? { is_fund: true } : {}),
       user_id: owner_key,
       group_ids: entity.group_ids,
       budget_name: entity.name,
       category_ids: entity.category_ids,
-      amount: budget_amount_per_instance(entity.amount, entity.period),
+      amount: entity.is_fund && entity.budget_end_date
+        ? fund_monthly_share(entity.amount, entity.start_date.toMillis(), entity.budget_end_date.toMillis())
+        : budget_amount_per_instance(entity.amount, entity.period),
       cadence: budget_cadence_to_instance(entity.period),
       start_ms: entity.start_date.toMillis(),
       generation_end_ms: generation_end.getTime(),

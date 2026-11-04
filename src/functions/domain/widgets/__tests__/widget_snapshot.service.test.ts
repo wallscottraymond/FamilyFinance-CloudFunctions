@@ -91,6 +91,7 @@ describe("compute_period_summary (mobile mapResult + computePeriodSummary)", () 
       income: { planned: 4100, actual: 2000 },
       bills: { planned: 1860, actual: 1800 },
       budgets: { planned: 600, actual: 450 },
+      funds: { planned: 0, actual: 0 },
       goals: { planned: 300, actual: 120 },
       isEmpty: false,
     });
@@ -205,5 +206,26 @@ describe("compute_period_summary — Other Income is received, never planned (M8
     ] }, "2026M11", []);
     expect(s.income.planned).toBe(2000);
     expect(s.income.actual).toBe(2300);
+  });
+});
+
+describe("funds", () => {
+  const P = "2026M12";
+  const fund = {
+    budget_id: "f", name: "Christmas", is_everything_else: false, is_fund: true,
+    periods: [{ period_id: P, allocated_amount: 100, effective_amount: 100, spent: 250 }],
+  };
+  const plain = {
+    budget_id: "b", name: "Food", is_everything_else: false,
+    periods: [{ period_id: P, allocated_amount: 200, effective_amount: 200, spent: 150 }],
+  };
+  it("stay out of left to spend and the budget rows", () => {
+    expect(compute_left_to_spend([plain, fund], P)).toMatchObject({ budgeted: 200, spent: 150, available: 50, over: false });
+    expect(compute_budget_lines([plain, fund], P).map((l) => l.id)).toEqual(["b"]);
+  });
+  it("have their own row on the summary", () => {
+    const s = compute_period_summary({ budgets: [plain, fund], bills: [], income: [] }, P, []);
+    expect(s.budgets).toEqual({ planned: 200, actual: 150 });
+    expect(s.funds).toEqual({ planned: 100, actual: 250 });
   });
 });

@@ -38,9 +38,10 @@ export const WIDGET_DATA_VERSION = 2;
  * left / summary / bills: 1 = period and bills window chosen from the widget's LOCAL day (`day`).
  * left / summary: 3 = card payments are money movement (Trustworthy-Numbers D1). 4 = D7, D8.
  * summary: 5 = income planned at what was expected, not the real deposit (AF-08).
+ * left: 5, summary: 6 = Funds stay out of left to spend and the budget rows, with a summary row.
  */
 export const WIDGET_LOGIC_REVISION: Readonly<Record<string, number>> = {
-  recent: 2, left: 4, summary: 5, bills: 1,
+  recent: 2, left: 5, summary: 6, bills: 1,
 };
 
 /** The version a widget of `kind` compares: the view version plus that kind's logic revision. */
@@ -59,6 +60,8 @@ export interface WidgetBudgetInput {
   budget_id?: string;
   name?: string;
   is_everything_else: boolean;
+  /** A Fund: not part of left to spend or the budget rows, and a row of its own on the summary. */
+  is_fund?: boolean;
   periods: Array<{
     period_id: string;
     allocated_amount: number;
@@ -117,6 +120,7 @@ export interface WidgetSummary {
   income: PlannedActual;
   bills: PlannedActual;
   budgets: PlannedActual;
+  funds: PlannedActual;
   goals: PlannedActual;
   isEmpty: boolean;
 }
@@ -286,6 +290,7 @@ export function compute_left_to_spend(
   let spent = 0;
   for (const b of budgets) {
     if (!include_everything_else && b.is_everything_else) continue;
+    if (b.is_fund) continue;
     const p = budget_period(b, period_id);
     const allocated = p?.allocated_amount ?? 0;
     budgeted += p?.effective_amount ?? allocated;
@@ -297,7 +302,7 @@ export function compute_left_to_spend(
     budgeted,
     spent,
     over: available < 0,
-    hasBudgets: budgets.some((b) => !b.is_everything_else),
+    hasBudgets: budgets.some((b) => !b.is_everything_else && !b.is_fund),
   };
 }
 
@@ -312,7 +317,7 @@ export function compute_budget_lines(
   // spending is in Everything Else. Partly paused ones show their unpaused share, like the app.
   const shown = budgets
     .map((b, i) => ({ b, i }))
-    .filter(({ b }) => !budget_period(b, period_id)?.is_paused);
+    .filter(({ b }) => !b.is_fund && !budget_period(b, period_id)?.is_paused);
   const lines = shown.map(({ b, i }) => {
     const p = budget_period(b, period_id);
     const allocated = p?.allocated_amount ?? 0;
@@ -514,11 +519,18 @@ export function compute_period_summary(
 
   let budgets_planned = 0;
   let budgets_spent = 0;
+  let funds_planned = 0;
+  let funds_spent = 0;
   let real_budgets = 0;
   for (const b of derived.budgets) {
     if (b.is_everything_else) continue;
     real_budgets += 1;
     const p = budget_period(b, period_id);
+    if (b.is_fund) {
+      funds_planned += p?.allocated_amount ?? 0;
+      funds_spent += p?.spent ?? 0;
+      continue;
+    }
     budgets_planned += p?.allocated_amount ?? 0; // Summary uses totalAllocated (not effective)
     budgets_spent += p?.spent ?? 0;
   }
@@ -531,6 +543,7 @@ export function compute_period_summary(
     income: { planned: income.planned, actual: income.actual },
     bills: { planned: bills.planned, actual: bills.actual },
     budgets: { planned: budgets_planned, actual: budgets_spent },
+    funds: { planned: funds_planned, actual: funds_spent },
     goals: { planned: goals_planned, actual: goals_actual },
     isEmpty:
       income.entries === 0 &&

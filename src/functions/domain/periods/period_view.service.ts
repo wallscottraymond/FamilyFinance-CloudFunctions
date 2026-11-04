@@ -16,6 +16,8 @@ import {
   DerivedBudgetViewPeriod,
 } from "../budgets/budget_view.service";
 import { owned_splits_for_budget } from "../budgets/budget_spend_match.service";
+import { compute_budget_spent } from "../budgets/budget_spend.service";
+import { fund_position } from "../budgets/fund.service";
 import {
   compute_ee_leftovers,
   EELeftoverBucketInputs,
@@ -49,6 +51,7 @@ export interface DerivedBudgetResult {
   budget_id: string;
   name: string;
   is_everything_else: boolean;
+  is_fund?: boolean;
   periods: DerivedBudgetViewPeriod[];
 }
 export interface DerivedRecurringResult {
@@ -90,6 +93,24 @@ export function compute_period_view(
         b.priced,
         b.paused_ranges
       );
+      if (b.fund_total !== undefined) {
+        const total = b.fund_total;
+        // The same owner rule as the period's own spend, over the fund's earlier transactions too.
+        const earlier = owned_splits_for_budget(
+          b.id,
+          deps.real_budgets,
+          ee_id,
+          (deps.fund_prior_splits ?? []).filter((s) => s.txn_date_ms < deps.span_start_ms),
+          deps.ee_alias_ids
+        );
+        const to_date = [...earlier, ...owned.filter((s) => s.txn_date_ms >= deps.span_start_ms)];
+        const fund_periods = periods.map((p) => {
+          const spent = compute_budget_spent(b.id, 0, p.end_ms, to_date).spent;
+          const position = fund_position(total, spent);
+          return { ...p, remaining: position.left, fund_total: total, fund_spent_to_date: position.spent_to_date };
+        });
+        return { budget_id: b.id, name: b.name, is_everything_else: false, is_fund: true, periods: fund_periods };
+      }
       return { budget_id: b.id, name: b.name, is_everything_else: b.is_ee, periods };
     })
     // A budget with NO periods in this view is entirely outside its active range (e.g. a newly

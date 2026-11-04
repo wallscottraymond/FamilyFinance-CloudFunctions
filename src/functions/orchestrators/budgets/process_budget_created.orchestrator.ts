@@ -22,9 +22,19 @@ import { budget_repo } from "../../repositories/budget.repo";
 import { budget_period_repo } from "../../repositories/budget_period.repo";
 import { source_period_repo } from "../../repositories/source_period.repo";
 import { compute_budget_periods } from "../../domain/budgets/period_generation.service";
+import { fund_monthly_share } from "../../domain/budgets/fund.service";
 import { create_job } from "../../infrastructure/job_queue";
 import { reassign_view, REHOME_BACK_MS } from "../sharing/view_reassign";
 import { ProcessBudgetCreatedPayload } from "../../types/budgets/create_budget.types";
+
+/** A Fund's share comes from the stored total: it may have been edited before this job ran. */
+async function amount_per_period(ctx: TraceContext, payload: ProcessBudgetCreatedPayload): Promise<number> {
+  if (!payload.is_fund) return payload.amount;
+  const budget = await budget_repo.get_by_id(ctx, payload.budget_id);
+  return budget?.is_fund && budget.budget_end_date
+    ? fund_monthly_share(budget.amount, budget.start_date.toMillis(), budget.budget_end_date.toMillis())
+    : payload.amount;
+}
 
 /**
  * Processes the create cascade.
@@ -128,7 +138,8 @@ async function generate_periods(
     budget_id: payload.budget_id,
     user_id: payload.user_id,
     group_ids: payload.group_ids,
-    budget_amount: payload.amount,
+    ...(payload.is_fund ? { fund_range: { start_ms: payload.start_ms, end_ms: payload.generation_end_ms } } : {}),
+    budget_amount: await amount_per_period(ctx, payload),
     fill_after_last_prime: payload.is_recurring,
     budget_cadence: payload.cadence,
     category_ids: payload.category_ids,

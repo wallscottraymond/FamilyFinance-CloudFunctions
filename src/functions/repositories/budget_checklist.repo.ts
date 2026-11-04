@@ -28,6 +28,12 @@ export const budget_checklist_repo = {
     return snap.exists ? read_doc(snap.data()) : EMPTY_CHECKLIST;
   },
 
+  /** A new budget's starting list. Same result on a retry, because the budget's id is deterministic. */
+  async create(budget_id: string, owner_key: string, checklist: BudgetChecklist): Promise<void> {
+    /* eslint-disable-next-line @typescript-eslint/naming-convention */
+    await doc_ref(budget_id).set({ ...checklist, userId: owner_key, updatedAt: Timestamp.now() });
+  },
+
   /** One edit, in a transaction, so simultaneous edits both land. Returns the list, or the errors. */
   async apply(
     budget_id: string,

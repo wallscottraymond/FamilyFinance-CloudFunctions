@@ -1,5 +1,5 @@
 import {
-  apply_checklist_op as apply, BudgetChecklist, CHECKLIST_MAX_ITEMS, CHECKLIST_MAX_TICK_PERIODS, EMPTY_CHECKLIST,
+  apply_checklist_op as apply, BudgetChecklist, CHECKLIST_MAX_ITEMS, compute_initial_checklist, CHECKLIST_MAX_TICK_PERIODS, EMPTY_CHECKLIST,
 } from "../budget_checklist.service";
 
 const DEC = "2026-12";
@@ -47,5 +47,30 @@ describe("apply_checklist_op", () => {
     }
     expect(Object.keys(c.ticks)).toHaveLength(CHECKLIST_MAX_TICK_PERIODS);
     expect(c.ticks["2010-01"]).toBeUndefined();
+  });
+});
+
+describe("compute_initial_checklist", () => {
+  it("starts a carrying list, with no ticks", () => {
+    const { checklist } = compute_initial_checklist([
+      { id: "a", name: " Train set ", estimate: 100 },
+      { id: "b", name: "Bike", estimate: 200 },
+    ]);
+    expect(checklist).toEqual({
+      carry: true,
+      ticks: {},
+      items: [
+        { id: "a", name: "Train set", estimate: 100, period_key: null },
+        { id: "b", name: "Bike", estimate: 200, period_key: null },
+      ],
+    });
+  });
+  it("no items: the empty list", () => {
+    expect(compute_initial_checklist([]).checklist).toEqual(EMPTY_CHECKLIST);
+  });
+  it("a repeated id counts once; a blank name is refused", () => {
+    const one = { id: "a", name: "x", estimate: 1 };
+    expect(compute_initial_checklist([one, one]).checklist?.items).toHaveLength(1);
+    expect(compute_initial_checklist([{ ...one, name: " " }]).errors).toBeDefined();
   });
 });

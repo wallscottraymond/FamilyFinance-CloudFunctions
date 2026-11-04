@@ -57,6 +57,10 @@ export function compute_update_budget(
     validation_errors.push("A budget needs at least one category.");
   }
 
+  if (existing.is_fund && (input.is_ongoing === true || input.budget_end_date !== undefined || input.rollover_enabled === true || input.category_ids !== undefined)) {
+    validation_errors.push("A fund's end date and categories can't be changed, and it doesn't use rollover");
+  }
+
   // Fixed end date validation
   let budget_end: Date | null = existing.budget_end_date
     ? existing.budget_end_date.toDate()

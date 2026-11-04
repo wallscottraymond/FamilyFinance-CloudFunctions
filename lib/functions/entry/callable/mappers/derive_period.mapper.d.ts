@@ -13,7 +13,10 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         budgetId: string;
         name: string;
         isEverythingElse: boolean;
+        isFund: boolean;
         periods: {
+            fundTotal?: number | undefined;
+            fundSpentToDate?: number | undefined;
             periodId: string;
             periodType: import("../../../domain").PeriodInstanceType;
             allocatedAmount: number;

@@ -62,6 +62,7 @@ export declare function compute_period_generation_end(start: Date, is_ongoing: b
  */
 export declare function build_self_provision_budget_created_payload(args: {
     budget_id: string;
+    is_fund?: boolean;
     user_id: string;
     group_ids: string[];
     budget_name: string;
@@ -100,6 +101,12 @@ export interface SourcePeriodForGeneration {
  */
 export interface ComputeBudgetPeriodsInput {
     budget_id: string;
+    /** A Fund's dates, stamped on its periods for the pickers. */
+    fund_range?: {
+        start_ms: number;
+        end_ms: number;
+    };
+    is_fund?: boolean;
     user_id: string;
     group_ids: string[];
     budget_amount: number;

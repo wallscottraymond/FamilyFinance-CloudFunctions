@@ -20,6 +20,7 @@ function map_budget(b: DerivedBudgetResult) {
     budgetId: b.budget_id,
     name: b.name,
     isEverythingElse: b.is_everything_else,
+    isFund: b.is_fund === true,
     periods: b.periods.map((p) => ({
       periodId: p.period_id,
       periodType: p.period_type,
@@ -35,6 +36,7 @@ function map_budget(b: DerivedBudgetResult) {
       // some → "Partly paused". Paused days' spending is in Everything Else.
       isPaused: p.is_paused ?? false,
       pausedDays: p.paused_days ?? 0,
+      ...(p.fund_total !== undefined ? { fundTotal: p.fund_total, fundSpentToDate: p.fund_spent_to_date } : {}),
     })),
   };
 }
