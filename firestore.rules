@@ -436,6 +436,14 @@ service cloud.firestore {
     match /feedback_senders/{userId} {
       allow read, write: if false;
     }
+    // Website-Waitlist: signups + abuse counters. Functions-only — the site posts to join_waitlist,
+    // and an email list must never be readable from a client.
+    match /waitlist/{entryId} {
+      allow read, write: if false;
+    }
+    match /_waitlist_limits/{limitId} {
+      allow read, write: if false;
+    }
 
     // =======================
     // FAMILIES COLLECTION RULES (LEGACY)
