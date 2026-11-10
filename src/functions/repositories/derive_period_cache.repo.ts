@@ -49,10 +49,12 @@ export interface CachedDerivedPeriod<TResult> {
  *  the 5-day wait (D7, D8). v7 = occurrences carry their expected amount (AF-08).
  *  v8 = a paused period's group carries its resume date (AF-03). v10 = budget periods carry
  *  `daily_spent` (per-day spend for the budget daily chart) + the spend breakdown `daily_count`,
- *  `places`, `fees`; budgets carry `first_category_ids` ("Easy to change" tips).
+ *  `places`, `fees`; budgets carry `first_category_ids` ("Easy to change" tips). v11 = places are
+ *  top 8 by total ∪ top 8 by purchase count (up to 16) and each carries `code` (its most common
+ *  resolved Plaid detailed code).
  *  Every function bundling this repo (derive_period, derive_period_range, derive_budget_view,
  *  widget_snapshot) deploys together. */
-const CACHE_SHAPE = "v10";
+const CACHE_SHAPE = "v11";
 
 /** Deterministic doc id for a derive call, per UTC day: a result depends on the day only through a
  *  card payment's wait ending, which happens at UTC midnight and isn't a data change (D8). Windows are ms epoch ints — safe in an id. */

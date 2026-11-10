@@ -11,10 +11,11 @@
  * @module domain/budgets/spend_breakdown
  */
 /** A bank-fee split's kind (from its Plaid `BANK_FEES_*` code). */
-export type FeeKind = "atm" | "late" | "overdraft" | "foreign" | "other";
+export type FeeKind = "atm" | "late" | "overdraft" | "foreign" | "interest" | "other";
 /** A purchase under this (dollars) counts as a small one. */
 export declare const SMALL_PURCHASE_LIMIT = 25;
-/** Places kept per budget period (by total, desc). */
+/** Places kept per budget period: the top this-many by total UNION the top this-many by purchase
+ *  count (so a frequent small habit isn't cut by a few big buys) — up to twice this many. */
 export declare const TOP_PLACES = 8;
 export interface PlaceSpend {
     key: string;
@@ -25,6 +26,8 @@ export interface PlaceSpend {
     small_count: number;
     /** Net spend there, to the cent. */
     total: number;
+    /** The place's most common resolved Plaid detailed code among its purchases ("" if unknown). */
+    code: string;
 }
 export interface FeeSpend {
     kind: FeeKind;
@@ -54,10 +57,14 @@ export declare class SpendBreakdownAccumulator {
         vendor_key?: string | null;
         place_name?: string | null;
         fee_kind?: FeeKind | null;
+        category_code?: string | null;
     }, signed: number): void;
-    /** Top places by total (positive totals only), ties by count then name. */
+    /**
+     * The places to show (positive totals only): the top `limit` by total UNION the top `limit` by
+     * purchase count, deduped, sorted by total desc (ties by count, then name) — up to 2 × `limit`.
+     */
     top_places(limit?: number): PlaceSpend[];
-    /** Fee kinds charged in the period (at least one fee), by total desc. */
+    /** Fee kinds charged in the period (at least one fee, net total > 0), by total desc. */
     fee_list(): FeeSpend[];
 }
 //# sourceMappingURL=spend_breakdown.service.d.ts.map

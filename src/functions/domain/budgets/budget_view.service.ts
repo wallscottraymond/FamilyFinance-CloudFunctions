@@ -66,7 +66,7 @@ export interface DerivedBudgetViewPeriod {
   daily_spent: number[];
   /** Purchases per UTC day (splits that add spend), indexed as `daily_spent`. */
   daily_count: number[];
-  /** Counted spend by place (vendor key), top 8 by total, positive totals only. */
+  /** Counted spend by place (vendor key): top 8 by total ∪ top 8 by count, positive totals only. */
   places: PlaceSpend[];
   /** Bank fees among the counted spend, by kind (only kinds present). */
   fees: FeeSpend[];

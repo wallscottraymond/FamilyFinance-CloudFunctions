@@ -43,7 +43,7 @@ describe("derive_period mapper — Easy to change breakdown", () => {
         budget_id: "b", name: "Food", is_everything_else: false, first_category_ids: ["groceries"],
         periods: [{
           period_id: "w", spent: 3, daily_spent: [1, 0, 2], daily_count: [1, 0, 2],
-          places: [{ key: "aldi", name: "Aldi", count: 3, small_count: 2, total: 3 }],
+          places: [{ key: "aldi", name: "Aldi", count: 3, small_count: 2, total: 3, code: "FOOD_AND_DRINK_GROCERIES" }],
           fees: [{ kind: "atm", count: 1, total: 2.5 }],
         }],
       }],
@@ -51,7 +51,7 @@ describe("derive_period mapper — Easy to change breakdown", () => {
     const b = out.budgets[0];
     expect(b.firstCategoryIds).toEqual(["groceries"]);
     expect(b.periods[0].dailyCount).toEqual([1, 0, 2]);
-    expect(b.periods[0].places).toEqual([{ key: "aldi", name: "Aldi", count: 3, smallCount: 2, total: 3 }]);
+    expect(b.periods[0].places).toEqual([{ key: "aldi", name: "Aldi", count: 3, smallCount: 2, total: 3, code: "FOOD_AND_DRINK_GROCERIES" }]);
     expect(b.periods[0].fees).toEqual([{ kind: "atm", count: 1, total: 2.5 }]);
   });
 

@@ -179,6 +179,7 @@ export function owned_splits_for_budget(
       vendor_key: s.vendor_key ?? null,
       place_name: s.place_name ?? null,
       fee_kind: s.fee_kind ?? null,
+      category_code: s.semantic_code || null,
     });
   }
   return out;

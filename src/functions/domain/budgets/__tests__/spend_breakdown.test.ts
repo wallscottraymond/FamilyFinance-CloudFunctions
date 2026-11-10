@@ -12,7 +12,7 @@ describe("fee_kind_of", () => {
     ["BANK_FEES_OVERDRAFT_FEES", "overdraft"],
     ["BANK_FEES_INSUFFICIENT_FUNDS", "overdraft"],
     ["BANK_FEES_FOREIGN_TRANSACTION_FEES", "foreign"],
-    ["BANK_FEES_INTEREST_CHARGE", "other"],
+    ["BANK_FEES_INTEREST_CHARGE", "interest"],
     ["BANK_FEES_OTHER_BANK_FEES", "other"],
   ])("%s → %s", (code, kind) => {
     expect(fee_kind_of(code)).toBe(kind);
@@ -38,6 +38,7 @@ describe("split_fee_kind", () => {
     const pick = { semantic_code: "BANK_FEES_ATM_FEES", category_source: "user" as const, second_category_id: null };
     expect(split_fee_kind(pick, "BANK_FEES_OVERDRAFT_FEES")).toBe("overdraft");
     expect(split_fee_kind(pick, "FOOD_AND_DRINK_COFFEE")).toBe("other");
+    expect(split_fee_kind(pick, "BANK_FEES_INTEREST_CHARGE")).toBe("interest");
   });
 
   it("a user pick to a specific fee detail uses that detail", () => {
@@ -50,6 +51,7 @@ describe("split_fee_kind", () => {
 import { build_category_catalog } from "../../transactions/split_category.service";
 import { map_raw_split_to_on_read_match } from "../../../resolvers/shared/on_read_matching";
 import { stored_split_for_spend } from "../../../resolvers/budgets/budget_spend.resolver";
+import { owned_splits_for_budget } from "../budget_spend_match.service";
 
 describe("raw split → breakdown fields (no extra reads: from the loaded transaction)", () => {
   const catalog = build_category_catalog([
@@ -76,6 +78,13 @@ describe("raw split → breakdown fields (no extra reads: from the loaded transa
     const txn = { merchantName: "Chase", name: "ATM FEE", vendorKey: "chase" };
     expect(map_raw_split_to_on_read_match(raw, { ...ctx, merchant_name: "Chase" }, catalog).fee_kind).toBe("atm");
     const s = stored_split_for_spend(raw, txn, "ee", "monthly", catalog, ctx);
-    expect(s).toMatchObject({ fee_kind: "atm", vendor_key: "chase", place_name: "Chase" });
+    expect(s).toMatchObject({ fee_kind: "atm", vendor_key: "chase", place_name: "Chase", category_code: "BANK_FEES_ATM_FEES" });
+  });
+
+  it("the on-read path carries the resolved code as category_code (a place's code)", () => {
+    const m = map_raw_split_to_on_read_match({ amount: 5, plaidDetailedCategory: "FOOD_AND_DRINK_COFFEE" },
+      { ...ctx, merchant_name: "Starbucks" }, catalog);
+    const [owned] = owned_splits_for_budget("ee", [], "ee", [m]);
+    expect(owned).toMatchObject({ category_code: "FOOD_AND_DRINK_COFFEE", vendor_key: "starbucks" });
   });
 });

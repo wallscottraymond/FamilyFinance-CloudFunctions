@@ -35,6 +35,7 @@ function map_budget(b: DerivedBudgetResult) {
       dailyCount: p.daily_count ?? [],
       places: (p.places ?? []).map((pl) => ({
         key: pl.key, name: pl.name, count: pl.count, smallCount: pl.small_count, total: pl.total,
+        code: pl.code ?? "",
       })),
       fees: p.fees ?? [],
       returnAmount: p.return_amount,

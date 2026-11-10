@@ -31,6 +31,7 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
                 count: number;
                 smallCount: number;
                 total: number;
+                code: string;
             }[];
             fees: import("../../../domain/budgets/spend_breakdown.service").FeeSpend[];
             returnAmount: number;

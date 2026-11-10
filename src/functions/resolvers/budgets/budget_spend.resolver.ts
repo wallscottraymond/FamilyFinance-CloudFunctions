@@ -216,5 +216,6 @@ export function stored_split_for_spend(
       resolved_category,
       category_input.plaid_detailed
     ),
+    category_code: effective_category || null,
   };
 }

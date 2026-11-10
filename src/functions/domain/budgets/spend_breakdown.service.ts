@@ -12,11 +12,12 @@
  */
 
 /** A bank-fee split's kind (from its Plaid `BANK_FEES_*` code). */
-export type FeeKind = "atm" | "late" | "overdraft" | "foreign" | "other";
+export type FeeKind = "atm" | "late" | "overdraft" | "foreign" | "interest" | "other";
 
 /** A purchase under this (dollars) counts as a small one. */
 export const SMALL_PURCHASE_LIMIT = 25;
-/** Places kept per budget period (by total, desc). */
+/** Places kept per budget period: the top this-many by total UNION the top this-many by purchase
+ *  count (so a frequent small habit isn't cut by a few big buys) — up to twice this many. */
 export const TOP_PLACES = 8;
 
 export interface PlaceSpend {
@@ -28,6 +29,8 @@ export interface PlaceSpend {
   small_count: number;
   /** Net spend there, to the cent. */
   total: number;
+  /** The place's most common resolved Plaid detailed code among its purchases ("" if unknown). */
+  code: string;
 }
 
 export interface FeeSpend {
@@ -49,6 +52,7 @@ export function fee_kind_of(code: string | null | undefined): FeeKind | null {
   if (c.includes("LATE")) return "late";
   if (c === "BANK_FEES_OVERDRAFT_FEES" || c === "BANK_FEES_INSUFFICIENT_FUNDS") return "overdraft";
   if (c === "BANK_FEES_FOREIGN_TRANSACTION_FEES") return "foreign";
+  if (c === "BANK_FEES_INTEREST_CHARGE") return "interest"; // card interest
   return "other";
 }
 
@@ -68,28 +72,52 @@ export function split_fee_kind(
   return fee_kind_of(resolved.semantic_code);
 }
 
+/** The most frequent key (ties → alphabetical, so the result is deterministic); "" if none. */
+function most_common(counts: Map<string, number>): string {
+  let best = "";
+  let best_n = 0;
+  for (const [k, n] of counts) {
+    if (n > best_n || (n === best_n && k < best)) {
+      best = k;
+      best_n = n;
+    }
+  }
+  return best;
+}
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100 + 0;
 }
 
 /** Accumulates places + fees over a period's counted splits (one `add` per counted split). */
 export class SpendBreakdownAccumulator {
-  private readonly places = new Map<string, { name: string; count: number; small: number; total: number }>();
+  private readonly places = new Map<
+    string,
+    { name: string; count: number; small: number; total: number; codes: Map<string, number> }
+  >();
   private readonly fees = new Map<FeeKind, { count: number; total: number }>();
 
   /** `signed` = the split's contribution to `spent` (negative for a credit that nets it down). */
   add(
-    split: { vendor_key?: string | null; place_name?: string | null; fee_kind?: FeeKind | null },
+    split: {
+      vendor_key?: string | null;
+      place_name?: string | null;
+      fee_kind?: FeeKind | null;
+      category_code?: string | null;
+    },
     signed: number
   ): void {
     const is_purchase = signed > 0;
     if (split.vendor_key) {
       const p = this.places.get(split.vendor_key) ??
-        { name: split.place_name || split.vendor_key, count: 0, small: 0, total: 0 };
+        { name: split.place_name || split.vendor_key, count: 0, small: 0, total: 0, codes: new Map() };
       p.total += signed;
       if (is_purchase) {
         p.count += 1;
         if (signed < SMALL_PURCHASE_LIMIT) p.small += 1;
+        if (split.category_code) {
+          p.codes.set(split.category_code, (p.codes.get(split.category_code) ?? 0) + 1);
+        }
       }
       this.places.set(split.vendor_key, p);
     }
@@ -101,13 +129,26 @@ export class SpendBreakdownAccumulator {
     }
   }
 
-  /** Top places by total (positive totals only), ties by count then name. */
+  /**
+   * The places to show (positive totals only): the top `limit` by total UNION the top `limit` by
+   * purchase count, deduped, sorted by total desc (ties by count, then name) — up to 2 × `limit`.
+   */
   top_places(limit = TOP_PLACES): PlaceSpend[] {
-    return [...this.places.entries()]
-      .map(([key, p]) => ({ key, name: p.name, count: p.count, small_count: p.small, total: round2(p.total) }))
-      .filter((p) => p.total > 0)
-      .sort((a, b) => b.total - a.total || b.count - a.count || a.name.localeCompare(b.name))
-      .slice(0, limit);
+    const all: PlaceSpend[] = [...this.places.entries()]
+      .map(([key, p]) => ({
+        key, name: p.name, count: p.count, small_count: p.small, total: round2(p.total),
+        code: most_common(p.codes),
+      }))
+      .filter((p) => p.total > 0);
+    const by_total = (a: PlaceSpend, b: PlaceSpend) =>
+      b.total - a.total || b.count - a.count || a.name.localeCompare(b.name);
+    const by_count = (a: PlaceSpend, b: PlaceSpend) =>
+      b.count - a.count || b.total - a.total || a.name.localeCompare(b.name);
+    const keep = new Set([
+      ...[...all].sort(by_total).slice(0, limit).map((p) => p.key),
+      ...[...all].sort(by_count).slice(0, limit).map((p) => p.key),
+    ]);
+    return all.filter((p) => keep.has(p.key)).sort(by_total);
   }
 
   /** Fee kinds charged in the period (at least one fee, net total > 0), by total desc. */

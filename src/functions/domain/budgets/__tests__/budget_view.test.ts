@@ -325,9 +325,9 @@ describe("derive_budget_view_periods — spend breakdown (Easy to change tips)",
     splits.push(split({ amount: 500, vendor_key: "ignored", spend_status: "ignored" }));
     const wk = week(splits);
     expect(wk.places).toHaveLength(8);
-    expect(wk.places[0]).toEqual({ key: "p9", name: "Place 9", count: 1, small_count: 0, total: 100 });
+    expect(wk.places[0]).toEqual({ key: "p9", name: "Place 9", count: 1, small_count: 0, total: 100, code: "" });
     const coffee = wk.places.find((p) => p.key === "coffee");
-    expect(coffee).toEqual({ key: "coffee", name: "Coffee", count: 4, small_count: 3, total: 59.24 });
+    expect(coffee).toEqual({ key: "coffee", name: "Coffee", count: 4, small_count: 3, total: 59.24, code: "" });
     expect(wk.places.map((p) => p.total)).toEqual([...wk.places.map((p) => p.total)].sort((a, b) => b - a));
     expect(wk.places.some((p) => p.key === "zero" || p.key === "ignored")).toBe(false);
     expect(wk.places.some((p) => p.key === "p0" || p.key === "p1")).toBe(false); // 10, 20 < cut
@@ -336,7 +336,7 @@ describe("derive_budget_view_periods — spend breakdown (Easy to change tips)",
   it("splits without a vendor key are counted in spent but not in places", () => {
     const wk = week([split({ amount: 10 }), split({ amount: 5, vendor_key: "a", place_name: "A" })]);
     expect(wk.spent).toBe(15);
-    expect(wk.places).toEqual([{ key: "a", name: "A", count: 1, small_count: 1, total: 5 }]);
+    expect(wk.places).toEqual([{ key: "a", name: "A", count: 1, small_count: 1, total: 5, code: "" }]);
   });
 
   it("breaks out bank fees by kind (still in spent), only kinds present", () => {
@@ -351,5 +351,64 @@ describe("derive_budget_view_periods — spend breakdown (Easy to change tips)",
     expect(wk.spent).toBe(45.5);
     // A fully reversed overdraft fee nets to $0 → not a tip, dropped.
     expect(wk.fees).toEqual([{ kind: "atm", count: 2, total: 5.5 }]);
+  });
+});
+
+describe("places — top 8 by total ∪ top 8 by purchase count, with each place's category code", () => {
+  const week = (splits: SplitForSpend[]) =>
+    derive_budget_view_periods(BUDGET, [weekBucket("w", JUN_08, JUN_14)], [junMonthly()], splits)[0];
+
+  it("keeps a frequent small habit that the total cut would drop (Java Jo's case), deduped", () => {
+    const splits: SplitForSpend[] = [];
+    // 10 big one-off places ($200 … $110): they fill the top 8 by total.
+    for (let i = 0; i < 10; i++) {
+      splits.push(split({ amount: 200 - 10 * i, vendor_key: `big${i}`, place_name: `Big ${i}` }));
+    }
+    // A coffee habit: 7 purchases, $82 — 11th by total, 1st by count.
+    for (let i = 0; i < 7; i++) {
+      splits.push(split({ amount: i === 0 ? 16 : 11, vendor_key: "java", place_name: "Java Jo's",
+        category_code: "FOOD_AND_DRINK_COFFEE" }));
+    }
+    // 2 purchases each: counted 2nd–4th by count.
+    for (const k of ["s1", "s2", "s3"]) {
+      splits.push(split({ amount: 35, vendor_key: k }), split({ amount: 35, vendor_key: k }));
+    }
+    const wk = week(splits);
+    const keys = wk.places.map((p) => p.key);
+    expect(new Set(keys).size).toBe(keys.length); // no duplicates
+    // Top 8 by total = big0…big7 (s1–s3 at $70 sit below big7's $130).
+    // Top 8 by count = java, s1, s2, s3, then the 1-purchase places by total: big0…big3.
+    expect(keys).toEqual(["big0", "big1", "big2", "big3", "big4", "big5", "big6", "big7", "java", "s1", "s2", "s3"]);
+    expect(wk.places.find((p) => p.key === "java")).toEqual({
+      key: "java", name: "Java Jo's", count: 7, small_count: 7, total: 82, code: "FOOD_AND_DRINK_COFFEE",
+    });
+    expect(keys).not.toContain("big8");
+    expect(wk.places.map((p) => p.total)).toEqual([...wk.places.map((p) => p.total)].sort((a, b) => b - a));
+  });
+
+  it("returns at most 16 places when the two top-8 lists don't overlap", () => {
+    const splits: SplitForSpend[] = [];
+    for (let i = 0; i < 12; i++) splits.push(split({ amount: 500 + i, vendor_key: `big${i}` }));
+    for (let i = 0; i < 12; i++) {
+      for (let n = 0; n < 3; n++) splits.push(split({ amount: 5 + i / 100, vendor_key: `small${i}` }));
+    }
+    expect(week(splits).places).toHaveLength(16);
+  });
+
+  it("code = the most common code among the place's purchases (credits don't vote; ties alphabetical)", () => {
+    const wk = week([
+      split({ amount: 8, vendor_key: "a", category_code: "FOOD_AND_DRINK_FAST_FOOD" }),
+      split({ amount: 8, vendor_key: "a", category_code: "FOOD_AND_DRINK_COFFEE" }),
+      split({ amount: 8, vendor_key: "a", category_code: "FOOD_AND_DRINK_COFFEE" }),
+      split({ amount: 8, vendor_key: "a", category_code: "FOOD_AND_DRINK_FAST_FOOD", is_income: true }),
+      split({ amount: 8, vendor_key: "a", category_code: "FOOD_AND_DRINK_FAST_FOOD", is_income: true }),
+      split({ amount: 5, vendor_key: "t", category_code: "FOOD_AND_DRINK_RESTAURANT" }),
+      split({ amount: 5, vendor_key: "t", category_code: "FOOD_AND_DRINK_COFFEE" }),
+      split({ amount: 5, vendor_key: "u" }),
+    ]);
+    const code = (k: string) => wk.places.find((p) => p.key === k)?.code;
+    expect(code("a")).toBe("FOOD_AND_DRINK_COFFEE");
+    expect(code("t")).toBe("FOOD_AND_DRINK_COFFEE");
+    expect(code("u")).toBe("");
   });
 });

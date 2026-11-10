@@ -67,6 +67,8 @@ export interface SplitForSpend {
   vendor_key?: string | null;
   place_name?: string | null;
   fee_kind?: FeeKind | null;
+  /** The resolved Plaid detailed code (the category's meaning) — a place's `code`. */
+  category_code?: string | null;
 }
 
 /** Computed spend for one budget period. */
@@ -81,7 +83,8 @@ export interface BudgetSpendResult {
   /** Only when `daily` is requested: purchases per day (splits that ADD spend; a refund credit is
    *  not one), indexed as `daily_spent`. */
   daily_count?: number[];
-  /** Only when `daily` is requested: the counted spend by place, top TOP_PLACES by total. */
+  /** Only when `daily` is requested: the counted spend by place — top TOP_PLACES by total UNION
+   *  top TOP_PLACES by purchase count, sorted by total. */
   places?: PlaceSpend[];
   /** Only when `daily` is requested: bank fees among the counted spend, by kind (present kinds). */
   fees?: FeeSpend[];
