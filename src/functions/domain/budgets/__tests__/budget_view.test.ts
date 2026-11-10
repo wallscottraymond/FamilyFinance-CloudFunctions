@@ -208,3 +208,148 @@ describe("derive_budget_view_periods", () => {
     expect(periods.map((p) => p.period_id)).toEqual(["jun", "jul"]);
   });
 });
+
+describe("derive_budget_view_periods — daily_spent (budget daily chart)", () => {
+  const sum_cents = (days: number[]) => days.reduce((s, v) => s + Math.round(v * 100), 0);
+  const JUN = (d: number, h = 12) => Date.UTC(2026, 5, d, h);
+
+  it("places each counted split on its UTC day and sums exactly to spent", () => {
+    const splits = [
+      split({ amount: 50.1, txn_date_ms: JUN(8, 0) }), // first day, midnight → index 0
+      split({ amount: 20, txn_date_ms: JUN(9), spend_status: "refund" }), // refund stays in spent
+      split({ amount: 15, txn_date_ms: JUN(9), is_income: true }), // expense-category credit nets down
+      split({ amount: 12.34, txn_date_ms: JUN(10), is_pending: true }), // pending counts like spent
+      split({ amount: 999, txn_date_ms: JUN(10), spend_status: "ignored" }), // excluded
+      split({ amount: 777, txn_date_ms: JUN(11), outflow_id: "bill" }), // recurring: excluded
+      split({ amount: 7.77, txn_date_ms: JUN(14, 23) }), // last day → index 6
+      split({ amount: 500, txn_date_ms: JUN(15) }), // outside the week
+    ];
+    const [wk] = derive_budget_view_periods(
+      BUDGET,
+      [weekBucket("w", JUN_08, JUN_14)],
+      [junMonthly()],
+      splits
+    );
+    expect(wk.spent).toBe(75.21); // 50.10 + 20 − 15 + 12.34 + 7.77
+    expect(wk.daily_spent).toEqual([50.1, 5, 12.34, 0, 0, 0, 7.77]);
+    expect(sum_cents(wk.daily_spent)).toBe(Math.round(wk.spent * 100));
+  });
+
+  it("puts the rounding remainder on the last non-zero day", () => {
+    const splits = [
+      split({ amount: 0.333, txn_date_ms: JUN(8) }),
+      split({ amount: 0.333, txn_date_ms: JUN(10) }),
+      split({ amount: 0.333, txn_date_ms: JUN(12) }),
+    ];
+    const [wk] = derive_budget_view_periods(BUDGET, [weekBucket("w", JUN_08, JUN_14)], [junMonthly()], splits);
+    expect(wk.spent).toBe(1);
+    expect(wk.daily_spent).toEqual([0.33, 0, 0.33, 0, 0.34, 0, 0]);
+    expect(sum_cents(wk.daily_spent)).toBe(100);
+  });
+
+  it("has one entry per calendar day (monthly = 30 for June), zeros when nothing counted", () => {
+    const [m] = derive_budget_view_periods(
+      BUDGET,
+      [{ period_id: "2026M06", period_type: "monthly", start_ms: JUN_01, end_ms: JUN_30 }],
+      [junMonthly()],
+      [split({ amount: 40, txn_date_ms: JUN(30, 23) })]
+    );
+    expect(m.daily_spent).toHaveLength(30);
+    expect(m.daily_spent[29]).toBe(40);
+    expect(sum_cents(m.daily_spent)).toBe(4000);
+    const [empty] = derive_budget_view_periods(BUDGET, [weekBucket("w", JUN_08, JUN_14)], [junMonthly()], []);
+    expect(empty.daily_spent).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("paused days carry no spend (it is Everything Else's)", () => {
+    const [wk] = derive_budget_view_periods(
+      BUDGET,
+      [weekBucket("w", JUN_08, JUN_14)],
+      [junMonthly()],
+      [split({ amount: 30, txn_date_ms: JUN(9) }), split({ amount: 10, txn_date_ms: JUN(12) })],
+      undefined,
+      undefined,
+      undefined,
+      [{ start_day: Math.floor(JUN(9) / 86_400_000), end_day: Math.floor(JUN(9) / 86_400_000) }]
+    );
+    expect(wk.spent).toBe(10);
+    expect(wk.daily_spent).toEqual([0, 0, 0, 0, 10, 0, 0]);
+  });
+});
+
+describe("derive_budget_view_periods — spend breakdown (Easy to change tips)", () => {
+  const JUN = (d: number, h = 12) => Date.UTC(2026, 5, d, h);
+  const week = (splits: SplitForSpend[], paused?: Array<{ start_day: number; end_day: number }>) =>
+    derive_budget_view_periods(
+      BUDGET, [weekBucket("w", JUN_08, JUN_14)], [junMonthly()], splits,
+      undefined, undefined, undefined, paused
+    )[0];
+
+  it("dailyCount counts purchases only, on the same days as dailySpent", () => {
+    const splits = [
+      split({ amount: 5, txn_date_ms: JUN(8), vendor_key: "a" }),
+      split({ amount: 6, txn_date_ms: JUN(8), vendor_key: "a" }),
+      split({ amount: 20, txn_date_ms: JUN(9), spend_status: "refund" }), // still a purchase
+      split({ amount: 15, txn_date_ms: JUN(9), is_income: true }), // credit: not a purchase
+      split({ amount: 999, txn_date_ms: JUN(10), spend_status: "ignored" }), // excluded
+      split({ amount: 999, txn_date_ms: JUN(10), is_transfer: true }), // excluded
+      split({ amount: 999, txn_date_ms: JUN(11), outflow_id: "bill" }), // bill-linked: excluded
+      split({ amount: 999, txn_date_ms: JUN(11), is_income_category: true }), // income: excluded
+      split({ amount: 7, txn_date_ms: JUN(14, 23) }),
+      split({ amount: 50, txn_date_ms: JUN(13) }), // paused day: excluded
+    ];
+    const wk = week(splits, [{ start_day: Math.floor(JUN(13) / 86_400_000), end_day: Math.floor(JUN(13) / 86_400_000) }]);
+    expect(wk.daily_count).toEqual([2, 1, 0, 0, 0, 0, 1]);
+    expect(wk.daily_count).toHaveLength(wk.daily_spent.length);
+    expect(wk.daily_count.reduce((a, b) => a + b, 0)).toBe(4);
+    // Every day with a purchase has spend booked on that same day.
+    wk.daily_count.forEach((n, i) => { if (n > 0) expect(wk.daily_spent[i]).not.toBe(0); });
+    expect(wk.spent).toBe(5 + 6 + 20 - 15 + 7);
+  });
+
+  it("groups places by vendor key: net total, count, smallCount, top 8 by total", () => {
+    const splits: SplitForSpend[] = [];
+    // 10 places, place p<i> spends 10*(i+1) in one purchase.
+    for (let i = 0; i < 10; i++) {
+      splits.push(split({ amount: 10 * (i + 1), vendor_key: `p${i}`, place_name: `Place ${i}` }));
+    }
+    // Coffee: 3 small buys + 1 big, and a refund credit netting it down.
+    splits.push(split({ amount: 4.5, vendor_key: "coffee", place_name: "Coffee" }));
+    splits.push(split({ amount: 4.25, vendor_key: "coffee", place_name: "Coffee" }));
+    splits.push(split({ amount: 24.99, vendor_key: "coffee", place_name: "Coffee" }));
+    splits.push(split({ amount: 30, vendor_key: "coffee", place_name: "Coffee" }));
+    splits.push(split({ amount: 4.5, vendor_key: "coffee", place_name: "Coffee", is_income: true }));
+    // A place netted to zero is dropped; an ignored purchase never counts.
+    splits.push(split({ amount: 12, vendor_key: "zero" }));
+    splits.push(split({ amount: 12, vendor_key: "zero", is_income: true }));
+    splits.push(split({ amount: 500, vendor_key: "ignored", spend_status: "ignored" }));
+    const wk = week(splits);
+    expect(wk.places).toHaveLength(8);
+    expect(wk.places[0]).toEqual({ key: "p9", name: "Place 9", count: 1, small_count: 0, total: 100 });
+    const coffee = wk.places.find((p) => p.key === "coffee");
+    expect(coffee).toEqual({ key: "coffee", name: "Coffee", count: 4, small_count: 3, total: 59.24 });
+    expect(wk.places.map((p) => p.total)).toEqual([...wk.places.map((p) => p.total)].sort((a, b) => b - a));
+    expect(wk.places.some((p) => p.key === "zero" || p.key === "ignored")).toBe(false);
+    expect(wk.places.some((p) => p.key === "p0" || p.key === "p1")).toBe(false); // 10, 20 < cut
+  });
+
+  it("splits without a vendor key are counted in spent but not in places", () => {
+    const wk = week([split({ amount: 10 }), split({ amount: 5, vendor_key: "a", place_name: "A" })]);
+    expect(wk.spent).toBe(15);
+    expect(wk.places).toEqual([{ key: "a", name: "A", count: 1, small_count: 1, total: 5 }]);
+  });
+
+  it("breaks out bank fees by kind (still in spent), only kinds present", () => {
+    const wk = week([
+      split({ amount: 3, fee_kind: "atm" }),
+      split({ amount: 2.5, fee_kind: "atm" }),
+      split({ amount: 35, fee_kind: "overdraft" }),
+      split({ amount: 35, fee_kind: "overdraft", is_income: true }), // reversed fee nets down
+      split({ amount: 40 }),
+      split({ amount: 9, fee_kind: "late", spend_status: "ignored" }), // ignored: not a fee here
+    ]);
+    expect(wk.spent).toBe(45.5);
+    // A fully reversed overdraft fee nets to $0 → not a tip, dropped.
+    expect(wk.fees).toEqual([{ kind: "atm", count: 2, total: 5.5 }]);
+  });
+});

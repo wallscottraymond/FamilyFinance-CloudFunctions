@@ -16,6 +16,8 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
 import { split_spend_status } from "../../domain/budgets/budget_spend.service";
+import { FeeKind, split_fee_kind } from "../../domain/budgets/spend_breakdown.service";
+import { clean_vendor_name, vendor_key } from "../../domain/transactions/vendor_key.service";
 import {
   detect_internal_transfers,
   InternalTransferResult,
@@ -29,6 +31,7 @@ import {
 import {
   resolve_split_category,
   CategoryCatalog,
+  ResolvedSplitCategory,
 } from "../../domain/transactions/split_category.service";
 import { split_category_input_from_raw } from "../../domain/transactions/split_category_edit.service";
 
@@ -52,6 +55,9 @@ export interface TxnMatchContext {
   /** For the category function's merchant / keyword rules. */
   merchant_name?: string | null;
   name?: string | null;
+  /** The transaction's stored `vendorKey` (spend breakdown only); absent → computed from the
+   *  names by the same `vendor_key` function that stores it. */
+  vendor_key?: string | null;
 }
 
 /** How long a paying side waits for its card side before counting as spending (D8): the pairing
@@ -92,14 +98,12 @@ export function map_raw_split_to_on_read_match(
 ): SplitForOnReadMatch {
   // The ONE category function (canon M7) via THE raw-split mapper — the same calls the assignment
   // engine makes, so the period page and the stored fields can't disagree.
-  const category = resolve_split_category(
-    split_category_input_from_raw(
-      raw_split,
-      { merchantName: ctx.merchant_name ?? null, name: ctx.name ?? null },
-      catalog
-    ),
+  const category_input = split_category_input_from_raw(
+    raw_split,
+    { merchantName: ctx.merchant_name ?? null, name: ctx.name ?? null },
     catalog
   );
+  const category = resolve_split_category(category_input, catalog);
   return {
     amount: (raw_split.amount as number) ?? 0,
     txn_date_ms: ctx.txn_date_ms,
@@ -122,6 +126,35 @@ export function map_raw_split_to_on_read_match(
       (raw_split.budgetAssignmentSource as string) === "manual"
         ? (raw_split.budgetId as string) ?? null
         : null,
+    ...split_breakdown_fields(
+      { merchant_name: ctx.merchant_name, name: ctx.name, vendor_key: ctx.vendor_key },
+      category,
+      category_input.plaid_detailed
+    ),
+  };
+}
+
+/**
+ * The spend-breakdown fields of a split ("Easy to change" tips; never a counting decision): the
+ * transaction's vendor key — its stored `vendorKey`, else the same `vendor_key` function vendor
+ * history stores — a display name (merchant name, else the transaction name), and its bank-fee
+ * kind. From the already-loaded transaction: no reads. PURE.
+ */
+export function split_breakdown_fields(
+  txn: { merchant_name?: unknown; name?: unknown; vendor_key?: unknown },
+  category: ResolvedSplitCategory,
+  plaid_detailed: string | null
+): { vendor_key: string | null; place_name: string | null; fee_kind: FeeKind | null } {
+  const merchant_name = typeof txn.merchant_name === "string" ? txn.merchant_name : null;
+  const name = typeof txn.name === "string" ? txn.name : null;
+  const stored = typeof txn.vendor_key === "string" && txn.vendor_key ? txn.vendor_key : null;
+  const place_source = [merchant_name, name]
+    .map((v) => (v ?? "").trim())
+    .find((v) => v.length > 0);
+  return {
+    vendor_key: stored ?? vendor_key({ merchant_name, name }),
+    place_name: place_source ? clean_vendor_name(place_source) : null,
+    fee_kind: split_fee_kind(category, plaid_detailed),
   };
 }
 

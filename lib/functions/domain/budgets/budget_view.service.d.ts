@@ -26,6 +26,7 @@
  * @module domain/budgets/budget_view
  */
 import { SplitForSpend } from "./budget_spend.service";
+import { FeeSpend, PlaceSpend } from "./spend_breakdown.service";
 import { PeriodInstanceType } from "./period_generation.service";
 import { MonthlyPeriodForDerivation } from "./period_allocation_view.service";
 import { PausedDayRange } from "./budget_pause.service";
@@ -50,6 +51,14 @@ export interface DerivedBudgetViewPeriod {
     /** Pro-rated limit incl. monthly rollover (allocated + rolled_over). */
     effective_amount: number;
     spent: number;
+    /** `spent` per UTC calendar day of the bucket (index 0 = start day); Σ === spent to the cent. */
+    daily_spent: number[];
+    /** Purchases per UTC day (splits that add spend), indexed as `daily_spent`. */
+    daily_count: number[];
+    /** Counted spend by place (vendor key), top 8 by total, positive totals only. */
+    places: PlaceSpend[];
+    /** Bank fees among the counted spend, by kind (only kinds present). */
+    fees: FeeSpend[];
     pending_spent: number;
     return_amount: number;
     /** effective_amount − spent (pro-rated rollover remaining). */

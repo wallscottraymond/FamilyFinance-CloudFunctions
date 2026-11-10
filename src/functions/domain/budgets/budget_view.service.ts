@@ -30,6 +30,7 @@ import {
   compute_budget_spent,
   SplitForSpend,
 } from "./budget_spend.service";
+import { FeeSpend, PlaceSpend } from "./spend_breakdown.service";
 import { PeriodInstanceType } from "./period_generation.service";
 import {
   bucket_allocation_unpaused,
@@ -61,6 +62,14 @@ export interface DerivedBudgetViewPeriod {
   /** Pro-rated limit incl. monthly rollover (allocated + rolled_over). */
   effective_amount: number;
   spent: number;
+  /** `spent` per UTC calendar day of the bucket (index 0 = start day); Σ === spent to the cent. */
+  daily_spent: number[];
+  /** Purchases per UTC day (splits that add spend), indexed as `daily_spent`. */
+  daily_count: number[];
+  /** Counted spend by place (vendor key), top 8 by total, positive totals only. */
+  places: PlaceSpend[];
+  /** Bank fees among the counted spend, by kind (only kinds present). */
+  fees: FeeSpend[];
   pending_spent: number;
   return_amount: number;
   /** effective_amount − spent (pro-rated rollover remaining). */
@@ -121,11 +130,13 @@ export function derive_budget_view_periods(
     if (active_end_ms != null && bucket.start_ms > active_end_ms) {
       continue;
     }
+    const bucket_days = utc_day(bucket.end_ms) - utc_day(bucket.start_ms) + 1;
     const spend = compute_budget_spent(
       budget_id,
       bucket.start_ms,
       bucket.end_ms,
-      counted
+      counted,
+      { start_ms: bucket.start_ms, days: bucket_days }
     );
 
     // THE page rule (domain/budgets/period_allocation_view): each overlapping monthly period's
@@ -140,7 +151,6 @@ export function derive_budget_view_periods(
       paused
     );
     const paused_days = paused_days_in(paused, bucket.start_ms, bucket.end_ms);
-    const bucket_days = utc_day(bucket.end_ms) - utc_day(bucket.start_ms) + 1;
 
     result.push({
       budget_id,
@@ -151,6 +161,10 @@ export function derive_budget_view_periods(
       allocated_amount: allocated,
       effective_amount: effective,
       spent: spend.spent,
+      daily_spent: spend.daily_spent ?? [],
+      daily_count: spend.daily_count ?? [],
+      places: spend.places ?? [],
+      fees: spend.fees ?? [],
       pending_spent: spend.pending_spent,
       return_amount: spend.return_amount,
       remaining: round2(effective - spend.spent),

@@ -21,12 +21,22 @@ function map_budget(b: DerivedBudgetResult) {
     name: b.name,
     isEverythingElse: b.is_everything_else,
     isFund: b.is_fund === true,
+    // User-facing first_category slugs the budget owns ([] for Everything Else / manual budgets).
+    firstCategoryIds: b.first_category_ids ?? [],
     periods: b.periods.map((p) => ({
       periodId: p.period_id,
       periodType: p.period_type,
       allocatedAmount: p.allocated_amount,
       effectiveAmount: p.effective_amount,
       spent: p.spent,
+      // Per UTC day of the period (index 0 = first day); sums to `spent` (budget daily chart).
+      dailySpent: p.daily_spent ?? [],
+      // "Easy to change" tips — from the same counted splits as `spent`.
+      dailyCount: p.daily_count ?? [],
+      places: (p.places ?? []).map((pl) => ({
+        key: pl.key, name: pl.name, count: pl.count, smallCount: pl.small_count, total: pl.total,
+      })),
+      fees: p.fees ?? [],
       returnAmount: p.return_amount,
       remaining: p.remaining,
       isDerived: true,

@@ -24,6 +24,7 @@
  */
 import { BudgetForMatch } from "../transactions/match_budget.service";
 import { SplitForSpend, SpendStatusForSpend } from "./budget_spend.service";
+import { FeeKind } from "./spend_breakdown.service";
 /** A split with everything the read-time owner resolution + spend need. */
 export interface SplitForOnReadMatch {
     amount: number;
@@ -51,6 +52,10 @@ export interface SplitForOnReadMatch {
      *  Not used in any decision. */
     source_txn_id?: string;
     source_split_id?: string | null;
+    /** Spend breakdown only (places / fees; never a decision) — see SplitForSpend. */
+    vendor_key?: string | null;
+    place_name?: string | null;
+    fee_kind?: FeeKind | null;
 }
 /**
  * Resolve the budget a split belongs to on read.

@@ -25,6 +25,7 @@ import {
   card_payment_is_money_movement,
   detect_card_payment_pairs_from_txns,
   detect_internal_transfers_from_txns,
+  split_breakdown_fields,
   txn_effective_category,
 } from "../shared/on_read_matching";
 import {
@@ -184,10 +185,8 @@ export function stored_split_for_spend(
   if (stored_budget_in_lens(s, cadence) !== budget_id) return null;
   // The category's meaning from the ONE category function (a user pick away from income makes
   // it spending).
-  const resolved_category = resolve_split_category(
-    split_category_input_from_raw(s, txn, catalog),
-    catalog
-  );
+  const category_input = split_category_input_from_raw(s, txn, catalog);
+  const resolved_category = resolve_split_category(category_input, catalog);
   const effective_category = resolved_category.semantic_code;
   // A manual pin counts in its budget whatever the money is (canon A4) — as on the page. The
   // engine stores a pin per lens (an Everything Else pin → each lens's own EE), so the pin is
@@ -211,5 +210,11 @@ export function stored_split_for_spend(
     spend_status: split_spend_status(s),
     outflow_id: (s.outflowId as string | null) ?? null,
     inflow_id: (s.inflowId as string | null) ?? null,
+    // Spend breakdown only (places / fees) — the same fields the on-read mapper gives.
+    ...split_breakdown_fields(
+      { merchant_name: txn.merchantName, name: txn.name, vendor_key: txn.vendorKey },
+      resolved_category,
+      category_input.plaid_detailed
+    ),
   };
 }

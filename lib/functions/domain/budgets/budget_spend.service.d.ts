@@ -23,6 +23,7 @@
  *
  * @module domain/budgets/budget_spend
  */
+import { FeeKind, FeeSpend, PlaceSpend } from "./spend_breakdown.service";
 /** A split's budget-spend treatment (mirrors the `SpendStatus` type). */
 export type SpendStatusForSpend = "counted" | "ignored" | "refund";
 /** A split + its transaction context, as the spend computation needs it. */
@@ -57,6 +58,12 @@ export interface SplitForSpend {
      *  the split from budget spend so an unlinked bill payment doesn't double-count as
      *  spending (S5). Optional: callers without stream context omit it (defaults false). */
     is_recurring_member?: boolean;
+    /** Spend breakdown only (never a counting decision): the transaction's vendor key
+     *  (domain/transactions/vendor_key — stored `vendorKey`, else computed from its names), its
+     *  display name, and its bank-fee kind when the category is a BANK_FEES one. Optional. */
+    vendor_key?: string | null;
+    place_name?: string | null;
+    fee_kind?: FeeKind | null;
 }
 /** Computed spend for one budget period. */
 export interface BudgetSpendResult {
@@ -64,6 +71,21 @@ export interface BudgetSpendResult {
     pending_spent: number;
     /** Σ|amount| of the countable `refund` splits — expected returns (parallel to spent). */
     return_amount: number;
+    /** Only when `daily` is requested: `spent` per UTC calendar day of the period (index 0 = the
+     *  period's first day). Same splits + sign as `spent`; Σ daily_spent === spent to the cent. */
+    daily_spent?: number[];
+    /** Only when `daily` is requested: purchases per day (splits that ADD spend; a refund credit is
+     *  not one), indexed as `daily_spent`. */
+    daily_count?: number[];
+    /** Only when `daily` is requested: the counted spend by place, top TOP_PLACES by total. */
+    places?: PlaceSpend[];
+    /** Only when `daily` is requested: bank fees among the counted spend, by kind (present kinds). */
+    fees?: FeeSpend[];
+}
+/** Which days to break `spent` into: the period's first day (epoch ms) and its day count. */
+export interface DailySpendWindow {
+    start_ms: number;
+    days: number;
 }
 export { is_transfer_category, is_income_category, } from "../transactions/category_semantics.service";
 /**
@@ -81,10 +103,18 @@ export declare function is_countable(split: SplitForSpend): boolean;
  * @param period_start_ms - Period start (inclusive), epoch ms
  * @param period_end_ms - Period end (inclusive), epoch ms
  * @param splits - Candidate splits (any budget; this filters to `budget_id`)
+ * @param daily - Optional: also break `spent` into UTC days (Budget daily chart) and the spend
+ *   breakdown (purchases per day, places, bank fees — the "Easy to change" tips). Accumulated in
+ *   this same loop so none of it can drift from `spent`.
  *
  * PURE FUNCTION.
  */
-export declare function compute_budget_spent(budget_id: string, period_start_ms: number, period_end_ms: number, splits: SplitForSpend[]): BudgetSpendResult;
+export declare function compute_budget_spent(budget_id: string, period_start_ms: number, period_end_ms: number, splits: SplitForSpend[], daily?: DailySpendWindow): BudgetSpendResult;
+/**
+ * Round each day to cents, then put the rounding remainder on the last non-zero day so the days
+ * sum EXACTLY to `total` (the already-rounded `spent`). PURE.
+ */
+export declare function round_days_to_total(raw: number[], total: number): number[];
 /**
  * A stored split's spend status — THE one reading (the period page, stored spend and every other
  * reader): explicit `spendStatus` wins, else the legacy `isIgnored` / `isRefund` booleans, else

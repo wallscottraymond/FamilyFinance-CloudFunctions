@@ -24,6 +24,9 @@ export interface DerivedBudgetResult {
     name: string;
     is_everything_else: boolean;
     is_fund?: boolean;
+    /** The budget's user-facing first_category slugs (canon C3/A2); [] for Everything Else and
+     *  manual budgets. */
+    first_category_ids: string[];
     periods: DerivedBudgetViewPeriod[];
 }
 export interface DerivedRecurringResult {

@@ -52,6 +52,9 @@ export interface DerivedBudgetResult {
   name: string;
   is_everything_else: boolean;
   is_fund?: boolean;
+  /** The budget's user-facing first_category slugs (canon C3/A2); [] for Everything Else and
+   *  manual budgets. */
+  first_category_ids: string[];
   periods: DerivedBudgetViewPeriod[];
 }
 export interface DerivedRecurringResult {
@@ -109,9 +112,15 @@ export function compute_period_view(
           const position = fund_position(total, spent);
           return { ...p, remaining: position.left, fund_total: total, fund_spent_to_date: position.spent_to_date };
         });
-        return { budget_id: b.id, name: b.name, is_everything_else: false, is_fund: true, periods: fund_periods };
+        return {
+          budget_id: b.id, name: b.name, is_everything_else: false, is_fund: true,
+          first_category_ids: b.first_category_ids ?? [], periods: fund_periods,
+        };
       }
-      return { budget_id: b.id, name: b.name, is_everything_else: b.is_ee, periods };
+      return {
+        budget_id: b.id, name: b.name, is_everything_else: b.is_ee,
+        first_category_ids: b.first_category_ids ?? [], periods,
+      };
     })
     // A budget with NO periods in this view is entirely outside its active range (e.g. a newly
     // created budget viewed in a past period) — omit it so no empty $0 card is surfaced. EE is

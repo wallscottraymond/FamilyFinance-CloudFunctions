@@ -47,10 +47,12 @@ export interface CachedDerivedPeriod<TResult> {
  *  budget pause (isPaused / pausedDays on budget periods, PZ3). v5 = card payments are money
  *  movement, drop results that counted them (Trustworthy-Numbers D1). v6 = look-alike card sides,
  *  the 5-day wait (D7, D8). v7 = occurrences carry their expected amount (AF-08).
- *  v8 = a paused period's group carries its resume date (AF-03).
+ *  v8 = a paused period's group carries its resume date (AF-03). v10 = budget periods carry
+ *  `daily_spent` (per-day spend for the budget daily chart) + the spend breakdown `daily_count`,
+ *  `places`, `fees`; budgets carry `first_category_ids` ("Easy to change" tips).
  *  Every function bundling this repo (derive_period, derive_period_range, derive_budget_view,
  *  widget_snapshot) deploys together. */
-const CACHE_SHAPE = "v9";
+const CACHE_SHAPE = "v10";
 
 /** Deterministic doc id for a derive call, per UTC day: a result depends on the day only through a
  *  card payment's wait ending, which happens at UTC midnight and isn't a data change (D8). Windows are ms epoch ints — safe in an id. */

@@ -37,6 +37,9 @@ export interface BudgetForDerivation {
   paused_ranges?: PausedDayRange[];
   /** A Fund: its total. `monthly_periods` hold the monthly share. */
   fund_total?: number;
+  /** The budget's user-facing first_category slugs (from its `categoryIds`, canon A2); empty /
+   *  absent for Everything Else and manual budgets. */
+  first_category_ids?: string[];
 }
 
 export interface RecurringForDerivation {

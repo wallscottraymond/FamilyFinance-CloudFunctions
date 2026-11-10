@@ -664,6 +664,11 @@ export function shape_period_derivation_deps(
       priced,
       ...(!is_ee && mi.paused_ranges?.length ? { paused_ranges: mi.paused_ranges } : {}),
       ...(b.is_fund ? { fund_total: b.amount } : {}),
+      // The user-facing first_category slugs it owns (canon A2: `categoryIds` are first slugs;
+      // anything else in there is legacy and matches nothing). None for EE / manual budgets.
+      first_category_ids: is_ee || b.is_manual
+        ? []
+        : [...new Set((b.category_ids ?? []).filter((c) => c in catalog.plaid_by_first))],
     });
   }
 
@@ -953,6 +958,7 @@ export function shape_period_derivation_deps(
           is_recurring_member: on_outflow_stream(s) || on_inflow_stream(s),
           merchant_name: (data.merchantName as string | null) ?? null,
           name: (data.name as string | null) ?? null,
+          vendor_key: (data.vendorKey as string | null) ?? null,
         }, catalog)
       );
       const matched = splits_for_match[splits_for_match.length - 1];
@@ -1174,6 +1180,7 @@ export function shape_period_derivation_deps(
           is_recurring_member: false,
           merchant_name: (data.merchantName as string | null) ?? null,
           name: (data.name as string | null) ?? null,
+          vendor_key: (data.vendorKey as string | null) ?? null,
         }, catalog)
       );
     }

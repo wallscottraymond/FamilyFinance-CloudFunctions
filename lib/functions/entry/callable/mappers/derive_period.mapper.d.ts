@@ -14,6 +14,7 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         name: string;
         isEverythingElse: boolean;
         isFund: boolean;
+        firstCategoryIds: string[];
         periods: {
             fundTotal?: number | undefined;
             fundSpentToDate?: number | undefined;
@@ -22,6 +23,16 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             allocatedAmount: number;
             effectiveAmount: number;
             spent: number;
+            dailySpent: number[];
+            dailyCount: number[];
+            places: {
+                key: string;
+                name: string;
+                count: number;
+                smallCount: number;
+                total: number;
+            }[];
+            fees: import("../../../domain/budgets/spend_breakdown.service").FeeSpend[];
             returnAmount: number;
             remaining: number;
             isDerived: boolean;

@@ -13,8 +13,9 @@
  * @module resolvers/shared/on_read_matching
  */
 import { SplitForOnReadMatch } from "../../domain/budgets/budget_spend_match.service";
+import { FeeKind } from "../../domain/budgets/spend_breakdown.service";
 import { InternalTransferResult } from "../../domain/transactions/internal_transfer.service";
-import { CategoryCatalog } from "../../domain/transactions/split_category.service";
+import { CategoryCatalog, ResolvedSplitCategory } from "../../domain/transactions/split_category.service";
 /** Transaction-level context a split inherits (computed once per transaction). */
 export interface TxnMatchContext {
     txn_date_ms: number;
@@ -35,6 +36,9 @@ export interface TxnMatchContext {
     /** For the category function's merchant / keyword rules. */
     merchant_name?: string | null;
     name?: string | null;
+    /** The transaction's stored `vendorKey` (spend breakdown only); absent → computed from the
+     *  names by the same `vendor_key` function that stores it. */
+    vendor_key?: string | null;
 }
 /** How long a paying side waits for its card side before counting as spending (D8): the pairing
  *  tolerance, so a payment that could still pair never counts first. */
@@ -59,6 +63,21 @@ is_user_pick?: boolean): boolean;
  * manual pin are read.
  */
 export declare function map_raw_split_to_on_read_match(raw_split: Record<string, unknown>, ctx: TxnMatchContext, catalog: CategoryCatalog): SplitForOnReadMatch;
+/**
+ * The spend-breakdown fields of a split ("Easy to change" tips; never a counting decision): the
+ * transaction's vendor key — its stored `vendorKey`, else the same `vendor_key` function vendor
+ * history stores — a display name (merchant name, else the transaction name), and its bank-fee
+ * kind. From the already-loaded transaction: no reads. PURE.
+ */
+export declare function split_breakdown_fields(txn: {
+    merchant_name?: unknown;
+    name?: unknown;
+    vendor_key?: unknown;
+}, category: ResolvedSplitCategory, plaid_detailed: string | null): {
+    vendor_key: string | null;
+    place_name: string | null;
+    fee_kind: FeeKind | null;
+};
 /**
  * The category MEANING (a Plaid code) of a transaction for transfer pairing, from the ONE
  * category function (a user pick away from a transfer category makes that split spending): the

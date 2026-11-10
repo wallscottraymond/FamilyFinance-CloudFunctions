@@ -36,6 +36,7 @@ import {
   is_income_category,
   is_transfer_category,
 } from "./budget_spend.service";
+import { FeeKind } from "./spend_breakdown.service";
 
 /** A split with everything the read-time owner resolution + spend need. */
 export interface SplitForOnReadMatch {
@@ -66,6 +67,10 @@ export interface SplitForOnReadMatch {
    *  Not used in any decision. */
   source_txn_id?: string;
   source_split_id?: string | null;
+  /** Spend breakdown only (places / fees; never a decision) — see SplitForSpend. */
+  vendor_key?: string | null;
+  place_name?: string | null;
+  fee_kind?: FeeKind | null;
 }
 
 /**
@@ -171,6 +176,9 @@ export function owned_splits_for_budget(
       outflow_id: s.outflow_id,
       inflow_id: s.inflow_id,
       is_recurring_member: s.is_recurring_member,
+      vendor_key: s.vendor_key ?? null,
+      place_name: s.place_name ?? null,
+      fee_kind: s.fee_kind ?? null,
     });
   }
   return out;

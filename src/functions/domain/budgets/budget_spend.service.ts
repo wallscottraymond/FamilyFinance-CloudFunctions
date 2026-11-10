@@ -24,6 +24,8 @@
  * @module domain/budgets/budget_spend
  */
 
+import { FeeKind, FeeSpend, PlaceSpend, SpendBreakdownAccumulator } from "./spend_breakdown.service";
+
 /** A split's budget-spend treatment (mirrors the `SpendStatus` type). */
 export type SpendStatusForSpend = "counted" | "ignored" | "refund";
 
@@ -59,6 +61,12 @@ export interface SplitForSpend {
    *  the split from budget spend so an unlinked bill payment doesn't double-count as
    *  spending (S5). Optional: callers without stream context omit it (defaults false). */
   is_recurring_member?: boolean;
+  /** Spend breakdown only (never a counting decision): the transaction's vendor key
+   *  (domain/transactions/vendor_key — stored `vendorKey`, else computed from its names), its
+   *  display name, and its bank-fee kind when the category is a BANK_FEES one. Optional. */
+  vendor_key?: string | null;
+  place_name?: string | null;
+  fee_kind?: FeeKind | null;
 }
 
 /** Computed spend for one budget period. */
@@ -67,7 +75,25 @@ export interface BudgetSpendResult {
   pending_spent: number;
   /** Σ|amount| of the countable `refund` splits — expected returns (parallel to spent). */
   return_amount: number;
+  /** Only when `daily` is requested: `spent` per UTC calendar day of the period (index 0 = the
+   *  period's first day). Same splits + sign as `spent`; Σ daily_spent === spent to the cent. */
+  daily_spent?: number[];
+  /** Only when `daily` is requested: purchases per day (splits that ADD spend; a refund credit is
+   *  not one), indexed as `daily_spent`. */
+  daily_count?: number[];
+  /** Only when `daily` is requested: the counted spend by place, top TOP_PLACES by total. */
+  places?: PlaceSpend[];
+  /** Only when `daily` is requested: bank fees among the counted spend, by kind (present kinds). */
+  fees?: FeeSpend[];
 }
+
+/** Which days to break `spent` into: the period's first day (epoch ms) and its day count. */
+export interface DailySpendWindow {
+  start_ms: number;
+  days: number;
+}
+
+const DAY_MS = 86_400_000;
 
 // Plaid category semantics (transfer/income) live in the transactions domain so
 // the routing engine and this read-time calc share ONE definition. Re-exported
@@ -108,6 +134,9 @@ function round2(value: number): number {
  * @param period_start_ms - Period start (inclusive), epoch ms
  * @param period_end_ms - Period end (inclusive), epoch ms
  * @param splits - Candidate splits (any budget; this filters to `budget_id`)
+ * @param daily - Optional: also break `spent` into UTC days (Budget daily chart) and the spend
+ *   breakdown (purchases per day, places, bank fees — the "Easy to change" tips). Accumulated in
+ *   this same loop so none of it can drift from `spent`.
  *
  * PURE FUNCTION.
  */
@@ -115,11 +144,17 @@ export function compute_budget_spent(
   budget_id: string,
   period_start_ms: number,
   period_end_ms: number,
-  splits: SplitForSpend[]
+  splits: SplitForSpend[],
+  daily?: DailySpendWindow
 ): BudgetSpendResult {
   let spent = 0;
   let pending = 0;
   let return_amount = 0;
+  const day_count = daily ? Math.max(0, daily.days) : 0;
+  const by_day: number[] | null = daily ? new Array<number>(day_count).fill(0) : null;
+  const first_day = daily ? Math.floor(daily.start_ms / DAY_MS) : 0;
+  const count_by_day: number[] | null = daily ? new Array<number>(day_count).fill(0) : null;
+  const breakdown = daily ? new SpendBreakdownAccumulator() : null;
 
   for (const split of splits) {
     if (split.budget_id !== budget_id) {
@@ -137,6 +172,15 @@ export function compute_budget_spent(
     const magnitude = Math.abs(split.amount);
     const signed = split.is_income ? -magnitude : split.amount;
     spent += signed;
+    if (by_day && day_count > 0) {
+      // UTC day index; clamp so a split inside the period always lands somewhere.
+      const idx = Math.floor(split.txn_date_ms / DAY_MS) - first_day;
+      const day = Math.min(day_count - 1, Math.max(0, idx));
+      by_day[day] += signed;
+      // A purchase = a split that ADDS spend (a credit netting it down isn't one).
+      if (count_by_day && signed > 0) count_by_day[day] += 1;
+    }
+    breakdown?.add(split, signed);
     if (split.is_pending) {
       pending += signed;
     }
@@ -146,11 +190,36 @@ export function compute_budget_spent(
     }
   }
 
+  const spent_rounded = round2(spent);
   return {
-    spent: round2(spent),
+    spent: spent_rounded,
     pending_spent: round2(pending),
     return_amount: round2(return_amount),
+    ...(by_day ? { daily_spent: round_days_to_total(by_day, spent_rounded) } : {}),
+    ...(count_by_day ? { daily_count: count_by_day } : {}),
+    ...(breakdown ? { places: breakdown.top_places(), fees: breakdown.fee_list() } : {}),
   };
+}
+
+/**
+ * Round each day to cents, then put the rounding remainder on the last non-zero day so the days
+ * sum EXACTLY to `total` (the already-rounded `spent`). PURE.
+ */
+export function round_days_to_total(raw: number[], total: number): number[] {
+  const days = raw.map((v) => round2(v) + 0); // `+ 0` turns -0 into 0
+  if (days.length === 0) return days;
+  const cents_off = Math.round(total * 100) - days.reduce((sum, v) => sum + Math.round(v * 100), 0);
+  if (cents_off !== 0) {
+    let last = days.length - 1;
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (days[i] !== 0) {
+        last = i;
+        break;
+      }
+    }
+    days[last] = (Math.round(days[last] * 100) + cents_off) / 100 + 0;
+  }
+  return days;
 }
 
 /**
