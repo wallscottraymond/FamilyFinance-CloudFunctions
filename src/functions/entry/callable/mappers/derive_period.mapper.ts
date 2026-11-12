@@ -75,12 +75,29 @@ function map_recurring(r: DerivedRecurringResult) {
         ...(o.manual ? { manual: true } : {}),
         // The transaction that paid it (doc id) — the detail screen opens it.
         ...(o.transaction_id ? { transactionId: o.transaction_id } : {}),
+        // Income with parts only: this check's breakdown + the part you can count on.
+        ...(o.parts
+          ? {
+            parts: o.parts.map((p) => ({
+              ...(p.part_id ? { partId: p.part_id } : {}),
+              kind: p.kind,
+              ...(p.label ? { label: p.label } : {}),
+              amount: p.amount,
+              sure: p.sure,
+            })),
+            sureAmount: o.sure_amount ?? 0,
+          }
+          : {}),
       })),
       firstDueMs: g.first_due_ms,
       nextUnpaidDueMs: g.next_unpaid_due_ms,
     })),
     // Group views only: whose bill/income it is (owner badge). Omitted in Me.
     ...(r.owner_user_id ? { ownerUserId: r.owner_user_id } : {}),
+    // Income with parts only: each part's avg / typical / careful amount per check.
+    ...(r.part_stats
+      ? { partStats: r.part_stats.map((p) => ({ partId: p.part_id, avg: p.avg, typical: p.typical, careful: p.careful })) }
+      : {}),
   };
 }
 

@@ -1140,10 +1140,18 @@ service cloud.firestore {
         'incomeType', 'isRegularSalary', 'employerName', 'taxable',
         // User custom name (rename) + user expected-amount override ("this + future")
         // + per-occurrence expected overrides (map keyed by due-date, edited one check at a time)
-        'userCustomName', 'expectedAmountOverride', 'occurrenceAmountOverrides'
+        'userCustomName', 'expectedAmountOverride', 'occurrenceAmountOverrides',
+        // Income-Detail-Screen: the check as parts, forecast choices, per-check part overrides,
+        // a note on the income, and the user-classified marker written with the type.
+        'incomeParts', 'forecastSettings', 'occurrenceParts', 'incomeNote', 'isUserClassified'
       ];
       let changedFields = data.diff(resource_data).affectedKeys();
-      return changedFields.hasOnly(allowedFields);
+      return changedFields.hasOnly(allowedFields)
+        && (!changedFields.hasAny(['incomeParts']) || (data.incomeParts is list && data.incomeParts.size() <= 8))
+        && (!changedFields.hasAny(['forecastSettings']) || data.forecastSettings is map)
+        && (!changedFields.hasAny(['occurrenceParts']) || data.occurrenceParts is map)
+        && (!changedFields.hasAny(['incomeNote']) || !('incomeNote' in data) || (data.incomeNote is string && data.incomeNote.size() <= 2000))
+        && (!changedFields.hasAny(['isUserClassified']) || data.isUserClassified is bool);
     }
     
     function isValidRecurringOutflowUpdate() {

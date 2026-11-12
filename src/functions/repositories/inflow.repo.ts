@@ -42,6 +42,15 @@ import {
   absorbed_streams_to_doc,
   merge_log_to_doc,
 } from "./convert_doc_fields";
+import {
+  IncomePart,
+  ForecastSettings,
+  OccurrencePartsMap,
+  parse_income_parts,
+  parse_forecast_settings,
+  parse_occurrence_parts,
+  is_stale_occurrence_parts_key,
+} from "../domain/recurring/income_parts.service";
 import { is_unchanged_recurring_doc } from "./recurring_doc_equality";
 import {
   ManualSettledOccurrences,
@@ -85,6 +94,13 @@ export interface Inflow {
   // (`YYYY-MM-DD`). Wins over `expected_amount_override` for that ONE occurrence
   // (others unaffected). Sticky across Plaid re-sync. Absent/empty = none.
   occurrence_amount_overrides?: Record<string, number>;
+  // Income-Detail-Screen: the check as a list of parts, the forecast choices, per-check part
+  // overrides / labelled received splits, and a note on the income. All sticky across Plaid
+  // re-sync. Absent = the income has no parts (derive behaves as before).
+  income_parts?: IncomePart[];
+  forecast_settings?: ForecastSettings;
+  occurrence_parts?: OccurrencePartsMap;
+  income_note?: string;
 
   // Description
   description: string | null;
@@ -204,6 +220,18 @@ interface LegacyInflowDoc extends ConvertDocFields {
   payerMatchedTransactionIds?: string[];
   // Per-occurrence expected overrides keyed by due-date (see Inflow.occurrence_amount_overrides).
   occurrenceAmountOverrides?: Record<string, number>;
+  // Income-Detail-Screen user settings (see the entity). Raw (unparsed) as stored.
+  incomeParts?: unknown[];
+  forecastSettings?: Record<string, unknown>;
+  occurrenceParts?: Record<string, unknown>;
+  incomeNote?: string;
+  // Set when the user configured the income type (and its configs); Plaid never sets these.
+  isUserClassified?: boolean;
+  incomeVariability?: unknown;
+  hourlyConfig?: unknown;
+  commissionConfig?: unknown;
+  bonusConfig?: unknown;
+  variableConfig?: unknown;
 
   // Description
   description: string | null;
@@ -275,7 +303,7 @@ function to_removal_interval_docs(intervals: RemovalInterval[]): RemovalInterval
 /**
  * Maps legacy Firestore document to Inflow entity.
  */
-function map_to_entity(doc: LegacyInflowDoc): Inflow {
+export function map_to_entity(doc: LegacyInflowDoc): Inflow {
   return {
     id: doc.id,
     user_id: doc.ownerId,
@@ -292,6 +320,7 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
     average_amount: doc.averageAmount,
     expected_amount_override: doc.expectedAmountOverride ?? null,
     occurrence_amount_overrides: doc.occurrenceAmountOverrides ?? {},
+    ...map_income_parts_to_entity(doc),
     amount_min: undefined, // Legacy docs may not have this
     amount_max: undefined,
     currency: doc.currency,
@@ -341,10 +370,57 @@ function map_to_entity(doc: LegacyInflowDoc): Inflow {
   };
 }
 
+/** Income-Detail-Screen fields → entity (defensive; keys only when present, so an income without
+ *  parts maps exactly as before). */
+function map_income_parts_to_entity(
+  doc: LegacyInflowDoc
+): Pick<Inflow, "income_parts" | "forecast_settings" | "occurrence_parts" | "income_note"> {
+  const income_parts = parse_income_parts(doc.incomeParts);
+  const occurrence_parts = parse_occurrence_parts(doc.occurrenceParts);
+  return {
+    ...(income_parts.length > 0 ? { income_parts } : {}),
+    ...(doc.forecastSettings ? { forecast_settings: parse_forecast_settings(doc.forecastSettings) } : {}),
+    ...(Object.keys(occurrence_parts).length > 0 ? { occurrence_parts } : {}),
+    ...(typeof doc.incomeNote === "string" && doc.incomeNote ? { income_note: doc.incomeNote } : {}),
+  };
+}
+
+/** The user's classification (type + configs) is theirs once they set it (or gave the income
+ *  parts): Plaid's re-sync must not overwrite it. */
+function is_user_classified(existing?: LegacyInflowDoc | null): boolean {
+  return existing?.isUserClassified === true || (Array.isArray(existing?.incomeParts) && existing.incomeParts.length > 0);
+}
+
+/**
+ * Income-Detail-Screen user settings carried through a Plaid re-sync. CONDITIONAL keys only, so a
+ * doc without them stays byte-identical (no rewrite fan-out). `occurrenceParts` keys older than
+ * 24 months are pruned here (bounded array/map policy); `now` is the sync time.
+ */
+function carried_income_settings(existing: LegacyInflowDoc | null | undefined, now: Timestamp): Record<string, unknown> {
+  if (!existing) return {};
+  const out: Record<string, unknown> = {};
+  if (existing.incomeParts !== undefined) out.incomeParts = existing.incomeParts;
+  if (existing.forecastSettings !== undefined) out.forecastSettings = existing.forecastSettings;
+  if (existing.occurrenceParts !== undefined) {
+    const now_ms = now.toMillis();
+    const kept = Object.fromEntries(
+      Object.entries(existing.occurrenceParts).filter(([k]) => !is_stale_occurrence_parts_key(k, now_ms))
+    );
+    if (Object.keys(kept).length > 0) out.occurrenceParts = kept;
+  }
+  if (existing.incomeNote !== undefined) out.incomeNote = existing.incomeNote;
+  if (is_user_classified(existing)) {
+    for (const k of ["isUserClassified", "incomeVariability", "hourlyConfig", "commissionConfig", "bonusConfig", "variableConfig"] as const) {
+      if (existing[k] !== undefined) out[k] = existing[k];
+    }
+  }
+  return out;
+}
+
 /**
  * Maps InflowForPersistence to legacy Firestore document.
  */
-function map_persistence_to_doc(
+export function map_persistence_to_doc(
   entity: InflowForPersistence,
   now: Timestamp,
   existing?: LegacyInflowDoc | null
@@ -392,7 +468,8 @@ function map_persistence_to_doc(
     internalDetailedCategory:
       existing?.internalDetailedCategory ?? entity.internal_detailed_category,
 
-    incomeType: entity.income_type,
+    // A user-classified income keeps the type the user set (Plaid's guess never overwrites it).
+    incomeType: is_user_classified(existing) && existing?.incomeType ? existing.incomeType : entity.income_type,
     isRegularSalary: entity.is_regular_salary,
 
     source: entity.source,
@@ -444,6 +521,8 @@ function map_persistence_to_doc(
         : {}),
     // Convert-To-Recurring Phase 2: carried through this full-document set (conditional keys only).
     ...carried_convert_fields(existing, entity),
+    // Income-Detail-Screen settings + the user's classification (conditional keys only).
+    ...carried_income_settings(existing, now),
     // Add Income (D43) settings: a NEW doc only (conditional).
     ...(!existing && entity.income_extras ? entity.income_extras : {}),
 

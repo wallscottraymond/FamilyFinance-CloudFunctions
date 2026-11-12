@@ -805,6 +805,10 @@ export function shape_period_derivation_deps(
       has_amount_override: i.expected_amount_override != null,
       // Per-occurrence expected overrides (keyed by due-date) — win over everything for that occ.
       occurrence_amount_overrides: i.occurrence_amount_overrides,
+      // Income-Detail-Screen parts (keys only when the income has them → others unchanged).
+      ...(i.income_parts?.length
+        ? { income_parts: i.income_parts, forecast_settings: i.forecast_settings, occurrence_parts: i.occurrence_parts }
+        : {}),
       // Income remove/pause spans — filtered per period on read, same as bills.
       removal_intervals: i.removal_intervals,
       // "Mark as received" marks (income received outside linked accounts).

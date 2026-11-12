@@ -28,7 +28,21 @@ import {
   reconcile_occurrences,
   reconcile_income_occurrences,
 } from "../recurring/reconcile_occurrences.service";
-import { build_expected_occurrences } from "../recurring/expected_occurrences.service";
+import {
+  build_expected_occurrences,
+  make_income_expected_parts,
+  uses_income_parts,
+  income_check_dates,
+} from "../recurring/expected_occurrences.service";
+import {
+  PartStat,
+  compute_part_stats,
+  make_is_last_of_month,
+  received_check_parts,
+  sum_sure_parts,
+  sum_parts,
+} from "../recurring/income_parts.service";
+import { occurrence_date_key } from "../recurring/manual_settlement.service";
 import { apply_manual_settlements } from "../recurring/manual_settlement.service";
 import {
   place_occurrences,
@@ -63,6 +77,8 @@ export interface DerivedRecurringResult {
   groups: PlacedOccurrenceGroup[];
   /** Group views only (see RecurringForDerivation.owner_user_id). */
   owner_user_id?: string;
+  /** Income with parts only: each part's avg / typical / careful amount. */
+  part_stats?: PartStat[];
 }
 export interface DerivePeriodResult {
   view_cadence: PeriodInstanceType;
@@ -174,7 +190,11 @@ export function compute_period_view(
     const kept = r.removal_intervals?.length
       ? keep_unsuppressed(settled, r.removal_intervals, deps.span_start_ms, deps.span_end_ms)
       : settled;
-    const groups = place_occurrences(kept, deps.placement_buckets);
+    // Income with parts: attach each check's breakdown (received = the deposit split; outstanding
+    // = the planned parts). Incomes without parts skip this entirely (output unchanged).
+    const parts_on = uses_income_parts(r);
+    const placed_input = parts_on ? attach_income_parts(r, kept, deps.span_start_ms, deps.span_end_ms) : kept;
+    const groups = place_occurrences(placed_input, deps.placement_buckets);
     // A suppressed period shows the item only for the occurrences it kept (none → hidden).
     // A PAUSED one stays listed at $0, marked, with its resume date, in the periods it would have
     // been due: pausing a monthly bill must not add it to the other weeks of a weekly view (AF-03).
@@ -199,6 +219,18 @@ export function compute_period_view(
       name: r.name,
       groups: visible_groups,
       ...(r.owner_user_id ? { owner_user_id: r.owner_user_id } : {}),
+      ...(parts_on
+        ? {
+          part_stats: compute_part_stats({
+            parts: r.income_parts ?? [],
+            settings: r.forecast_settings,
+            deposits: r.payment_history ?? [],
+            occurrence_parts: r.occurrence_parts,
+            check_dates: (from, to) =>
+              generate_expected_occurrences_in_window(r.schedule, from, to).map((g) => g.due_date_ms),
+          }),
+        }
+        : {}),
     });
   }
 
@@ -279,6 +311,39 @@ export function compute_period_view(
   }
 
   return { view_cadence, budgets, bills, income };
+}
+
+/**
+ * Income with parts: put each check's breakdown on its occurrence. A received check splits the
+ * actual deposit (labelled split, else the default rule); an outstanding one shows the planned
+ * parts (a legacy per-check amount override has no parts: its amount stands alone). PURE.
+ */
+export function attach_income_parts(
+  r: PeriodDerivationDeps["recurring"][number],
+  occurrences: ReconciledOccurrence[],
+  span_start_ms: number,
+  span_end_ms: number
+): ReconciledOccurrence[] {
+  const is_last = make_is_last_of_month([
+    ...income_check_dates(r, span_start_ms, span_end_ms),
+    ...occurrences.map((o) => o.due_date_ms),
+  ]);
+  const planned = make_income_expected_parts(r, span_start_ms, span_end_ms, occurrences.map((o) => o.due_date_ms));
+  return occurrences.map((o) => {
+    if (o.is_paid) {
+      const parts = received_check_parts({
+        parts: r.income_parts ?? [],
+        occurrence_parts: r.occurrence_parts,
+        amount: o.amount_paid,
+        date_ms: o.due_date_ms,
+        is_last_of_month: is_last(o.due_date_ms),
+      });
+      return { ...o, parts, sure_amount: sum_parts(parts) };
+    }
+    if (r.occurrence_amount_overrides?.[occurrence_date_key(o.due_date_ms)] != null) return o;
+    const parts = planned(o.due_date_ms);
+    return { ...o, parts, sure_amount: sum_sure_parts(parts) };
+  });
 }
 
 /**

@@ -73,7 +73,9 @@ export async function resolve_occurrence_settlement_context(
   if (!i) return null;
   const has_amount_override = i.expected_amount_override != null;
   let payment_history: DepositForSlot[] | undefined;
-  if (with_history && !has_amount_override && (i.transaction_ids ?? []).length > 0) {
+  const has_parts = (i.income_parts?.length ?? 0) > 0;
+  // Parts need the deposit history (recent average / typical / careful), override or not.
+  if (with_history && (!has_amount_override || has_parts) && (i.transaction_ids ?? []).length > 0) {
     const docs = await transaction_repo.get_by_plaid_transaction_ids(
       ctx,
       i.user_id,
@@ -102,6 +104,9 @@ export async function resolve_occurrence_settlement_context(
       has_amount_override,
       payment_history,
       occurrence_amount_overrides: i.occurrence_amount_overrides,
+      ...(has_parts
+        ? { income_parts: i.income_parts, forecast_settings: i.forecast_settings, occurrence_parts: i.occurrence_parts }
+        : {}),
     },
   };
 }

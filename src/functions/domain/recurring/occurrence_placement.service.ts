@@ -36,6 +36,19 @@ export interface CanonicalOccurrence {
   is_manual?: boolean;
   /** The transaction (Firestore DOC id) that paid it, when one did (reconcile sets it). */
   matched_transaction_id?: string | null;
+  /** Income with parts only: this check's breakdown (Income-Detail-Screen). */
+  parts?: CheckPartOut[];
+  /** Income with parts only: the part of the amount you can count on. */
+  sure_amount?: number;
+}
+
+/** One part of a check (see income_parts.service `CheckPart`). */
+export interface CheckPartOut {
+  part_id?: string;
+  kind: string;
+  label?: string;
+  amount: number;
+  sure: boolean;
 }
 
 /** A view's calendar bucket (a monthly / weekly / bi-weekly source period). */
@@ -83,6 +96,9 @@ export interface PlacedOccurrenceGroup {
     expected_amount?: number;
     manual?: true;
     transaction_id?: string;
+    /** Income with parts only. */
+    parts?: CheckPartOut[];
+    sure_amount?: number;
   }>;
   /** Earliest due date of any placed occurrence, epoch ms (null if none). */
   first_due_ms: number | null;
@@ -151,6 +167,7 @@ export function place_occurrences(
         ...(o.is_paid && !o.is_manual && o.matched_transaction_id
           ? { transaction_id: o.matched_transaction_id }
           : {}),
+        ...(o.parts ? { parts: o.parts, sure_amount: o.sure_amount ?? 0 } : {}),
       });
       total_due += o.amount_due;
       total_paid += o.amount_paid;

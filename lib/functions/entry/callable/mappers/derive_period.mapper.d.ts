@@ -43,6 +43,12 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         }[];
     }[];
     bills: {
+        partStats?: {
+            partId: string;
+            avg: number;
+            typical: number;
+            careful: number;
+        }[] | undefined;
         ownerUserId?: string | undefined;
         recurringId: string;
         name: string;
@@ -50,6 +56,14 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             isFullyPaid: boolean;
             status: import("../../../domain/recurring/occurrence_placement.service").OccurrenceReconStatus;
             occurrences: {
+                parts?: {
+                    amount: number;
+                    sure: boolean;
+                    label?: string | undefined;
+                    kind: string;
+                    partId?: string | undefined;
+                }[] | undefined;
+                sureAmount?: number | undefined;
                 transactionId?: string | undefined;
                 manual?: boolean | undefined;
                 expectedAmount?: number | undefined;
@@ -70,6 +84,12 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
         }[];
     }[];
     income: {
+        partStats?: {
+            partId: string;
+            avg: number;
+            typical: number;
+            careful: number;
+        }[] | undefined;
         ownerUserId?: string | undefined;
         recurringId: string;
         name: string;
@@ -77,6 +97,14 @@ export declare function map_derive_period_result(result: DerivePeriodResult): {
             isFullyPaid: boolean;
             status: import("../../../domain/recurring/occurrence_placement.service").OccurrenceReconStatus;
             occurrences: {
+                parts?: {
+                    amount: number;
+                    sure: boolean;
+                    label?: string | undefined;
+                    kind: string;
+                    partId?: string | undefined;
+                }[] | undefined;
+                sureAmount?: number | undefined;
                 transactionId?: string | undefined;
                 manual?: boolean | undefined;
                 expectedAmount?: number | undefined;

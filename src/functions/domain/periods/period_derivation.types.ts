@@ -19,6 +19,7 @@ import { ManualSettledOccurrences } from "../recurring/manual_settlement.service
 import { DepositForSlot } from "../recurring/income_slot_amounts";
 import { RecurringScheduleForGeneration } from "../outflows/outflow_period.service";
 
+import type { IncomePart, ForecastSettings, OccurrencePartsMap } from "../recurring/income_parts.service";
 import type { PausedDayRange } from "../budgets/budget_pause.service";
 
 export interface BudgetForDerivation {
@@ -58,6 +59,11 @@ export interface RecurringForDerivation {
   /** INCOME only: per-occurrence expected overrides keyed by UTC due-date `YYYY-MM-DD`.
    *  Wins over the per-slot auto-estimate AND the definition override, for that ONE occurrence. */
   occurrence_amount_overrides?: Record<string, number>;
+  /** INCOME only: the check's parts, forecast choices and per-check part overrides
+   *  (Income-Detail-Screen). Absent / empty parts = the income behaves exactly as before. */
+  income_parts?: IncomePart[];
+  forecast_settings?: ForecastSettings;
+  occurrence_parts?: OccurrencePartsMap;
   /** "Mark as paid / received" marks keyed by UTC due date — applied after reconcile by the
    *  shared rule (domain/recurring/manual_settlement): a real payment always wins. */
   manual_settled_occurrences?: ManualSettledOccurrences;

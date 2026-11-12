@@ -13,6 +13,7 @@ import { PeriodInstanceType } from "../budgets";
 import { DerivedBudgetViewPeriod } from "../budgets/budget_view.service";
 import { generate_expected_occurrences_in_window } from "../outflows/outflow_period.service";
 import type { ActualPayment } from "../recurring/reconcile_occurrences.service";
+import { PartStat } from "../recurring/income_parts.service";
 import { PlacedOccurrenceGroup } from "../recurring/occurrence_placement.service";
 import { is_payment_suppressed } from "../recurring/recurring_suppression.service";
 import type { ReconciledOccurrence } from "../recurring/reconcile_occurrences.service";
@@ -35,6 +36,8 @@ export interface DerivedRecurringResult {
     groups: PlacedOccurrenceGroup[];
     /** Group views only (see RecurringForDerivation.owner_user_id). */
     owner_user_id?: string;
+    /** Income with parts only: each part's avg / typical / careful amount. */
+    part_stats?: PartStat[];
 }
 export interface DerivePeriodResult {
     view_cadence: PeriodInstanceType;
@@ -43,6 +46,12 @@ export interface DerivePeriodResult {
     income: DerivedRecurringResult[];
 }
 export declare function compute_period_view(deps: PeriodDerivationDeps, view_cadence: PeriodInstanceType): DerivePeriodResult;
+/**
+ * Income with parts: put each check's breakdown on its occurrence. A received check splits the
+ * actual deposit (labelled split, else the default rule); an outstanding one shows the planned
+ * parts (a legacy per-check amount override has no parts: its amount stands alone). PURE.
+ */
+export declare function attach_income_parts(r: PeriodDerivationDeps["recurring"][number], occurrences: ReconciledOccurrence[], span_start_ms: number, span_end_ms: number): ReconciledOccurrence[];
 /**
  * The occurrences a removed / paused / ended item keeps (D26 month rule + D28): an occurrence due
  * in a month that isn't suppressed is kept (only inside the span — the D28 look-ahead adds

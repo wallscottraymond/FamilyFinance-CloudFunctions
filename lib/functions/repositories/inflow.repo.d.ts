@@ -13,9 +13,10 @@ import type { RecurringWrittenDoc } from "./recurring_doc_equality";
 import { Timestamp } from "firebase-admin/firestore";
 import { WriteResult, BatchWriteResult, ReadOptions, TraceContext } from "../types";
 import { InflowForPersistence } from "../integrations/plaid/plaid_recurring_transformer";
-import { RemovalInterval } from "../domain/recurring/recurring_suppression.service";
-import { ConvertEntityView } from "./convert_doc_fields";
-import { ManualSettledOccurrences } from "./manual_settlement_doc";
+import { RemovalInterval, RemovalMode } from "../domain/recurring/recurring_suppression.service";
+import { ConvertDocFields, ConvertEntityView } from "./convert_doc_fields";
+import { IncomePart, ForecastSettings, OccurrencePartsMap } from "../domain/recurring/income_parts.service";
+import { ManualSettledOccurrences, ManualSettledOccurrencesDoc } from "./manual_settlement_doc";
 /**
  * Inflow entity in snake_case (internal representation).
  */
@@ -36,6 +37,10 @@ export interface Inflow {
     currency: string;
     expected_amount_override: number | null;
     occurrence_amount_overrides?: Record<string, number>;
+    income_parts?: IncomePart[];
+    forecast_settings?: ForecastSettings;
+    occurrence_parts?: OccurrencePartsMap;
+    income_note?: string;
     description: string | null;
     payer_name: string | null;
     user_custom_name: string | null;
@@ -88,6 +93,85 @@ export interface Inflow {
     merge_log?: ConvertEntityView["merge_log"];
     last_synced_at?: Timestamp;
 }
+/** Stored (camelCase) shape of a removal interval on the inflow doc. */
+interface RemovalIntervalDoc {
+    fromMs: number;
+    toMs: number | null;
+    mode: RemovalMode;
+}
+/**
+ * Legacy Firestore document structure (camelCase).
+ * Used for reading/writing to maintain backwards compatibility.
+ */
+interface LegacyInflowDoc extends ConvertDocFields {
+    id: string;
+    ownerId: string;
+    createdBy: string;
+    updatedBy: string;
+    groupId?: string | null;
+    groupIds?: string[];
+    isActive: boolean;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    plaidItemId: string;
+    accountId: string;
+    lastAmount: number;
+    averageAmount: number;
+    currency: string;
+    expectedAmountOverride?: number | null;
+    payerMatchedTransactionIds?: string[];
+    occurrenceAmountOverrides?: Record<string, number>;
+    incomeParts?: unknown[];
+    forecastSettings?: Record<string, unknown>;
+    occurrenceParts?: Record<string, unknown>;
+    incomeNote?: string;
+    isUserClassified?: boolean;
+    incomeVariability?: unknown;
+    hourlyConfig?: unknown;
+    commissionConfig?: unknown;
+    bonusConfig?: unknown;
+    variableConfig?: unknown;
+    description: string | null;
+    merchantName: string | null;
+    userCustomName: string | null;
+    frequency: string;
+    firstDate: Timestamp;
+    lastDate: Timestamp;
+    predictedNextDate: Timestamp | null;
+    plaidPrimaryCategory: string;
+    plaidDetailedCategory: string;
+    plaidCategoryId?: string | null;
+    internalPrimaryCategory: string | null;
+    internalDetailedCategory: string | null;
+    incomeType?: string;
+    isRegularSalary?: boolean;
+    source: string;
+    plaidStatus?: string;
+    plaidConfidenceLevel?: string | null;
+    isHidden: boolean;
+    isUserModified: boolean;
+    transactionIds: string[];
+    tags: string[];
+    rules: unknown[];
+    removedByUser?: boolean;
+    removalIntervals?: RemovalIntervalDoc[];
+    manualSettledOccurrences?: ManualSettledOccurrencesDoc;
+    captureRulesVersion?: number;
+    plaidIsActive?: boolean;
+    plaidInactiveAckAt?: Timestamp;
+    mergedIntoId?: string;
+    /** The schedule the user picked when tracking a Plaid suggestion (D8); wins over Plaid's. */
+    userFrequency?: string;
+    lastSyncedAt?: Timestamp;
+}
+/**
+ * Maps legacy Firestore document to Inflow entity.
+ */
+export declare function map_to_entity(doc: LegacyInflowDoc): Inflow;
+/**
+ * Maps InflowForPersistence to legacy Firestore document.
+ */
+export declare function map_persistence_to_doc(entity: InflowForPersistence, now: Timestamp, existing?: LegacyInflowDoc | null): LegacyInflowDoc;
 /**
  * Inflow Repository
  *
@@ -298,4 +382,5 @@ export declare const inflow_repo: {
      */
     mark_hidden(ctx: TraceContext, stream_ids: string[], hidden: boolean, user_id: string): Promise<WriteResult[]>;
 };
+export {};
 //# sourceMappingURL=inflow.repo.d.ts.map
