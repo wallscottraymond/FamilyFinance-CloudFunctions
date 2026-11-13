@@ -29,7 +29,7 @@ const DEFINITION_FIELDS: Record<RecurringNoteKind, string[]> = {
     "description", "payerName", "frequency", "userCustomName",
     "expectedAmountOverride", "averageAmount", "incomeType",
     "hourlyConfig", "commissionConfig", "bonusConfig", "variableConfig",
-    "incomeParts", "forecastSettings", "occurrenceParts", "incomeNote",
+    "incomeParts", "forecastSettings", "occurrenceParts", "incomeNote", "asItComes",
   ],
 };
 
