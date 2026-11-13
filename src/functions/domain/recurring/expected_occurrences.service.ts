@@ -48,6 +48,8 @@ export interface RecurringForExpected {
   forecast_settings?: ForecastSettings;
   /** Per-check part overrides + one-off extras, keyed by UTC due date `YYYY-MM-DD`. */
   occurrence_parts?: OccurrencePartsMap;
+  /** INCOME only: "As it comes" — no planned checks; its deposits are what it received. */
+  as_it_comes?: boolean;
 }
 
 /** True when the income's amounts come from its parts. */
@@ -93,6 +95,9 @@ export function build_expected_occurrences(
   span_start_ms: number,
   span_end_ms: number
 ): ExpectedOccurrence[] {
+  // "As it comes" income plans nothing: every deposit labelled with it reconciles as an extra
+  // (received) occurrence, so it shows exactly what arrived (D24).
+  if (r.kind === "inflow" && r.as_it_comes) return [];
   // Both bills AND income generate EXPECTED occurrences from the schedule (freq + anchor)
   // across the span — so a semi-monthly item yields 2/month and future months still show
   // upcoming occurrences.

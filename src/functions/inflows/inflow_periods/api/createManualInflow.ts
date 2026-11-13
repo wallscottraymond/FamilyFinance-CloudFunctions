@@ -45,6 +45,9 @@ interface CreateManualInflowRequest {
   commissionConfig?: CommissionIncomeConfig;
   bonusConfig?: BonusIncomeConfig;
   variableConfig?: VariableIncomeConfig;
+
+  /** "As it comes": no schedule, $0 expected; counts only the deposits labelled with it (D24). */
+  asItComes?: boolean;
 }
 
 interface CreateManualInflowResponse {
@@ -92,11 +95,21 @@ export const createManualInflow = onCall(
     const userId = request.auth.uid;
     const data = request.data as CreateManualInflowRequest;
 
+    // "As it comes" (D24): a named income with no schedule — $0, monthly periods, nothing planned;
+    // it counts only the deposits labelled with it. Fill in what such an income doesn't have.
+    const as_it_comes = data.asItComes === true;
+    if (as_it_comes) {
+      data.amount = 0;
+      data.frequency = data.frequency || "MONTHLY";
+      data.firstExpectedDate = data.firstExpectedDate || new Date().toISOString().slice(0, 10);
+      data.incomeType = data.incomeType || IncomeType.OTHER;
+    }
+
     // Validate required fields
     if (!data.name || data.name.trim() === "") {
       throw new HttpsError("invalid-argument", "Name is required");
     }
-    if (typeof data.amount !== "number" || data.amount <= 0) {
+    if (typeof data.amount !== "number" || (data.amount <= 0 && !as_it_comes)) {
       throw new HttpsError("invalid-argument", "Amount must be a positive number");
     }
     if (!data.frequency) {
@@ -148,6 +161,7 @@ export const createManualInflow = onCall(
               variable_config: data.variableConfig,
               account_id: data.accountId || null,
               source_transaction_id: data.sourceTransactionId || null,
+              as_it_comes,
             }
           );
           return { success: true, inflowId: inflow_id, message: "Manual income created successfully. Periods were generated." };

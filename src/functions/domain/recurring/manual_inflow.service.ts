@@ -44,6 +44,9 @@ export interface ManualInflowRequest {
   account_id: string;
   vendor_key: string | null;
   now_ms: number;
+  /** "As it comes" (Budget-And-Bill-Detail-Pages D24): no planned checks; it counts only the
+   *  deposits labelled with it. Stored monthly (so it has a period every month) at $0. */
+  as_it_comes?: boolean;
 }
 
 export function build_manual_inflow(req: ManualInflowRequest): { errors?: string[]; inflow?: InflowForPersistence } {
@@ -60,7 +63,10 @@ export function build_manual_inflow(req: ManualInflowRequest): { errors?: string
     is_user_modified: false,
     income_type: req.income_type,
     is_regular_salary: req.is_regular_salary,
+    as_it_comes: req.as_it_comes === true,
     income_extras: {
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- Firestore field name
+      ...(req.as_it_comes ? { asItComes: true } : {}),
       isPrivate: true,
       incomeVariability: req.income_variability,
       isUserClassified: true,

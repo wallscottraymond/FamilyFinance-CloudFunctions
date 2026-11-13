@@ -107,6 +107,7 @@ export async function resolve_occurrence_settlement_context(
       ...(has_parts
         ? { income_parts: i.income_parts, forecast_settings: i.forecast_settings, occurrence_parts: i.occurrence_parts }
         : {}),
+      ...(i.as_it_comes ? { as_it_comes: true } : {}),
     },
   };
 }

@@ -101,6 +101,8 @@ export interface Inflow {
   forecast_settings?: ForecastSettings;
   occurrence_parts?: OccurrencePartsMap;
   income_note?: string;
+  /** "As it comes": no planned checks; it counts only the deposits labelled with it. */
+  as_it_comes?: boolean;
 
   // Description
   description: string | null;
@@ -225,6 +227,7 @@ interface LegacyInflowDoc extends ConvertDocFields {
   forecastSettings?: Record<string, unknown>;
   occurrenceParts?: Record<string, unknown>;
   incomeNote?: string;
+  asItComes?: boolean;
   // Set when the user configured the income type (and its configs); Plaid never sets these.
   isUserClassified?: boolean;
   incomeVariability?: unknown;
@@ -321,6 +324,7 @@ export function map_to_entity(doc: LegacyInflowDoc): Inflow {
     expected_amount_override: doc.expectedAmountOverride ?? null,
     occurrence_amount_overrides: doc.occurrenceAmountOverrides ?? {},
     ...map_income_parts_to_entity(doc),
+    ...(doc.asItComes ? { as_it_comes: true } : {}),
     amount_min: undefined, // Legacy docs may not have this
     amount_max: undefined,
     currency: doc.currency,

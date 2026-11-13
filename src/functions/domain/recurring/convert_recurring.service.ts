@@ -446,6 +446,8 @@ export interface BuildConvertedInput {
   description?: string;
   is_user_modified?: boolean;
   income_extras?: Record<string, unknown>;
+  /** An "As it comes" income (no schedule of its own): $0 expected is allowed. */
+  as_it_comes?: boolean;
 }
 
 export interface BuildConvertedResult {
@@ -464,7 +466,10 @@ export function build_converted_recurring(input: BuildConvertedInput): BuildConv
   const name = input.name.trim();
   if (name.length === 0) errors.push("A name is required");
   if (name.length > CONVERT_NAME_MAX) errors.push(`The name can be at most ${CONVERT_NAME_MAX} characters`);
-  if (!(input.amount > 0) || !Number.isFinite(input.amount)) errors.push("The amount must be greater than zero");
+  const zero_ok = input.as_it_comes === true && input.amount === 0;
+  if (!zero_ok && (!(input.amount > 0) || !Number.isFinite(input.amount))) {
+    errors.push("The amount must be greater than zero");
+  }
   if (input.amount > CONVERT_AMOUNT_MAX) errors.push("The amount is too large");
   if (!CONVERT_FREQUENCIES.includes(input.frequency)) errors.push("Pick a schedule");
   if (errors.length > 0) return { errors };

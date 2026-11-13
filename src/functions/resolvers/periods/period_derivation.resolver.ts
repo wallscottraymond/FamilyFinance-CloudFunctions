@@ -809,6 +809,7 @@ export function shape_period_derivation_deps(
       ...(i.income_parts?.length
         ? { income_parts: i.income_parts, forecast_settings: i.forecast_settings, occurrence_parts: i.occurrence_parts }
         : {}),
+      ...(i.as_it_comes ? { as_it_comes: true } : {}),
       // Income remove/pause spans — filtered per period on read, same as bills.
       removal_intervals: i.removal_intervals,
       // "Mark as received" marks (income received outside linked accounts).
