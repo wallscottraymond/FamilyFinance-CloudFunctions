@@ -22,6 +22,7 @@ const edit_schema = z.object({
   edit: z.discriminatedUnion("op", [
     z.object({ op: z.literal("add"), id, name: z.string().max(100), estimate: z.number().min(0).max(100_000_000), period_key }),
     z.object({ op: z.literal("remove"), id }),
+    z.object({ op: z.literal("update"), id, name: z.string().max(100), estimate: z.number().min(0).max(100_000_000) }),
     z.object({ op: z.literal("tick"), id, period_key, ticked: z.boolean() }),
     z.object({ op: z.literal("carry"), carry: z.boolean(), period_key }),
   ]),

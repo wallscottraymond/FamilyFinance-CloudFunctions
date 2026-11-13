@@ -28,6 +28,19 @@ describe("apply_checklist_op", () => {
     expect(two.items.map((i) => i.id)).toEqual(["a", "b"]);
     expect(two.ticks[DEC]).toEqual(["a"]);
   });
+  it("update changes name and estimate in place, keeping order, period and ticks", () => {
+    const base = add(add({ ...EMPTY_CHECKLIST, carry: false }, "a"), "b");
+    const ticked = apply(base, { op: "tick", id: "a", period_key: DEC, ticked: true }).checklist!;
+    const c = apply(ticked, { op: "update", id: "a", name: " Turkey ", estimate: 45.555 }).checklist!;
+    expect(c.items.map((i) => i.id)).toEqual(["a", "b"]);
+    expect(c.items[0]).toEqual({ id: "a", name: "Turkey", estimate: 45.56, period_key: DEC });
+    expect(c.ticks[DEC]).toEqual(["a"]);
+  });
+  it("update refuses a blank name; updating a removed item does nothing", () => {
+    const base = add(EMPTY_CHECKLIST, "a");
+    expect(apply(base, { op: "update", id: "a", name: " ", estimate: 1 }).errors).toBeDefined();
+    expect(apply(base, { op: "update", id: "gone", name: "x", estimate: 1 }).checklist).toBe(base);
+  });
   it("ticking an item someone removed does nothing", () => {
     expect(apply(EMPTY_CHECKLIST, { op: "tick", id: "gone", period_key: DEC, ticked: true }).checklist?.ticks).toEqual({});
   });

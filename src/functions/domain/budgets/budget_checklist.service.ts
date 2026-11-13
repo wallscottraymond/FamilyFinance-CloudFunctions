@@ -34,6 +34,7 @@ export const EMPTY_CHECKLIST: BudgetChecklist = { carry: true, items: [], ticks:
 export type ChecklistOp =
   | { op: "add"; id: string; name: string; estimate: number; period_key: string }
   | { op: "remove"; id: string }
+  | { op: "update"; id: string; name: string; estimate: number }
   | { op: "tick"; id: string; period_key: string; ticked: boolean }
   | { op: "carry"; carry: boolean; period_key: string };
 
@@ -82,6 +83,20 @@ export function apply_checklist_op(
         if (kept.length) ticks[k] = kept;
       }
       return { checklist: { ...current, items: current.items.filter((i) => i.id !== op.id), ticks } };
+    }
+    case "update": {
+      // Change an item's name and estimate in place: it keeps its position, period and ticks.
+      // An item someone else just removed stays removed.
+      const name = op.name.trim();
+      if (!name) return { errors: ["Give the item a name"] };
+      if (!current.items.some((i) => i.id === op.id)) return { checklist: current };
+      const estimate = Math.round(op.estimate * 100) / 100;
+      return {
+        checklist: {
+          ...current,
+          items: current.items.map((i) => (i.id === op.id ? { ...i, name, estimate } : i)),
+        },
+      };
     }
     case "tick": {
       if (!current.items.some((i) => i.id === op.id)) return { checklist: current };
