@@ -181,6 +181,8 @@ export interface BuildConvertedInput {
     description?: string;
     is_user_modified?: boolean;
     income_extras?: Record<string, unknown>;
+    /** An "As it comes" income (no schedule of its own): $0 expected is allowed. */
+    as_it_comes?: boolean;
 }
 export interface BuildConvertedResult {
     errors?: string[];

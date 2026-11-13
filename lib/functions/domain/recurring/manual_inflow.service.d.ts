@@ -30,6 +30,9 @@ export interface ManualInflowRequest {
     account_id: string;
     vendor_key: string | null;
     now_ms: number;
+    /** "As it comes" (Budget-And-Bill-Detail-Pages D24): no planned checks; it counts only the
+     *  deposits labelled with it. Stored monthly (so it has a period every month) at $0. */
+    as_it_comes?: boolean;
 }
 export declare function build_manual_inflow(req: ManualInflowRequest): {
     errors?: string[];

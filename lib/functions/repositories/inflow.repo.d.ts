@@ -41,6 +41,8 @@ export interface Inflow {
     forecast_settings?: ForecastSettings;
     occurrence_parts?: OccurrencePartsMap;
     income_note?: string;
+    /** "As it comes": no planned checks; it counts only the deposits labelled with it. */
+    as_it_comes?: boolean;
     description: string | null;
     payer_name: string | null;
     user_custom_name: string | null;
@@ -125,6 +127,7 @@ interface LegacyInflowDoc extends ConvertDocFields {
     forecastSettings?: Record<string, unknown>;
     occurrenceParts?: Record<string, unknown>;
     incomeNote?: string;
+    asItComes?: boolean;
     isUserClassified?: boolean;
     incomeVariability?: unknown;
     hourlyConfig?: unknown;

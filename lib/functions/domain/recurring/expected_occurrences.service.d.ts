@@ -34,6 +34,8 @@ export interface RecurringForExpected {
     forecast_settings?: ForecastSettings;
     /** Per-check part overrides + one-off extras, keyed by UTC due date `YYYY-MM-DD`. */
     occurrence_parts?: OccurrencePartsMap;
+    /** INCOME only: "As it comes" — no planned checks; its deposits are what it received. */
+    as_it_comes?: boolean;
 }
 /** True when the income's amounts come from its parts. */
 export declare function uses_income_parts(r: Pick<RecurringForExpected, "kind" | "income_parts">): boolean;
