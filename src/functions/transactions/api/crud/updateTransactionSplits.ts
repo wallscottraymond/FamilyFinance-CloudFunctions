@@ -47,7 +47,7 @@ export const updateTransactionSplits = onCall<
   Promise<UpdateTransactionSplitsResponse>
 >({
   region: "us-central1",
-  memory: "256MiB",
+  memory: "512MiB", // 256 ran out (≈260 MiB) on a 2-split save, 2026-11-13
   timeoutSeconds: 30,
 }, async (request) => {
   // Check authentication
