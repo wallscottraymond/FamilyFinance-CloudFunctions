@@ -1437,6 +1437,12 @@ service cloud.firestore {
                                 (canManage() && resource.data.familyId != null && inSameFamily(resource.data.familyId))) &&
                                isValidBudgetPeriodUpdate();
 
+      // A group budget's period (userId "group:<id>"): members may edit its note and checklist —
+      // only the isValidBudgetPeriodUpdate fields; amounts and pausing stay callable-only.
+      allow update: if isGroupViewMember(resource.data.userId) &&
+                       request.resource.data.userId == resource.data.userId &&
+                       isValidBudgetPeriodUpdate();
+
       // Only admins can delete budget periods (for cleanup)
       allow delete: if isAdmin();
     }
