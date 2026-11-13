@@ -55,6 +55,7 @@ export { set_transaction_tags } from "./set_transaction_tags.entry";
 export { set_budget_tags } from "./set_budget_tags.entry";
 export { set_budget_pause } from "./set_budget_pause.entry";
 export { get_budget_checklist, edit_budget_checklist } from "./set_budget_checklist.entry";
+export { get_recurring_detail, set_recurring_note } from "./recurring_note.entry";
 export { derive_addable_transactions } from "./derive_addable_transactions.entry";
 export { backfill_transaction_assignments, } from "./backfill_transaction_assignments.entry";
 export { migrate_budget_categories } from "./migrate_budget_categories.entry";

@@ -83,6 +83,18 @@ export declare function received_check_parts(input: {
     date_ms: number;
     is_last_of_month: boolean;
 }): CheckPart[];
+/**
+ * The breakdown of a check whose TOTAL is fixed but which hasn't arrived: an amount the user set
+ * on that one check before it had parts (`occurrenceAmountOverrides`). Split like a deposit, so
+ * the total stays exactly what they set and the parts are labelled. All "sure" (the user set it).
+ */
+export declare function fixed_total_check_parts(input: {
+    parts: IncomePart[];
+    occurrence_parts?: OccurrencePartsMap;
+    amount: number;
+    date_ms: number;
+    is_last_of_month: boolean;
+}): CheckPart[];
 export interface PartsInputs {
     parts: IncomePart[];
     settings?: ForecastSettings;

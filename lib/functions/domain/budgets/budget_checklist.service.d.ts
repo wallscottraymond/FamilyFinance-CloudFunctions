@@ -36,6 +36,11 @@ export type ChecklistOp = {
     op: "remove";
     id: string;
 } | {
+    op: "update";
+    id: string;
+    name: string;
+    estimate: number;
+} | {
     op: "tick";
     id: string;
     period_key: string;
