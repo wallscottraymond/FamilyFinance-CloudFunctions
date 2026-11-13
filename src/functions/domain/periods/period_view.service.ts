@@ -39,6 +39,7 @@ import {
   compute_part_stats,
   make_is_last_of_month,
   received_check_parts,
+  fixed_total_check_parts,
   sum_sure_parts,
   sum_parts,
 } from "../recurring/income_parts.service";
@@ -340,7 +341,18 @@ export function attach_income_parts(
       });
       return { ...o, parts, sure_amount: sum_parts(parts) };
     }
-    if (r.occurrence_amount_overrides?.[occurrence_date_key(o.due_date_ms)] != null) return o;
+    // An amount set on this one check before it had parts: keep that total, label its parts.
+    const set_total = r.occurrence_amount_overrides?.[occurrence_date_key(o.due_date_ms)];
+    if (set_total != null) {
+      const parts = fixed_total_check_parts({
+        parts: r.income_parts ?? [],
+        occurrence_parts: r.occurrence_parts,
+        amount: set_total,
+        date_ms: o.due_date_ms,
+        is_last_of_month: is_last(o.due_date_ms),
+      });
+      return { ...o, parts, sure_amount: sum_parts(parts) };
+    }
     const parts = planned(o.due_date_ms);
     return { ...o, parts, sure_amount: sum_sure_parts(parts) };
   });

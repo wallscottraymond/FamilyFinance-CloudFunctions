@@ -54,8 +54,10 @@ export interface CachedDerivedPeriod<TResult> {
  *  resolved Plaid detailed code). v12 = income with parts: occurrences carry `parts` /
  *  `sure_amount`, income carries `part_stats` (Income-Detail-Screen).
  *  Every function bundling this repo (derive_period, derive_period_range, derive_budget_view,
- *  widget_snapshot) deploys together. */
-const CACHE_SHAPE = "v12";
+ *  widget_snapshot) deploys together.  v13 = a check with a set amount
+ *  (occurrenceAmountOverrides) carries labelled `parts` too; parts always add up to the check.
+ */
+const CACHE_SHAPE = "v13";
 
 /** Deterministic doc id for a derive call, per UTC day: a result depends on the day only through a
  *  card payment's wait ending, which happens at UTC midnight and isn't a data change (D8). Windows are ms epoch ints — safe in an id. */

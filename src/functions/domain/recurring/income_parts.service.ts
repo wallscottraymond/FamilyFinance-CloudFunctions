@@ -288,10 +288,22 @@ function split_deposit(
         by_part.set(e.part_id, (by_part.get(e.part_id) ?? 0) + e.amount);
         present.add(e.part_id);
         assigned += e.amount;
-      } else if (!e.part_id) {
+      } else {
+        // No part id (a one-off), or its part is gone (the type changed): keep it as a labelled
+        // one-off so the check's total never silently changes.
         extras.push(e);
         assigned += e.amount;
       }
+    }
+    // Parts this check's labels don't mention follow the default rule: a `set` part that applies
+    // takes its amount from what's left (e.g. the labels only name a part that was since removed).
+    for (const p of parts) {
+      if (present.has(p.id) || p.takes_rest || p.plan !== "set") continue;
+      if (!part_applies(p, date_ms, is_last)) continue;
+      const take = Math.min(p.amount ?? 0, Math.max(total_pos - assigned, 0));
+      by_part.set(p.id, take);
+      present.add(p.id);
+      assigned += take;
     }
     if (rest && (part_applies(rest, date_ms, is_last) || present.has(rest.id))) {
       by_part.set(rest.id, Math.max(total_pos - assigned, 0));
@@ -333,7 +345,42 @@ export function received_check_parts(input: {
     out.push(make_part(p, round2(s.by_part.get(p.id) ?? 0), true));
   }
   for (const e of s.extras) out.push({ kind: e.kind, ...(e.label ? { label: e.label } : {}), amount: round2(e.amount), sure: true });
-  return out;
+  return fill_gap(out, input.parts, input.amount);
+}
+
+/**
+ * Parts must add up to the check. What the split left over (e.g. a mid-month check bigger than
+ * base, when commission normally comes at month end) goes to the part that takes the rest, else
+ * to a plain "Other" line.
+ */
+function fill_gap(out: CheckPart[], parts: IncomePart[], total: number): CheckPart[] {
+  const gap = round2(Math.max(total, 0) - sum_parts(out));
+  if (gap <= 0.5) return out;
+  const rest = parts.find((p) => p.takes_rest);
+  if (rest) {
+    const i = out.findIndex((c) => c.part_id === rest.id);
+    if (i >= 0) {
+      out[i] = { ...out[i], amount: round2(out[i].amount + gap) };
+      return out;
+    }
+    return [...out, make_part(rest, gap, true)];
+  }
+  return [...out, { kind: "income", label: "Other", amount: gap, sure: true }];
+}
+
+/**
+ * The breakdown of a check whose TOTAL is fixed but which hasn't arrived: an amount the user set
+ * on that one check before it had parts (`occurrenceAmountOverrides`). Split like a deposit, so
+ * the total stays exactly what they set and the parts are labelled. All "sure" (the user set it).
+ */
+export function fixed_total_check_parts(input: {
+  parts: IncomePart[];
+  occurrence_parts?: OccurrencePartsMap;
+  amount: number;
+  date_ms: number;
+  is_last_of_month: boolean;
+}): CheckPart[] {
+  return received_check_parts(input);
 }
 
 function make_part(p: IncomePart, amount: number, sure: boolean): CheckPart {
@@ -491,7 +538,8 @@ export function make_expected_parts_calculator(
       out.push(make_part(p, round2(amount), p.plan === "set"));
     }
     for (const e of entries) {
-      if (e.part_id) continue;
+      // Per-part edits were used above; one whose part is gone (type changed) stays as a one-off.
+      if (e.part_id && inp.parts.some((p) => p.id === e.part_id)) continue;
       out.push({ kind: e.kind, ...(e.label ? { label: e.label } : {}), amount: round2(e.amount), sure: true });
     }
     return out;

@@ -216,6 +216,17 @@ describe("one-off extra and per-check override", () => {
   });
 });
 
+describe("planned check: edit whose part was removed", () => {
+  it("stays on the check as a labelled one-off, so the total doesn't silently change", () => {
+    const due = D(2026, 11, 28);
+    const calc = make_expected_parts_calculator(
+      { parts: [BASE], deposits: [], occurrence_parts: { [key(due)]: [{ part_id: "comm", kind: "commission", amount: 500 }] } },
+      () => true
+    );
+    expect(calc(due).map((p) => [p.part_id ?? p.kind, p.amount, p.sure])).toEqual([["base", 3092, true], ["commission", 500, true]]);
+  });
+});
+
 describe("received check split", () => {
   const is_last = (v: boolean) => v;
   it("default split: base takes min(set, deposit), commission gets the rest", () => {
@@ -245,6 +256,22 @@ describe("received check split", () => {
       parts: [BASE, COMMISSION], occurrence_parts, amount: 3500, date_ms: D(2026, 10, 28), is_last_of_month: true,
     });
     expect(tiny.find((p) => p.part_id === "comm")?.amount).toBe(0);
+  });
+  it("a mid-month deposit bigger than base: parts still add up (extra goes to the rest part)", () => {
+    const parts = received_check_parts({ parts: [BASE, COMMISSION], amount: 3500, date_ms: D(2026, 10, 13), is_last_of_month: false });
+    expect(parts.map((p) => [p.part_id, p.amount])).toEqual([["base", 3092], ["comm", 408]]);
+  });
+  it("no part takes the rest: the leftover shows as Other", () => {
+    const parts = received_check_parts({ parts: [BASE], amount: 3200, date_ms: D(2026, 10, 13), is_last_of_month: false });
+    expect(parts.map((p) => [p.label ?? p.part_id, p.amount])).toEqual([["base", 3092], ["Other", 108]]);
+  });
+  it("an edit whose part was removed (type changed) stays as a labelled one-off on a received check", () => {
+    const occurrence_parts = { [key(D(2026, 10, 28))]: [{ part_id: "comm", kind: "commission", amount: 500 }] };
+    const parts = received_check_parts({
+      parts: [BASE], occurrence_parts, amount: 3592, date_ms: D(2026, 10, 28), is_last_of_month: true,
+    });
+    expect(parts.map((p) => [p.part_id ?? p.kind, p.amount])).toEqual([["base", 3092], ["commission", 500]]);
+    expect(sum_parts(parts)).toBe(3592);
   });
   it("labelled history feeds the forecast (a reimbursement taken out of commission history)", () => {
     const deposits = egnyte_deposits([4000, 6000, 8000]);
@@ -308,6 +335,24 @@ describe("hook into build_expected_occurrences / placement", () => {
     const groups = place_occurrences(attached, [{ period_id: "2026M11", start_ms: span[0], end_ms: span[1] }]);
     expect(groups[0].occurrences[1].parts?.length).toBe(2);
     expect(groups[0].occurrences[1].sure_amount).toBe(3092);
+  });
+
+  it("a check with an amount set before parts keeps that total and gets labelled parts", () => {
+    const recurring = {
+      ...base_item, name: "x", payments: [], removal_intervals: [], income_parts: [BASE, COMMISSION],
+      occurrence_amount_overrides: { "2026-11-28": 9600, "2026-11-13": 5000 },
+    };
+    const recon = (due: number): ReconciledOccurrence => ({
+      occurrence_id: `inf1_${due}`, recurring_id: "inf1", due_date_ms: due, amount_due: 0, amount_paid: 0,
+      is_paid: false, matched_transaction_id: null, matched_split_id: null, payment_date_ms: null,
+    });
+    const [mid, end] = attach_income_parts(recurring as never, [recon(D(2026, 11, 13)), recon(D(2026, 11, 28))], ...span);
+    // month end: base 3092 + commission 6508, all sure (the user set the total)
+    expect(end.parts?.map((p) => [p.part_id, p.amount, p.sure])).toEqual([["base", 3092, true], ["comm", 6508, true]]);
+    expect(end.sure_amount).toBe(9600);
+    // mid-month set bigger than base: the extra goes to the part that takes the rest
+    expect(mid.parts?.map((p) => [p.part_id, p.amount])).toEqual([["base", 3092], ["comm", 1908]]);
+    expect(sum_parts(mid.parts ?? [])).toBe(5000);
   });
 
   it("placement without parts emits no parts keys (output unchanged)", () => {
